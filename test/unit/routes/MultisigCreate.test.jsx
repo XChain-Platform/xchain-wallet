@@ -177,7 +177,7 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getAllByRole('option', { name: 'Bitcoin BTC' })[1]);
+            fireEvent.click(screen.getByRole('option', { name: 'Bitcoin testnet BTC' }));
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();
@@ -240,6 +240,29 @@ describe('MultisigCreate key validation', () => {
 
         expect(screen.getByText(message)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('opens without an error message and keeps Review disabled', async () => {
+        await mount(mkMessaging());
+
+        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('keeps the errors of untouched fields silent while another field is typed', async () => {
+        await mount(mkMessaging());
+        await act(async () => {
+            fireEvent.change(screen.getAllByLabelText(/^Name/i)[0], { target: { value: 'Alice' } });
+        });
+        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+
+        await act(async () => {
+            fireEvent.blur(screen.getAllByLabelText(/Public key \(hex/i)[0]);
+        });
+        expect(screen.getByText(/Cosigner 1: public key must be a 33-byte compressed key/i)).toBeTruthy();
     });
 
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {

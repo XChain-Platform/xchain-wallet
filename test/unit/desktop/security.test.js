@@ -12,14 +12,12 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
-    TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
     allowlistedExternalUrl,
     hasNoIpcArguments,
     isAppUrl,
     isHttpUrl,
     isLocalFileUrl,
     isRemoteFrameUrl,
-    isTrezorConnectBridgeWindowOpen,
     isTrustedSenderEvent,
     isValidDesktopIpcMessage,
     isValidSignerBridgeMessage,
@@ -147,18 +145,14 @@ describe('desktop IPC argument validation', () => {
     });
 });
 
-describe('Trezor bridge window exception', () => {
-    it('requires both the exact marker and a trusted app opener', () => {
-        expect(isTrezorConnectBridgeWindowOpen(
-            TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
-            appIndex,
-            appRoot,
-        )).toBe(true);
-        expect(isTrezorConnectBridgeWindowOpen('other-window', appIndex, appRoot)).toBe(false);
-        expect(isTrezorConnectBridgeWindowOpen(
-            TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
-            'data:text/html,bridge',
-            appRoot,
-        )).toBe(false);
+describe('Trezor bridge document trust', () => {
+    it('never passes the app sender check, so the bridge window cannot drive app IPC', () => {
+        // The packaged layout: the renderer in renderer/dist, the bridge in main/trezorBridge.
+        const desktop = join(process.cwd(), 'desktop root');
+        const packagedRoot = join(desktop, 'renderer', 'dist');
+        const bridgeUrl = pathToFileURL(join(desktop, 'main', 'trezorBridge', 'connect.html')).href;
+        expect(isAppUrl(bridgeUrl, packagedRoot)).toBe(false);
+        expect(isTrustedSenderEvent({ senderFrame: { url: bridgeUrl } }, packagedRoot)).toBe(false);
+        expect(isTrustedSenderEvent({ senderFrame: { url: 'https://connect.trezor.io/9/iframe.html' } }, packagedRoot)).toBe(false);
     });
 });

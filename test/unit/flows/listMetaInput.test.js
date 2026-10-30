@@ -53,6 +53,12 @@ describe('listMetaInputError', () => {
         expect(listMetaInputError(field, overCap, { isCreate: true })).toBe('length');
     });
 
+    it.each(FIELDS)('refuses hostile invisible text in %s', (field) => {
+        for (const value of ['bad\u0000text', 'bad\u202etext', 'bad\u200btext']) {
+            expect(listMetaInputError(field, value, { isCreate: true })).toBe('unsafe');
+        }
+    });
+
     it.each(FIELDS)('accepts the clear sentinel when setting %s', (field) => {
         expect(listMetaInputError(field, '-', { isCreate: false })).toBeNull();
     });

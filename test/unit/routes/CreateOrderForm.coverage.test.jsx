@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const state = vi.hoisted(() => ({
     watcher: false,
@@ -132,6 +132,16 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateOrderForm coverage', () => {
+    it('names each side once: the section says You give, its radio group says what it picks', async () => {
+        await renderForm();
+
+        expect(screen.getAllByText('You give')).toHaveLength(1);
+        expect(screen.getAllByText('You get')).toHaveLength(1);
+        const give = screen.getByRole('region', { name: 'You give' });
+        expect(within(give).getByRole('group', { name: 'Asset type' })).toBeInTheDocument();
+        expect(screen.queryByRole('group', { name: 'You give' })).toBeNull();
+    });
+
     it('exposes kit choice controls through their native semantic roles', async () => {
         await renderForm();
 
@@ -150,6 +160,19 @@ describe('CreateOrderForm coverage', () => {
         })).not.toBeChecked();
     });
 
+    it('keeps the receive address with the get side and names the last section for all it holds', async () => {
+        await renderForm();
+
+        const getSection = screen.getByRole('region', { name: 'You get' });
+        expect(getSection).toContainElement(screen.getByLabelText('Receive at (optional)'));
+        const timing = screen.getByRole('region', { name: 'Timing and fees' });
+        // The section title no longer repeats the Expiration choice right below it.
+        expect(timing).toContainElement(screen.getByRole('group', { name: 'Expiration' }));
+        expect(screen.queryByRole('heading', { name: 'Expiration' })).toBeNull();
+        // Help text among the fields lines up with them instead of centring.
+        expect(screen.getByText(/Both sides of this order settle on the same chain/).className).toMatch(/hintLeft/);
+    });
+
     it('surfaces actionable validation for malformed order fields', async () => {
         await renderForm();
 
@@ -159,7 +182,7 @@ describe('CreateOrderForm coverage', () => {
         fillBasicOrder();
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
@@ -277,7 +300,7 @@ describe('CreateOrderForm coverage', () => {
             params: expect.objectContaining({ GIVE_TICK: 'XCP', GET_AMOUNT: '0.1' }),
             password: '',
         })));
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(await screen.findByText('Unsigned transaction, ready for signing'))
             .toBeInTheDocument();
     });
 
@@ -295,5 +318,29 @@ describe('CreateOrderForm coverage', () => {
         );
         expect(document.body).not.toHaveTextContent('/internal/order');
         expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
+    });
+
+    it.each([
+        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        // The shared action-text refusal answers first, before the memo's own check.
+        ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
+        ['a tab', 'a\tb', /Memo cannot contain control characters/],
+    ])('refuses a memo %s before composing', async (_label, memo, message) => {
+        await renderForm();
+        fillBasicOrder();
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(state.confirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts a memo of exactly 250 bytes', async () => {
+        await renderForm();
+        fillBasicOrder();
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(250) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await waitFor(() => expect(state.messaging.composeForConfirm.mock.calls.length + state.confirm.mock.calls.length + state.submit.mock.calls.length).toBeGreaterThan(0));
     });
 });

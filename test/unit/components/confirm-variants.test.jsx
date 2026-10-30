@@ -41,6 +41,7 @@ import {
     isUnreadableActionReason,
 } from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
 import { canApproveWithReport, toggleAcknowledged } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { messageText } from '../helpers/messageText.js';
 
 const OWN = 'bc1qownownownownownownownownownownownowno';
 const OTHER = 'bc1qotherotherotherotherotherotherotherx';
@@ -248,7 +249,7 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             }));
             const alert = utils.getByTestId('psbt-action-undecoded');
             expect(alert.getAttribute('role')).toBe('alert');
-            expect(alert.textContent).toMatch(
+            expect(messageText(alert)).toMatch(
                 /^The XChain action inside this transaction could not be read\. Verify/,
             );
             expect(alert.textContent).not.toContain(decodeError);
@@ -404,7 +405,15 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
             ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
             feeText: 'Network fee: 0.00042 BTC',
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC');
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
+    });
+
+    it('does not label the caller fee as an estimate twice', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
+            feeText: 'Network fee: 0.00042 BTC (estimate)',
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
     });
 
     // §1.1 / §5.2.2: the intent states what was COMPOSED. The caller's

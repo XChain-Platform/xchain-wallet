@@ -13,7 +13,9 @@ import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { isNativeShell } from '../nativeShell.js';
 import PLATFORM_LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './AppHeader.module.css';
+import { t } from '../../i18n/index.js';
 
 function actionableItems(menu) {
     return Array.from(menu?.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])') || []);
@@ -60,6 +62,10 @@ export function HeaderActionMenu({
     platformCurrent,
 }) {
     const [open, setOpen] = useState(false);
+    // The Settings popover is portaled to the body and anchored to its row in
+    // this menu, so the row has to stay mounted. While the popover is up the
+    // panel is hidden (not unmounted) so it does not show through underneath.
+    const [overlayOpen, setOverlayOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
     const menuRef = useRef(null);
@@ -114,15 +120,15 @@ export function HeaderActionMenu({
         ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
         : null;
     const settings = isValidElement(settingsControl)
-        ? cloneElement(settingsControl, { onNavigate: close })
+        ? cloneElement(settingsControl, { onNavigate: close, onOpenChange: setOverlayOpen })
         : settingsControl;
     const rows = [
-        { id: 'search', label: 'Search', Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
-        { id: 'manage-addresses', label: 'Manage addresses', Icon: Icon.AddressIcon, handler: onManageAddresses },
-        { id: 'view-address', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
-        { id: 'pop-out', label: 'Open in new window', Icon: Icon.ExternalLinkIcon, handler: popOut },
-        { id: 'more', label: 'More wallet actions', Icon: Icon.MoreIcon, handler: onMore },
+        { id: 'search', label: t('routes.addressList.search'), Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
+        { id: 'scan', label: t('scan.title'), Icon: Icon.ScanIcon, handler: onScan },
+        { id: 'manage-addresses', label: t('shell.headerMenu.manageAddresses'), Icon: Icon.AddressIcon, handler: onManageAddresses },
+        { id: 'view-address', label: t('routes.addressList.viewAddress'), Icon: Icon.EyeIcon, handler: onViewAddress },
+        { id: 'pop-out', label: t('history.detail.openNewWindow'), Icon: Icon.ExternalLinkIcon, handler: popOut },
+        { id: 'more', label: t('shell.headerMenu.moreWalletActions'), Icon: Icon.MoreIcon, handler: onMore },
     ].filter((row) => typeof row.handler === 'function');
     // A menu holding only Search repeats the rail's Search button; the layout
     // hides this trigger whenever a visible rail already offers it.
@@ -149,10 +155,10 @@ export function HeaderActionMenu({
                         initialFocusRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
                         setOpen(true);
                     }}
-                    aria-label="Open menu"
+                    aria-label={t('components.headerActionMenu.openMenu')}
                     aria-haspopup="menu"
                     aria-expanded={open ? 'true' : 'false'}
-                    title="Open menu"
+                    title={t('components.headerActionMenu.openMenu')}
                     data-header-control
                 />
             </span>
@@ -160,8 +166,9 @@ export function HeaderActionMenu({
                 <div
                     ref={menuRef}
                     className={styles.actionMenu}
+                    data-overlay-open={overlayOpen ? 'true' : undefined}
                     role="menu"
-                    aria-label="Header actions"
+                    aria-label={t('components.headerActionMenu.headerActions')}
                     onKeyDown={(event) => {
                         if (!event.target.closest?.('[role="menuitem"]')) return;
                         // Tab leaves the menu, so it closes without trapping focus.
@@ -212,7 +219,7 @@ export function HeaderActionMenu({
                             onClick={() => close()}
                         >
                             <span className={styles.rowIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span className={styles.rowLabel}>{site.label}</span>
+                            <span className={styles.rowLabel}>{platformLinkLabel(site)}</span>
                         </a>
                     ))}
                 </div>

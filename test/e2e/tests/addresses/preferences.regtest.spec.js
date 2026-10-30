@@ -1,4 +1,5 @@
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -15,23 +16,10 @@ const PASSWORD = 'regtestpassword123';
 const XCHAIN_AMOUNT = 20;
 const MEMO = `ADP${Date.now().toString().slice(-8)}`;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function readTxid(page) {
     const main = page.getByRole('main');
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+    const txid = await readShownTxid(main);
     expect(txid, 'the preferences result showed no transaction id').toBeTruthy();
     return txid;
 }
@@ -55,7 +43,7 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
         });
 
         await test.step('submit changed preferences through the address detail form', async () => {
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: `View address ${source}` }).click();
             await main.getByRole('button', { name: 'Edit on-chain preferences' }).click();

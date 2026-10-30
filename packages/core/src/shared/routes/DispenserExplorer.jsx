@@ -21,7 +21,11 @@ import {
     isOpenDispenserSelling,
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/dispenserExplorer.js';
+import '../../i18n/locales/en/send.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispenserExplorer.module.css';
 
@@ -102,7 +106,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const searchDisabledReason = !settings
         ? 'Loading available networks…'
         : chains.length === 0
-            ? 'No chains are available for the active network.'
+            ? 'No networks are available for the active network.'
             : !query.trim()
                 ? `Enter ${searchMode === 'token' ? 'a token ticker' : 'an address'} to search.`
                 : null;
@@ -317,13 +321,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     <div className={local.chainControl}>
                         {/* Options name the chain alone; the active network is set in Settings. */}
                         <Select
-                            label="Chain"
+                            label="Network"
                             size="md"
                             value={chainFilter}
                             onChange={(e) => setChainFilter(e.target.value)}
                             className={local.chainSelect}
                         >
-                            <option value="all">All chains</option>
+                            <option value="all">{t('common.allNetworks')}</option>
                             {chains.map((cid) => (
                                 <option key={cid} value={cid}>
                                     {chainRegistry.get(cid)?.displayName || cid.split('-')[0]}
@@ -343,7 +347,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                             autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
                             autoCorrect="off"
                             spellCheck={false}
-                            aria-describedby="dispenser-search-hint"
+                            hint={searchMode === 'token'
+                                ? t('dispenserExplorer.searchHint.token')
+                                : t('dispenserExplorer.searchHint.address')}
                         />
                     </div>
                     <Button
@@ -357,11 +363,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searching ? 'Searching…' : 'Search'}
                     </Button>
                 </div>
-                <p id="dispenser-search-hint" className={`${styles.entryDescription} ${local.searchHint}`}>
-                    {searchMode === 'token'
-                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
-                        : 'Dispenser address or source address.'}
-                </p>
                 {searchDisabledReason ? (
                     <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
                         {searchDisabledReason}
@@ -485,7 +486,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                         variant="secondary"
                                         loading={state.loadingMore}
                                         onClick={() => onLoadMore(cid)}
-                                        aria-label={`Load more results for ${d?.displayName || 'this chain'}`}
+                                        aria-label={t('dispenserExplorer.loadMoreFor', { name: d?.displayName || t('send.rbf.thisChain') })}
                                     >
                                         Load more results
                                     </Button>
@@ -502,7 +503,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
 function ResultRow({ row, oracleFeeds, onSelect }) {
     const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
     const price = dispenserFillPriceLabel(row, oracleFeeds);
-    const status = String(flowsLib.dispenserLiveState(row).status || '-');
+    const status = dispenserStatusLabel(flowsLib.dispenserLiveState(row).status) || '-';
     return (
         <Button
             type="button"

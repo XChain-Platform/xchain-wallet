@@ -41,6 +41,12 @@ export function Spinner({ size = 'md', label, className, ...rest }) {
 // children is a static string, look the label up via the shared
 // `iconForLabel` resolver (in icons/index.jsx). Caller can pass
 // `icon={null}` to opt out for the rare label-only button.
+/** True for a label made only of strings and numbers, e.g. "Save" or {count} items. */
+function isPlainText(children) {
+    const parts = Array.isArray(children) ? children : [children];
+    return parts.length > 0 && parts.every((part) => typeof part === 'string' || typeof part === 'number');
+}
+
 function defaultIconFor(children) {
     const Icon = iconForLabel(typeof children === 'string' ? children : null);
     return Icon ? <Icon /> : null;
@@ -78,6 +84,7 @@ export const Button = forwardRef(function Button({
     // no icon at all. Any truthy value renders verbatim.
     const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
     const iconOnly = Boolean(resolvedIcon) && children == null;
+    const textOnly = isPlainText(children);
     const ariaLabel = rest['aria-label'];
     const ariaLabelledBy = rest['aria-labelledby'];
     if (iconOnly && !(typeof ariaLabel === 'string' && ariaLabel.trim()) && !ariaLabelledBy) {
@@ -112,7 +119,9 @@ export const Button = forwardRef(function Button({
             {resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
             {/* An icon-only button renders no label span: an empty flex item
                 plus the icon gap would pull the icon off centre. */}
-            {iconOnly ? null : <span className={styles.label}>{children}</span>}
+            {iconOnly ? null : (
+                <span className={textOnly ? `${styles.label} ${styles.textLabel}` : styles.label}>{children}</span>
+            )}
         </button>
     );
 });

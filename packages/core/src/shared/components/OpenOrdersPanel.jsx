@@ -23,9 +23,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, AddressText, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from './WatcherResultPanel.jsx';
+import { ResultScreen } from './ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -38,6 +39,9 @@ import {
     divideDecimalStrings,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionDetail.js';
+import '../../i18n/locales/en/components.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -58,6 +62,7 @@ const NUMERIC_CELL_STYLE = {
  */
 export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
@@ -65,10 +70,13 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [addressesLoading, setAddressesLoading] = useState(true);
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressRetryKey, setAddressRetryKey] = useState(0);
+    const [ordersRetryKey, setOrdersRetryKey] = useState(0);
     const [confirmOrder, setConfirmOrder] = useState(/** @type {any | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const [queuedResult, setQueuedResult] = useState(/** @type {any | null} */ (null));
     const mountedRef = useRef(false);
     const autopayRequestRef = useRef(0);
     const panelVersionRef = useRef(0);
@@ -87,16 +95,30 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
-        let cancelled = false;
         setAddresses([]);
         setOrders([]);
+    }, [walletId, chainId]);
+
+    useEffect(() => {
+        setOrders([]);
+    }, [chainId, tick1, tick2]);
+
+    useEffect(() => {
+        let cancelled = false;
         setAddressesLoading(true);
         setOrdersLoading(true);
         setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddresses(byChain?.[chainId] || []);
+                if (!byChain || typeof byChain !== 'object' || Array.isArray(byChain)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                const nextAddresses = byChain[chainId] || [];
+                if (!Array.isArray(nextAddresses)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                setAddresses(nextAddresses);
                 setAddressesLoading(false);
             })
             .catch((err) => {
@@ -106,7 +128,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setOrdersLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId]);
+    }, [messaging, walletId, chainId, addressRetryKey]);
 
     // PC-16: auto-pay consent records for this wallet+chain, keyed by the
     // order's action index (resolved from the placement txid host-side).
@@ -161,6 +183,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         let cancelled = false;
         let requestId = 0;
         setOrdersLoading(true);
+        setLoadError(null);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
@@ -190,7 +213,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
         const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
         return () => { cancelled = true; stopPollInterval(); };
-    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
+    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading, ordersRetryKey]);
 
     const rows = useMemo(() => {
         return orders.map((o) => summarizeOrder(o, tick1, tick2)).filter(Boolean);
@@ -229,6 +252,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setWatcherResult(result);
                 return;
             }
+            // Signed but held in the broadcast queue: the order is still open on
+            // the network, and a second cancel would sign a duplicate.
+            if (result?.queued) {
+                setQueuedResult(result);
+                return;
+            }
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
@@ -261,9 +290,24 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         );
     }
 
+    if (queuedResult) {
+        return (
+            <ResultScreen
+                state="signed-not-broadcast"
+                what={t('components.openOrdersPanel.orderCancellation')}
+                unsaved={queuedResult.unsaved}
+                onDone={() => {
+                    setQueuedResult(null);
+                    setConfirmOrder(null);
+                }}
+            />
+        );
+    }
+
     if (watcherResult) {
         return (
-            <WatcherResultPanel
+            <ResultScreen
+                state="unsigned"
                 result={watcherResult}
                 onBuildAnother={() => setWatcherResult(null)}
                 onDone={() => {
@@ -276,20 +320,35 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     return (
         <section
-            aria-label="Open orders"
+            aria-label={t('components.openOrdersPanel.openOrders')}
             aria-busy={addressesLoading || ordersLoading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Open orders</p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.openOrdersPanel.openOrders')}</p>
             {addressesLoading || ordersLoading ? (
-                <StatusMessage variant="status">Loading open orders…</StatusMessage>
+                <StatusMessage variant="status">{t('components.openOrdersPanel.loadingOpenOrders')}</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => {
+                            if (addresses.length === 0) {
+                                setAddressRetryKey((key) => key + 1);
+                            } else {
+                                setOrdersRetryKey((key) => key + 1);
+                            }
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loadError && !addressesLoading && !ordersLoading && rows.length === 0 ? (
                 <p style={{
@@ -298,7 +357,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     fontSize: 'var(--xc-text-sm)',
                     textAlign: 'center',
                 }}>
-                    No open orders on this market.
+                    {t('components.openOrdersPanel.noOpenOrdersOnThis')}
                 </p>
             ) : null}
             {rows.length > 0 ? (
@@ -312,11 +371,11 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         color: 'var(--xc-text-muted)',
                         fontSize: '0.75rem',
                     }}>
-                        <span>Side</span>
-                        <span style={NUMERIC_CELL_STYLE}>Price</span>
-                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
-                        <span style={NUMERIC_CELL_STYLE}>Filled</span>
-                        <span style={{ textAlign: 'right' }}>Action</span>
+                        <span>{t('components.placeOrderPanel.side')}</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.placeOrderPanel.price')}</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.size')}{tick1})</span>
+                        <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.filled')}</span>
+                        <span style={{ textAlign: 'right' }}>{t('actionDetail.title')}</span>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
                         {rows.map((r, index) => (
@@ -332,17 +391,17 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                 }}
                             >
                                 <span style={{
-                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)',
                                     fontWeight: 600,
                                 }}>
-                                    {r.side === 'buy' ? 'Buy' : 'Sell'}
+                                    {r.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
                                 </span>
                                 <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.price}</span>
                                 <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.size}</span>
                                 <span style={NUMERIC_CELL_STYLE}>
                                     {r.filled > 0
-                                        ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
-                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
+                                        ? (balancesHidden ? t('components.openOrdersPanel.filled2') : t('components.openOrdersPanel.filled3', { filled: r.filled, size: r.size }))
+                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>{t('components.openOrdersPanel.open')}</span>}
                                 </span>
                                 <Button
                                     variant="danger"
@@ -353,7 +412,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                     }}
                                     disabled={submitting}
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </Button>
                                 {(() => {
                                     const consent = autopayByIndex.get(String(r.actionIndex));
@@ -366,7 +425,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                             color: 'var(--xc-text-muted)',
                                         }}>
                                             <Switch
-                                                label={`CoinPay auto-pay ${on ? 'on' : 'off (notify-only)'}`}
+                                                label={t('components.openOrdersPanel.coinpayAutoPay', { value: on ? 'on' : 'off (notify-only)' })}
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}
                                             />
@@ -384,22 +443,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     noValidate
                     style={{
                         marginTop: '0.5rem',
-                        padding: '0.5rem',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: '4px',
+                        padding: 'var(--xc-card-pad)',
+                        border: 'var(--xc-card-border)',
+                        background: 'var(--xc-card-bg)',
+                        borderRadius: 'var(--xc-card-radius)',
                     }}
                 >
                     <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
-                        Cancel order #{String(confirmOrder.action_index)}?
-                        {confirmOwner ? <> from <AddressText address={confirmOwner.address} /></> : null}
+                        {t('components.openOrdersPanel.cancelOrder')}{String(confirmOrder.action_index)}?
+                        {confirmOwner ? <> {t('components.openOrdersPanel.from')} <AddressText address={confirmOwner.address} /></> : null}
                     </p>
                     <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
-                        This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.
+                        {t('components.openOrdersPanel.thisSubmitsACancellationTransaction')}
                     </p>
+                    {demoGuard.note}
+                    {demoGuard.dialog}
                     {submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
+                        <StatusMessage variant="error">{submitError}</StatusMessage>
                     ) : null}
                     <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
                         <Button
@@ -409,16 +469,16 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                             onClick={() => setConfirmOrder(null)}
                             disabled={submitting}
                         >
-                            Back
+                            {t('common.back')}
                         </Button>
                         <Button
                             type="submit"
                             variant="danger"
                             size="sm"
                             loading={submitting || cancelLane.composing}
-                            disabled={submitting || cancelLane.composing}
+                            disabled={demoGuard.blocked || submitting || cancelLane.composing}
                         >
-                            Cancel order
+                            {t('components.openOrdersPanel.cancelOrder2')}
                         </Button>
                     </div>
                 </form>
@@ -484,9 +544,8 @@ function summarizeOrder(o, tick1, tick2) {
 }
 
 function extractRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.orders)) return resp.orders;
-    return [];
+    throw new Error('getMarketOrders: malformed response');
 }

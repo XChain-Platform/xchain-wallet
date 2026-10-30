@@ -41,14 +41,19 @@
 
 import {
     PANIC_ARMED_SELF,
+    getPanicModeState,
     getPanicRemainingMs,
     isSigningFrozen,
 } from '../../flows/panicMode.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/panic.js';
 
 /** Surfaces the policy knows about. */
 export const PANIC_SURFACE_HOME = 'home';
 export const PANIC_SURFACE_SEND = 'send';
 export const PANIC_SURFACE_SIGN = 'sign';
+/** A sign surface whose only way forward is Reject: the freeze stands where the password field would be. */
+export const PANIC_SURFACE_REJECT_ONLY = 'reject-only';
 
 /**
  * Human countdown, matching the Settings -> Safety row so the two surfaces
@@ -87,10 +92,11 @@ export function formatPanicRemaining(ms) {
  * @param {object} [opts]
  * @param {import('../../flows/panicMode.js').PanicModeState} [opts.state]
  * @param {number} [opts.nowMs]
- * @param {'home'|'send'|'sign'} [opts.surface]
+ * @param {'home'|'send'|'sign'|'reject-only'} [opts.surface]
+ * @param {string} [opts.rejectLabel] on the reject-only surface, the label of the screen's reject control
  * @returns {PanicNotice|null}
  */
-export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_SURFACE_HOME } = {}) {
+export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_SURFACE_HOME, rejectLabel } = {}) {
     if (!state || !isSigningFrozen(state, nowMs)) return null;
 
     const remainingMs = getPanicRemainingMs(state, nowMs);
@@ -106,7 +112,7 @@ export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_S
         remainingText,
     };
     if (!disclose) return { ...base, title: null, detail: null };
-    return { ...base, ...discloseCopy(surface, remainingText) };
+    return { ...base, ...discloseCopy(surface, remainingText, rejectLabel) };
 }
 
 /**
@@ -115,23 +121,45 @@ export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_S
  *
  * @param {string} surface
  * @param {string} remainingText
+ * @param {string} [rejectLabel] the label on the screen's reject control, named by the reject-only sentence
  * @returns {{ title: string, detail: string }}
  */
-function discloseCopy(surface, remainingText) {
+function discloseCopy(surface, remainingText, rejectLabel) {
     if (surface === PANIC_SURFACE_SEND) {
+        return { title: t('panic.send.title'), detail: t('panic.send.detail', { remaining: remainingText }) };
+    }
+    if (surface === PANIC_SURFACE_REJECT_ONLY) {
+        // A screen with a labelled reject control names that label; a form
+        // whose only exit is Back says so instead of naming a button it lacks.
         return {
-            title: 'Panic mode is on. This send cannot be signed.',
-            detail: `Signing stays frozen for another ${remainingText}. You can fill in the form, but approving it will be refused. Turn panic mode off in Settings > Safety to send now.`,
+            title: t('panic.frozen.title'),
+            detail: rejectLabel
+                ? t('panic.rejectOnly.detail', { remaining: remainingText, reject: rejectLabel })
+                : t('panic.rejectOnly.detailBack', { remaining: remainingText }),
         };
     }
     if (surface === PANIC_SURFACE_SIGN) {
-        return {
-            title: 'Panic mode is on. Signing is frozen.',
-            detail: `${remainingText} remaining. Approving will be refused until panic mode is turned off in Settings > Safety.`,
-        };
+        return { title: t('panic.frozen.title'), detail: t('panic.sign.detail', { remaining: remainingText }) };
     }
-    return {
-        title: 'Panic mode is on. Signing is frozen.',
-        detail: `Nothing can be sent or signed for another ${remainingText}. Balances and history still work. Turn it off in Settings > Safety.`,
-    };
+    return { title: t('panic.frozen.title'), detail: t('panic.home.detail', { remaining: remainingText }) };
+}
+
+/**
+ * The sentence for a submit the freeze refused, or null when the wallet may
+ * not say so. Keyed on the error name, the only part of the error that
+ * survives the messaging boundary. A duress-armed freeze answers null, so the
+ * caller keeps its generic failure line and the observer sees no cue; a freeze
+ * this context cannot see (still loading, or already over) answers null too.
+ *
+ * @param {unknown} err
+ * @param {object} [opts]
+ * @param {import('../../flows/panicMode.js').PanicModeState} [opts.state]
+ * @param {number} [opts.nowMs]
+ * @returns {string|null}
+ */
+export function panicRefusalMessage(err, { state = getPanicModeState(), nowMs = Date.now() } = {}) {
+    if (/** @type {any} */ (err)?.name !== 'PanicModeActiveError') return null;
+    const notice = panicFreezeNotice({ state, nowMs });
+    if (!notice || !notice.disclose) return null;
+    return t('panic.refusal', { remaining: notice.remainingText });
 }

@@ -152,6 +152,9 @@ export function isChainConfirmedRecord(pendingTx) {
 
 /** @param {unknown} hash */
 function normalizeHash(hash) {
+    // An object or array would stringify to a shared bogus identity and fold
+    // every such malformed row into one entry.
+    if (typeof hash !== 'string' && typeof hash !== 'number') return '';
     return String(hash || '').trim().toLowerCase();
 }
 
@@ -159,6 +162,8 @@ function normalizeHash(hash) {
 function pendingKeyFor(chainId, txHash) {
     return `pending:${chainId}:${normalizeHash(txHash)}`;
 }
+
+const MAX_DATE_MS = 8.64e15;
 
 /**
  * `first_seen` is unix SECONDS on the wire (the decoder column) but History
@@ -172,7 +177,10 @@ function pendingKeyFor(chainId, txHash) {
 export function firstSeenToMs(firstSeen) {
     const n = Number(firstSeen);
     if (!Number.isFinite(n) || n <= 0) return null;
-    return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
+    const ms = n < 1e12 ? Math.round(n * 1000) : Math.round(n);
+    // Past the largest instant a Date holds, the stamp cannot be shown or
+    // sorted meaningfully; the entry falls back to its own first sighting.
+    return ms > MAX_DATE_MS ? null : ms;
 }
 
 /**
@@ -311,8 +319,11 @@ export function pendingTxToEntry({
     if (!txHash && !(failed && pendingTxId)) return null;
     const chainConfirmed = isChainConfirmedRecord(pendingTx);
     if (!failed && !isLivePendingStatus(pendingTx?.status) && !chainConfirmed) return null;
-    const source = String(pendingTx?.fromAddress || '');
-    const destinations = pendingTx?.toAddress ? [String(pendingTx.toAddress)] : [];
+    // A raw broadcast records "unknown" for the parties it can't name; that is
+    // a placeholder, not an address, so the entry carries none.
+    const addressOf = (value) => (value && value !== 'unknown' ? String(value) : '');
+    const source = addressOf(pendingTx?.fromAddress);
+    const destinations = addressOf(pendingTx?.toAddress) ? [addressOf(pendingTx.toAddress)] : [];
     const broadcastAtMs = isoToMs(pendingTx?.broadcastAt);
     // M2.2 records the network sighting on the record itself; until that row
     // lands the field is simply absent and the entry stays "awaiting network".
@@ -360,6 +371,7 @@ export function pendingTxToEntry({
             localStatus: String(pendingTx?.status || ''),
             pendingTxId: pendingTx?.id ? String(pendingTx.id) : null,
             replaced: String(pendingTx?.status || '') === 'rbf-replaced',
+            replacedElsewhere: pendingTx?.replacedElsewhere === true,
             rbf: typeof pendingTx?.rbf === 'boolean' ? pendingTx.rbf : null,
             replacementTxHash: pendingTx?.rbfReplacement
                 ? normalizeHash(pendingTx.rbfReplacement)
@@ -399,6 +411,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             localStatus: localEntry.pending.localStatus,
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
+            replacedElsewhere: localEntry.pending.replacedElsewhere === true,
             rbf: localEntry.pending.rbf,
             replacementTxHash: localEntry.pending.replacementTxHash,
             // A block is the one thing a mempool row cannot know about; only
@@ -493,6 +506,8 @@ export function mergePendingEntries({ confirmed, pending }) {
  *   `dropped`           a mempool DID report it and no longer does, with no
  *                       confirmation, past the grace window
  *   `replaced`          we replaced it ourselves via RBF
+ *   `replaced-elsewhere` another transaction spent its coins, so it cannot
+ *                       confirm (no mempool lists it and no block holds it)
  *
  * `confirmed` is the one state that speaks of a block, and it is a fact
  * about the transaction, not about any action: the service recorded none
@@ -510,7 +525,7 @@ export function mergePendingEntries({ confirmed, pending }) {
  * the network took the send. Only a proven block outranks it, since a
  * "permanent" broadcast failure can still turn out to have landed.
  *
- * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced' | 'failed'}
+ * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced' | 'replaced-elsewhere' | 'failed'}
  */
 export function pendingDisplayState(entry, nowMs, windows) {
     const meta = entry?.pending;
@@ -528,6 +543,9 @@ export function pendingDisplayState(entry, nowMs, windows) {
 
     // Present in a mempool as of the latest read: unambiguously healthy.
     if (meta.origin === 'mempool' || meta.origin === 'both') return 'seen';
+
+    // Nothing lists it and its coins are spent by another transaction.
+    if (meta.replacedElsewhere) return 'replaced-elsewhere';
 
     // No mempool is reporting it right now. This includes a local record and
     // an incoming row remembered from the previous successful mempool read.

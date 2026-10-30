@@ -19,8 +19,12 @@ import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { width: 360, height: 640, gutter: 12 },
-    { width: 768, height: 1024, gutter: 12 },
-    { width: 1440, height: 900, gutter: 12 },
+    { width: 639, height: 900, gutter: 12 },
+    { width: 640, height: 900, gutter: 16 },
+    { width: 768, height: 1024, gutter: 16 },
+    { width: 899, height: 900, gutter: 16 },
+    { width: 900, height: 900, gutter: 24 },
+    { width: 1440, height: 900, gutter: 24 },
 ];
 
 const ROUTES = [
@@ -58,7 +62,9 @@ async function openRoute(page, route) {
     }
 
     const main = page.getByRole('main');
-    await expect(main.locator(':scope > *').first()).toBeVisible();
+    // The notices slot is main's first child and stays empty and hidden when
+    // there is nothing to say, so wait for the first visible child instead.
+    await expect(main.locator(':scope > *:visible').first()).toBeVisible();
     if (route.formName) {
         await expect(main.getByRole('form', { name: route.formName, exact: true }))
             .toBeVisible();
@@ -67,9 +73,17 @@ async function openRoute(page, route) {
     await settle(page);
 }
 
-async function geometry(page) {
-    return page.getByRole('main').evaluate((main) => {
-        const first = main.firstElementChild;
+async function geometry(page, isFormRoute) {
+    return page.getByRole('main').evaluate((main, formRoute) => {
+        // Skip the empty notices slot, which renders no box or a zero-height one.
+        const block = Array.from(main.children).find((el) => el.getBoundingClientRect().height > 0);
+        // A plain form sits in a page wrapper beside its notices, so the form
+        // is the block itself or a direct child of that block.
+        const isForm = (el) => el.matches('form, [role="group"]');
+        const formEl = formRoute && block && (isForm(block)
+            ? block
+            : Array.from(block.children).find(isForm));
+        const first = formEl || block;
         const screenHeader = main.parentElement?.querySelector(':scope > header');
         const pageHeader = screenHeader?.firstElementChild;
         if (!first) throw new Error('Screen body has no first content block');
@@ -97,7 +111,10 @@ async function geometry(page) {
             startGutter: main.clientLeft,
             scrollbarGutter: borderWidth - main.clientLeft,
             directForms: Array.from(main.children)
-                .filter((element) => element.matches('form, [role="group"]')).length,
+                .flatMap((element) => (isForm(element)
+                    ? [element]
+                    : Array.from(element.children).filter(isForm)))
+                .length,
             firstStyle: {
                 backgroundColor: firstStyle.backgroundColor,
                 borderLeftWidth: parseFloat(firstStyle.borderLeftWidth),
@@ -105,7 +122,7 @@ async function geometry(page) {
                 paddingLeft: parseFloat(firstStyle.paddingLeft),
             },
         };
-    });
+    }, isFormRoute);
 }
 
 test('page templates keep one responsive gutter and the intended wide-screen shape', async ({ page }) => {
@@ -119,7 +136,7 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
         for (const route of ROUTES) {
             await test.step(`${viewport.width}px / ${route.name}`, async () => {
                 await openRoute(page, route);
-                const measured = await geometry(page);
+                const measured = await geometry(page, route.template === 'form');
 
                 expect(measured.gutter, 'Screen owns the tier gutter')
                     .toBeCloseTo(viewport.gutter, 5);
@@ -161,7 +178,8 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
                     expect(measured.firstStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
                     expect(measured.firstStyle.borderLeftWidth).toBeGreaterThan(0);
                     expect(measured.firstStyle.boxShadow).not.toBe('none');
-                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(24, 5);
+                    // The wide form card uses the one shared card padding (--xc-card-pad, 16px).
+                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(16, 5);
                 }
             });
         }

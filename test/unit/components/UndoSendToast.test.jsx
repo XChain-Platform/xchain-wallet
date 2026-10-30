@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { UndoSendToast } from '../../../packages/core/src/shared/components/UndoSendToast.jsx';
 
 afterEach(cleanup);
@@ -52,6 +53,28 @@ describe('UndoSendToast', () => {
         render(<UndoSendToast status="counting" remaining={5} onCancel={onCancel} />);
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('is the host toast: same stack position, card, message and action styles', () => {
+        const css = readFileSync('packages/core/src/shared/components/UndoSendToast.module.css', 'utf8');
+        expect(css).toMatch(/\.stack\s*\{\s*composes:\s*viewport from '\.\/ToastHost\.module\.css';\s*\}/);
+        expect(css).toMatch(/\.toast\s*\{\s*composes:\s*toast variant_info from '\.\/ToastStack\.module\.css';\s*\}/);
+        expect(css).toMatch(/\.cancelBtn\s*\{\s*composes:\s*actionBtn from '\.\/ToastStack\.module\.css';\s*\}/);
+        // Nothing of its own: no second set of positions, colours or motion.
+        expect(css).not.toMatch(/position:|background:|animation:|bottom:/);
+    });
+
+    it('rests in the same corner as the host stack', () => {
+        const { container, unmount } = render(<UndoSendToast status="counting" remaining={5} />);
+        expect(container.firstChild.dataset.placement).toBe('end');
+        unmount();
+        document.documentElement.style.setProperty('--xc-bottom-bar-h', '3.5rem');
+        try {
+            const view = render(<UndoSendToast status="counting" remaining={5} />);
+            expect(view.container.firstChild.dataset.placement).toBe('center');
+        } finally {
+            document.documentElement.style.removeProperty('--xc-bottom-bar-h');
+        }
     });
 
     it('a click with no onCancel does not throw', () => {

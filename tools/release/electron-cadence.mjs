@@ -55,16 +55,36 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * §9's thresholds, in one place because they are the policy.
  *
  * `MAJOR_GRACE_DAYS` is §9's "within 4 weeks of upstream release".
+ * `PATCH_GRACE_DAYS` is how long a new patch on our own major may sit
+ * untaken. It cannot be zero: pnpm refuses any third-party entry published
+ * less than a day ago (pnpm-workspace.yaml keeps that floor on, browser
+ * engine included), and Electron has shipped three 44.x patches inside four
+ * days, so a zero-grace rule was red on every day a patch shipped with no
+ * installable pin that could clear it. A week keeps the weekly run honest:
+ * a patch older than seven days is owed and fails the run.
  * `SUPPORTED_MAJORS` is upstream's own window: Electron maintains the
  * newest three stable majors and nothing older, so being outside it means
  * no security fixes exist for the engine we ship, at any version.
  */
 export const POLICY = {
     MAJOR_GRACE_DAYS: 28,
+    PATCH_GRACE_DAYS: 7,
     SUPPORTED_MAJORS: 3,
 };
 
 const majorOf = (v) => Number(String(v).split('.')[0]);
+const STABLE = /^(\d+)\.(\d+)\.(\d+)$/;
+/** Compare two stable x.y.z versions; anything else sorts as equal. */
+function compareStable(a, b) {
+    const x = STABLE.exec(String(a));
+    const y = STABLE.exec(String(b));
+    if (!x || !y) return 0;
+    for (let i = 1; i <= 3; i += 1) {
+        const d = Number(x[i]) - Number(y[i]);
+        if (d) return d;
+    }
+    return 0;
+}
 
 /** The version that actually ships: the lockfile's resolution. */
 export function readPinnedVersion({
@@ -135,15 +155,46 @@ export function assess(version, packument) {
         missing.push(`dist-tags.${ourMajor}-x-y (nothing to compare our patch level against)`);
     }
 
+    const nowMs = Date.parse(packument._now ?? new Date().toISOString());
+    const ageDaysOf = (v) => (time[v] ? (nowMs - Date.parse(time[v])) / 86400000 : null);
     if (newestOnOurMajor && newestOnOurMajor !== version) {
-        problems.push({
-            kind: 'patch',
-            detail: `${version} is not the newest ${ourMajor}.x: ${newestOnOurMajor} exists`,
-            // Within a major, Electron releases are almost entirely
-            // Chromium security backports. Being behind here is the
-            // straightforward "we ship known-fixed bugs" case.
-            since: time[newestOnOurMajor] ?? null,
-        });
+        // The patch that is OWED: the newest one on our major that has been
+        // out past the grace. A newest patch with no release date is owed at
+        // once, so a sparse document cannot buy a quiet week.
+        const newestAge = ageDaysOf(newestOnOurMajor);
+        let owed = null;
+        if (newestAge == null || newestAge > POLICY.PATCH_GRACE_DAYS) {
+            owed = newestOnOurMajor;
+        } else {
+            owed = Object.keys(time)
+                .filter((v) => STABLE.test(v) && majorOf(v) === ourMajor)
+                .filter((v) => compareStable(v, version) > 0)
+                .filter((v) => ageDaysOf(v) > POLICY.PATCH_GRACE_DAYS)
+                .sort(compareStable)
+                .pop() ?? null;
+        }
+        if (owed) {
+            problems.push({
+                kind: 'patch',
+                detail: owed === newestOnOurMajor
+                    ? `${version} is not the newest ${ourMajor}.x: ${newestOnOurMajor} exists`
+                    : `${version} is behind ${owed}, out past the ${POLICY.PATCH_GRACE_DAYS}-day `
+                        + `patch grace (newest ${ourMajor}.x: ${newestOnOurMajor})`,
+                // Within a major, Electron releases are almost entirely
+                // Chromium security backports. Being behind here is the
+                // straightforward "we ship known-fixed bugs" case.
+                since: time[owed] ?? null,
+            });
+        } else {
+            // Not a failure: the newer patch is still inside its grace, and
+            // likely inside pnpm's one-day floor, so no pin could take it yet.
+            problems.push({
+                kind: 'patch-pending',
+                detail: `${newestOnOurMajor} shipped ${time[newestOnOurMajor]?.slice(0, 10)}; `
+                    + `take it within ${POLICY.PATCH_GRACE_DAYS} days of release`,
+                since: time[newestOnOurMajor] ?? null,
+            });
+        }
     }
 
     // Every stable major newer than ours, oldest first, with how long it
@@ -203,8 +254,9 @@ export function assess(version, packument) {
     // and downgrading it to "inconclusive" would lose a real finding to a
     // bookkeeping gap. Only when nothing was detected does a gap decide the
     // verdict, and then it decides it against silence. `about-to-be-
-    // unsupported` alone stays a warning, exactly as before.
-    const detected = problems.some((p) => p.kind !== 'about-to-be-unsupported');
+    // unsupported` and `patch-pending` stay warnings.
+    const WARNINGS = new Set(['about-to-be-unsupported', 'patch-pending']);
+    const detected = problems.some((p) => !WARNINGS.has(p.kind));
     let state = 'ok';
     if (detected) state = 'behind';
     else if (missing.length) state = 'inconclusive';

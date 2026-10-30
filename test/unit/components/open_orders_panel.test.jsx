@@ -155,7 +155,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         const side = await screen.findByText('Sell');
         const price = screen.getByText('2.00000000');
         expect(screen.getByText('10.00000000')).toBeInTheDocument();
-        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(side.style.color).toBe('var(--xc-danger-fg)');
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
         expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
@@ -285,7 +285,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
         expect(screen.getByText(/Cancel order #17\?/)).toBeTruthy();
-        expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.')).toBeTruthy();
+        expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it can\'t be undone.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
         expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();
@@ -313,6 +313,25 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         await waitFor(() => {
             expect(screen.getByText('No open orders on this market.')).toBeTruthy();
         });
+    });
+
+    it('ends a signed-but-queued cancel on the queued panel and keeps the order listed', async () => {
+        const messaging = mountPanel();
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        await screen.findByLabelText('Confirm Cancel order (#17)');
+
+        lane.open = false;
+        await act(async () => lane.resolve({ queued: true, broadcast: 'queued', unsaved: false }));
+
+        expect(await screen.findByText('Signed. Not broadcast yet.')).toBeTruthy();
+        expect(screen.queryByText('No open orders on this market.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull();
+        expect(lane.run).toHaveBeenCalledTimes(1);
+        expect(messaging.cancelOrder).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
     });
 
     it('keeps the cancel action busy while composition is pending', async () => {
@@ -348,10 +367,8 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
-        expect(await screen.findByRole('heading', {
-            name: 'Unsigned transaction, ready for signing',
-        })).toBeTruthy();
-        expect(screen.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(await screen.findByText('Unsigned transaction, ready for signing')).toBeTruthy();
+        expect(screen.getByLabelText('Unsigned transaction code').value).toBe('aa00');
         expect(screen.queryByText('No open orders on this market.')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));

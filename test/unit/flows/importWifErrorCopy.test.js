@@ -180,3 +180,146 @@ describe('D-64: the wif-only onboarding lane says the same thing', () => {
         expect(a.message).toBe(b.message);
     });
 });
+
+describe('importWif with an uncompressed key', () => {
+    const UNCOMPRESSED_PUB = `04${'cd'.repeat(64)}`;
+    function uncompressedSdk() {
+        return {
+            get: () => ({
+                wallet: {
+                    importWIF: () => ({ publicKeyHex: UNCOMPRESSED_PUB, compressed: false }),
+                    deriveAddress: (_pub, { type }) => {
+                        if (type !== 'p2pkh') throw new Error('Failed to derive address: Invalid pubkey for p2wpkh');
+                        return 'mLegacyUncompressed';
+                    },
+                },
+            }),
+        };
+    }
+
+    it('refuses the segwit type the form sends with copy naming P2PKH', async () => {
+        const caught = await importWif({
+            vault,
+            walletId: 'w1',
+            masterKey: MASTER_KEY,
+            chainRegistry,
+            sdkRegistry: uncompressedSdk(),
+            chainId: 'bitcoin-regtest',
+            wif: '9uncompressedstub',
+            addressType: 'p2wpkh',
+        }).catch((e) => e);
+        expect(caught).toBeInstanceOf(InvalidWifError);
+        expect(caught.code).toBe('UNCOMPRESSED_KEY_TYPE');
+        expect(caught.message).toMatch(/P2PKH/);
+        expectUserFacing(caught.message);
+        expect(await vault.addresses.list()).toEqual([]);
+    });
+
+    it('adds the P2PKH address when the form picks P2PKH', async () => {
+        const r = await importWif({
+            vault,
+            walletId: 'w1',
+            masterKey: MASTER_KEY,
+            chainRegistry,
+            sdkRegistry: uncompressedSdk(),
+            chainId: 'bitcoin-regtest',
+            wif: '9uncompressedstub',
+            addressType: 'p2pkh',
+        });
+        expect(r.address).toMatchObject({ addressType: 'p2pkh', address: 'mLegacyUncompressed' });
+    });
+
+    it('words the refusal identically on both lanes', () => {
+        const a = new InvalidWifError('uncompressed key has no p2wpkh address', 'UNCOMPRESSED_KEY_TYPE');
+        const b = new SingleWifError('uncompressed key has no p2wpkh address', 'UNCOMPRESSED_KEY_TYPE');
+        expect(a.message).toBe(b.message);
+        expectUserFacing(a.message);
+    });
+});
+
+describe('a raw 64-hex private key pasted into the WIF field', () => {
+    const HEX = '1234567890abcdef'.repeat(4);
+    // The SDK's own reading of hex: base58 failure or bad checksum, which the
+    // generic copy turns into a typo hunt for a key that has no typo.
+    const sdkRejectingHex = () => throwingSdk(Object.assign(
+        new Error('Failed to import WIF: Non-base58 character'), { code: 'INVALID_WIF' },
+    ));
+
+    it.each([
+        ['bare', HEX],
+        ['0x-prefixed', `0x${HEX}`],
+        ['upper case', HEX.toUpperCase()],
+        ['no zero digit', '1'.repeat(64)],
+    ])('names the hex encoding (%s) on the add-address lane', async (_label, input) => {
+        const caught = await importWif({
+            vault,
+            walletId: 'w1',
+            masterKey: MASTER_KEY,
+            chainRegistry,
+            sdkRegistry: sdkRejectingHex(),
+            chainId: 'bitcoin-regtest',
+            wif: input,
+        }).catch((e) => e);
+        expect(caught).toBeInstanceOf(InvalidWifError);
+        expect(caught.code).toBe('RAW_HEX_KEY');
+        expect(caught.message).toMatch(/raw hex private key/i);
+        expect(caught.message).toMatch(/WIF/);
+        expectUserFacing(caught.message);
+    });
+
+    it('words it identically on the onboarding lane', () => {
+        const a = new InvalidWifError('raw hex private key', 'RAW_HEX_KEY');
+        const b = new SingleWifError('raw hex private key', 'RAW_HEX_KEY');
+        expect(a.message).toBe(b.message);
+    });
+
+    it('leaves a 63- or 65-character hex string to the ordinary copy', () => {
+        expect(wifFailureMessage('Invalid checksum', 'INVALID_WIF')).not.toMatch(/hex/i);
+    });
+});
+
+describe('importWif on a wif-only wallet', () => {
+    // A wif-only wallet has an empty seed blob; its first imported key is the
+    // sealed value a password check can open.
+    async function wifOnlyVault() {
+        const sealed = bytesToBase64(await encrypt(MASTER_KEY, new TextEncoder().encode('cFirstKeyStub')));
+        return {
+            wallets: memCollection([{
+                id: 'w2',
+                schemaVersion: 1,
+                name: 'Paper key',
+                format: 'wif-only',
+                encryptedSeed: '',
+                kdfParams: {},
+                importedKeys: [{ addressId: 'a0', encryptedWif: sealed, importedAt: '2026-01-01T00:00:00.000Z' }],
+            }]),
+            accounts: memCollection(),
+            addresses: memCollection(),
+        };
+    }
+    const okSdk = {
+        get: () => ({ wallet: { importWIF: () => ({ publicKeyHex: '02ee', compressed: true }), deriveAddress: () => 'mSecondKey' } }),
+    };
+
+    it('adds a second key under the session master key', async () => {
+        const v = await wifOnlyVault();
+        const r = await importWif({
+            vault: v, walletId: 'w2', masterKey: MASTER_KEY, chainRegistry, sdkRegistry: okSdk,
+            chainId: 'bitcoin-regtest', wif: 'cSecondKeyStub', addressType: 'p2pkh',
+        });
+        expect(r.address.address).toBe('mSecondKey');
+        const stored = await v.wallets.get('w2');
+        expect(stored.importedKeys).toHaveLength(2);
+        expect(stored.encryptedSeed).toBe('');
+    });
+
+    it('reads a wrong master key as a wrong password, not an internal error', async () => {
+        const v = await wifOnlyVault();
+        const caught = await importWif({
+            vault: v, walletId: 'w2', masterKey: OTHER_KEY, chainRegistry, sdkRegistry: okSdk,
+            chainId: 'bitcoin-regtest', wif: 'cSecondKeyStub', addressType: 'p2pkh',
+        }).catch((e) => e);
+        expect(caught).toBeInstanceOf(WrongPasswordError);
+        expect((await v.wallets.get('w2')).importedKeys).toHaveLength(1);
+    });
+});

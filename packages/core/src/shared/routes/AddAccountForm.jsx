@@ -12,6 +12,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, Button, FormPage, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignerSelectForm } from './SignerSelectForm.jsx';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 
 /**
  * Add a new BIP44 account under the active wallet (§11.3.2). Derives
@@ -86,17 +88,20 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
-        if (trimmed.length === 0) {
+        if (!hasVisibleText(trimmed)) {
             setError('Account name is required.');
             return;
         }
-        if (accounts.some((account) => account?.name?.trim().toLocaleLowerCase()
-            === trimmed.toLocaleLowerCase())) {
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
+            setError(`Account name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+        if (accounts.some((account) => nameKey(account?.name) === nameKey(trimmed))) {
             setError(`An account named "${trimmed}" already exists.`);
             return;
         }
         if (typeof messaging.createAccount !== 'function') {
-            setError('messaging.createAccount is not available in this shell.');
+            setError('Adding accounts is not available in this shell.');
             return;
         }
         setError(null);
@@ -109,7 +114,8 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
             });
             onCreated(result?.account);
         } catch (err) {
-            setError(err?.message || 'Failed to add account.');
+            // Show flow copy as is; developer text becomes lock-and-unlock advice (a stale signer pool is the usual cause)
+            setError(userFacingMessage(err, 'Couldn\'t add the account. Lock and unlock your wallet, then try again.'));
             setBusy(false);
         }
     }

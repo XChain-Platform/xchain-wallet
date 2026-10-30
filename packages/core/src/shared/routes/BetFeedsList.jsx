@@ -9,14 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedsList.module.css';
-import rowStyles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -177,7 +178,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <EmptyState
                     title="No betting address"
-                    body="Betting requires an address on a supported chain."
+                    body="Betting requires an address on a supported network."
                 />
             </ListPage>,
         );
@@ -196,7 +197,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
@@ -205,8 +205,33 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         );
     }
 
+    // This screen is the whole betting family's entry point, so the two personal
+    // views hang off it rather than each needing its own slot in the actions
+    // menu. The actions sit in the actions row like every other list screen's. Every button is secondary: the status filter below says which
+    // side is on with aria-pressed, so nothing here competes as the primary.
+    const actions = onCreate || onMyBets || onMyMarkets ? (
+        <>
+            {onCreate ? (
+                <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>
+                    Create market
+                </Button>
+            ) : null}
+            {onMyBets ? <Button type="button" variant="secondary" onClick={onMyBets}>My bets</Button> : null}
+            {onMyMarkets ? <Button type="button" variant="secondary" onClick={onMyMarkets}>My markets</Button> : null}
+        </>
+    ) : null;
+
     return wrap(
         <ListPage
+            actions={actions}
+            notices={error ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            ) : null}
             toolbar={(
                 <div className={local.toolbarRow}>
                     <div className={local.toolbarNetwork}>
@@ -219,34 +244,14 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         />
                     </div>
                     <div className={`${styles.betActions} ${local.toolbarActions}`}>
-                        {/* A two-way filter: the colour shows the active side, and
+                        {/* A two-way filter: the pressed ring shows the active side, and
                             aria-pressed says the same to a screen reader. */}
-                        <Button size="md" variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button size="md" variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
-                        {onCreate ? <Button size="md" variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                        <Button size="md" variant="secondary" aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant="secondary" aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
                     </div>
                 </div>
             )}
         >
-            {/* This screen is the whole family's entry point (the GovernancePolls
-                pattern), so the two personal views hang off it rather than each
-                needing its own slot in the actions menu. */}
-            {onMyBets || onMyMarkets ? (
-                <div className={styles.betActions}>
-                    {onMyBets ? <Button size="md" variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button size="md" variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
-                </div>
-            ) : null}
-
-            {error ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
-                >
-                    {error}
-                </StatusMessage>
-            ) : null}
             {chainId && !rows && !error ? (
                 <div role="status" aria-label="Loading betting markets" aria-busy="true">
                     Loading betting markets…
@@ -255,7 +260,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"
-                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'Markets created on this chain appear here.'}
+                    body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
                 />
             ) : null}
 
@@ -263,28 +268,38 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 <ul className={local.marketList}>
                     {rows.map((m) => {
                         const id = m.action_index;
-                        // The market LABEL is on-chain text written by whoever created the
-                        // market. React escapes it on render; it is never injected as markup.
-                        const label = m.label || '(untitled market)';
+                        // Market text is attacker-authored on-chain data. React
+                        // escapes markup, and the display pass also exposes bidi
+                        // controls instead of letting them reorder this row.
+                        const label = neutralizeControlText(m.label, { maxLength: 100 }) || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <li key={String(id)} className={local.marketItem}>
-                                <Button
+                            <li key={String(id)}>
+                                {/* The shared row, as Governance polls use: rendered through
+                                    Button, the row took its primary fill, and the muted label and
+                                    outcomes were unreadable on it. */}
+                                <ListRow
                                     type="button"
                                     onClick={() => onOpenMarket(chainId, id)}
-                                    className={rowStyles.entry}
-                                >
-                                    <span className={rowStyles.entryText}>
+                                    className={local.marketCard}
+                                    title={(
                                         <span className={local.marketHeader}>
                                             <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
                                             <StatusPill status={m.feed_status} />
                                         </span>
-                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{String(label).slice(0, 100)}</span>
-                                        {outcomes.length ? (
-                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
-                                        ) : null}
-                                    </span>
-                                </Button>
+                                    )}
+                                    subtitle={(
+                                        <>
+                                            <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>{label}</span>
+                                            {outcomes.length ? (
+                                                <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>
+                                                    {outcomes.slice(0, 4).map((outcome) => safeOutcomeLabel(outcome) || '?').join(' / ')}
+                                                    {outcomes.length > 4 ? ' …' : ''}
+                                                </span>
+                                            ) : null}
+                                        </>
+                                    )}
+                                />
                             </li>
                         );
                     })}

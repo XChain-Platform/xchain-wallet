@@ -20,6 +20,7 @@
 // so a later re-unlock doesn't race against stale state.
 
 import { clearSigningSecret } from './signingSecretSession.js';
+import { AUTO_LOCK_REQUEST_CEILING_MS } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
 
 /**
  * Raised when any step of the lock sequence failed. Every other step still
@@ -103,6 +104,71 @@ export async function handleWalletLock(_request, deps) {
 }
 
 /**
+ * Clear an earlier session's idle deadline before the unlocked UI can arm a
+ * new one. Waiting here prevents a slow storage removal from deleting the new
+ * record after the UI receives the successful unlock response.
+ *
+ * @param {{ clearAutoLockState: () => Promise<void>, continueUnlock: () => Promise<unknown> }} deps
+ * @returns {Promise<unknown>}
+ */
+export async function sequenceUnlockedSession(deps) {
+    await deps.clearAutoLockState();
+    return deps.continueUnlock();
+}
+
+// The ceiling is shared with the foreground hold in core.
+export { AUTO_LOCK_REQUEST_CEILING_MS };
+
+// Requests that sign or broadcast. A due idle lock waits for one of these to
+// settle, the same work the foreground hook holds its lock for. A read never
+// holds it: offline, a balance read the closed popup left behind waits on the
+// network, and the lock must not wait with it.
+const LOCK_HOLDING_REQUEST = /^(action\.|auth\.sign|broadcast\.(signedTx|queue\.broadcast)$|multisigSign\.)/;
+
+/**
+ * Whether a trusted UI request of this type holds a due idle lock.
+ *
+ * @param {unknown} type
+ * @returns {boolean}
+ */
+export function requestHoldsAutoLock(type) {
+    return typeof type === 'string' && LOCK_HOLDING_REQUEST.test(type);
+}
+
+/**
+ * Track the trusted UI requests in flight that hold a due idle lock. `begin`
+ * runs once per request and returns its completion callback. A request holds
+ * the lock from its start until it ends or `ceilingMs` passes, whichever
+ * comes first.
+ *
+ * @param {{ now?: () => number, ceilingMs?: number }} [opts]
+ * @returns {{ begin: (type: unknown) => () => void, isActive: () => boolean }}
+ */
+export function createUiRequestTracker(opts = {}) {
+    const now = opts.now ?? Date.now;
+    const ceilingMs = opts.ceilingMs ?? AUTO_LOCK_REQUEST_CEILING_MS;
+    /** @type {Set<{ startedAt: number }>} */
+    const inFlight = new Set();
+    return {
+        begin(type) {
+            if (!requestHoldsAutoLock(type)) return () => {};
+            const entry = { startedAt: now() };
+            inFlight.add(entry);
+            return () => { inFlight.delete(entry); };
+        },
+        isActive() {
+            const at = now();
+            for (const entry of inFlight) {
+                if (at - entry.startedAt < ceilingMs) return true;
+                // Past the ceiling the request stops holding and is dropped.
+                inFlight.delete(entry);
+            }
+            return false;
+        },
+    };
+}
+
+/**
  * @typedef {Object} LockBackstopDeps
  * @property {() => { sessionBackend: unknown, signingSecretBackend: unknown }} lockDeps   built per attempt, since an attempt can be retried
  * @property {() => void} tearDownHost                     release host + vault, zero the SignerPool
@@ -162,12 +228,22 @@ export function createLockBackstop(deps) {
     async function maybeAutoLock() {
         // Already locked; nothing to do, unless a previous lock left a secret
         // behind and is waiting on this alarm to retry the clear.
-        if (!deps.isUnlocked() && !cleanupPending) return 'skipped';
-        if (deps.isRequestActive?.()) return 'deferred';
+        if (!deps.isUnlocked() && !cleanupPending) {
+            return 'skipped';
+        }
+        // A record storage cannot read is a deadline this worker cannot
+        // enforce, so it locks rather than leaving the session open for good.
+        let unreadable = false;
         let state;
-        try { state = await deps.readAutoLockState(); } catch { return 'skipped'; }
-        if (!deps.shouldAutoLock(state, now())) return 'skipped';
-        logger.log('[xchain] auto-lock: idle timeout reached, locking wallet');
+        try { state = await deps.readAutoLockState(); } catch { unreadable = true; }
+        if (!unreadable && !deps.shouldAutoLock(state, now())) return 'skipped';
+        // A due lock waits for in-flight signing work. The request tracker
+        // stops counting a request after its ceiling, so a hung one cannot
+        // hold the wallet open for good.
+        if (deps.isRequestActive?.()) return 'deferred';
+        logger.log(unreadable
+            ? '[xchain] auto-lock: record unreadable, locking wallet'
+            : '[xchain] auto-lock: idle timeout reached, locking wallet');
         try {
             await lockWalletNow();
             return 'locked';

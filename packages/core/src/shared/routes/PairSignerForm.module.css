@@ -21,14 +21,12 @@
 }
 
 .vendorCard {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     text-align: start;
     cursor: pointer;
     color: var(--xc-text);
@@ -79,14 +77,11 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: auto 1fr;
     gap: var(--xc-space-1) var(--xc-space-3);
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -113,35 +108,6 @@
     padding: calc(var(--xc-space-1) / 2) var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
     border: 1px solid var(--xc-border);
-}
-
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
-
-.warningBanner {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
-
-.errorBanner {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: color-mix(in srgb, var(--xc-danger) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-danger) 40%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
 }
 
 .bannerDetail {
@@ -171,14 +137,12 @@
     color: var(--xc-success);
 }
 
+/* The section title sits the header gap above the paired rows. */
 .pairedSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-header-gap);
     margin: 0 0 var(--xc-space-4);
-}
-
-.pairedHeading {
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    margin: 0 0 var(--xc-space-2);
 }
 
 .pairedList {
@@ -191,13 +155,10 @@
 }
 
 .pairedRow {
+    composes: card from '../../ui/Card.module.css';
     align-items: center;
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     display: flex;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
 }
 
 .pairedIdentity {

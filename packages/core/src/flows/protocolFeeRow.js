@@ -44,6 +44,7 @@
 // (protocolFeeDisclosure / the native pre-flight).
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
 
 /**
  * @typedef {Object} NormalizedProtocolFee

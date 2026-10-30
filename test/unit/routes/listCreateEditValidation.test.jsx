@@ -82,7 +82,7 @@ describe('list create validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText(/over the 8,192-byte limit/)).toBeTruthy();
+        expect(await screen.findByText(/This list has 34 tokens \(8,\d{3} bytes\), but one action holds 8,192 bytes, which fits 32 of them\. Remove 2 tokens\./)).toBeTruthy();
         expect(screen.queryByText('Review list')).toBeNull();
     });
 
@@ -103,7 +103,7 @@ describe('list create validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText('Custom fee rate can have no more than 8 decimal places.')).toBeTruthy();
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
         expect(screen.queryByText('Review list')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -206,7 +206,7 @@ describe('list edit validation and review', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText('Custom fee rate must be greater than zero.')).toBeTruthy();
+        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.queryByText('Review list edit')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });

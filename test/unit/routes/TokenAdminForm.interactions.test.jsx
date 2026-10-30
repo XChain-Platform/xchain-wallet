@@ -21,12 +21,12 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-function mountAdmin(mode, overrides = {}) {
+function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ tick: 'TOKEN', locks: {} }),
+        getTokenInfo: vi.fn().mockResolvedValue({ tick: initialTick, creator: SOURCE.address, locks: {} }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         ...overrides,
     };
@@ -42,7 +42,7 @@ function mountAdmin(mode, overrides = {}) {
                 walletId="w"
                 mode={mode}
                 initialChainId={CHAIN}
-                initialTick="TOKEN"
+                initialTick={initialTick}
                 initialFromAddress={SOURCE.address}
                 onBack={() => {}}
             />
@@ -57,6 +57,42 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm review interaction safety', () => {
+    it('keeps a lowercase managed ticker exact in the composed admin action', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({
+            psbtHex: '70736274ff00',
+            chainId: CHAIN,
+        });
+        mountAdmin('description', { buildActionPsbtRequest }, 'caseSensitive');
+
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: 'Exact ticker update' },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+        fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
+
+        await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalled());
+        const params = buildActionPsbtRequest.mock.calls[0][0].actionData.params;
+        expect(params.TICK).toBe('caseSensitive');
+    });
+
+    it('rejects an overlong managed-token description before review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('description', { buildActionPsbtRequest });
+
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: '<b>markup</b>'.repeat(700) },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot be longer than 249 characters.');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('states that an ownership transfer cannot be undone on review', async () => {
         mountAdmin('transfer', {
             getTokenInfo: vi.fn().mockResolvedValue({
@@ -101,6 +137,25 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
+    it('refuses an admin action before review when the issuer is unknown', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('transfer', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: null,
+                locks: {},
+            }),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('refuses a description update after the description is locked', async () => {
         const buildActionPsbtRequest = vi.fn();
         mountAdmin('description', {
@@ -119,6 +174,21 @@ describe('TokenAdminForm review interaction safety', () => {
             'The description for TOKEN is permanently locked and cannot be updated.',
         );
         expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hostile description before watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('description', { buildActionPsbtRequest });
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: 'safe\u202eunsafe' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot contain text-direction control characters.');
+        expect(screen.queryByRole('form', { name: 'Review description update' })).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -183,7 +253,7 @@ describe('TokenAdminForm review interaction safety', () => {
         await act(async () => {
             resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN });
         });
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
     });
 
     it('does not use the previous callback token availability while typing', async () => {
@@ -191,7 +261,7 @@ describe('TokenAdminForm review interaction safety', () => {
         const nextInfo = new Promise((resolve) => { resolveNext = resolve; });
         const getTokenInfo = vi.fn(({ tick }) => {
             if (tick === 'TOKEN') {
-                return Promise.resolve({ chainId: CHAIN, tick, locks: {} });
+                return Promise.resolve({ chainId: CHAIN, tick, creator: SOURCE.address, locks: {} });
             }
             if (tick === 'DIVISIBLE') {
                 return Promise.resolve({ chainId: CHAIN, tick, divisibility: 8 });
@@ -255,5 +325,63 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Callback amount must be a positive number.');
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+});
+
+describe('Callback settings reads the holders again at Review', () => {
+    // The indexer refuses a callback edit once supply is distributed, after the
+    // fee is spent. The holder read that disables the fields can fail, or
+    // predate the first transfer out, so Review reads it again.
+    async function fillCallback(beforeReview = () => {}) {
+        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: 'PAY' } });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '150' } });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        beforeReview();
+        fireEvent.click(preview);
+    }
+
+    function base(tokenHolderSummary, buildActionPsbtRequest) {
+        return {
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'PAY'
+                    ? { chainId: CHAIN, tick: 'PAY', divisibility: 0, creator: NEW_OWNER }
+                    : { chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {} }
+            )),
+            tokenHolderSummary,
+            buildActionPsbtRequest,
+        };
+    }
+
+    it('refuses while the holders cannot be read', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
+        mountAdmin('callback-settings', base(vi.fn().mockRejectedValue(new Error('explorer 500')), buildActionPsbtRequest));
+        await fillCallback();
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't check whether TOKEN has holders. Callback settings can change only before any supply is distributed, so try again when the explorer answers.",
+        );
+        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses when supply went out after the form opened', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
+        let distributed = false;
+        const summary = vi.fn(async () => ({ isDistributed: distributed, holderCount: distributed ? 2 : 1 }));
+        mountAdmin('callback-settings', base(summary, buildActionPsbtRequest));
+        await fillCallback(() => { distributed = true; });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Callback settings can only be changed before any supply is distributed. This token already has holders.',
+        );
+        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('reaches review while supply is still undistributed', async () => {
+        mountAdmin('callback-settings', base(vi.fn().mockResolvedValue({ isDistributed: false, holderCount: 1 }), vi.fn()));
+        await fillCallback();
+        expect(await screen.findByRole('form', { name: /Review callback settings/ })).toBeInTheDocument();
     });
 });

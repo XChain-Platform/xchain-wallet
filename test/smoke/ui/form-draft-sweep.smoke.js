@@ -54,7 +54,7 @@ for (const [label, src, viewName, restoreFields] of [
         `${label} reads settings.privacy.formDraftTtlMs`);
 
     // 3. The hook is mounted with the documented view name.
-    assert.ok(new RegExp(`useFormDraft\\(\\{ view: '${viewName}', walletId, ttlMs: formDraftTtlMs \\}\\)`).test(src),
+    assert.ok(new RegExp(`useFormDraft\\(\\{ view: '${viewName}', walletId, network: draftNetwork, ttlMs: formDraftTtlMs \\}\\)`).test(src),
         `${label} mounts useFormDraft with view='${viewName}'`);
 
     // 4. The save effect persists every documented field but NEVER the

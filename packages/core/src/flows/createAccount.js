@@ -22,6 +22,7 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../util/display_name.js';
 
 /** @type {WeakMap<object, Map<string, Promise<void>>>} */
 const CREATE_ACCOUNT_QUEUES = new WeakMap();
@@ -120,12 +121,14 @@ export async function createAccount({
         const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
         const nextIndex = maxIndex + 1;
         const requestedName = typeof name === 'string' ? name.trim() : '';
-        if (name !== undefined && requestedName.length === 0) {
+        if (name !== undefined && !hasVisibleText(requestedName)) {
             throw new Error('createAccount: name must be a non-empty string');
         }
+        if (nameLength(requestedName) > NAME_MAX_LENGTH) {
+            throw new Error(`createAccount: name must be ${NAME_MAX_LENGTH} characters or fewer`);
+        }
         const accountName = requestedName || `Account ${nextIndex + 1}`;
-        if (existing.some((candidate) => String(candidate.name ?? '').trim().toLocaleLowerCase()
-            === accountName.toLocaleLowerCase())) {
+        if (existing.some((candidate) => nameKey(candidate.name) === nameKey(accountName))) {
             throw new Error(`An account named "${accountName}" already exists.`);
         }
 

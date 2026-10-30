@@ -192,6 +192,7 @@ export async function signMultisigLocally(opts) {
             });
             const updated = await contributeMultisigSignatureLocal({
                 vault:        opts.vault,
+                sdkRegistry:  opts.sdkRegistry,
                 sessionId:    session.id,
                 pubkey:       lowerLocalPubkey,
                 signatureHex: partialSig,
@@ -217,6 +218,7 @@ export async function signMultisigLocally(opts) {
         }
         const updated = await contributeMultisigSignatureLocal({
             vault:        opts.vault,
+            sdkRegistry:  opts.sdkRegistry,
             sessionId:    session.id,
             pubkey:       lowerLocalPubkey,
             signatureHex: sig,
@@ -260,7 +262,7 @@ async function contributeMultisigNonceLocal({ vault, sessionId, pubkey, publicNo
     return contributeMultisigNonce({ vault, sessionId, pubkey, publicNonceHex });
 }
 
-async function contributeMultisigSignatureLocal({ vault, sessionId, pubkey, signatureHex }) {
+async function contributeMultisigSignatureLocal({ vault, sdkRegistry, sessionId, pubkey, signatureHex }) {
     const { contributeMultisigSignature } = await import('./multisigSigning.js');
-    return contributeMultisigSignature({ vault, sessionId, pubkey, signatureHex });
+    return contributeMultisigSignature({ vault, sdkRegistry, sessionId, pubkey, signatureHex });
 }

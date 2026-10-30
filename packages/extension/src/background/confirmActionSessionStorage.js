@@ -21,16 +21,29 @@
 // The stored payload is SELF-CONTAINED (`{ request, composed, report }` with
 // the composed PSBT hex, not a reference) so a killed-and-restarted SW can
 // rehydrate the modal to its last state WITHOUT re-composing - re-composing
-// would break the byte-identity guarantee (a new UTXO selection).
+// would break the byte-identity guarantee (a new UTXO selection). It also
+// carries `dispatch` and `createdAt`, which resume needs to sign and to expire.
 //
 // Falls back to null when chrome.storage.session is unreachable (Node tests,
 // non-extension shells), so the host uses in-memory only.
 
 const REQUEST_KEY = 'xchain.confirmAction';
 const RESERVATION_KEY = 'xchain.reservationLedger';
+const OWN_SPENDS_KEY = 'xchain.ownSpends';
 
 /**
- * @typedef {{ id: string, request: object, composed: object, report: object|null }} ConfirmSession
+ * One stored confirm, exactly as the `action.confirmSession.put` route in
+ * createBackgroundHost.js writes it. Nothing typechecks these packages, so a
+ * test reads these @property names back and compares them to the stored keys.
+ *
+ * @typedef {Object} ConfirmSession
+ * @property {string} id
+ * @property {object|null} request
+ * @property {object|null} composed
+ * @property {object|null} report
+ * @property {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }|null} dispatch
+ *   allow-listed messaging method names plus the request body resume signs with
+ * @property {number|null} createdAt  epoch ms the confirm was stored, checked against the resume TTL
  */
 
 /**
@@ -40,6 +53,8 @@ const RESERVATION_KEY = 'xchain.reservationLedger';
  * @property {(id: string) => Promise<void>} removeSession
  * @property {() => Promise<Array<object>>} loadReservations
  * @property {(entries: Array<object>) => Promise<void>} saveReservations
+ * @property {() => Promise<Array<object>>} loadOwnSpends
+ * @property {(entries: Array<object>) => Promise<void>} saveOwnSpends
  */
 
 /**
@@ -55,20 +70,37 @@ export function createConfirmActionSessionStorage() {
     const set = (key, value) => new Promise((resolve) => {
         try { area.set({ [key]: value }, () => resolve()); } catch { resolve(); }
     });
+    const loadSessionMap = async () => {
+        const v = await get(REQUEST_KEY);
+        return (v && typeof v === 'object') ? v : {};
+    };
+    // chrome.storage has no atomic update primitive. Serialize the session-map
+    // read/modify/write operations so two confirm pages cannot both read the
+    // same snapshot and erase each other's entry with their writes.
+    let sessionMutation = Promise.resolve();
+    const mutateSessions = (mutation) => {
+        const pending = sessionMutation.then(mutation, mutation);
+        sessionMutation = pending.catch(() => {});
+        return pending;
+    };
 
     return {
         async loadSessions() {
-            const v = await get(REQUEST_KEY);
-            return (v && typeof v === 'object') ? v : {};
+            await sessionMutation;
+            return loadSessionMap();
         },
         async putSession(id, session) {
-            const all = await this.loadSessions();
-            all[id] = session;
-            await set(REQUEST_KEY, all);
+            await mutateSessions(async () => {
+                const all = await loadSessionMap();
+                all[id] = session;
+                await set(REQUEST_KEY, all);
+            });
         },
         async removeSession(id) {
-            const all = await this.loadSessions();
-            if (all[id]) { delete all[id]; await set(REQUEST_KEY, all); }
+            await mutateSessions(async () => {
+                const all = await loadSessionMap();
+                if (all[id]) { delete all[id]; await set(REQUEST_KEY, all); }
+            });
         },
         async loadReservations() {
             const v = await get(RESERVATION_KEY);
@@ -76,6 +108,13 @@ export function createConfirmActionSessionStorage() {
         },
         async saveReservations(entries) {
             await set(RESERVATION_KEY, Array.isArray(entries) ? entries : []);
+        },
+        async loadOwnSpends() {
+            const v = await get(OWN_SPENDS_KEY);
+            return Array.isArray(v) ? v : [];
+        },
+        async saveOwnSpends(entries) {
+            await set(OWN_SPENDS_KEY, Array.isArray(entries) ? entries : []);
         },
     };
 }
@@ -92,5 +131,19 @@ export function reservationStoreFrom(storage) {
     return {
         load: () => storage.loadReservations(),
         save: (entries) => storage.saveReservations(entries),
+    };
+}
+
+/**
+ * The OwnSpendStore createOwnSpendLedger accepts, backed by this session
+ * storage, so the coins a send claimed stay claimed across a worker restart.
+ *
+ * @param {ConfirmActionSessionStorage} storage
+ * @returns {{ load: () => Promise<Array<object>>, save: (e: Array<object>) => Promise<void> }}
+ */
+export function ownSpendStoreFrom(storage) {
+    return {
+        load: () => storage.loadOwnSpends(),
+        save: (entries) => storage.saveOwnSpends(entries),
     };
 }

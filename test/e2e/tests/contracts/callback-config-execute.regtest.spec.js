@@ -45,7 +45,13 @@
 // mining, rather than trusting the block was reached because two blocks
 // were mined.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     callbackBlockAhead,
     EXPLORER_URL,
@@ -82,20 +88,6 @@ async function explorerJson(path) {
     return res.json();
 }
 
-/** Opens the command palette and runs the first matching entry. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Fills the password when the confirm screen asks for one and approves.
  *
@@ -123,30 +115,19 @@ async function readDoneTxid(page, timeoutMs = 180_000) {
     return txid;
 }
 
-/** Opens My Tokens (via the pancake menu) filtered to one ticker, and opens it. */
+/** Opens My Tokens (via the command palette) filtered to one ticker, and opens it. */
 async function openManageToken(page, tick) {
-    await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'My tokens', exact: true }).click();
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const search = main.getByLabel('Search your tokens by ticker or description');
     await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });
     await search.fill(tick);
-    const row = main.getByRole('button', { name: new RegExp(`^${tick}\\b`) });
+    const row = main.getByRole('button', { name: `Open ${tick} token details`, exact: true });
     await expect(row.first(), `My Tokens does not list ${tick}`).toBeVisible({ timeout: 60_000 });
     await row.first().click();
     await expect(main.getByRole('heading', { name: tick, exact: true }), 'Manage Token did not open on this ticker')
         .toBeVisible({ timeout: 30_000 });
     return main;
-}
-
-/** Opens the "More" overflow menu on Manage Token and picks one entry. */
-async function pickManageMore(main, label) {
-    const more = main.getByRole('button', { name: 'More', exact: true });
-    await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
-    await more.click();
-    const item = main.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `Manage Token's overflow menu has no "${label}" entry`).toBeVisible({ timeout: 15_000 });
-    await item.click();
 }
 
 async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000) {
@@ -168,12 +149,12 @@ async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000
     throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
 }
 
-/** The block height printed on the Callback settings form ("Current block on X: N."). */
+/** The block height printed on the Callback settings form ("Current block: N."). */
 async function readCurrentHeightFromForm(main) {
-    const hint = main.getByText(/^Current block on /);
+    const hint = main.getByText(/^Current block: /);
     await expect(hint, 'Callback settings never printed the current block height').toBeVisible({ timeout: 30_000 });
     const text = await hint.innerText();
-    const match = text.match(/Current block on [^:]+:\s*([\d,]+)\./);
+    const match = text.match(/Current block:\s*([\d,]+)\./);
     expect(match, `unparseable current-block hint: ${text}`).toBeTruthy();
     return Number(match[1].replace(/,/g, ''));
 }
@@ -210,7 +191,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Callback Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -230,7 +211,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -248,7 +229,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('configure the callback via Callback settings, and the chain records the config', async () => {
             let main = await openManageToken(page, TICK);
-            await pickManageMore(main, 'Callback settings');
+            await clickManageTokenAction(main, 'Callback settings');
 
             main = page.getByRole('main');
             await expect(main.getByLabel('Callback token'), 'Callback settings never rendered its fields')

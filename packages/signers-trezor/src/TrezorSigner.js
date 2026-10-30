@@ -43,7 +43,8 @@ import {
     hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
-import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
+import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
+import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, pathToAddressN, toTrezorSignTransaction } from './trezorFormat.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
@@ -123,10 +124,13 @@ export class TrezorSigner extends Signer {
      *   - `'available'`: device reachable + same physical device we paired
      *   - `'locked'`: Connect reports that the device needs to be unlocked
      *   - `'disconnected'`: Connect rejects or the device identifier doesn't match
+     *   - `'unsupported-network'`: a chainId was passed that CHAIN_ID_TO_TREZOR_COIN
+     *     does not map, so every sign or derive on it would fail
      *
+     * @param {{ chainId?: string }} [opts]   Chain the caller is about to use; omitted accepts any
      * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
-    async getStatus() {
+    async getStatus(opts = {}) {
         let res;
         try {
             res = await this._connect.getFeatures();
@@ -159,6 +163,11 @@ export class TrezorSigner extends Signer {
         if (!observedId || observedId !== this._deviceIdentifier) {
             return 'disconnected';
         }
+        // Report a chain chainIdToTrezorCoin refuses here, as LedgerSigner does,
+        // rather than 'available' followed by a sign that cannot succeed.
+        if (opts?.chainId && !Object.prototype.hasOwnProperty.call(CHAIN_ID_TO_TREZOR_COIN, opts.chainId)) {
+            return 'unsupported-network';
+        }
         return 'available';
     }
 
@@ -172,16 +181,61 @@ export class TrezorSigner extends Signer {
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const coin = chainIdToTrezorCoin(chainId);
+        const pathAt = (index) => formatBip44Path({
+            purpose: bip44PurposeFor(addressType, coin),
+            coin,
+            accountIndex,
+            change,
+            index,
+        });
+        // More than one address goes to Connect as one bundled call per
+        // method, so a gap-limit scan costs two device round trips rather
+        // than two per address. The paths and their order are the same.
+        if (count > 1) {
+            const entries = Array.from({ length: count }, (_, i) => ({ index: startIndex + i, path: pathAt(startIndex + i) }));
+            const [addrRes, pkRes] = await Promise.all([
+                this._connect.getAddress({
+                    bundle: entries.map(({ path }) => ({ path, coin, showOnTrezor: !!verify })),
+                }),
+                this._connect.getPublicKey({ bundle: entries.map(({ path }) => ({ path, coin })) }),
+            ]);
+            if (!addrRes?.success) {
+                throw signerFailure(this._id, 'getAddress', addrRes);
+            }
+            if (!pkRes?.success) {
+                throw signerFailure(this._id, 'getPublicKey', pkRes);
+            }
+            const addresses = addrRes.payload;
+            const keys = pkRes.payload;
+            if (!Array.isArray(addresses) || addresses.length !== count
+                || !Array.isArray(keys) || keys.length !== count) {
+                throw new SignerStatusError(
+                    this._id, 'error', `getAddresses: Trezor answered a bundle of ${count} paths with a different count`,
+                );
+            }
+            return entries.map(({ index, path }, i) => {
+                // Connect echoes each item's numeric path. The address and key
+                // are filed under this index only when both items carry exactly
+                // the path asked for, hardened bits included: a missing path, a
+                // reordered answer, or a path that prints the same but differs
+                // as numbers is refused. The serializedPath string is not
+                // compared, since it can match while the numbers do not.
+                const want = pathToAddressN(path);
+                for (const item of [addresses[i], keys[i]]) {
+                    if (!sameAddressN(item?.path, want)) {
+                        throw new SignerStatusError(
+                            this._id, 'error',
+                            `getAddresses: Trezor answered path ${describeAddressN(item?.path)} for ${path}`,
+                        );
+                    }
+                }
+                return { index, address: addresses[i]?.address, publicKey: keys[i]?.publicKey, path };
+            });
+        }
         const out = [];
         for (let i = 0; i < count; i += 1) {
             const index = startIndex + i;
-            const path = formatBip44Path({
-                purpose: bip44PurposeFor(addressType, coin),
-                coin,
-                accountIndex,
-                change,
-                index,
-            });
+            const path = pathAt(index);
             // verify: display the address on the Trezor's trusted screen and
             // require the user to confirm it (defeats a compromised host/
             // transport substituting a receive address). Off = silent
@@ -273,6 +327,9 @@ export class TrezorSigner extends Signer {
         // Compare the reply back to the PSBT before its txid escapes this
         // method, because every caller downstream treats txHex as approved.
         assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
+        // Matching fields prove where the money goes, not that the signatures
+        // spend it: verify each one against the prevout and amount the user approved.
+        assertInputSignaturesVerify({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }
@@ -477,6 +534,25 @@ function bip44PurposeFor(addressType, coin) {
 function formatBip44Path({ purpose, coin, accountIndex, change, index }) {
     const coinType = coinTypeFor(coin);
     return `m/${purpose}/${coinType}/${accountIndex}'/${change}/${index}`;
+}
+
+/**
+ * Whether Connect's numeric `path` equals `want` element for element, each
+ * read as an unsigned 32-bit integer so a hardened index compares with its top
+ * bit set. Anything that is not such an array is a mismatch.
+ *
+ * @param {unknown} got
+ * @param {number[]} want
+ */
+function sameAddressN(got, want) {
+    if (!Array.isArray(got) || got.length !== want.length) return false;
+    return got.every((n, i) => Number.isInteger(n) && n >= 0 && n <= 0xffffffff && (n >>> 0) === want[i]);
+}
+
+/** A device-reported path for an error message, without trusting its shape. */
+function describeAddressN(got) {
+    if (!Array.isArray(got)) return '(none)';
+    return `[${got.map((n) => String(n)).join(',')}]`;
 }
 
 /**

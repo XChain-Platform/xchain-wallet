@@ -25,7 +25,7 @@ export function StatesSection() {
                         <li><strong><code>&lt;Skeleton&gt;</code></strong>: first paint while data is in flight; shapes mimic what's about to load.</li>
                         <li><strong><code>&lt;EmptyState&gt;</code></strong>: loaded successfully, dataset is empty; optional CTA to populate (see the Empty state section; it supersedes <code>EmptyStateNudge</code>).</li>
                         <li><strong><code>&lt;StatusMessage variant="error"&gt;</code></strong>: inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
-                        <li><strong><code>&lt;StatusMessage variant="status" | "success"&gt;</code></strong>: inline informational copy / confirmation after a successful action stays on the same view.</li>
+                        <li><strong><code>&lt;StatusMessage variant="status" | "info" | "success"&gt;</code></strong>: inline informational copy / confirmation after a successful action stays on the same view.</li>
                         <li><strong>Toast</strong> (via <code>ToastHost</code>): ephemeral result of an action when the user has already moved on (e.g. copied to clipboard, address generated).</li>
                     </ul>
                 </>}
@@ -57,8 +57,9 @@ export function StatesSection() {
     Insufficient balance.
 </StatusMessage>
 
-// Action just completed, user has likely moved on: toast
-showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
+// Action just completed, user has likely moved on: toast. The host owns
+// where it shows and how long it stays; pass only the words and the tone.
+showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
             </Markup>
 
             <LiveExample label="Skeleton: first paint, shape matches the data">
@@ -100,6 +101,12 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
             <LiveExample label="StatusMessage: inline success after action">
                 <StatusMessage variant="success">
                     Address copied to clipboard.
+                </StatusMessage>
+            </LiveExample>
+
+            <LiveExample label="StatusMessage: info (informational copy with its own tone)">
+                <StatusMessage variant="info">
+                    Your balances update when the network reconnects.
                 </StatusMessage>
             </LiveExample>
 

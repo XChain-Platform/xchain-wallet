@@ -54,6 +54,7 @@ export const SDK_DEEP_PATHS = {
     musig2: ['src/musig2.js'],
     networks: ['src/networks.js'],
     preflightConstants: ['src/preflight/constants.js'],
+    preflightTier1Findings: ['src/preflight/index/tier1_findings.js'],
     protocolConstants: ['src/protocol/constants.js'],
     protocolNetworks: ['src/protocol/networks.js', 'src/networks.js'],
     protocolValidator: ['src/protocol/validator.js', 'src/validator.js'],

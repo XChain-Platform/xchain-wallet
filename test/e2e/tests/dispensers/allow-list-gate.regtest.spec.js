@@ -38,7 +38,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/allow-list-gate.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -55,6 +56,9 @@ import {
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
+    selectVenueSendAsset,
+    selectDispenserOnSource,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -154,19 +158,6 @@ async function waitForCredit(address, tick, min, timeoutMs = 180_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * The shared reader, plus this lane's own checks.
  *
@@ -188,10 +179,13 @@ async function expectConfirmModal(page) {
 
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -204,16 +198,9 @@ async function approveAndGetTxid(page) {
  * picker; nothing is composed from it here.
  */
 async function addWalletAndReadAddress(page, name) {
-    await gotoPalette(page, 'Switch wallet');
-    await page.getByRole('button', { name: 'Add wallet' }).click();
-    await createWallet(page, { password: PASSWORD, name, navigate: false });
-    await gotoPalette(page, 'Switch wallet');
-    await page.getByRole('button', { name: new RegExp(name) }).first().click();
-    await expect(page.getByRole('button', { name: new RegExp(name) }).first(),
-        `the app did not switch to ${name}`)
-        .toBeVisible({ timeout: 30_000 });
+    await addWallet(page, { name, password: PASSWORD });
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
@@ -222,25 +209,15 @@ async function addWalletAndReadAddress(page, name) {
     return address;
 }
 
-async function switchToWallet(page, name) {
-    await gotoPalette(page, 'Switch wallet');
-    await page.getByRole('button', { name: new RegExp(name) }).first().click();
-    await expect(page.getByRole('button', { name: new RegExp(name) }).first(),
-        `the app did not switch to ${name}`)
-        .toBeVisible({ timeout: 30_000 });
-}
-
 /** Sends `amount` of the venue's native coin to `to` from the active wallet. */
 async function payCoin(page, to, amount) {
-    await gotoPalette(page, 'Send');
+    await openPaletteCommand(page, 'Send');
     const main = page.getByRole('main');
     const coin = REGTEST_COIN.slice(1);
     // The Send form has no chain picker (D-140): it follows the SELECTED
     // ASSET's chain. Picking the venue's native coin is how the chain gets
-    // chosen, and a NATIVE row is named for its CHAIN, not its ticker.
-    await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill(coin);
-    await page.getByLabel(new RegExp(`Open ${REGTEST_CHAIN_LABEL} details`, 'i')).first().click();
+    // chosen.
+    await selectVenueSendAsset(page);
     await expect(main.getByRole('textbox', { name: new RegExp(`^Amount \\(${coin}\\)`) }),
         `the Send form is composing on the wrong chain: no ${coin} amount field`)
         .toBeVisible({ timeout: 30_000 });
@@ -274,9 +251,9 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             // The seller's dispenser opens on its SOURCE (D-15), so this is
             // also the dispenser's GET_ADDRESS - the second address the gate
             // checks, and the one an owner forgets to list.
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
@@ -304,7 +281,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForTokenBalance(seller, TICK, MINT);
             await seedPrices();
 
-            await gotoPalette(page, 'Create a list');
+            await openPaletteCommand(page, 'Create a list');
             const main = page.getByRole('main');
             await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -337,14 +314,18 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('and opens a dispenser bound to it', async () => {
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
+            // The dispenser opens on the Source: that is the address each buyer
+            // pays, and the one the seller lists.
+            await selectDispenserOnSource(page);
+
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await selectPickerAsset(page, TICK);
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
@@ -443,7 +424,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             // the explorer serves both on the row it was already reading and the
             // OWNER's view of the same page prints them. The step above measured
             // what following that sentence costs.
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                 .first().click();
             const main = page.getByRole('main');

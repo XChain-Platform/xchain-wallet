@@ -197,11 +197,39 @@ describe('holdersFor explorer response edges', () => {
         expect(getHolders).toHaveBeenCalledTimes(1);
     });
 
-    it('merges array pages and ignores malformed later pages', async () => {
-        const first = { total: 1001, data: [{ address: 'first' }] };
+    const holderRows = (prefix, count) => Array.from({ length: count }, (_unused, index) => ({
+        address: `${prefix}-${index}`,
+    }));
+
+    it('merges complete array pages with the caller options', async () => {
+        const first = { total: 1001, data: holderRows('first', 500) };
         const getHolders = vi.fn(async (_tick, pageOpts) => {
             if (pageOpts.page === 1) return first;
-            if (pageOpts.page === 2) return [{ address: 'second' }];
+            if (pageOpts.page === 2) return holderRows('second', 500);
+            return { data: holderRows('third', 1) };
+        });
+
+        const result = await holdersFor({
+            sdkRegistry: { get: () => ({ getHolders }) },
+            chainId: 'c',
+            tick: 'UNIT',
+            opts: { owner: 'wallet' },
+            all: true,
+        });
+        expect(result.total).toBe(1001);
+        expect(result.data).toHaveLength(1001);
+        expect(result.data[500]).toEqual({ address: 'second-0' });
+        expect(result.data[1000]).toEqual({ address: 'third-0' });
+        expect(getHolders).toHaveBeenNthCalledWith(3, 'UNIT', {
+            owner: 'wallet', page: 3, limit: 500,
+        });
+    });
+
+    it('refuses a malformed later page instead of returning a partial list', async () => {
+        const first = { total: 1001, data: holderRows('first', 500) };
+        const getHolders = vi.fn(async (_tick, pageOpts) => {
+            if (pageOpts.page === 1) return first;
+            if (pageOpts.page === 2) return holderRows('second', 500);
             return { data: 'unreadable' };
         });
 
@@ -211,12 +239,6 @@ describe('holdersFor explorer response edges', () => {
             tick: 'UNIT',
             opts: { owner: 'wallet' },
             all: true,
-        })).resolves.toEqual({
-            total: 1001,
-            data: [{ address: 'first' }, { address: 'second' }],
-        });
-        expect(getHolders).toHaveBeenNthCalledWith(3, 'UNIT', {
-            owner: 'wallet', page: 3, limit: 500,
-        });
+        })).rejects.toThrow(/partial holders.*page 3/);
     });
 });

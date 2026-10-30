@@ -17,15 +17,18 @@
 // The second case is the negative control: the same race with no seal.
 
 import { describe, it, expect, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import {
     BROADCAST_QUEUE_STORAGE_VERSION,
     createBroadcastQueueStorage,
 } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
 const KEY = 'xchain.broadcastQueue';
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 
 function fakeChrome() {
     const store = {};
@@ -50,9 +53,14 @@ function deferred() {
     return { promise, resolve };
 }
 
-const entry = (id, extra = {}) => ({ id, chainId: CHAIN, signedTxHex: `hex-${id}`, summary: id, signedAt: 1, ...extra });
+const entry = (id, extra = {}) => ({ id, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: id, signedAt: 1, ...extra });
 
 function makeHost(broadcastTx) {
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault: {
             pendingTxs: {
@@ -73,7 +81,7 @@ function makeHost(broadcastTx) {
             get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }),
             list: () => [],
         },
-        sdkRegistry: { get: () => ({ encoder: { broadcastTx } }), for: () => ({ encoder: { broadcastTx } }) },
+        sdkRegistry: { get: () => sdk, for: () => sdk },
         signerPool: { get: () => null, has: () => false },
         approvals: { request: async () => ({ approved: true }) },
         bridgeEvents: { emit() {} },
@@ -122,7 +130,7 @@ describe('sealBroadcastQueue fences writes that resolve after the wipe', () => {
     it('re-creates the key with the wiped entries when nothing sealed it', async () => {
         const { store } = await raceWipe({ seal: false });
         expect(store[KEY]).toBeDefined();
-        expect(JSON.stringify(store[KEY])).toContain('hex-B');
+        expect(JSON.stringify(store[KEY])).toContain(SIGNED.txHex);
     });
 });
 
@@ -155,7 +163,7 @@ describe('a rehydrate still reading when the seal lands takes nothing back', () 
             // No settle before the enqueue: it joins the host's eager load, whose
             // read fails, so its own persist starts the held second read.
             const h = makeHost(vi.fn());
-            const enqueued = h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-new' });
+            const enqueued = h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex });
             await settle();
 
             await h.host.sealBroadcastQueue();

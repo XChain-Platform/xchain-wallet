@@ -9,9 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -26,13 +28,15 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     hasAnyAddress,
@@ -48,10 +52,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -129,7 +133,10 @@ function withFormattedExpiration(confirmAction) {
  */
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
-    const networkAvailable = useOnlineStatus();
+    const demoGuard = useDemoGuard(walletId, { onBack });
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -174,6 +181,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const markReviewAttempt = useFocusNoticeOnAttempt();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -202,7 +210,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 if (!Object.keys(signingByChain)[0]) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before creating a swap.');
+                        : 'No addresses on any network yet. Use Receive to generate one before creating a swap.');
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
@@ -312,6 +320,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
         if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
+        if (memoError) return memoError;
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
         giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,
@@ -353,10 +363,6 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
-        : null;
-    const feeError = feePick.mode === 'custom'
-        && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0 || !feeCustomEstimate)
-        ? 'Enter a valid custom network fee rate before reviewing.'
         : null;
 
     // Wire-format SWAP v0 params: the one definition the confirm compose and
@@ -462,7 +468,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!networkAvailable) return;
+        markReviewAttempt();
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;
@@ -473,7 +482,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
-        if (validationError || expError || feeError) return;
+        if (validationError || expError) return;
+        // The memoized check keeps the clock of the last edit, so ask again now.
+        if (expirationValidationError(expMode, expInput)) {
+            setFormError('Expiration must be a future date and time.');
+            return;
+        }
         setFormError(null);
         if (singleEncode) {
             if (submitPendingRef.current) return;
@@ -490,7 +504,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         const freshExpirationError = expirationValidationError(expMode, expInput);
-        if (validationError || freshExpirationError || feeError) {
+        if (validationError || freshExpirationError) {
             if (freshExpirationError) setSubmitError(freshExpirationError);
             return;
         }
@@ -591,7 +605,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -604,11 +618,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -653,10 +668,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -692,12 +708,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 </p>
                 <dl className={styles.detailsList}>
                     {descriptor ? (
-                        <DetailRow label="Give chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                        <DetailRow label="Give network" value={<ChainBadge descriptor={descriptor} size="sm" />} />
                     ) : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Give amount" value={giveSide} />
                     {descriptor ? (
-                        <DetailRow label="Get chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                        <DetailRow label="Get network" value={<ChainBadge descriptor={descriptor} size="sm" />} />
                     ) : null}
                     <DetailRow label="Get amount" value={getSide} />
                     {!giveOwnership && !getOwnership ? (
@@ -730,9 +746,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     are not refunded.
                 </p>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -860,26 +874,22 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Swap tokens"
             onSubmit={handleReview}
             sectioned
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || feeError || formError ? (
+            status={validationError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {validationError}
                         </StatusMessage>
                     ) : null}
-                    {feeError ? (
-                        <StatusMessage variant="error" className={styles.error}>
-                            {feeError}
-                        </StatusMessage>
-                    ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {formError}
                         </StatusMessage>
                     ) : null}
@@ -901,12 +911,27 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         >
             <FormSection
                 title="Network"
-                description="Both swap legs settle on this chain."
+                description="Both swap legs settle on this network."
             >
                 <ChainPicker
-                    label="Give and get chain"
+                    label="Give and get network"
                     value={chainId}
-                    onChange={setChainId}
+                    onChange={(cid) => {
+                        if (cid === chainId) return;
+                        // Tokens, the receive address and list IDs name things on
+                        // one chain; a list ID on another chain is a different list.
+                        setChainId(cid);
+                        setGiveTick('');
+                        setGiveAmount('');
+                        setGiveOwnership(false);
+                        setGetTick('');
+                        setGetAmount('');
+                        setGetOwnership(false);
+                        setGetAddress('');
+                        setAllowListIdx('');
+                        setBlockListIdx('');
+                        setFormError(null);
+                    }}
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     hideNetworkKind
@@ -932,11 +957,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onOpenPicker={() => setGivePickerOpen(true)}
                 />
                 {gatedGiveNotice.gated && !giveOwnership ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
-                        </p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">
+                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                    </FormNotice>
                 ) : null}
                 {giveOwnership ? null : (
                     <AmountField
@@ -957,17 +980,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                             : null}
                     />
                 )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                    <input
-                        type="checkbox"
-                        checked={giveOwnership}
-                        onChange={(e) => setGiveOwnership(e.target.checked)}
-                    />
-                    Give this token&apos;s ownership instead of an amount
-                </label>
+                <Checkbox
+                    label="Give this token's ownership instead of an amount"
+                    checked={giveOwnership}
+                    onChange={(e) => setGiveOwnership(e.target.checked)}
+                />
                 {giveOwnership ? (
-                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft}>
                         Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                     </p>
                 ) : null}
@@ -991,17 +1010,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         }}
                     />
                 )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                    <input
-                        type="checkbox"
-                        checked={getOwnership}
-                        onChange={(e) => setGetOwnership(e.target.checked)}
-                    />
-                    Require the matcher to give that token&apos;s ownership instead of an amount
-                </label>
+                <Checkbox
+                    label="Require the matcher to give that token's ownership instead of an amount"
+                    checked={getOwnership}
+                    onChange={(e) => setGetOwnership(e.target.checked)}
+                />
                 {getOwnership ? (
-                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft}>
                         The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
                     </p>
                 ) : null}
@@ -1011,17 +1026,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 title="Timing and fees"
                 description="The give side stays escrowed until a match, cancellation, or expiration."
             >
-            <p className={styles.successLabel}>Expiration</p>
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="swap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
+            <RadioGroup
+                legend="Expiration"
+                name="swap-exp"
+                value={expMode}
+                onChange={setExpMode}
+                options={[
+                    { value: 'default', label: 'Default window' },
+                    { value: 'custom', label: 'Expire at a specific time' },
+                ]}
+            />
             {expMode === 'custom' ? (
                 <Input
                     label="Expires"
@@ -1031,7 +1045,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onChange={(e) => setExpInput(e.target.value)}
                 />
             ) : null}
-            {expError ? <StatusMessage variant="error" className={styles.error}>{expError}</StatusMessage> : null}
+            {expError ? <FieldNote variant="error">{expError}</FieldNote> : null}
 
             <dl className={styles.detailsList}>
                 <DetailRow label="Rate" value={rateText} />
@@ -1075,18 +1089,20 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <p className={styles.successLabel}>Restrict who can match (optional)</p>
-                    <div className={styles.actions}>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
-                        </Button>
-                        {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
-                        </Button>
-                        {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                    <div className={styles.choiceGroup}>
+                        <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                        <div className={styles.choiceButtons}>
+                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                            </Button>
+                            {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
+                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                            </Button>
+                            {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
+                        </div>
                     </div>
-                    <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                    <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                 </div>
             ) : null}
 
@@ -1098,6 +1114,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    // Offline already says swapping is blocked, so a fee-source
+                    // notice would be a second message for the same state.
+                    showEstimateNotice={networkAvailable}
                 />
             ) : null}
 

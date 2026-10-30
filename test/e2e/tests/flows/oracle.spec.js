@@ -227,7 +227,7 @@ for (const viewport of VIEWPORTS) {
             await expect(form).toBeVisible({ timeout: 30_000 });
             await expectScreenLayout(page, 'My oracle', `${viewport.name} oracle form`);
 
-            await form.getByLabel("Token's chain").selectOption('LTC');
+            await form.getByLabel("Token's network").selectOption('LTC');
             await form.getByLabel('Token ticker').fill(TICK);
             await form.getByLabel('Currency').selectOption(FIAT);
             await form.getByLabel(/^Price of one/).fill(PRICE);

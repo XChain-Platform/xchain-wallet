@@ -263,7 +263,9 @@ describe('importBackupLocal derives once per distinct set of inputs', () => {
 });
 
 describe('add-mode restore through the in-page host', () => {
-    it('three derivations (file, old seal, new seal), unchanged: no pair shares inputs', async () => {
+    // The device box is checked against the vault key first, so a restore into an
+    // open vault pays four: that check, the file, the old seal and the new seal.
+    it('four derivations (device check, file, old seal, new seal): no pair shares inputs', async () => {
         const { fileContent } = await backupThenWipe();
         await createWalletLocal({ password: DEVICE_PASSWORD });
         resetCount();
@@ -275,7 +277,7 @@ describe('add-mode restore through the in-page host', () => {
             mode: 'add',
         });
         expect(res).toMatchObject({ rekeyed: true });
-        expect(state.passwords).toEqual([BACKUP_PASSWORD, WALLET_PASSWORD, DEVICE_PASSWORD]);
+        expect(state.passwords).toEqual([DEVICE_PASSWORD, BACKUP_PASSWORD, WALLET_PASSWORD, DEVICE_PASSWORD]);
         expect(state.issued.every(zeroed)).toBe(true);
         expect(populated).toEqual([]);
     });

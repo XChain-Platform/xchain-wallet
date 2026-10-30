@@ -12,12 +12,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { ResultScreen } from '../components/ResultScreen.jsx';
+import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 import consoleStyles from './OracleConsole.module.css';
@@ -80,6 +82,7 @@ function countdownLabel(targetSec, nowSec) {
  */
 export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
 
@@ -308,7 +311,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     if (result?.psbtHex && !result?.txid) {
         return wrap(
             <ListPage>
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setActive(null); }}
                     onDone={onBack}
@@ -318,12 +322,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     }
 
     return wrap(
-        <ListPage toolbar={(
+        <ListPage notices={demoGuard.note || error || formError ? (
+            <>
+                {demoGuard.note}
+                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            </>
+        ) : null} toolbar={(
             <Button type="button" variant="ghost" size="md" disabled={refreshing} onClick={() => load(true)}>
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {demoGuard.dialog}
             {!rows ? <p>Loading your markets…</p> : null}
             {rows && rows.length === 0 && !error ? (
                 <EmptyState
@@ -331,7 +341,6 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     body="Betting markets created by this wallet appear here."
                 />
             ) : null}
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">
                     <p className={styles.summary}>
@@ -371,7 +380,10 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     return (
                         <div key={key} className={`${styles.listCard} ${consoleStyles.card}`}>
                             <div className={consoleStyles.marketHeader}>
-                                <strong className={consoleStyles.marketTitle}>Market number: #{String(f.action_index)}; {f.label || 'Untitled market'}</strong>
+                                <strong className={consoleStyles.marketTitle}>
+                                    Market number: #{String(f.action_index)};{' '}
+                                    {neutralizeControlText(f.label, { maxLength: 250 }) || 'Untitled market'}
+                                </strong>
                                 <span className={styles.hint}>Market status: {marketStatusLabel(f.feed_status)}</span>
                             </div>
                             {/* Only while those two clocks still mean something. A
@@ -445,7 +457,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="primary"
                                         loading={actionConfirm.composing}
-                                        disabled={!allowList.trim() && !blockList.trim()}
+                                        disabled={demoGuard.blocked || (!allowList.trim() && !blockList.trim())}
                                         onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
                                             feedActionIndex: f.action_index,
                                             allowList: allowList.trim(),
@@ -464,9 +476,20 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         consequences: this choice pays the whole pot out one way and
                                         cannot be undone. The selected outcome has to be announced. */}
                                     <div role="group" aria-label="Winning outcome" className={consoleStyles.outcomeRow}>
-                                        {labels.map((l, i) => (
-                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} size="md" aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
-                                        ))}
+                                        {labels.map((l, i) => {
+                                            const outcomeText = safeOutcomeLabel(l) || `Outcome ${i}`;
+                                            return (
+                                                <Button
+                                                    key={i}
+                                                    variant={outcome === i ? 'primary' : 'ghost'}
+                                                    size="md"
+                                                    aria-pressed={outcome === i}
+                                                    onClick={() => setOutcome(i)}
+                                                >
+                                                    {outcomeText}
+                                                </Button>
+                                            );
+                                        })}
                                     </div>
                                     {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
@@ -478,9 +501,9 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="primary"
                                         loading={actionConfirm.composing}
-                                        disabled={outcome === null}
+                                        disabled={demoGuard.blocked || outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
-                                            feedActionIndex: f.action_index, outcome,
+                                            feedActionIndex: f.action_index, outcome, outcomes: labels,
                                         })}
                                     >
                                         {isWatcherMode ? 'Create unsigned transaction' : 'Review resolve'}
@@ -500,6 +523,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     <Button
                                         variant="danger"
                                         loading={actionConfirm.composing}
+                                        disabled={demoGuard.blocked}
                                         onClick={() => runOracleAction(f, 'cancelMarketParams', submitCancel, {
                                             feedActionIndex: f.action_index,
                                         })}

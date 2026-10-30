@@ -17,15 +17,14 @@
 // every mutation so a service-worker restart (extension) or a tab refresh
 // (web) doesn't lose the user's signed-but-unbroadcast txs.
 //
-// One adapter handles the shells whose host has a storage API:
+// The default adapter handles the shells whose host has a storage API:
 //   - Extension SW    → `chrome.storage.local` (no localStorage in MV3)
 //   - Web renderer    → `localStorage`
 //
-// When neither API is available (the desktop host in Electron MAIN, Node
-// tests, ad-hoc smoke harness), `createBroadcastQueueStorage` returns null
-// and the queue is in-memory only (the prior v0.292.0 behavior). Desktop
-// still shares one store across its hosts, so a lock keeps the queue; a
-// relaunch does not.
+// When neither API is available, `createBroadcastQueueStorage` returns null
+// and the queue is in-memory only. Desktop main injects a file-backed adapter
+// through `createBroadcastQueueStorageAdapter`, which shares this envelope and
+// validation while supplying its own IO.
 
 import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 
@@ -36,7 +35,7 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
  * Internal entry shape (mirrors what createBackgroundHost pushes). The optional
  * `pendingTxId`, `resumedClaim` and `adsCommit` tie an entry to its vault record and
  * its ADS verdict, so `coerceSnapshot` must keep them.
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string, revealTxHex?: string, revealTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
  */
 
 /**
@@ -67,7 +66,10 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
  * `load` read, and either save writes the pair, so neither half can erase the
  * other. It should not reject; the host treats a rejection as an unreadable
  * store (it fails closed and retries), never as an empty journal. `save`, `saveSettlements` and `clear` reject when the store refused
- * the write, so the caller can tell a landed save from a refused one.
+ * the write, so the caller can tell a landed save from a refused one. `save`
+ * and `saveSettlements` also reject while the last load read a storageVersion
+ * newer than this build's, so a downgraded build keeps its queue in memory
+ * rather than overwriting the newer data.
  *
  * @typedef {Object} BroadcastQueueStorage
  * @property {() => Promise<QueueSnapshot | null>} load
@@ -114,7 +116,7 @@ export function createBroadcastQueueStorage() {
  *           remove: () => Promise<void> }} io
  * @returns {BroadcastQueueStorage}
  */
-function envelopeAdapter(io) {
+export function createBroadcastQueueStorageAdapter(io) {
     // Last successfully read state of the key. This adapter is its process's
     // only writer (a shell hands one queue store, and so one adapter, to every
     // host it builds; see broadcastQueueStore.js), so saving one half alongside
@@ -123,7 +125,12 @@ function envelopeAdapter(io) {
     let cached = { queues: /** @type {QueueSnapshot} */ ({}), settlements: /** @type {OwedSettlement[]} */ ([]) };
     // Count clears, so a read that started before one cannot refill the cache it emptied.
     let generation = 0;
+    // The newer storageVersion the last supported read found, or null; while set, every write is refused.
+    let newerVersionRead = null;
     async function persist() {
+        if (newerVersionRead !== null) {
+            throw new Error(`broadcast queue write refused: stored storageVersion ${newerVersionRead} is newer than supported version ${BROADCAST_QUEUE_STORAGE_VERSION}`);
+        }
         await io.write({
             storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
             queues: cached.queues,
@@ -138,6 +145,7 @@ function envelopeAdapter(io) {
             if (!read.ok || started !== generation) return null;
             const normalized = splitBlob(read.blob);
             cached = { queues: normalized.queues, settlements: normalized.settlements };
+            newerVersionRead = normalized.newerVersion;
             if (normalized.needsMigration) {
                 // Reading legacy data must not depend on the upgrade write. A
                 // refused write leaves the source value available for retry.
@@ -159,13 +167,15 @@ function envelopeAdapter(io) {
         async clear() {
             generation += 1;
             cached = { queues: {}, settlements: [] };
+            // A wipe hands the key back to this build, so the next save may write it.
+            newerVersionRead = null;
             await io.remove();
         },
     };
 }
 
 function chromeLocalAdapter() {
-    return envelopeAdapter({
+    return createBroadcastQueueStorageAdapter({
         read() {
             return new Promise((resolve) => {
                 try {
@@ -227,7 +237,7 @@ function settleChromeWrite(op, resolve, reject) {
 }
 
 function localStorageAdapter() {
-    return envelopeAdapter({
+    return createBroadcastQueueStorageAdapter({
         async read() {
             let raw;
             try {
@@ -263,7 +273,7 @@ function localStorageAdapter() {
  * normalize to the current envelope and request a best-effort rewrite.
  *
  * @param {unknown} blob
- * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[], needsMigration: boolean }}
+ * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[], needsMigration: boolean, newerVersion: number | null }}
  */
 function splitBlob(blob) {
     const isEnvelope = !!blob
@@ -278,16 +288,22 @@ function splitBlob(blob) {
             queues,
             settlements: [],
             needsMigration: Object.keys(queues).length > 0,
+            newerVersion: null,
         };
     }
     const env = /** @type {any} */ (blob);
     const hasVersion = Object.prototype.hasOwnProperty.call(env, 'storageVersion');
+    const version = env.storageVersion;
     return {
         queues: coerceSnapshot(env.queues),
         settlements: coerceSettlements(env.settlements),
-        // Unknown version values stay untouched so this build never rewrites
-        // data owned by a newer or malformed format.
+        // Never rewrite a versioned blob on load. A newer version also makes the adapter
+        // refuse every save until `clear()` or a supported load, so newer data survives;
+        // any other unrecognized value is read as-is and replaced by the next save.
         needsMigration: !hasVersion,
+        newerVersion: typeof version === 'number' && Number.isFinite(version) && version > BROADCAST_QUEUE_STORAGE_VERSION
+            ? version
+            : null,
     };
 }
 

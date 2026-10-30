@@ -14,8 +14,12 @@
 // only thing it can ever do is land the user on a prefilled form they still
 // have to act on: nothing here unlocks, signs or submits.
 
-import { useEffect, useState } from 'react';
-import { uri as coreUri } from '@xchain-wallet/core';
+import { useCallback, useEffect, useState } from 'react';
+import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
+import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { resolvePaymentChain } from '../../core/src/uri/paymentChain.js';
+import { isValidAddressForChain } from '../../core/src/shared/utils/addressValidation.js';
+import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
 
 const COIN_SCHEMES = Object.freeze({
     bitcoin: { coin: 'bitcoin', tick: 'BTC' },
@@ -27,8 +31,28 @@ const ROUTABLE_XCHAIN_ACTIONS = new Set(['send', 'receive', 'execute']);
 
 export const INVALID_DEEP_LINK_MESSAGE = 'This link is invalid or unsupported.';
 
+function descriptorAcceptsAddress(descriptor, address) {
+    if (!COIN_SCHEMES[descriptor.coin]) return true;
+    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
+}
+
 function invalidRoute() {
     return { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
+}
+
+const NETWORK_KINDS = ['mainnet', 'testnet', 'regtest'];
+
+// The chain a coin-scheme link pays on. A coin scheme is shared by every
+// network of its coin, so the address picks the network. A `chain=` value must
+// be one of those networks; without one, an address two networks share (a
+// legacy testnet and regtest address) cannot say which one the amount is on.
+function coinLinkChainId(coin, address, namedChain, chainRegistry) {
+    const candidates = NETWORK_KINDS
+        .filter((kind) => isValidAddressForChain(address, coin, kind))
+        .map((kind) => chainRegistry?.chainIdFor?.(coin, kind))
+        .filter(Boolean);
+    if (namedChain !== undefined) return candidates.includes(namedChain) ? namedChain : null;
+    return candidates.length === 1 ? candidates[0] : null;
 }
 
 function unwrapProtocolHandler(raw) {
@@ -48,7 +72,7 @@ function unwrapProtocolHandler(raw) {
  *
  * @param {unknown} raw
  * @param {any} chainRegistry
- * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
+ * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
  */
 export function deepLinkRoute(raw, chainRegistry) {
     if (typeof raw !== 'string' || !raw) return null;
@@ -62,18 +86,25 @@ export function deepLinkRoute(raw, chainRegistry) {
 
     if (coinScheme) {
         try {
-            const parts = coreUri.parseBip21Uri(normalized);
+            const parts = parseBip21Uri(normalized);
             if (parts.required?.length > 0) return invalidRoute();
             const memo = parts.message ?? parts.label;
-            const hardened = coreUri.hardenUriIntentText({ kind: 'send', memo });
-            const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
+            const hardened = hardenUriIntentText({ kind: 'send', memo, tick: parts.params?.tick });
+            // The link's target must be an address on one of the scheme's own
+            // chains, and a request that names a network must name the one its
+            // address is on: either mismatch would prefill a different payment
+            // than the link describes.
+            const chainId = coinLinkChainId(coinScheme.coin, parts.address, parts.params?.chain, chainRegistry);
             if (!chainId) return invalidRoute();
+            // A named token must not fall back to the coin.
+            const namedTick = hardened.tick ? hardened.tick.toUpperCase() : undefined;
+            if (namedTick && tickerReferenceError(namedTick, { allowRef: true })) return invalidRoute();
             return {
                 view: 'send',
                 sendPrefill: {
                     address: parts.address,
                     amount: parts.amount,
-                    tick: coinScheme.tick,
+                    tick: namedTick || coinScheme.tick,
                     chainId,
                     memo: hardened.memo,
                 },
@@ -89,7 +120,7 @@ export function deepLinkRoute(raw, chainRegistry) {
     if (!isXchainLink) return null;
     let intent;
     try {
-        intent = coreUri.hardenUriIntentText(coreUri.parseXchainUri(normalized, { chainRegistry }));
+        intent = hardenUriIntentText(parseXchainUri(normalized, { chainRegistry }));
     } catch {
         return invalidRoute();
     }
@@ -97,12 +128,33 @@ export function deepLinkRoute(raw, chainRegistry) {
     // URI tooling. External links accept only screens that require an explicit
     // review action, so a typo or future privileged action fails closed here.
     if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
+    // A path-style link names its chain in the path. That chain must be one
+    // the registry holds, and a destination must be an address on it, the bar
+    // the coin-code form already meets.
+    if (intent?.chainId && typeof chainRegistry?.get === 'function') {
+        const descriptor = chainRegistry.get(intent.chainId);
+        if (!descriptor) return invalidRoute();
+        if (intent.kind === 'send' && intent.address && !descriptorAcceptsAddress(descriptor, intent.address)) {
+            return invalidRoute();
+        }
+    }
     if (intent?.kind === 'send') {
+        if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
+            return invalidRoute();
+        }
         let amount = intent.amount;
         try {
-            amount = coreUri.normalizeBip21Amount(amount);
+            // Token amounts carry up to 18 decimals, the same bound the BIP21
+            // parser applies when a tick is named.
+            amount = normalizeBip21Amount(amount, intent.tick ? 18 : undefined);
         } catch {
             return invalidRoute();
+        }
+        // A link that names no chain pays on the one chain its address
+        // belongs to, the chain the scanner picks for the same link.
+        let chainId = intent.chainId;
+        if (!chainId && intent.address && typeof chainRegistry?.supportedChains === 'function') {
+            chainId = resolvePaymentChain({ address: intent.address, chainRegistry }).chainId;
         }
         return {
             view: 'send',
@@ -110,8 +162,9 @@ export function deepLinkRoute(raw, chainRegistry) {
                 address: intent.address,
                 amount,
                 tick: intent.tick,
-                chainId: intent.chainId,
+                chainId,
                 memo: intent.memo,
+                requestMessage: intent.message ?? intent.label,
             },
         };
     }
@@ -170,19 +223,26 @@ export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
 }
 
 /**
- * Desktop deep-link intake: claim on mount, hold the route while locked, and
- * hand it to apply once a wallet is unlocked. Call it after the last-view
- * resume so the link's form is the view that sticks.
+ * Desktop deep-link intake: claim on mount, hold the route while locked or
+ * while `held` (a Send screen showing an approved payment), and hand it to
+ * apply once a wallet is unlocked and nothing holds it. Call it after the
+ * last-view resume so the link's form is the view that sticks.
  *
- * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ * Returns whether a link is waiting behind the hold and a drop function that
+ * discards it.
+ *
+ * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, held?: boolean, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ * @returns {{ waiting: boolean, drop: () => void }}
  */
-export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, apply }) {
+export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, held = false, apply }) {
     const [route, setRoute] = useState(/** @type {ReturnType<typeof deepLinkRoute>} */ (null));
     // Mount-only: the bridge and the detached flag are fixed for a window's life
     useEffect(() => watchDeepLinks({ bridge, detached, chainRegistry, onRoute: setRoute }), []);
     useEffect(() => {
-        if (!route || detached || !unlocked || !walletId) return;
+        if (!route || detached || !unlocked || !walletId || held) return;
         apply(route);
         setRoute(null);
-    }, [route, unlocked, walletId]);
+    }, [route, unlocked, walletId, held]);
+    const drop = useCallback(() => setRoute(null), []);
+    return { waiting: held && route !== null, drop };
 }

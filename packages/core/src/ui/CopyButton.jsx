@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
@@ -17,6 +17,8 @@ import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
 import { copyText, CopyFailure } from '../shared/clipboard.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Copies `value` to the system clipboard and briefly shows a confirmation
@@ -34,8 +36,10 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
  * @param {number} [props.feedbackMs]
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
+ * @param {'filled' | 'outlined'} [props.appearance]  outlined for a per-row action
+ *   repeated down a list (each message in a thread); filled everywhere else
  */
-export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
+export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied, appearance = 'filled' }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
     const [copiedText, setCopiedText] = useState('');
@@ -46,7 +50,14 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
         parentOwns: false,
     });
     const buttonRef = useRef(null);
+    // The pending reset to idle. It is cleared on unmount so it never runs
+    // against a component (or, in a test, a torn-down document) that is gone,
+    // and on a second click so the first click's timer cannot cut the new
+    // confirmation short.
+    const resetTimerRef = useRef(null);
     const haptic = useHapticFeedback();
+
+    useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
     async function handleCopy() {
         const actionLabel = String(ariaLabel || label).trim();
@@ -83,7 +94,9 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
                 '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
             )),
         }));
-        setTimeout(() => {
+        clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = setTimeout(() => {
+            resetTimerRef.current = null;
             setState('idle');
             setAnnouncement((current) => (
                 current.error ? current : { ...current, text: '' }
@@ -98,7 +111,7 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
             <Button
                 ref={buttonRef}
                 size="sm"
-                className={styles.btn}
+                className={appearance === 'outlined' ? `${styles.btn} ${styles.outlined}` : styles.btn}
                 onClick={handleCopy}
                 icon={icon}
                 aria-label={state === 'copied' ? text : ariaLabel || label}

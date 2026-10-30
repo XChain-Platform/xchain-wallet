@@ -59,7 +59,9 @@ import {
     SIGNING_SECRET_SESSION_KEY,
     loadSigningCredentials,
 } from './background/signingSecretSession.js';
-import { initPanicModePersistence } from './background/panicModeStorage.js';
+import { attachPanicStateListener, initPanicModePersistence } from './background/panicModeStorage.js';
+import { isTrustedExtensionSender } from './bridge/publicSurface.js';
+import { attachBridgeBootGate, WALLET_LOCKED_ENVELOPE } from './background/bridgeBootGate.js';
 import { createBroadcastQueueStorage } from './background/broadcastQueueStorage.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from './background/broadcastQueueStore.js';
 import {
@@ -68,7 +70,13 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
+import {
+    createLockBackstop,
+    createHostBuildFlight,
+    createKeepaliveTick,
+    createUiRequestTracker,
+    sequenceUnlockedSession,
+} from './background/walletLock.js';
 import {
     createBridgeEventBroadcaster,
     notifyDisconnectedSites,
@@ -82,7 +90,8 @@ import {
 import { attachExtensionCommandListener } from './background/extensionCommands.js';
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
-import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { announceAutoLockUnsaved, createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { attachApprovalWatchListener } from './shared/approvalWatch.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
 import { createRestartStringSetStorage } from './background/restartStateStorage.js';
 
@@ -386,6 +395,14 @@ async function buildHost() {
         broadcastQueueStore,
         approvals: approvalBroker,
         surfaceStateEvents,
+        // §26: an auto-lock arm storage refused locks at once (fail closed).
+        onAutoLockArmRefused: async () => {
+            try {
+                await lockBackstop.lockWalletNow();
+            } finally {
+                void announceAutoLockUnsaved();
+            }
+        },
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
@@ -452,7 +469,7 @@ async function buildHost() {
             listArmedAlerts: () => vault.priceAlerts.list(),
             getSettings: () => flowsLib.getSettings(vault),
             notify: chromeNotify,
-            markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
             loadFired: () => priceAlertFiredStore.load(),
             saveFired: (ids) => priceAlertFiredStore.save(ids),
             logger: console,
@@ -672,15 +689,10 @@ function renewBroadcastQueueStore() {
 // keepalive alarm checks + locks.
 
 let lastActivityStampAt = 0;
-let activeUiRequests = 0;
-function noteAutoLockActivity() {
-    activeUiRequests += 1;
-    let finished = false;
-    const finish = () => {
-        if (finished) return;
-        finished = true;
-        activeUiRequests = Math.max(0, activeUiRequests - 1);
-    };
+// Signing and broadcast requests in flight; a due lock waits for them (once).
+const uiRequests = createUiRequestTracker();
+function noteAutoLockActivity(type) {
+    const finish = uiRequests.begin(type);
     const now = Date.now();
     // Throttle persisted writes to at most once per 10s; a message burst from
     // the open popup only needs to keep the idle clock roughly fresh.
@@ -706,7 +718,7 @@ const lockBackstop = createLockBackstop({
         return teardown;
     },
     isUnlocked: () => Boolean(host && vault),
-    isRequestActive: () => activeUiRequests > 0,
+    isRequestActive: () => uiRequests.isActive(),
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,
@@ -748,16 +760,18 @@ attachSessionMetaListener({
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
     onUnlocked: () => {
-        // Drop any stale cross-session auto-lock state; the popup re-arms the
-        // backstop (with the correct idleMs + demo-skip) once Home mounts.
-        clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        return ensureHost()
-            .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
-            .catch((err) => {
-                console.error('[xchain] ensureHost after unlock failed:', err);
-            });
+        // Drop an earlier session's deadline before publishing unlocked. The
+        // popup re-arms with the current timeout once it receives that state.
+        return sequenceUnlockedSession({
+            clearAutoLockState,
+            continueUnlock: () => ensureHost()
+                .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
+                .catch((err) => {
+                    console.error('[xchain] ensureHost after unlock failed:', err);
+                }),
+        });
     },
     startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
         walletId: opts.walletId,
@@ -774,6 +788,16 @@ attachSessionMetaListener({
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
+
+// §26.5 panic mode: always on, and pre-host on purpose. The popup and side
+// panel tell the worker about a freeze directly, so signing stops here even
+// when chrome.storage.local refuses the record, and the duress passphrase
+// arms it from the Locked screen with the vault still shut.
+attachPanicStateListener({ flows: flowsLib, isTrustedSender: isTrustedExtensionSender });
+
+// Approval windows hold a port here; its close tells them this worker, and
+// every request it held, is gone.
+attachApprovalWatchListener();
 
 // "Wipe wallet data": always on, and pre-host on purpose. The escapes that
 // reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)
@@ -806,8 +830,25 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
     });
 }
 
-ensureHost().catch((err) => {
-    console.error('[xchain] background init failed:', err);
+// A dApp call that finds no host (locked, or a restarted worker still
+// rebuilding) is answered here instead of reaching no listener at all.
+attachBridgeBootGate({
+    hasHost: () => Boolean(host),
+    ensureHost,
+    dispatch: (message, sender, sendResponse) => (detachHost?.listener
+        ? detachHost.listener(message, sender, sendResponse)
+        : sendResponse(WALLET_LOCKED_ENVELOPE)),
 });
+
+// A restarted worker checks its idle deadline at once rather than at the
+// first keepalive alarm, so a record it cannot read locks before any request.
+ensureHost()
+    .catch((err) => {
+        console.error('[xchain] background init failed:', err);
+    })
+    .then(() => maybeAutoLock())
+    .catch((err) => {
+        console.error('[xchain] boot auto-lock check failed:', err);
+    });
 
 console.log('[xchain] background service worker ready');

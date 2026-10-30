@@ -14,6 +14,13 @@ The runtime layer catches things static analysis can't:
 Color-contrast still requires a real browser (jsdom doesn't compute
 styles); that lives in Playwright at `test/e2e/`.
 
+The blocking Playwright axe specs scan the license gate; onboarding welcome;
+wallet creation at the password, concealed recovery phrase, revealed recovery
+phrase, verification, and donation stages; wallet import; unlocked Home;
+Locked; the Send form; and ready and failing confirmation screens at full and
+popup widths. The layout axe sweep walks more routes for a report, but it does
+not fail the browser job on findings.
+
 ## Layout
 
 ```
@@ -30,8 +37,8 @@ route fail the accessibility suite until its coverage status is recorded.
 
 The runtime route suite renders every A-L and M-Z route module, plus focused
 suites for Send, Receive, History's ActionDetail, TokenDetail, Settings and its
-drilldown sections, the token issue, dispenser, order, bet, and poll voting
-forms, Onboarding's license, explainer, and welcome steps, and the primary
+drilldown sections, the extension connection approval, the token issue,
+dispenser, order, bet, and poll voting forms, Onboarding's license, explainer, and welcome steps, and the primary
 protocol detail screens. It also renders Home and Settings inside the desktop
 shell's wide side navigation and persistent header. The
 `coverage.a11y.test.js` inventory contains the complete, machine-checked list

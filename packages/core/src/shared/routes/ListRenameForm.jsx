@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     PageHeader,
@@ -21,8 +22,9 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -36,7 +38,7 @@ import {
     listMetaInputError,
     utf8ByteLength,
 } from '../../flows/listMetaInput.js';
-import { findListOwner } from '../../flows/listMembership.js';
+import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -49,6 +51,7 @@ const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
     semicolon: 'Cannot contain the ; character.',
+    unsafe: 'Cannot contain control, text-direction, or zero-width characters.',
     length: 'Too long.',
     format: 'Invalid format.',
 };
@@ -94,6 +97,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const listActionIndex = String(listRef.actionIndex);
     const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
@@ -131,7 +135,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             setAddressesByChain(byChain || {});
             setActiveByChain(active || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -224,7 +228,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (nameError || descriptionError) {
             setFormError('Fix the list name and description first.');
             return false;
@@ -256,6 +260,18 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             MEMO: trimmedMemo,
         };
         try {
+            if (typeof owner === 'string' && owner) {
+                const ownerCheck = await recheckListOwner({
+                    readList: (actionIndex) => messaging.getListByActionIndex({ chainId, actionIndex }),
+                    actionIndex: listActionIndex,
+                    owner,
+                });
+                if (!ownerCheck.ok) {
+                    setOwner(ownerCheck.owner);
+                    setFormError(ownerCheck.message);
+                    return;
+                }
+            }
             const next = await lane.run({
                 actionData: { action: 'LIST', params },
                 encoderOpts: { payFeeInNativeCoin: nativeFee.flag || undefined },
@@ -304,9 +320,12 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     }
 
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="list rename" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => setResult(null)}
                     onDone={onDone}
@@ -319,6 +338,12 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                     {result.psbtHex && !result.txid ? 'Unsigned list rename created.' : 'List rename submitted.'}
                 </StatusMessage>
                 <p className={styles.hint}>The new list details appear when this transaction confirms.</p>
+                {result.txid ? (
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Transaction ID</dt>
+                        <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
+                    </dl>
+                ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>
@@ -330,6 +355,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const formDisabled = sdkSupported !== true;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Rename list"
             onSubmit={handleReview}
             status={(sdkSupported === false || formError) ? (
@@ -360,9 +386,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <dd className={styles.detailsValue}>
                     {detail.description ? neutralizeControlText(detail.description) : 'Not set'}
                 </dd>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -371,12 +397,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             </dl>
 
             {missingOwner ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        The current owner, {shortAddress(owner)}, is not an address in this wallet.
-                        A rename signed by another address will be refused by the network.
-                    </p>
-                </div>
+                <FormNotice variant="warning" role="alert">
+                    {`The current owner, ${shortAddress(owner)}, is not an address in this wallet. A rename signed by another address will be refused by the network.`}
+                </FormNotice>
             ) : null}
 
             <Input

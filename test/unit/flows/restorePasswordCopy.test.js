@@ -28,7 +28,7 @@ import {
     restorePasswordRequiredMessage,
 } from '../../../packages/core/src/flows/restorePasswordCopy.js';
 import { BackupPasswordError } from '../../../packages/core/src/crypto/backup.js';
-import { BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
+import { BackupSealDamagedError, BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
 
 /** Every string this lane can put on screen clears the same bar. */
 function expectUserFacing(message) {
@@ -118,6 +118,20 @@ describe('restoreFailureMessage names the password it is talking about', () => {
         expectNamesAField(m);
     });
 
+    // A damaged seal is not a password problem, so no field may be blamed for it.
+    it('a damaged wallet inside the backup, never a password', () => {
+        for (const reason of [
+            new BackupSealDamagedError('seed'),
+            { name: 'BackupSealDamagedError', message: new BackupSealDamagedError('passphrase').message },
+            new BackupSealDamagedError('imported key').message,
+        ]) {
+            const m = restoreFailureMessage(reason);
+            expect(m).toMatch(/damaged, so no password can open it/);
+            expect(m).not.toContain(`The "${RESTORE_PASSWORD_LABELS.wallet}" field wants`);
+            expect(m).not.toContain(`The "${RESTORE_PASSWORD_LABELS.file}" field wants`);
+        }
+    });
+
     it('an empty field is named by its label, per mode', () => {
         for (const role of ['file', 'wallet', 'device']) {
             for (const mode of ['fresh', 'add']) {
@@ -200,7 +214,7 @@ describe('restoreFailureMessage names the password it is talking about', () => {
         for (const raw of [
             'unexpected magic "undefined"',
             'file is not valid JSON (Unexpected token h in JSON at position 0)',
-            'unsupported formatVersion 9 (expected 1)',
+            'unsupported formatVersion 0 (expected 1)',
             'encryption.kdf.algorithm must be "argon2id"',
             'payload must be a base64 string',
         ]) {
@@ -209,6 +223,23 @@ describe('restoreFailureMessage names the password it is talking about', () => {
             for (const reason of [err, raw]) {
                 const m = restoreFailureMessage(reason);
                 expect(m).toBe('That is not a wallet backup file this app can read. Choose the backup file you exported, or paste its whole contents.');
+                expectUserFacing(m);
+            }
+        }
+    });
+
+    it('a backup from a newer release says to update the app, not to check the file or passwords', () => {
+        const newer = 'This backup was made by a newer version of the app. Update the app, then restore it again.';
+        for (const [raw, name] of [
+            ['unsupported formatVersion 2 (expected 1)', 'BackupFormatError'],
+            ['importBackupFile: unsupported payloadVersion 2 (expected 1)', 'Error'],
+            ['migrate: record is at v8, newer than target v3. Downgrade is unsupported (§11.6).', 'Error'],
+        ]) {
+            const err = new Error(raw);
+            err.name = name;
+            for (const reason of [err, raw]) {
+                const m = restoreFailureMessage(reason, { mode: 'add' });
+                expect(m).toBe(newer);
                 expectUserFacing(m);
             }
         }

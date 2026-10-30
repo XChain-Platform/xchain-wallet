@@ -37,7 +37,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/market-view.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -50,12 +50,16 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    waitForTokenBalance,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE pays a real coin fee on this chain, so fund generously. */
 const FUNDING = 2;
 const SUPPLY = '1000';
+/** XCHAIN minted for the ISSUE protocol fee. */
+const GAS_XCHAIN = 10;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `MKT${STAMP}`;
 /** The order this run puts on the book: give the new token, get XCHAIN. */
@@ -105,19 +109,6 @@ async function waitForBookAsk(tick1, tick2, timeoutMs = 180_000) {
     return book || { asks: [], bids: [] };
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
@@ -137,7 +128,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Market View Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -149,7 +140,12 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            // The ISSUE protocol fee is charged in XCHAIN; a fresh wallet holds none, and the
+            // confirm screen then refuses with "insufficient funds (FEE)" and keeps Approve off.
+            await mintXchain(page, GAS_XCHAIN);
+            await waitForTokenBalance(source, 'XCHAIN', GAS_XCHAIN);
+
+            await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
@@ -169,7 +165,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('place a token-for-token order, which is what creates a market', async () => {
-            await gotoPalette(page, 'Create order');
+            await openPaletteCommand(page, 'Create order');
             const main = page.getByRole('main');
             await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -226,10 +222,9 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
 
             await main.getByRole('button', { name: /^(Change asset|Select coin or token)/ }).click();
-            const search = page.getByRole('textbox').first();
-            await expect(search).toBeVisible({ timeout: 30_000 });
-            await search.fill(TICK);
-            await page.getByText(TICK, { exact: true }).first().click();
+            // The selector opens the asset picker, whose filter is a searchbox
+            // and whose rows are keyed by chain and tick.
+            await selectPickerAsset(page, TICK);
 
             // "All" rather than "Popular": a market minutes old has no volume,
             // and Popular is volume-ranked.
@@ -264,7 +259,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Memoless Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -273,7 +268,10 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await mintXchain(page, GAS_XCHAIN);
+            await waitForTokenBalance(source, 'XCHAIN', GAS_XCHAIN);
+
+            await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -285,7 +283,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status), 'the venue rejected the ISSUE').toBe('valid');
 
-            await gotoPalette(page, 'Create order');
+            await openPaletteCommand(page, 'Create order');
             main = page.getByRole('main');
             await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);

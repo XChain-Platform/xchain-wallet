@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { isConfirmActive, isConfirmApproving, useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
 import { useConfirmModal } from '../../../packages/core/src/shared/hooks/useConfirmModal.js';
 import { useDispenserDestination } from '../../../packages/core/src/shared/hooks/useDispenserDestination.js';
 import { useDocumentTitle } from '../../../packages/core/src/shared/hooks/useDocumentTitle.js';
@@ -133,7 +133,7 @@ describe('shared hook lifecycle cleanup', () => {
             { initialProps: { enabled: true } },
         );
 
-        expect(document.title).toBe('Send - XChain Wallet');
+        expect(document.title).toBe('XChain Wallet - Send');
         hook.rerender({ enabled: false });
         expect(document.title).toBe('Host title');
     });
@@ -172,12 +172,41 @@ describe('shared hook lifecycle cleanup', () => {
         const rejected = expect(confirmation).rejects.toMatchObject({ reason: 'user-rejected' });
 
         await waitFor(() => expect(hook.result.current.phase).toBe('preflighting'));
+        expect(isConfirmActive()).toBe(true);
         hook.unmount();
 
         await rejected;
+        expect(isConfirmActive()).toBe(false);
         await waitFor(() => {
             expect(releaseEncoderInputs).toHaveBeenCalledWith('release-1');
             expect(session.clear).toHaveBeenCalledWith(expect.stringMatching(/^cs:/));
         });
+    });
+
+    it('reports an approval as in flight from Approve until the send settles', async () => {
+        const sent = deferred();
+        const hook = renderHook(() => useConfirmAction());
+        let confirmation;
+        act(() => {
+            confirmation = hook.result.current.confirm({
+                chainId: 'bitcoin-regtest',
+                compose: vi.fn(async () => ({ psbt: 'psbt', actionString: 'SEND' })),
+                preflight: vi.fn(async () => ({ findings: [] })),
+                onApprove: vi.fn(() => sent.promise),
+            });
+        });
+        await waitFor(() => expect(hook.result.current.phase).toBe('ready'));
+        expect(isConfirmApproving()).toBe(false);
+
+        let approval;
+        act(() => { approval = hook.result.current.approve({}); });
+        await waitFor(() => expect(isConfirmApproving()).toBe(true));
+
+        await act(async () => {
+            sent.resolve({ txid: 'ab'.repeat(32) });
+            await approval;
+        });
+        await expect(confirmation).resolves.toEqual({ txid: 'ab'.repeat(32) });
+        expect(isConfirmApproving()).toBe(false);
     });
 });

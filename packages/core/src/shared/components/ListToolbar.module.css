@@ -1,0 +1,18 @@
+/* Search and filters share one row, wrapping when the window is too narrow
+   for them side by side. Every control takes an equal share. */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.field {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.field > div {
+    margin-bottom: 0;
+}

@@ -99,7 +99,8 @@ for (const [name, file] of [
     ['web', join(web, 'src', 'App.jsx')],
 ]) {
     const src = readFileSync(file, 'utf8');
-    assert.ok(/from ['"]@xchain-wallet\/core\/shared\/components\/QueuedBroadcastBanner\.jsx['"]/.test(src),
+    // The web App loads the banner on demand (a dynamic import), the popup statically.
+    assert.ok(/(?:from |import\()['"]@xchain-wallet\/core\/shared\/components\/QueuedBroadcastBanner\.jsx['"]/.test(src),
         `${name} App imports QueuedBroadcastBanner`);
     assert.ok(/<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(src),
         `${name} App renders <QueuedBroadcastBanner walletId={activeWalletId}>`);

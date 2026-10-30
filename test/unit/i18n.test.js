@@ -14,6 +14,7 @@ import { IntlMessageFormat } from 'intl-messageformat';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    formatOrList,
     getFormatLocale,
     getLocale,
     onLocaleChange,
@@ -232,6 +233,27 @@ afterAll(async () => {
     if (getLocale() !== 'en') await setLocale('en');
 });
 
+describe('formatOrList', () => {
+    it('joins accepted word counts as an English "or" list and leaves one value bare', () => {
+        expect(formatOrList([12, 15, 18, 21, 24])).toBe('12, 15, 18, 21, or 24');
+        expect(formatOrList([12])).toBe('12');
+    });
+
+    it('reads the word-count error through the dictionary', () => {
+        expect(t('importWallet.phrase.wrongWordCount', {
+            expected: formatOrList([12, 15, 18, 21, 24]),
+            count: 13,
+        })).toBe('Expected 12, 15, 18, 21, or 24 words, got 13.');
+    });
+
+    it('formats under a locale code Intl rejects instead of throwing', async () => {
+        // Same shape as pseudo-rtl: a 3-letter subtag after a long language.
+        registerLocale('pseudo-rtl-list', en);
+        await setLocale('pseudo-rtl-list');
+        expect(formatOrList([12, 24])).toBe('12 or 24');
+    });
+});
+
 describe('translations', () => {
     it('keeps English copy platform-neutral and typographically consistent', () => {
         const values = Object.values(en);
@@ -248,7 +270,7 @@ describe('translations', () => {
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
         expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
-        expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
+        expect(en['send.destination.placeholder']).toBe('Enter an address or name…');
     });
 
     it('keeps localized A-to-M route copy plain and consistent', () => {
@@ -282,7 +304,7 @@ describe('translations', () => {
             savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
             watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
             importOptions: 'Wallet import options',
-            historySearch: 'Search action, address, token, transaction ID, memo…',
+            historySearch: 'Search by action, address, token, transaction ID, or memo…',
             peerError: "Couldn't load the linked transaction. Try again.",
         });
     });
@@ -453,10 +475,20 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // The noun the queued-result panel names for a held message and the noun the signing warning names.
+            ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
+            // The History status filter header and the parallel composer's status-pill label prefix.
+            ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
             ['home.receive', 'uri.intent.receive'],
+            // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
+            ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
+            // The Send form's network field and the Settings network row.
+            ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
+            // Leads the blocked-site pattern hint and the biometric unlock sentence.
+            ['settings.biometric.use', 'settings.connectedSites.blockPatternLead'],
         ]);
     });
 

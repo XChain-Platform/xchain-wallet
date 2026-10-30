@@ -23,6 +23,7 @@
 // worktree started on Vite's default port and silently tests that tree.
 
 import { defineConfig, devices } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.CRAWL_PORT || 5191);
 const SHARDS = Number(process.env.CRAWL_SHARDS || 4);
@@ -36,6 +37,7 @@ const VENUES = [
         name: 'android-lg-k51',
         use: {
             browserName: 'chromium',
+            channel: 'chromium',
             viewport: { width: 411, height: 814 },
             deviceScaleFactor: 1.75,
             isMobile: true,
@@ -50,9 +52,27 @@ const VENUES = [
     },
     { name: 'iphone-17-pro', use: { ...devices['iPhone 15 Pro'], viewport: { width: 402, height: 874 } } },
     { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
+    // The narrowest supported width, where rows of two or more buttons are
+    // tightest; the crawl's control-row overflow finding is aimed here.
+    {
+        name: 'narrow-360',
+        use: {
+            browserName: 'chromium',
+            channel: 'chromium',
+            viewport: { width: 360, height: 800 },
+            deviceScaleFactor: 2,
+            isMobile: true,
+            hasTouch: true,
+            permissions: ['clipboard-read', 'clipboard-write'],
+            launchOptions: {
+                args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+            },
+        },
+    },
 ];
 const WANTED = (process.env.CRAWL_VENUES || 'android-lg-k51').split(',').map((v) => v.trim()).filter(Boolean);
-const projects = WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name));
+const projects = (WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name)))
+    .map((project) => withHostBlock(project));
 if (projects.length === 0) throw new Error(`CRAWL_VENUES names no known venue: ${WANTED.join(', ')}`);
 
 // One output folder per run, shared by every shard: workers inherit the
@@ -76,7 +96,7 @@ export default defineConfig({
     },
     projects,
     webServer: {
-        command: `pnpm -C ../../packages/web exec vite --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web exec vite --port ${PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PORT}`,
         reuseExistingServer: true,
         timeout: 120_000,

@@ -41,21 +41,70 @@ const WalletUtils = walletModule.default ?? walletModule;
 
 /** @type {any | null} */
 let sharedTransport = null;
+/** @type {(() => void) | null} */
+let sharedDisconnectHandler = null;
+/** @type {Promise<any> | null} */
+let pendingTransport = null;
+// Bumped by every reset, so an open that started before it never lands in the cache.
+let transportGeneration = 0;
 
 /**
- * Lazy-create a shared WebHID transport.
- *
- * @param {() => Promise<any>} [loader]
+ * Cache a transport until it reports disconnect. An unplugged Ledger closes its
+ * WebHID device for good, so a kept transport would fail every pairing after
+ * the device is plugged back in until the app restarts. @ledgerhq's Transport
+ * offers on and off but no once, so the listener removes itself.
  */
-export async function getLedgerTransport(loader = defaultTransportLoader) {
-    if (sharedTransport) return sharedTransport;
+function cacheTransport(transport) {
+    sharedTransport = transport;
+    if (typeof transport?.on !== 'function') return;
+    const onDisconnect = () => {
+        const remove = transport.off ?? transport.removeListener;
+        if (typeof remove === 'function') remove.call(transport, 'disconnect', onDisconnect);
+        if (sharedTransport !== transport) return;
+        sharedTransport = null;
+        sharedDisconnectHandler = null;
+    };
+    sharedDisconnectHandler = onDisconnect;
+    transport.on('disconnect', onDisconnect);
+}
+
+function closeQuietly(transport) {
+    if (typeof transport?.close !== 'function') return;
+    Promise.resolve().then(() => transport.close()).catch(() => {});
+}
+
+async function openTransport(loader, generation) {
     const mod = await loader();
     const TransportWebHID = mod?.default ?? mod;
     if (!TransportWebHID || typeof TransportWebHID.create !== 'function') {
         throw new Error('desktop ledgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
     }
-    sharedTransport = await TransportWebHID.create();
-    return sharedTransport;
+    const transport = await TransportWebHID.create();
+    // A lock or wallet switch that lands while the device is opening ends that
+    // session; caching the late transport would hand it to the next wallet.
+    if (generation !== transportGeneration) {
+        closeQuietly(transport);
+        throw new Error('desktop ledgerFactory: Ledger transport reset while opening');
+    }
+    cacheTransport(transport);
+    return transport;
+}
+
+/**
+ * Lazy-create a shared WebHID transport. Callers that arrive while the device
+ * is still opening share that one open, since WebHID refuses a second open of
+ * a claimed device.
+ *
+ * @param {() => Promise<any>} [loader]
+ */
+export function getLedgerTransport(loader = defaultTransportLoader) {
+    if (sharedTransport) return Promise.resolve(sharedTransport);
+    if (pendingTransport) return pendingTransport;
+    const opening = openTransport(loader, transportGeneration).finally(() => {
+        if (pendingTransport === opening) pendingTransport = null;
+    });
+    pendingTransport = opening;
+    return opening;
 }
 
 function defaultTransportLoader() {
@@ -90,5 +139,17 @@ export async function pairLedgerSigner({
 }
 
 export function resetLedgerTransport() {
+    const transport = sharedTransport;
+    const handler = sharedDisconnectHandler;
     sharedTransport = null;
+    sharedDisconnectHandler = null;
+    pendingTransport = null;
+    transportGeneration += 1;
+    if (transport && handler) {
+        const remove = transport.off ?? transport.removeListener;
+        if (typeof remove === 'function') remove.call(transport, 'disconnect', handler);
+    }
+    // Close the device as the extension and web shells do, so a lock or wallet
+    // switch ends the session rather than leaving the device open behind it.
+    closeQuietly(transport);
 }

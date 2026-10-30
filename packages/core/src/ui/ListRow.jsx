@@ -27,6 +27,8 @@ import styles from './ListRow.module.css';
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {string} [props.tooltip]   native title attribute; `title` is the row heading
  * @param {string} [props.className]
+ * @param {string} [props.trailingClassName]   extra class for the trailing slot, for a row whose trailing figures must not give way to its title
+ * @param {string} [props.contentClassName]   extra class for the title and subtitle column, for a row that sets how far that column may shrink
  */
 export function ListRow({
     leading,
@@ -39,6 +41,8 @@ export function ListRow({
     type = 'button',
     tooltip,
     className,
+    trailingClassName,
+    contentClassName,
     ...rest
 }) {
     const isLink = href != null;
@@ -61,11 +65,13 @@ export function ListRow({
             {...rest}
         >
             {leading ? <span className={styles.leading}>{leading}</span> : null}
-            <span className={styles.content}>
+            <span className={[styles.content, contentClassName].filter(Boolean).join(' ')}>
                 <span className={styles.title}>{title}</span>
                 {subtitle ? <span className={styles.subtitle}>{subtitle}</span> : null}
             </span>
-            {trailing ? <span className={styles.trailing}>{trailing}</span> : null}
+            {trailing ? (
+                <span className={[styles.trailing, trailingClassName].filter(Boolean).join(' ')}>{trailing}</span>
+            ) : null}
             {resolvedChevron ? (
                 <span className={styles.chevron} aria-hidden="true">
                     {resolvedChevron}

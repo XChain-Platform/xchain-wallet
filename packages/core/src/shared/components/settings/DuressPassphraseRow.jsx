@@ -23,25 +23,40 @@
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.
 //
-//   error            `<StatusMessage variant="error">` (role="alert") with a
-//                    one-click "Try again" recovery on storage-write failure.
+//   error            an error message (role="alert") above the form card, via
+//                    SettingsInlineForm, with a one-click "Try again" recovery on storage-write failure.
+//
+//   not saved        storage refused the record or its removal. The row says
+//                    which, above the row, with a "Try again" that writes the
+//                    held salt and hash (or the removal) again, so the screen
+//                    never reads Configured for a passphrase a restart drops,
+//                    or Not configured for one a restart brings back.
 //
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
-import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, FormSection, Input } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
     setDuressPassphrase,
     clearDuressPassphrase,
+    getDuressSaveStatus,
+    retryDuressSave,
+    DURESS_SAVE_UNSAVED,
+    DURESS_SAVE_CLEAR_FAILED,
 } from '../../../flows/duressPassphrase.js';
-import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/verifySignature.js';
 
 export function DuressPassphraseRow() {
     const { messaging } = useMessaging();
     const [configured, setConfigured] = useState(isDuressConfigured());
+    const [saveStatus, setSaveStatus] = useState(getDuressSaveStatus);
     const [showForm, setShowForm] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
     const [pass, setPass] = useState('');
@@ -52,6 +67,7 @@ export function DuressPassphraseRow() {
     // an incorrect current password require an edit, so those leave retryRef
     // null and the alert renders without a misleading "Try again" button.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
+    const swap = useFocusAfterSwap(configured);
 
     async function attemptSet() {
         if (busy) return;
@@ -77,6 +93,8 @@ export function DuressPassphraseRow() {
         try {
             await messaging.unlockWallet(currentPassword);
             setDuressPassphrase(pass);
+            setSaveStatus(getDuressSaveStatus());
+            swap.request();
             setConfigured(true);
             setShowForm(false);
             setCurrentPassword('');
@@ -101,114 +119,140 @@ export function DuressPassphraseRow() {
 
     function handleClear() {
         clearDuressPassphrase();
-        setConfigured(false);
+        setSaveStatus(getDuressSaveStatus());
+        const stillConfigured = isDuressConfigured();
+        if (!stillConfigured) swap.request();
+        setConfigured(stillConfigured);
+    }
+
+    function retrySave() {
+        const status = retryDuressSave();
+        setSaveStatus(status);
+        const stillConfigured = isDuressConfigured();
+        if (stillConfigured !== configured) swap.request();
+        setConfigured(stillConfigured);
+    }
+
+    function cancelForm() {
+        setShowForm(false);
+        setCurrentPassword('');
+        setPass('');
+        setConfirm('');
+        setError(null);
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
     if (configured) {
+        const saveNotice = saveStatus === DURESS_SAVE_UNSAVED
+            ? t('settings.duress.notSaved')
+            : saveStatus === DURESS_SAVE_CLEAR_FAILED
+                ? t('settings.duress.couldNotRemove')
+                : null;
         return (
-            <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Duress passphrase</span>
-                    <span style={ROW_HINT}>
-                        Configured. Entering this passphrase on the unlock screen will silently arm
-                        panic mode while showing a normal-looking wrong-password message.
-                    </span>
+            <SettingsInlineForm
+                error={saveNotice}
+                recovery={saveNotice ? { label: t('common.tryAgain'), onAction: retrySave } : undefined}
+            >
+                <div style={ROW}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.duress.configuredEnteringThisPassphraseOn')}
+                        </span>
+                    </div>
+                    <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
+                        {t('settings.biometric.disable')}
+                    </Button>
                 </div>
-                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
-                    Disable
-                </Button>
-            </div>
+            </SettingsInlineForm>
         );
     }
 
     if (showForm) {
         return (
-            <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>Set duress passphrase</span>
-                    <span style={ROW_HINT}>
-                        Pick a passphrase that is NOT your real wallet password. Entering it on the
-                        unlock screen will silently arm panic mode (24-hour signing freeze) and surface
-                        the same UI a wrong password produces.
-                    </span>
-                </div>
-                <Input
-                    type="password"
-                    enterKeyHint="next"
-                    value={currentPassword}
-                    onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
-                    placeholder="Current wallet password"
-                    autoComplete="current-password"
-                    aria-label="Current wallet password"
-                />
-                <Input
-                    type="password"
-                    enterKeyHint="next"
-                    value={pass}
-                    onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
-                    placeholder="Duress passphrase"
-                    autoComplete="new-password"
-                    aria-label="Duress passphrase"
-                />
-                <Input
-                    type="password"
-                    enterKeyHint="done"
-                    value={confirm}
-                    onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
-                    placeholder="Confirm passphrase"
-                    autoComplete="new-password"
-                    aria-label="Confirm duress passphrase"
-                />
-                {error ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+            <SettingsInlineForm
+                error={error}
+                recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+                onCancel={cancelForm}
+                cancelDisabled={busy}
+            >
+                <FormPage
+                    onSubmit={handleSet}
+                    sectioned
+                    submitFromAnyField
+                    label={t('settings.duress.setDuressPassphrase')}
+                >
+                    <FormSection
+                        title={t('settings.duress.setDuressPassphrase')}
+                        description={t('settings.duress.pickAPassphraseThatIs')}
+                        headingLevel="h3"
                     >
-                        {error}
-                    </StatusMessage>
-                ) : null}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        icon={null}
-                        onClick={() => {
-                            setShowForm(false);
-                            setCurrentPassword('');
-                            setPass('');
-                            setConfirm('');
-                            setError(null);
-                        }}
-                        disabled={busy}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        size="sm"
-                        icon={null}
-                        disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
-                    >
-                        {busy ? 'Verifying…' : 'Save'}
-                    </Button>
-                </div>
-            </form>
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={currentPassword}
+                        onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.thisWallet.currentWalletPassword')}
+                        autoComplete="current-password"
+                        aria-label={t('settings.thisWallet.currentWalletPassword')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={pass}
+                        onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.duressPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.duressPassphrase')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="done"
+                        value={confirm}
+                        onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.confirmPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.confirmDuressPassphrase')}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            icon={null}
+                            onClick={cancelForm}
+                            disabled={busy}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            icon={null}
+                            disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
+                        >
+                            {busy ? t('verifySignature.verifying') : t('history.contact.save')}
+                        </Button>
+                    </div>
+                    </FormSection>
+                </FormPage>
+            </SettingsInlineForm>
         );
     }
 
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Duress passphrase</span>
+                <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
                 <span style={ROW_HINT}>
-                    A second password that, if entered on the unlock screen, silently arms panic mode
-                    (24-hour signing freeze) without giving the observer any visible cue.
+                    {t('settings.duress.aSecondPasswordThatIf')}
                 </span>
             </div>
-            <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
-                Set
+            <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
+                {t('settings.duress.set')}
             </Button>
         </div>
     );

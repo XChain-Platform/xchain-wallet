@@ -1,0 +1,153 @@
+{
+    "rules": {
+        "packages/core/src/shared/commandPalette/CommandPalette.module.css | .escHint": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/commandPalette/CommandPalette.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/AlertsOverlay.module.css | .alert": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/AppHeader.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/ConfirmActionModal.module.css | .messageText": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/components/DerivationPathCrossCheck.module.css | .path": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/components/GatedFileViewer.module.css | .body": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/GatedFileViewer.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/HeaderSettingsButton.module.css | .summaryRow": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/HomeTabs.module.css | .sortControl": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/HomeTabs.module.css | .sortSelect": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/LayoutModeToggle.module.css | .btn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/LeftNav.module.css | .skipLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/MnemonicGrid.module.css | .cell": "One recovery-phrase word cell in the word grid, read like a value box, not a card.",
+        "packages/core/src/shared/components/NetworkFilter.module.css | .popover": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/NetworkStatusIndicator.module.css | .settings": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/NetworkStatusIndicator.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/NoticeModal.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/OverlaySurface.module.css | .surface": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/PlatformSwitcher.module.css | .here": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/PlatformSwitcher.module.css | .menu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/PlatformSwitcher.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/QueuedBroadcastBanner.module.css | .broadcastBtn, .discardBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/RawPsbtViewer.module.css | .json": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/components/ToastStack.module.css | .toast": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/TokenField.module.css | .control": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/TotalBalanceHero.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/TotalBalanceHero.module.css | .hero": "The accent-filled balance hero banner at the top of the screen, not a card.",
+        "packages/core/src/shared/keyboard/ShortcutHelp.module.css | .kbd": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/keyboard/ShortcutHelp.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/AddressList.module.css | .addMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/AddressList.module.css | .hiddenToggle": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/AddressList.module.css | .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/AddressList.module.css | .segmented": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/AddressList.wif.module.css | .wifToggle": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/ContactsList.module.css | .addAddressBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/ContactsList.module.css | .addrMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/ContactsList.module.css | .addressDeleteBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/ContactsList.module.css | .modalCard": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/ContactsList.module.css | .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/DispenserDetail.module.css | .quickActionLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/DispenserDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/History.module.css | .chainPickerBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/History.module.css | .chainPickerMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/History.module.css | .detailAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/History.module.css | .moreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/History.module.css | .searchInput": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/Home.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/components/PortfolioChart.module.css | .range": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/TokenPicker.module.css | .kindSegments": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/Home.module.css | .actionsFull .quickAction, .quickActions .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/ImportWallet.module.css | .scannerBox": "Artwork or a camera or QR frame, not a card.",
+        "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/OnboardingCarousel.module.css | .stackFrame": "Artwork or a camera or QR frame, not a card.",
+        "packages/core/src/shared/routes/PairSignerForm.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/Send.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/StakeDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .balanceHero": "The accent-filled balance hero banner at the top of the screen, not a card.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .fileLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .galleryMediaCard": "Artwork or a camera or QR frame, not a card.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .heroImageFallback": "Artwork or a camera or QR frame, not a card.",
+        "packages/core/src/shared/routes/TokenDetail.module.css | .pgpsigBlock": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/TokenPicker.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/routes/TokenWizard.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/ViewPrivateKey.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/ViewPrivateKey.module.css | .wif": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/WalletPicker.module.css | .rowWrap .rowMenuBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/AddressCombobox.module.css | .dropdown": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/ui/ChainPicker.module.css | .popover": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/ui/ChainPicker.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/Checkbox.module.css | .box": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/CopyButton.module.css | .btn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/FeeSelector.module.css | .customInput": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/IconSelect.module.css | .popover": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/ui/IconSelect.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/commandPalette/CommandPalette.module.css | .input": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/InfoTip.module.css | .bubble": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/ui/Input.module.css | .input[type='file']::file-selector-button": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/Input.module.css | .input": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/PageHeader.module.css | .trailing button:not([role=\"menuitem\"])": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/ui/QrDisplay.module.css | .frame": "Artwork or a camera or QR frame, not a card.",
+        "packages/core/src/ui/SegmentedControl.module.css | .segmented": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/web/src/DevVariantBadge.module.css | .clear": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/DevVariantBadge.module.css | .flip": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/DevVariantBadge.module.css | .picker": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/DevVariantBadge.module.css | .pwToggle": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/AccentBorderedCardSection.module.css | .hero": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/AddressListSection.module.css | .abSearch": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/QuickActionSection.module.css | .quickAction": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/ToggleBarSection.module.css | .segmented": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/TokenSelectorSection.module.css | .search": "Development-only or style-guide chrome, not product UI.",
+        "packages/web/src/style-guide/sections/templateExamples.module.css | .search, .select": "Development-only or style-guide chrome, not product UI."
+    },
+    "overrides": {
+        "packages/core/src/shared/routes/Onboarding.module.css | .licenseScroll | padding": "Open debt (not a ruling): the licence terms card keeps a narrower inset on short screens so two lines of the terms stay visible above the actions; the card itself stays outlined by the licence-page ruling."
+    },
+    "inline": {
+        "packages/core/src/shared/components/LogConsole.jsx": {
+            "count": 3,
+            "reason": "Filter buttons and level badges in the developer log console."
+        },
+        "packages/core/src/shared/components/TradeHistoryPanel.jsx": {
+            "count": 1,
+            "reason": "A status badge inside a trade row."
+        },
+        "packages/core/src/shared/components/settings/AboutSection.jsx": {
+            "count": 2,
+            "reason": "Monospace license and diagnostic dumps, read like value boxes."
+        },
+        "packages/core/src/shared/components/settings/BackupSection.jsx": {
+            "count": 2,
+            "reason": "Reveal buttons that hold the recovery phrase and passphrase."
+        },
+        "packages/core/src/shared/routes/BridgeOriginBadge.jsx": {
+            "count": 1,
+            "reason": "A small origin badge."
+        },
+        "packages/core/src/shared/routes/History.jsx": {
+            "count": 2,
+            "reason": "The fee-bump dialog and the fieldset inside it."
+        },
+        "packages/core/src/shared/routes/PairPartnerWallet.jsx": {
+            "count": 1,
+            "reason": "A monospace code value box."
+        },
+        "packages/core/src/shared/routes/PsbtSignForm.jsx": {
+            "count": 2,
+            "reason": "A raw transaction value box and the paste field."
+        },
+        "packages/core/src/shared/routes/SignMessageForm.jsx": {
+            "count": 2,
+            "reason": "Message and signature value boxes."
+        },
+        "packages/core/src/ui/AnimatedQrFrames.jsx": {
+            "count": 1,
+            "reason": "Frame stepper buttons."
+        },
+        "packages/desktop/renderer/DesktopUpdateBanner.jsx": {
+            "count": 1,
+            "reason": "A floating update banner over the page."
+        },
+        "packages/web/src/style-guide/sections/IconsSection.jsx": {
+            "count": 1,
+            "reason": "Style-guide icon tile."
+        }
+    }
+}

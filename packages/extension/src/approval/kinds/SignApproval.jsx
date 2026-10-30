@@ -18,6 +18,7 @@ import {
     Input,
     ChainBadge,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import {
@@ -25,8 +26,15 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/actionDetail.js';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
+import '@xchain-wallet/core/i18n/locales/en/send.js';
+import '@xchain-wallet/core/i18n/locales/en/signerSelect.js';
+import '@xchain-wallet/core/i18n/locales/en/verifySignature.js';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
+import { PanicSignStatus, usePanicFreeze } from '@xchain-wallet/core/shared/safety/PanicFreezeNotice.jsx';
+import { PANIC_SURFACE_REJECT_ONLY } from '@xchain-wallet/core/shared/safety/panicNotice.js';
 // §5.6 slice 4: the confirm surface's building blocks, reused here.
 // The whole <ConfirmActionModal> deliberately is NOT reused: this window is
 // already a confirm surface with its own Screen, origin block, always-allow
@@ -63,6 +71,7 @@ import {
     describeAction as describeActionOnHost,
     getTokenInfo,
 } from '../messaging.js';
+import { signingPathLines } from '../signingPathLines.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
@@ -137,6 +146,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [expired, setExpired] = useState(false);
     useBackHandler(onReject, busy);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
@@ -145,6 +155,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         /** @type {Set<string> | null} */ (null),
     );
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
+    const panicNotice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY, t('extension.approval.reject'));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const requestedFee = approvalFeeRequest(payload, descriptor);
     const nativeTicker = tickerForDescriptor(descriptor);
@@ -637,7 +648,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     }, [chainId, intentKey]);
 
 
-    const title = KIND_TITLE[kind] ?? 'Approval required';
+    const title = KIND_TITLE[kind] ?? 'Approve request';
     const showSavePermanent =
         kind === 'signAction' ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
@@ -739,10 +750,16 @@ export function SignApproval({ id, kind, payload, onReject }) {
         : 'Watcher mode never signs or asks for a password. Reject this request or switch to Normal mode to sign on this device.';
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked || signInBlocked;
-    const signingUnavailable = watcherMode || watchOnlyBlocked;
+    // A freeze the user armed is stated first and the window asks for no
+    // password, since the worker refuses the signature whatever is typed. A
+    // duress-armed freeze leaves the window looking as it always does
+    // (panicNotice.js): the worker still refuses, and an observer sees no cue.
+    const panicFrozen = Boolean(panicNotice?.disclose);
+    const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
     async function handleApprove() {
+        if (expired) return;
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
         if (modeApprovalBlocked) return;
         setBusy(true);
@@ -758,14 +775,23 @@ export function SignApproval({ id, kind, payload, onReject }) {
             setPassword('');
             window.close();
         } catch (err) {
-            setError(
-                err?.name === 'InvalidPasswordError'
-                    ? 'Incorrect password.'
-                    : err?.message || 'Approval failed.',
-            );
+            if (err?.name === 'ApprovalInterruptedError') {
+                setExpired(true);
+                setWalletId(null);
+                setPassword('');
+                setError(err.message);
+            } else {
+                setError(
+                    err?.name === 'InvalidPasswordError'
+                        ? 'Incorrect password.'
+                        : userFacingMessage(err, 'Approval failed.'),
+                );
+            }
             setBusy(false);
-            inputRef.current?.focus();
-            inputRef.current?.select();
+            if (err?.name !== 'ApprovalInterruptedError') {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+            }
         }
     }
 
@@ -780,7 +806,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             footer={
                 <div className={shared.footer}>
                     <Button
-                        variant="danger"
+                        variant="secondary"
                         block
                         icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
@@ -791,7 +817,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     {!signingUnavailable ? (
                         <Button
                             type="button"
-                            variant="primary"
+                            variant="success"
                             block
                             icon={<Icon.ThumbsUpIcon />}
                             loading={busy}
@@ -804,7 +830,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </div>
             }
         >
+            <div className={styles.body}>
             <ListPage>
+                {panicFrozen ? (
+                    <PanicSignStatus notice={panicNotice} testId="approval-panic-freeze" role="alert" />
+                ) : null}
                 {descriptor ? (
                     <div className={styles.chainLine}>
                         <ChainBadge descriptor={descriptor} size="sm" showName />
@@ -898,9 +928,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 `approvalBlocked`; this says why, in the same words the
                 in-wallet PSBT confirm page uses. */}
             {psbtRefusal ? (
-                <p className={styles.refusal} role="alert" data-testid="approval-refusal">
+                <StatusMessage variant="error" role="alert" testId="approval-refusal">
                     {psbtRefusal}
-                </p>
+                </StatusMessage>
             ) : null}
 
             {kind === 'coSign' ? (
@@ -955,14 +985,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-                {watchOnlyBlocked ? (
-                    <p className={styles.refusal} role="status">
+                {panicFrozen ? null : watchOnlyBlocked ? (
+                    <StatusMessage variant="error" role="status">
                         {WATCH_ONLY_SIGNING_MESSAGE}
-                    </p>
+                    </StatusMessage>
                 ) : watcherMode ? (
-                    <p className={styles.refusal} role="status">
+                    <StatusMessage variant="error" role="status">
                         {watcherCopy}
-                    </p>
+                    </StatusMessage>
                 ) : walletMode === null ? (
                     <p role="status">{t('extension.sign.checkingWalletMode')}</p>
                 ) : null}
@@ -999,6 +1029,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ) : null}
                 </FormPage>
             ) : null}
+            </div>
         </Screen>
     );
 }
@@ -1119,7 +1150,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>{t('extension.sign.signingPaths')}</p>
                     <pre className={shared.summaryValue}>
-                        {inner.signingPaths.join('\n')}
+                        {signingPathLines(inner.signingPaths).join('\n')}
                     </pre>
                 </div>
             ) : null;
@@ -1177,11 +1208,13 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                         ) : null}
                     </div>
                     {decoded.warnings.length > 0 ? (
-                        <ul className={styles.warnings} role="alert">
-                            {decoded.warnings.map((w, i) => (
-                                <li key={i}>{w}</li>
-                            ))}
-                        </ul>
+                        <StatusMessage variant="warning" role="alert">
+                            <ul>
+                                {decoded.warnings.map((w, i) => (
+                                    <li key={i}>{w}</li>
+                                ))}
+                            </ul>
+                        </StatusMessage>
                     ) : null}
                 </>
             );
@@ -1301,12 +1334,14 @@ function CoSignIntentSummary({ loading, error, preview }) {
     if (error || !preview) {
         return (
             <>
-                <ul className={styles.warnings} role="alert">
-                    <li>
-                        {coSignErrorSentence(error)}
-                        {' '}{t('extension.sign.trustSource')}
-                    </li>
-                </ul>
+                <StatusMessage variant="warning" role="alert">
+                    <ul>
+                        <li>
+                            {coSignErrorSentence(error)}
+                            {' '}{t('extension.sign.trustSource')}
+                        </li>
+                    </ul>
+                </StatusMessage>
                 {error && isDeveloperMessage(error) ? (
                     <CoSignTechnicalDetails testId="cosign-error-details" text={error} />
                 ) : null}
@@ -1342,9 +1377,11 @@ function CoSignIntentSummary({ loading, error, preview }) {
                 </>
             ) : (
                 <>
-                    <ul className={styles.warnings} role="alert">
-                        <li>{coSignUndecodedSentence(preview.decodeReason)}</li>
-                    </ul>
+                    <StatusMessage variant="warning" role="alert">
+                        <ul>
+                            <li>{coSignUndecodedSentence(preview.decodeReason)}</li>
+                        </ul>
+                    </StatusMessage>
                     {preview.decodeReason ? (
                         <CoSignTechnicalDetails testId="cosign-decode-details" text={String(preview.decodeReason)} />
                     ) : null}
@@ -1353,12 +1390,14 @@ function CoSignIntentSummary({ loading, error, preview }) {
 
             {preview.decodeOk && !preview.policyOk ? (
                 <>
-                    <ul className={styles.warnings} role="alert">
-                        <li>
-                            {coSignPolicySentence(preview.policyReason)}
-                            {' '}{t('extension.sign.policyRefusal')}
-                        </li>
-                    </ul>
+                    <StatusMessage variant="warning" role="alert">
+                        <ul>
+                            <li>
+                                {coSignPolicySentence(preview.policyReason)}
+                                {' '}{t('extension.sign.policyRefusal')}
+                            </li>
+                        </ul>
+                    </StatusMessage>
                     {preview.policyReason ? (
                         <CoSignTechnicalDetails testId="cosign-policy-details" text={String(preview.policyReason)} />
                     ) : null}

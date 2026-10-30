@@ -223,6 +223,26 @@ function escapedPattern(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Remove the group marks the field itself drew from a value the user just
+ * edited by typing. The display groups digits ("1,000"), so one more typed
+ * digit reads "1,0000", which the localized parser takes for the decimal
+ * 1.0000 and turns a million into one. A mark is only the field's own when
+ * the value shown before the edit already carried one.
+ *
+ * @param {string} rawValue         the input's value after the keystroke
+ * @param {string} previousDisplay  the value the input showed before it
+ * @param {string} [locale]
+ * @returns {string}
+ */
+export function dropFieldGrouping(rawValue, previousDisplay, locale) {
+    const { group } = localeNumberSeparators(locale);
+    const spaceLike = /^[\s  ]$/u.test(group);
+    const marks = spaceLike ? /[\s  ]/gu : new RegExp(escapedPattern(group), 'gu');
+    if (!new RegExp(marks.source, 'u').test(String(previousDisplay))) return rawValue;
+    return String(rawValue).replace(marks, '');
+}
+
 /** Normalize an amount that may carry its active unit or fiat symbol. */
 export function normalizeAmountFieldInput(value, { unit = '', fiatCurrency = null, locale } = {}) {
     if (value === null || value === undefined) return null;
@@ -356,6 +376,18 @@ export function formatDisplayAmount(value, locale) {
 
     const formatted = formatDecimalAmount(unsigned, locale);
     return nonZero ? `${sign}${formatted}` : formatted;
+}
+
+/**
+ * True when a wire amount is a plain decimal a row can print: a finite number,
+ * a bigint, or a decimal string (exponent form included). An object, NaN or
+ * Infinity is not an amount, and printing it would show [object Object] or NaN.
+ */
+export function isDisplayableAmount(value) {
+    if (typeof value === 'bigint') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'string') return false;
+    return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim());
 }
 
 /** Add a History direction sign without changing the stored amount. */
@@ -551,6 +583,23 @@ export function decimalToBaseUnits(value, decimals = 8) {
     return parsed.units * (10n ** BigInt(scale - parsed.scale));
 }
 
+/**
+ * Convert a non-negative decimal amount to base units, dropping (`down`) or
+ * carrying (`up`) digits past `decimals` instead of refusing them.
+ */
+export function decimalToBaseUnitsRounded(value, decimals, direction) {
+    const scale = Number(decimals);
+    const parsed = parseDecimal(value);
+    if (!parsed || parsed.units < 0n || !Number.isInteger(scale) || scale < 0 || scale > 100) {
+        return null;
+    }
+    if (direction !== 'down' && direction !== 'up') return null;
+    if (parsed.scale <= scale) return parsed.units * (10n ** BigInt(scale - parsed.scale));
+    const divisor = 10n ** BigInt(parsed.scale - scale);
+    const whole = parsed.units / divisor;
+    return direction === 'up' && parsed.units % divisor !== 0n ? whole + 1n : whole;
+}
+
 /** Convert an integer quantity and divisibility into a decimal amount. */
 export function decimalFromBaseUnits(value, decimals = 8) {
     const scale = Number(decimals);
@@ -560,6 +609,22 @@ export function decimalFromBaseUnits(value, decimals = 8) {
     } catch {
         return null;
     }
+}
+
+/**
+ * Classify a typed token amount without going through a float. The amount
+ * field lets a user type a lone '.', '.5' or '5.', and Number('.') is NaN,
+ * which slips past a `Number(x) <= 0` guard; this check works on the digits.
+ *
+ * @param {unknown} value
+ * @returns {'empty' | 'shape' | 'zero' | null}  null when the amount is a positive plain decimal
+ */
+export function amountEntryProblem(value) {
+    const text = String(value ?? '').trim();
+    if (text === '') return 'empty';
+    if (!/^\d+(?:\.\d+)?$/.test(text)) return 'shape';
+    if (!/[1-9]/.test(text)) return 'zero';
+    return null;
 }
 
 /**

@@ -9,7 +9,11 @@ export const REDACTED_DIAGNOSTIC_VALUE = '[REDACTED]';
 export const DIAGNOSTIC_TEXT_LIMIT = 2000;
 
 const PHRASE_VALUE_RE = /(\b(?:mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|passphrase)\b["']?\s*[:=]\s*)(?!["'])[^\r\n]+/gi;
-const LABELED_VALUE_RE = /(\b(?:address(?:es)?|balance(?:s)?|password|passphrase|mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|private[ _-]?key|secret[ _-]?key|wif|xprv)\b["']?\s*[:=]\s*)(\{[^{}\r\n]*\}|\[[^\]\r\n]*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi;
+const LABELED_VALUE_RE = /(\b(?:address(?:es)?|balance(?:s)?|password|passphrase|mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|private[ _-]?key|secret[ _-]?key|wif|xprv|pwd|pass(?:word)?[ _-]?hash|(?:session|auth|access|refresh|api|bearer|csrf|id)[ _-]?(?:token|key|secret|id)|cookie|authorization)\b["']?\s*[:=]\s*)(\{[^{}\r\n]*\}|\[[^\]\r\n]*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi;
+// Extended public keys name every address of a wallet, so they stay out of a copied log.
+const EXTENDED_PUBLIC_KEY_RE = /\b(?:[xyzXYZ]pub|[tuvTUV]pub|[LMlm]tub|dgub|ttub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g;
+const BEARER_RE = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
+const JWT_RE = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 const PRIVATE_KEY_RE = /\b(?:0x)?[a-f0-9]{64}\b/gi;
 const EXTENDED_PRIVATE_KEY_RE = /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g;
 const WIF_RE = /\b(?:5[HJK][1-9A-HJ-NP-Za-km-z]{49}|[KL][1-9A-HJ-NP-Za-km-z]{51})\b/g;
@@ -66,9 +70,12 @@ export function redactDiagnosticText(value, opts = {}) {
         : DIAGNOSTIC_TEXT_LIMIT;
     const input = String(value ?? '').slice(0, limit + 512);
     const secretsRemoved = input
+        .replace(BEARER_RE, `$1 ${REDACTED_DIAGNOSTIC_VALUE}`)
+        .replace(JWT_RE, REDACTED_DIAGNOSTIC_VALUE)
         .replace(PHRASE_VALUE_RE, `$1${REDACTED_DIAGNOSTIC_VALUE}`)
         .replace(LABELED_VALUE_RE, redactLabeledValue)
         .replace(EXTENDED_PRIVATE_KEY_RE, REDACTED_DIAGNOSTIC_VALUE)
+        .replace(EXTENDED_PUBLIC_KEY_RE, REDACTED_DIAGNOSTIC_VALUE)
         .replace(WIF_RE, REDACTED_DIAGNOSTIC_VALUE)
         .replace(PRIVATE_KEY_RE, REDACTED_DIAGNOSTIC_VALUE);
     const redacted = redactBip39Phrases(opts.keepAddresses

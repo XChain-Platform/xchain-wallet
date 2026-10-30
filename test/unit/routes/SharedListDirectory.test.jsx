@@ -144,6 +144,22 @@ describe('SharedListDirectory', () => {
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
+    it('names every failed chain in one notice and shows no empty state beside it', async () => {
+        mount({
+            response: {
+                lists: [],
+                unavailable: ['litecoin-mainnet', 'dogecoin-mainnet'],
+            },
+        });
+
+        await screen.findByRole('img', { name: 'Litecoin' });
+        const notices = screen.getAllByText(/Shared lists unavailable/);
+        expect(notices).toHaveLength(1);
+        expect(within(notices[0].closest('[role="alert"], [role="status"]') || notices[0]).getByRole('img', { name: 'Dogecoin' }))
+            .toBeTruthy();
+        expect(screen.queryByText('No shared lists yet')).toBeNull();
+    });
+
     it('does not expose an unknown network kind through fallback text', async () => {
         mount({
             response: {
@@ -234,5 +250,45 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByText('No shared lists yet')).toBeTruthy();
         expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps valid entries when the directory response contains malformed rows', async () => {
+        mount({
+            response: {
+                lists: [undefined, ENTRIES[0], 7],
+                unavailable: [],
+            },
+        });
+
+        expect(await screen.findByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('neutralizes and caps the indexer text a directory row shows', async () => {
+        mount({
+            response: {
+                lists: [{
+                    kind: 'home',
+                    home_chain: 'BTC',
+                    home_list_index: '12\u202E21',
+                    type: 2,
+                    owner: 'bc1q\u202Elive',
+                    member_count: 1,
+                    share_block: 'x'.repeat(5000),
+                    bindTarget: 12,
+                    name: 'n'.repeat(100000),
+                }],
+                unavailable: [],
+            },
+        });
+
+        const row = await screen.findByRole('listitem', { name: 'Address list 12\u242621' });
+        const text = row.textContent;
+        expect(text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+        expect(within(row).getByText('bc1q\u2426live')).toBeTruthy();
+        expect(within(row).getByText(`${'n'.repeat(63)}…`)).toBeTruthy();
+        expect(within(row).getByText(`${'x'.repeat(99)}…`)).toBeTruthy();
+        expect(text.length).toBeLessThan(1000);
     });
 });

@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => 
 
 import {
     BackupPointerUnresolvedError,
+    BackupSealDamagedError,
     BackupSeedPasswordError,
     exportBackupFile,
     importBackupFile,
@@ -41,6 +42,8 @@ import {
     restoreFromBackupPointer,
 } from '../../../packages/core/src/flows/backupFile.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
+import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
+import { KDF_MIN_ITERATIONS, KDF_MIN_MEMORY_KIB } from '../../../packages/core/src/crypto/kdf.js';
 
 const KDF = {
     algorithm: 'argon2id', salt: 'salt', iterations: 2, memory: 8192, parallelism: 1,
@@ -184,7 +187,7 @@ describe('wallet re-key failure and cleanup edges', () => {
         expect(crypto.deriveMasterKeyAsync).not.toHaveBeenCalled();
     });
 
-    it('classifies an imported-key decrypt failure and zeros the old key', async () => {
+    it('classifies an imported-key tag mismatch as the wrong password and zeros the old key', async () => {
         const oldKey = new Uint8Array([1, 2, 3]);
         const wallet = {
             encryptedSeed: '',
@@ -193,7 +196,7 @@ describe('wallet re-key failure and cleanup edges', () => {
             kdfParams: KDF,
         };
         crypto.deriveMasterKeyAsync.mockResolvedValue(oldKey);
-        crypto.decrypt.mockRejectedValue(new Error('bad tag'));
+        crypto.decrypt.mockRejectedValue(new AeadAuthError(new Error('invalid ghash tag')));
 
         const error = await rekeyWalletRecord(wallet, {
             walletPassword: 'wallet password', devicePassword: 'device password',
@@ -202,6 +205,68 @@ describe('wallet re-key failure and cleanup edges', () => {
         expect(error).toBeInstanceOf(BackupSeedPasswordError);
         expect(error.what).toBe('imported key');
         expect([...oldKey]).toEqual([0, 0, 0]);
+    });
+
+    // A short or undecodable seal is damage, not a password: only a tag mismatch is.
+    it.each([
+        ['a ciphertext shorter than IV and tag', new Error('aead: ciphertext too short')],
+        ['a seal that is not base64', new DOMException('Invalid character', 'InvalidCharacterError')],
+    ])('reports %s as a damaged seal, never as the wrong password', async (_label, fault) => {
+        const oldKey = new Uint8Array([1, 2, 3]);
+        const wallet = {
+            encryptedSeed: 'seed', encryptedPassphrase: null, importedKeys: [], kdfParams: KDF,
+        };
+        crypto.deriveMasterKeyAsync.mockResolvedValue(oldKey);
+        crypto.decrypt.mockRejectedValue(fault);
+
+        const error = await rekeyWalletRecord(wallet, {
+            walletPassword: 'wallet password', devicePassword: 'device password',
+        }).catch((caught) => caught);
+
+        expect(error).toBeInstanceOf(BackupSealDamagedError);
+        expect(error).not.toBeInstanceOf(BackupSeedPasswordError);
+        expect(error.what).toBe('seed');
+        expect(error.cause).toBe(fault);
+        expect([...oldKey]).toEqual([0, 0, 0]);
+    });
+
+    // The new seal guards THIS device's password, so it never inherits a cost below the floor.
+    it.each([
+        ['below the floor is raised to it', { iterations: 1, memory: 8192, parallelism: 1 },
+            { iterations: KDF_MIN_ITERATIONS, memory: KDF_MIN_MEMORY_KIB, parallelism: 1 }],
+        ['above the floor is kept', { iterations: 6, memory: 2 * KDF_MIN_MEMORY_KIB, parallelism: 2 },
+            { iterations: 6, memory: 2 * KDF_MIN_MEMORY_KIB, parallelism: 2 }],
+        ['mixed is raised field by field', { iterations: 6, memory: 8192, parallelism: 1 },
+            { iterations: 6, memory: KDF_MIN_MEMORY_KIB, parallelism: 1 }],
+    ])('re-seals at a cost %s', async (_label, inherited, expected) => {
+        const wallet = {
+            encryptedSeed: 'seed', encryptedPassphrase: null, importedKeys: [],
+            kdfParams: { ...KDF, ...inherited },
+        };
+        crypto.deriveMasterKeyAsync.mockImplementation(async () => new Uint8Array(32).fill(1));
+        crypto.decrypt.mockResolvedValue(new Uint8Array([5, 6]));
+        crypto.encrypt.mockResolvedValue(new Uint8Array([7]));
+
+        await expect(rekeyWalletRecord(wallet, {
+            walletPassword: 'wallet password', devicePassword: 'device password',
+        })).resolves.toBe(true);
+        expect(crypto.makeFreshKdfParams).toHaveBeenCalledWith(expected);
+    });
+
+    it('re-seals at explicit kdfParams unchanged, even below the floor', async () => {
+        const explicit = { ...KDF, salt: 'caller-salt' };
+        const wallet = {
+            encryptedSeed: 'seed', encryptedPassphrase: null, importedKeys: [], kdfParams: KDF,
+        };
+        crypto.deriveMasterKeyAsync.mockImplementation(async () => new Uint8Array(32).fill(1));
+        crypto.decrypt.mockResolvedValue(new Uint8Array([5, 6]));
+        crypto.encrypt.mockResolvedValue(new Uint8Array([7]));
+
+        await rekeyWalletRecord(wallet, {
+            walletPassword: 'wallet password', devicePassword: 'device password', kdfParams: explicit,
+        });
+        expect(crypto.makeFreshKdfParams).not.toHaveBeenCalled();
+        expect(wallet.kdfParams).toBe(explicit);
     });
 
     it('zeros both keys and decrypted plaintext when resealing fails', async () => {

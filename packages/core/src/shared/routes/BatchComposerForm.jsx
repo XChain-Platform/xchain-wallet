@@ -36,14 +36,17 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
@@ -52,6 +55,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -170,6 +174,7 @@ function sendTotalsFor(parsedRows) {
  */
 export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
@@ -193,6 +198,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    // Rows the user has edited, or every row once Review was pressed. A row
+    // with no action picked yet only says so after one of those.
+    const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
     const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
@@ -228,7 +236,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                 .map(([cid]) => cid);
             if (chains.length === 0) {
-                setLoadError('No addresses on any chain yet. Use Receive to generate one before composing a batch.');
+                setLoadError('No addresses on any network yet. Use Receive to generate one before composing a batch.');
                 return;
             }
             setChainId(chains[0]);
@@ -288,7 +296,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // A chain switch keeps queued rows, so every row is checked against
         // the chain that will receive the batch.
         if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected chain.`;
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected network.`;
         }
         if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
             return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
@@ -313,6 +321,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         return constraintError;
     }, [parsedRows, rowErrors, constraintError]);
 
+    // The error shown beside each row: an unpicked action waits until the row
+    // is touched or Review is pressed; every other row error shows at once.
+    const shownRowErrors = rows.map((row, i) => (
+        rowErrors[i] && (row.action || touchedRows[row.id]) ? rowErrors[i] : null
+    ));
+
     const draftKey = JSON.stringify({ chainId, fromAddressId, rows });
     const draftKeyRef = useRef(draftKey);
     draftKeyRef.current = draftKey;
@@ -330,6 +344,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     };
     const updateRow = (i, patch) => {
         clearPreReviewErrors(rows[i]?.id);
+        const id = rows[i]?.id;
+        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
         setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     };
     const addRow = () => {
@@ -344,6 +360,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const sendTotals = useMemo(() => sendTotalsFor(parsedRows), [parsedRows]);
 
     async function goReview() {
+        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
         if (composeError) return;
         const validatedDraftKey = draftKey;
         setValidatingRows(true);
@@ -478,6 +495,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     async function handleSign(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setBuildError(feeStop.formError); return; }
         if (stage === 'submitting' || !composed) return;
         const hw = hwSource;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
@@ -551,7 +570,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
 
     // Confirm page, rendered in place of the review stage; the queued rows
@@ -582,7 +601,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setComposed(null); setStage('compose'); }}
                     onDone={onBack}
@@ -594,7 +614,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // broadcast" would report N sub-actions as sent when none are.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="batch" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />,
             );
         }
         return wrap(
@@ -616,17 +636,18 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const hw = isHwSource(fromAddress);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review batch"
                 onSubmit={handleSign}
                 status={buildError || (submitError && (hw || isWatcherMode)) ? (
                     <>
                         {buildError ? (
-                            <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>
+                            <StatusMessage variant="error" details={buildErrorDetails || undefined}>
                                 {buildError}
                             </StatusMessage>
                         ) : null}
                         {submitError && (hw || isWatcherMode) ? (
-                            <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>
+                            <StatusMessage variant="error" details={submitErrorDetails || undefined}>
                                 {submitError}
                             </StatusMessage>
                         ) : null}
@@ -724,13 +745,14 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Batch composer"
             sectioned
             status={preReviewError || constraintError ? (
-                <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
+                <StatusMessage variant="error">{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={Boolean(composeError) || validatingRows}>
+                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
                     Review
                 </Button>
             )}
@@ -745,7 +767,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             </details>
             <FormSection title="Batch settings">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={chainId || ''}
                     onChange={(cid) => {
                         clearPreReviewErrors();
@@ -763,7 +785,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
                 >
                     {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
+                        <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
                     ))}
                 </Select>
             </FormSection>
@@ -789,10 +811,10 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         placeholder='{"VERSION":"0", ...}'
                         spellCheck={false}
                     />
-                    {rowErrors[i] ? (
-                        <StatusMessage variant="error" className={styles.error}>
-                            {rowErrors[i]}
-                        </StatusMessage>
+                    {shownRowErrors[i] ? (
+                        <FieldNote variant="error">
+                            {shownRowErrors[i]}
+                        </FieldNote>
                     ) : null}
                     <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
                         <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>

@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormNotice, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -23,7 +24,7 @@ import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -35,19 +36,22 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { humanizeError } from '../utils/humanizeError.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { compareAmounts } from '../../market/orderMath.js';
+import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/createOrder.js';
 
 // A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
 function orderFailureFallback(err) {
@@ -72,6 +76,15 @@ function localInputToUnix(localStr) {
     if (!Number.isFinite(ms)) return null;
     return Math.floor(ms / 1000);
 }
+
+// The indexer reads a coin-named ticker as an unknown token and marks the order
+// invalid, so the native coin is chosen with the Native option, not typed.
+const isNativeCoinName = (tick, coinTicker) => Boolean(coinTicker) && String(tick).trim().toUpperCase() === coinTicker;
+const nativeCoinTickMessage = (coinTicker) => `${coinTicker} is the network coin. Choose Native ${coinTicker} for that side instead of typing it as a token.`;
+
+// The amount as the order spells it: consensus reads 00012 as 12 and 2.50 as
+// 2.5, so the plain form is what the confirm shows and the chain credits.
+const wireAmount = (v) => multiplyAmounts(v, '1') ?? String(v).trim();
 
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(String(v).trim()) > 0;
 const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
@@ -103,6 +116,7 @@ const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
  */
 export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromAddress, onManageOrders }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
 
@@ -127,7 +141,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         submitMethods: { hw: 'orderActionHw', software: 'orderAction' },
         initialChainId,
         initialFromAddress,
-        noAddressMessage: 'No addresses on any chain yet. Use Receive to generate one first.',
+        noAddressMessage: 'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
@@ -244,17 +258,17 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (giveType === 'token') {
             p.GIVE_TICK = giveTick.trim().toUpperCase();
-            if (giveOwnership) p.GIVE_OWNERSHIP = '1'; else p.GIVE_AMOUNT = giveAmount.trim();
+            if (giveOwnership) p.GIVE_OWNERSHIP = '1'; else p.GIVE_AMOUNT = wireAmount(giveAmount);
         } else {
             p.GIVE_TICK = '';
-            p.GIVE_AMOUNT = giveAmount.trim();
+            p.GIVE_AMOUNT = wireAmount(giveAmount);
         }
         if (getType === 'token') {
             p.GET_TICK = getTick.trim().toUpperCase();
-            if (getOwnership) p.GET_OWNERSHIP = '1'; else p.GET_AMOUNT = getAmount.trim();
+            if (getOwnership) p.GET_OWNERSHIP = '1'; else p.GET_AMOUNT = wireAmount(getAmount);
         } else {
             p.GET_TICK = '';
-            p.GET_AMOUNT = getAmount.trim();
+            p.GET_AMOUNT = wireAmount(getAmount);
         }
         if (getAddress.trim()) p.GET_ADDRESS = getAddress.trim();
         if (expMode === 'custom' && expInput.trim()) {
@@ -292,18 +306,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
             const tickError = tickerReferenceError(giveTick, { noun: 'Give ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(giveTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
         } else if (!isPlainPositive(giveAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
         }
         if (!giveOwnership) {
-            const precisionError = tokenAmountPrecisionError(giveAmount, {
+            const precisionError = tokenAmountPrecisionError(wireAmount(giveAmount), {
                 divisibility: giveType === 'coin' ? 8 : giveTokenInfo?.divisibility,
                 tick: giveAssetTick,
                 noun: 'Give amount',
             });
             if (precisionError) { setFormError(precisionError); return false; }
-            if (giveBalance !== null && compareAmounts(giveAmount, giveBalance) === 1) {
+            if (giveBalance !== null && compareAmounts(wireAmount(giveAmount), giveBalance) === 1) {
                 setFormError(`Give amount exceeds your available ${giveAssetTick.toUpperCase()} balance of ${giveBalance}.`);
                 return false;
             }
@@ -313,18 +328,26 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
             const tickError = tickerReferenceError(getTick, { noun: 'Get ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(getTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         } else if (!isPlainPositive(getAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to get.`); return false;
         }
         if (!getOwnership) {
             const getAssetTick = getType === 'coin' ? coinTicker : getTick;
-            const precisionError = tokenAmountPrecisionError(getAmount, {
+            const precisionError = tokenAmountPrecisionError(wireAmount(getAmount), {
                 divisibility: getType === 'coin' ? 8 : getTokenInfo?.divisibility,
                 tick: getAssetTick,
                 noun: 'Get amount',
             });
             if (precisionError) { setFormError(precisionError); return false; }
+        }
+        // Consensus accepts the same token on both sides, and at any price
+        // other than one the difference goes to whoever matches the order.
+        if (giveType === 'token' && getType === 'token'
+            && giveTick.trim().toUpperCase() === getTick.trim().toUpperCase()) {
+            setFormError('You give and get the same token. Choose a different token for one side.');
+            return false;
         }
         const ga = getAddress.trim();
         const receiveError = ga ? addressValidationError(ga, descriptor) : null;
@@ -337,6 +360,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m) || memoCharacterError(m);
+        if (memoError) { setFormError(memoError); return false; }
         if (allowListIdx && !isCanonicalActionIndex(allowListIdx)) {
             setFormError('Allow-list ID must be a positive whole number.'); return false;
         }
@@ -430,6 +455,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!guardBeforeSign()) return;
         setFormError(null);
         if (singleEncode) { void openConfirmModal(); return; }
@@ -516,19 +543,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         // Signed but not broadcast. No order exists to match yet, so
         // the auto-pay note below would be describing a thing that is not
         // on the chain.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="order" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="order" unsaved={result.unsaved} />);
         }
         const autopayNote = autopayArm
             ? (result?.autopayArmed === false
@@ -610,11 +637,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review order"
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -636,7 +664,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -659,9 +687,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </p>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -689,11 +715,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create order"
             onSubmit={handleReview}
             noValidate
             sectioned
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <>
                     {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
@@ -725,7 +752,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                 />
-                <p className={styles.hint}>
+                <p className={styles.hintLeft}>
                     Both sides of this order settle on the same chain. To get a token on another chain, use Cross-chain order.
                 </p>
 
@@ -740,7 +767,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         iconLabel="Choose source address"
                     />
                 ) : (
-                    <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                    <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
                 )}
 
                 <SideEditor
@@ -788,13 +815,11 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 />
 
                 {giveType === 'coin' && getType === 'coin' ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">
+                        At least one side must be a token. Coin-for-coin is a regular payment, not an order.
+                    </FormNotice>
                 ) : null}
-            </FormSection>
 
-            <FormSection title="Expiration">
                 <AddressField
                     label="Receive at (optional)"
                     hint="Address where you receive the get side. Defaults to your source address."
@@ -804,7 +829,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     autoCorrect="off"
                     spellCheck={false}
                 />
+            </FormSection>
 
+            <FormSection title="Timing and fees">
                 <RadioGroup
                     legend="Expiration"
                     name="order-exp"
@@ -825,25 +852,36 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     />
                 ) : null}
 
-                <Button type="button" variant="link" icon={null} onClick={() => setShowAdvanced((v) => !v)}>
+                <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    icon={null}
+                    className={styles.advancedToggle}
+                    aria-expanded={showAdvanced}
+                    onClick={() => setShowAdvanced((v) => !v)}
+                >
                     {showAdvanced ? 'Hide advanced options' : 'Advanced options (lists, memo)'}
+                    <Icon.ChevronDownIcon
+                        style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                    />
                 </Button>
                 {showAdvanced ? (
                     <>
-                        <p className={styles.successLabel}>Restrict who can match (optional)</p>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                                {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
-                            </Button>
-                            {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                        <div className={styles.choiceGroup}>
+                            <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                            <div className={styles.choiceButtons}>
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                    {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
+                                </Button>
+                                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                    {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
+                                </Button>
+                                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
+                            </div>
                         </div>
-                        <div className={styles.actions}>
-                            <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                                {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
-                            </Button>
-                            {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
-                        </div>
-                        <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                        <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                         <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     </>
                 ) : null}
@@ -857,7 +895,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             onChange={(e) => setAutopayEnabled(e.target.checked)}
                         />
                         {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Even if the service that reports matches were fully compromised, auto-pay could send
                                 at most the combined amounts you give across all your orders with auto-pay on.
                             </p>
@@ -871,7 +909,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         ) : null}
                     </>
                 ) : giveIsNative ? (
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {isWatcherMode
                             ? 'Watcher and hardware wallets cannot auto-pay; you will be notified to pay any match manually.'
                             : 'Hardware wallets cannot auto-pay; you will be notified to pay any match manually.'}
@@ -898,8 +936,10 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
     return (
         <>
             {showHeading ? <p className={styles.successLabel}>{heading}</p> : null}
+            {/* The section title already says which side this is, so the group
+                names what it picks instead of repeating "You give". */}
             <RadioGroup
-                legend={heading}
+                legend={t('createOrder.side.assetType')}
                 name={`${heading}-type`}
                 value={type}
                 onChange={onType}

@@ -36,7 +36,7 @@
 import { assertNoTamper, buildExpectedOutputs, TamperDetectedError } from './confirmChecks.js';
 import { isChunkEncoding } from './nativeFeeLane.js';
 import { compiledPayloadByteLen } from './envelopeSelection.js';
-import { checkEnvelopeReveal } from './envelopeRevealCheck.js';
+import { checkEnvelopeReveal, envelopeRevealRefusalMessage } from './envelopeRevealCheck.js';
 
 const MISMATCH = 'The action encoded in the transaction does not match what you approved.';
 
@@ -120,6 +120,9 @@ export function assertBuiltActionMatchesIntent({
             network: sdk.config && sdk.config.network,
             assertEnvelopeCarrierBinding: sdk.decoder?.assertEnvelopeCarrierBinding,
         });
-        if (!verdict.ok) throw new TamperDetectedError(MISMATCH, { reason: verdict.reason });
+        if (!verdict.ok) {
+            throw new TamperDetectedError(envelopeRevealRefusalMessage(verdict.reason),
+                { reason: verdict.reason, decodeReason: verdict.decodeReason });
+        }
     }
 }

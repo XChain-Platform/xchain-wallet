@@ -10,6 +10,7 @@
 
 import { Button, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionsMenu.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './ActionsMenu.module.css';
@@ -60,7 +61,6 @@ export function ActionsMenu({ entries, onBack }) {
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('actionsMenu.title')}
-            titleIcon={<Icon.TokenIcon />}
         />
     );
     return (

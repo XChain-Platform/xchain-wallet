@@ -70,9 +70,11 @@ assert.ok(!/Route SDK requests through a local Tor SOCKS5 proxy when available/.
 assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
     'the non-proxying shells render an explicit unavailable row');
 const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
-const unavailBlock = src.slice(unavailGate, unavailGate + 700);
+const unavailBlock = src.slice(unavailGate, unavailGate + 900);
 assert.match(unavailBlock, /Not available on this platform/,
     'the unavailable row names the platform limit in the hint');
+assert.match(unavailBlock, /isNativeShell\(\)[\s\S]*Not available in the iOS and Android apps/,
+    'the iOS and Android apps get their own hint, chosen through the locale');
 assert.match(unavailBlock, /checked=\{false\}/,
     'the unavailable row never draws a switch in the on position');
 assert.match(unavailBlock, /\bdisabled\b/,
@@ -89,7 +91,7 @@ for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {
 }
 assert.match(
     primSrc,
-    /import \{ Switch \} from '@xchain-wallet\/core\/ui';/,
+    /import \{[^}]*\bSwitch\b[^}]*\} from '@xchain-wallet\/core\/ui';/,
     'ToggleRow imports the kit Switch',
 );
 assert.match(primSrc, /<Switch\b/, 'ToggleRow renders the kit Switch');

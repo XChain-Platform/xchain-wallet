@@ -14,6 +14,10 @@ import { Button, EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 
 /**
  * §27.5 / G074: Collectibles view. Renders an NFT-shaped grid (large
@@ -48,8 +52,8 @@ import styles from './CollectiblesView.module.css';
 export function CollectiblesView({
     rows,
     demo = false,
-    emptyTitle = 'No collectibles yet',
-    emptyBody = 'Collectibles appear here after this wallet receives them.',
+    emptyTitle = t('home.tabs.noCollectiblesYet'),
+    emptyBody = t('components.collectiblesView.collectiblesAppearHereAfterThis'),
     onReceive,
     onSelectToken,
     pinnedKeys,
@@ -66,7 +70,7 @@ export function CollectiblesView({
             <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
-                actionLabel={onReceive ? 'Receive' : undefined}
+                actionLabel={onReceive ? t('home.receive') : undefined}
                 onAction={onReceive}
                 actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
@@ -88,7 +92,7 @@ export function CollectiblesView({
 
     return (
         <div className={styles.wrap}>
-            <div className={styles.grid} role="list" aria-label="Collectibles">
+            <div className={styles.grid} role="list" aria-label={t('components.collectiblesView.collectibles')}>
                 {sortedRows.map((r) => (
                     <CollectibleCard
                         key={`${r.chainId}:${r.tick}`}
@@ -111,12 +115,12 @@ export function CollectiblesView({
                     aria-expanded={hiddenExpanded}
                 >
                     {hiddenExpanded
-                        ? `Hide ${hidden.length} hidden collectible${hidden.length === 1 ? '' : 's'}`
-                        : `Show ${hidden.length} hidden collectible${hidden.length === 1 ? '' : 's'}`}
+                        ? t('components.collectiblesView.hideHidden', { count: hidden.length })
+                        : t('components.collectiblesView.showHidden', { count: hidden.length })}
                 </button>
             ) : null}
             {hidden.length > 0 && hiddenExpanded ? (
-                <div className={styles.grid} role="list" aria-label="Hidden collectibles">
+                <div className={styles.grid} role="list" aria-label={t('components.collectiblesView.hiddenCollectibles')}>
                     {hidden.map((r) => (
                         <CollectibleCard
                             key={`hidden:${r.chainId}:${r.tick}`}
@@ -191,7 +195,7 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                 type={clickable ? 'button' : undefined}
                 onClick={handleClick}
                 aria-label={clickable
-                    ? `Open ${row.displayName || row.tick} details`
+                    ? t('components.collectiblesView.openDetails', { value: row.displayName || row.tick })
                     : undefined}
             >
                 <div className={styles.thumb}>
@@ -242,8 +246,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     variant={pinned ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
-                    aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
-                    title={pinned ? 'Unpin' : 'Pin to top'}
+                    aria-label={pinned ? t('balances.unpin', { tick: row.tick }) : t('balances.pin', { tick: row.tick })}
+                    title={pinned ? t('balances.unpin2') : t('balances.pinToTop')}
                     onClick={() => onTogglePin(key, !pinned)}
                     className={styles.pinBtn}
                 />
@@ -254,8 +258,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     variant={hidden ? 'primary' : 'secondary'}
                     icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
-                    aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
-                    title={hidden ? 'Unhide' : 'Hide'}
+                    aria-label={hidden ? t('balances.unhide', { tick: row.tick }) : t('balances.hide', { tick: row.tick })}
+                    title={hidden ? t('settings.display.unhide2') : t('settings.developer.hide')}
                     onClick={() => onToggleHide(key, !hidden)}
                     className={styles.hideBtn}
                 />

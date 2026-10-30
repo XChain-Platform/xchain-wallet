@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import {
     formatWithThousands,
@@ -38,7 +39,7 @@ import {
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -49,8 +50,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { compareAmounts } from '../../market/orderMath.js';
 import { stakingActionParams } from '../../flows/unstakeClaimActions.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -111,14 +112,16 @@ function extractRows(resp) {
  * @param {'unstake' | 'claim-rewards'} props.mode
  * @param {string} props.walletId
  * @param {string} props.chainId
+ * @param {string} [props.initialFromAddress]  the staking position's own address; acts from it when it is one of the wallet's on `chainId`
  * @param {() => void} props.onBack
  */
-export function StakingActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+export function StakingActionForm({ mode, walletId, chainId: initialChainId, initialFromAddress, onBack }) {
     // The launching position seeds the network; the standard Network
     // picker lets the user retarget the action at any Bitcoin chain the
     // wallet holds addresses on (the address + fee sections follow along).
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     // Only for the fiat preview: the display currency, and whether the user
     // has opted out of third-party price data (§45 / privacy.priceDataEnabled).
     const { settings } = useSettings();
@@ -167,11 +170,16 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Act from the chain's active address (else newest HD
-                // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is still
+                // one of ours on this chain; otherwise act from the chain's active
+                // address (else newest HD external), matching Send.
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -315,15 +323,17 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         return heights[0] ?? null;
     }, [isUnstake, activeStakes, pendingStakes, signingPubkey]);
 
-    // Prefill with the full balance (the common case is still "take it
-    // all"), but stop overwriting once the user edits: a positions
-    // refresh or key switch must not clobber a typed partial amount.
+    // Default to the full balance (the common case is still "take it all"),
+    // but stop following it once the user edits. Deriving the untouched value
+    // during render keeps the displayed balance, input and action params
+    // atomic: a fast submit cannot land between a balance render and a later
+    // prefill effect. A positions refresh or key switch still cannot clobber a
+    // typed partial amount.
     const [amount, setAmount] = useState('');
-    const amountTouchedRef = useRef(false);
-    useEffect(() => {
-        if (amountTouchedRef.current) return;
-        setAmount(availableAmt != null ? String(availableAmt) : '');
-    }, [availableAmt]);
+    const [amountTouched, setAmountTouched] = useState(false);
+    const effectiveAmount = !amountTouched && availableAmt != null
+        ? String(availableAmt)
+        : amount;
 
     // §29.3 fiat preview + toggle, same wiring as Send. The canonical
     // `amount` stays coin-scale; fiat mode only changes the display.
@@ -345,14 +355,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         if (!fiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const value = amount ? coinToFiatExact(amount, fiatRate) : null;
+                const value = effectiveAmount ? coinToFiatExact(effectiveAmount, fiatRate) : null;
                 setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             setFiatAmount('');
             return 'coin';
         });
-    }, [amount, fiatRate]);
+    }, [effectiveAmount, fiatRate]);
 
     // A rate can go away mid-edit (chain switched, feed went quiet), which
     // would strand the field in a mode it can no longer convert.
@@ -371,7 +381,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         const stripped = String(rawValue).replace(/,/g, '');
         // Valid partial decimals only ("" / "." / "1." stay allowed).
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-        amountTouchedRef.current = true;
+        setAmountTouched(true);
         // In fiat mode the typed text is fiat and the canonical `amount`
         // (what gets broadcast, and what the available-balance check reads)
         // is derived from it. Writing the typed number straight into
@@ -504,8 +514,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRateValid = feePick.mode !== 'custom'
-        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     // The legacy absent-AMOUNT bytes mean "everything", so they are sent only
     // when the entered amount EQUALS a known total. Any other valid amount is
@@ -517,11 +525,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     const {
         params: actionParams, amountValid, isWholeAmount, normalizedAmount,
     } = useMemo(
-        () => stakingActionParams({ isUnstake, signingPubkey, amount, availableAmt }),
-        [isUnstake, signingPubkey, amount, availableAmt],
+        () => stakingActionParams({ isUnstake, signingPubkey, amount: effectiveAmount, availableAmt }),
+        [isUnstake, signingPubkey, effectiveAmount, availableAmt],
     );
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -560,10 +570,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         }
         if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
             setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
-            return;
-        }
-        if (!customFeeRateValid) {
-            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);
@@ -685,7 +691,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </ListPage>,
         );
     }
@@ -697,12 +703,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<ListPage><QueuedResultPanel onDone={onBack} unsaved={result.unsaved} /></ListPage>);
+            return wrap(<ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
                 <ListPage>
-                    <WatcherResultPanel
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={handleBuildAnother}
                         onDone={onBack}
@@ -737,10 +744,11 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         const isPartial = !reviewed.full;
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -779,7 +787,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     </dd>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -872,12 +880,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} staking`}
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : positionsError ? (
-                <StatusMessage variant="error" className={styles.error}>{positionsError}</StatusMessage>
+                <StatusMessage variant="error">{positionsError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -912,7 +921,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
             <AmountField
                 label="Amount"
-                amount={amount}
+                amount={effectiveAmount}
                 fiatAmount={fiatAmount}
                 tick="XCHAIN"
                 fiatRate={fiatRate}
@@ -922,7 +931,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 inputRef={amountInputRef}
                 onMax={() => {
                     const max = availableAmt != null ? String(availableAmt) : '';
-                    amountTouchedRef.current = true;
+                    setAmountTouched(true);
                     setAmount(max);
                     if (amountInputMode === 'fiat') {
                         const converted = max && fiatRate ? coinToFiatExact(max, fiatRate) : null;

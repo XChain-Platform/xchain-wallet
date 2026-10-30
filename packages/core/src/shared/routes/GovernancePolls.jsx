@@ -16,7 +16,9 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/governance.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { pollRowForDisplay } from './pollDisplay.js';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
 
@@ -115,7 +117,10 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         setPollState({ walletId, chainId, rows: null, error: null });
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
             .then((resp) => {
-                if (!cancelled) setPollState({ walletId, chainId, rows: extractRows(resp), error: null });
+                if (!cancelled) {
+                    const rows = extractRows(resp).map(pollRowForDisplay).filter(Boolean);
+                    setPollState({ walletId, chainId, rows, error: null });
+                }
             })
             .catch((err) => {
                 if (!cancelled) {
@@ -149,11 +154,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     }
     if (!chainId && !error) {
         return wrap(
-            <ListPage>
-                <div role="status" aria-label={t('governance.loadingAddressesLabel')} aria-busy="true">
-                    {t('governance.loadingAddresses')}
-                </div>
-            </ListPage>,
+            <ListPage notices={(
+                <StatusMessage variant="status" label={t('governance.loadingAddressesLabel')} busy>{t('governance.loadingAddresses')}</StatusMessage>
+            )} />,
         );
     }
     if (!chainId) {
@@ -161,7 +164,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: t('common.tryAgain'), onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
@@ -171,7 +173,18 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     }
 
     return wrap(
-        <ListPage toolbar={(
+        <ListPage
+            notices={pollError ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
+                >
+                    {pollError}
+                </StatusMessage>
+            ) : !rows ? (
+                <StatusMessage variant="status" label={t('governance.loadingPollsLabel')} busy>{t('governance.loadingPolls')}</StatusMessage>
+            ) : null}
+            toolbar={(
             <>
                 <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
@@ -179,20 +192,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             </>
         )}>
 
-            {pollError ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.error}
-                    recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
-                >
-                    {pollError}
-                </StatusMessage>
-            ) : null}
-            {chainId && !rows && !pollError ? (
-                <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
-                    {t('governance.loadingPolls')}
-                </div>
-            ) : null}
             {rows && rows.length === 0 ? (
                 <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
             ) : null}

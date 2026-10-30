@@ -33,7 +33,8 @@
 // constant with no env override) does that.
 //
 import { randomBytes } from 'node:crypto';
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     EXPLORER_URL,
@@ -114,7 +115,9 @@ async function mineToHeight(target, timeoutMs = 240_000) {
     while (Date.now() < deadline) {
         const status = await explorerJson('status').catch(() => null);
         tip = Number(status?.chain_tip?.[REGTEST_COIN]);
-        indexed = Number(status?.decoder_tip?.[REGTEST_COIN]);
+        // `last_block` is the height the indexer has processed and the one the
+        // wallet reads as its watermark; `decoder_tip` can run blocks ahead.
+        indexed = Number(status?.last_block?.[REGTEST_COIN]);
         if (Number.isFinite(indexed) && indexed >= target) return indexed;
         if (!Number.isFinite(tip) || tip < target) await nudgeChain();
         await new Promise((r) => setTimeout(r, 1_500));
@@ -134,22 +137,15 @@ async function approveConfirm(page) {
 
 /** Navigates through the command palette, the way Staking is reached (it
  * hangs off Home's secondary actions and the palette, never a nav tab). */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
 
-/** Reads the full txid from either action or SEND completion markup. */
+/** Reads the full txid from either action or SEND completion markup: the
+ * staking forms print it whole, and Send draws it truncated with the full id
+ * as the accessible name. */
 async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('code, dd')
-        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
-    await expect(value).toBeVisible({ timeout: 30_000 });
-    const txid = (await value.innerText()).trim();
-    expect(txid, 'the done screen names a real txid').toMatch(/^[0-9a-f]{64}$/);
-    return txid;
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 30_000,
+        message: 'the done screen names a real txid',
+    });
 }
 
 function amountField(scope) {
@@ -309,7 +305,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await unlockAfterReload(page, PASSWORD);
 
             pubkey = newSigningPubkey();
-            await gotoPalette(page, 'Staking');
+            await openPaletteCommand(page, 'Staking');
             const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
@@ -320,7 +316,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             const main = page.getByRole('main');
             await expect(main.getByLabel('Signing public key', { exact: true })).toBeVisible({ timeout: 30_000 });
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
-            await expect(main.getByText('✓ No existing stake for this pubkey; defaulting to New stake.'))
+            await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 30_000 });
             await amountField(main).fill(STAKE_AMOUNT);
             await main.getByRole('button', { name: 'Stake', exact: true }).click();
@@ -346,8 +342,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
         });
 
         await test.step('FALSIFY: a permanent broadcast failure on a partial Claim never succeeds and never records a claim', async () => {
-            await gotoPalette(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            await openPaletteCommand(page, 'Staking');
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
@@ -384,8 +380,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            await openPaletteCommand(page, 'Staking');
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
             const claimBtn = page.getByRole('group', { name: 'Stake actions' })

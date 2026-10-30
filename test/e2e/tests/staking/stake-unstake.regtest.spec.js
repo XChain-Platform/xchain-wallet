@@ -53,11 +53,13 @@
 //    success, before the same inputs are sent for real.
 
 import { randomBytes } from 'node:crypto';
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     EXPLORER_URL,
     REGTEST_COIN,
+    approveConfirm as approveConfirmBounded,
+    expectConfirmModal,
     failBroadcast,
     fundAddress,
     healVenueClock,
@@ -76,6 +78,10 @@ const MINT_XCHAIN = 300;
 
 const STAKE_AMOUNT = '100';
 const UNSTAKE_PARTIAL = '30';
+// The faked-failure attempt unstakes a different amount. The encoder refuses a
+// byte-identical rebuild for five minutes, and after a faked rejection the
+// inputs are still unspent, so the real attempt has to be a different transaction.
+const UNSTAKE_FAKED = '25';
 const TOPUP_AMOUNT = '20';
 
 /** A fresh, syntactically-valid 64-hex signing key. The indexer regexes the
@@ -115,13 +121,6 @@ async function approveConfirm(page) {
  * destination at any width; it hangs off Home's secondary actions
  * and off the palette, so the palette is what works identically in every
  * shell. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
 
 /** The txid off a form's done screen: StakeForm and StakingActionForm both
  * end on one summary line and a single Txid `<dl>` row. */
@@ -141,13 +140,14 @@ function amountField(scope) {
  * INDEXER's own processed height reaches `target` - i.e. past a stake's
  * `activation_block`.
  *
- * MEASURED, not assumed: this waits on `decoder_tip`, not `chain_tip`. A
- * first version polled the raw node tip and returned as soon as it crossed
- * `activation_block`, which raced a transient one-block decode lag on this
- * shared venue - the very next preflight dry-run (Tier 1) still reported
- * "invalid: SIGNING_PUBKEY (no active stake...)" because the INDEXER had not
- * processed that block yet, even though the node had. The stake-activation
- * check reads indexer state, so indexer state is what has to clear the bar. */
+ * MEASURED, not assumed: this waits on `last_block`, not `chain_tip` or
+ * `decoder_tip`. Both of those can sit blocks ahead of what the indexer has
+ * processed (on 2026-10-17 `decoder_tip` read 1331 while `last_block` read
+ * 1327, one short of the stake's activation block 1328). Stake Detail resolves
+ * a stake's activation against `last_block` through the wallet's indexer
+ * watermark, and the preflight dry run reads indexer state too, so a stake
+ * opened before `last_block` clears the bar shows "Nothing staked" with every
+ * action disabled. */
 async function mineToHeight(target, timeoutMs = 240_000) {
     const deadline = Date.now() + timeoutMs;
     let tip = null;
@@ -155,7 +155,7 @@ async function mineToHeight(target, timeoutMs = 240_000) {
     while (Date.now() < deadline) {
         const status = await explorerJson('status').catch(() => null);
         tip = Number(status?.chain_tip?.[REGTEST_COIN]);
-        indexed = Number(status?.decoder_tip?.[REGTEST_COIN]);
+        indexed = Number(status?.last_block?.[REGTEST_COIN]);
         if (Number.isFinite(indexed) && indexed >= target) return indexed;
         if (!Number.isFinite(tip) || tip < target) await nudgeChain();
         await new Promise((r) => setTimeout(r, 1_500));
@@ -227,7 +227,14 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await switchToRegtest(page, PASSWORD);
 
             staker = await readReceiveAddress(page);
-            await fundAddress(staker, FUNDING_BTC);
+            // One retry: the utxo-tracker view can lag the mined block on the
+            // shared venue, and funding is setup, not the claim under test.
+            try {
+                await fundAddress(staker, FUNDING_BTC);
+            } catch {
+                await nudgeChain();
+                await fundAddress(staker, FUNDING_BTC);
+            }
 
             // Balances are fetched per chain on mount, so a reload is the cheapest
             // way to make the freshly-confirmed UTXO visible to the forms.
@@ -247,7 +254,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
         await test.step('stake XCHAIN under a fresh signing pubkey', async () => {
             pubkey = newSigningPubkey();
 
-            await gotoPalette(page, 'Staking');
+            await openPaletteCommand(page, 'Staking');
             const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
@@ -272,7 +279,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // wire's VERSION on; wait for it rather than trusting the radio's
             // default, so a detection regression would fail HERE, not silently
             // stake the wrong VERSION.
-            await expect(main.getByText('✓ No existing stake for this pubkey; defaulting to New stake.'))
+            await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 30_000 });
 
             await amountField(main).fill(STAKE_AMOUNT);
@@ -302,11 +309,10 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
         });
 
         await test.step('FALSIFY: a permanent broadcast failure on UNSTAKE surfaces as an error, never a silent success', async () => {
-            await gotoPalette(page, 'Staking');
-            // StakeRow renders a real <button> but pins role="listitem" on it
-            // (it lives inside a role="list" container), so it answers to
-            // 'listitem', not 'button', in the accessibility tree.
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            await openPaletteCommand(page, 'Staking');
+            // Each stake row is a native button inside its own list item, named
+            // for the position, its amount and its owner.
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
@@ -328,15 +334,13 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // still real, exactly as `failBroadcast`'s own contract promises.
             await failBroadcast(page, 'permanent');
 
-            await amountField(main).fill(UNSTAKE_PARTIAL);
+            await amountField(main).fill(UNSTAKE_FAKED);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
 
-            const confirm = page.getByTestId('confirm-modal');
-            await expect(confirm).toBeVisible({ timeout: 60_000 });
+            const confirm = await expectConfirmModal(page, 'the (faked-failure) partial UNSTAKE');
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirmBounded(page, 'the (faked-failure) partial UNSTAKE');
 
             // RED, on purpose: the happy-path assertions two steps below
             // (success text, `waitForValidAction`) would fail exactly like this
@@ -348,29 +352,38 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // `confirm-error` panel - useConfirmAction's 'error' phase resolves
             // through `openConfirmScreen`'s own catch, which closes the confirm
             // screen and returns the PLAIN FORM with the failure surfaced as a
-            // StatusMessage `role="alert"` reading
-            // "broadcast failed (phase1): Encoder RPC error: <reason>".
+            // StatusMessage `role="alert"`. The injected node reason
+            // (bad-txns-inputs-missingorspent) is a spend conflict, so the wallet
+            // says a coin was already used and nothing was sent. That is the
+            // permanent verdict this step injects, as opposed to the queued
+            // "Signed. Not broadcast yet." a transient failure earns.
             await expect(confirm).toHaveCount(0, { timeout: 120_000 });
             const err = main.getByRole('alert');
             await expect(err).toBeVisible({ timeout: 30_000 });
-            await expect(err).toContainText(/missingorspent/i);
+            await expect(err, 'the spent-input rejection was not reported as a coin conflict')
+                .toContainText('One of the coins this transaction spends was already used by another '
+                    + 'transaction. Nothing was sent.');
+            await expect(page.getByText('Signed. Not broadcast yet.'),
+                'a permanent rejection was presented as a queued retry').toHaveCount(0);
             await expect(page.getByText(/Unstake broadcast\./)).toHaveCount(0);
 
             // Restore: drop the fake encoder answer. The plain form's own state
-            // (amount, pubkey) survives the round trip untouched, so the next
-            // step re-drives the SAME inputs for real with no re-fill needed.
+            // (amount, pubkey) survives the round trip untouched.
             await page.unroute(`${ENCODER_URL}/**`);
         });
 
         await test.step('the real partial UNSTAKE broadcasts and indexes valid', async () => {
             const main = page.getByRole('main');
-            // Reject returned to the plain form with state intact (proven for
-            // Send in confirm-broadcast.regtest.spec.js); re-assert rather than
-            // trust it, since a regression here would silently unstake the
-            // wrong amount.
-            await expect(amountField(main)).toHaveValue(UNSTAKE_PARTIAL);
+            // The refusal returned to the plain form with state intact; re-assert
+            // rather than trust it, since a regression here would silently
+            // unstake the wrong amount. Then set the real amount.
+            await expect(amountField(main)).toHaveValue(UNSTAKE_FAKED);
+            await amountField(main).fill(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
-            await approveConfirm(page);
+            await expectConfirmModal(page, 'the real partial UNSTAKE');
+            const realPassword = page.getByLabel('Password', { exact: true });
+            if (await realPassword.count() > 0 && await realPassword.isVisible()) await realPassword.fill(PASSWORD);
+            await approveConfirmBounded(page, 'the real partial UNSTAKE');
 
             await expect(main.getByText(/Unstake broadcast\./)).toBeVisible({ timeout: 120_000 });
             const txid = await readDoneTxid(page);
@@ -417,7 +430,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
         });
 
         await test.step('Top-up mode: staking again under the SAME pubkey broadcasts as VERSION 2', async () => {
-            await gotoPalette(page, 'Staking');
+            await openPaletteCommand(page, 'Staking');
             const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();

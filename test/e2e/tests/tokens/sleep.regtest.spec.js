@@ -15,7 +15,13 @@
 // v0 locks the signing address from Token Actions (legacy review stage with
 // a typed LOCK confirm); it runs last because a slept address cannot sign.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -41,19 +47,6 @@ const MINT_XCHAIN = 20;
 /** How far past the tip the address lock resumes, beyond anything a nudge mines mid-test. */
 const LOCK_AHEAD_BLOCKS = 1000;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
@@ -67,7 +60,7 @@ async function approveAndGetTxid(page) {
 
 /** Opens Manage Token for `tick` and clicks the pause/resume action (label varies with state). */
 async function openPauseAction(page, tick, label) {
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -75,23 +68,12 @@ async function openPauseAction(page, tick, label) {
     await row.click();
     await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
 
-    const primary = main.getByRole('button', { name: label, exact: true });
-    if (await primary.count() > 0 && await primary.first().isVisible()) {
-        await primary.first().click();
-        return;
-    }
-    const more = main.getByRole('button', { name: /^More/ });
-    await expect(more, `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout: 15_000 });
-    await more.first().click();
-    const item = page.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `no "${label}" action available for ${tick}`).toBeVisible({ timeout: 15_000 });
-    await item.click();
+    await clickManageTokenAction(main, label);
 }
 
 /** Opens the address self-lock form (SLEEP v0) off the Token Actions page. */
 async function openLockAddress(page) {
-    await gotoPalette(page, 'All actions');
+    await openPaletteCommand(page, 'All actions');
     const entry = page.getByRole('main').getByRole('button', { name: /^Lock this address/ });
     await expect(entry, 'Token Actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
     await entry.click();
@@ -129,7 +111,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await createWallet(page, { password: PASSWORD, name: 'Sleep Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -146,7 +128,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByLabel('Ticker').fill(TICK);
@@ -221,7 +203,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             // Lock relative to the height the form's future-block check uses.
             const heightLine = main.getByText(/^Duration starts from current block /);
             await expect(heightLine, 'the lock form never read the chain height').toBeVisible({ timeout: 30_000 });
-            const height = Number((await heightLine.innerText()).match(/block ([\d,]+) on /)?.[1]?.replace(/,/g, ''));
+            const height = Number((await heightLine.innerText()).match(/block ([\d,]+)\./)?.[1]?.replace(/,/g, ''));
             expect(Number.isFinite(height) && height > 0, 'unreadable chain height on the lock form').toBe(true);
             const resumeBlock = height + LOCK_AHEAD_BLOCKS;
 
@@ -232,7 +214,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             // Legacy review stage: irreversibility warning, typed confirm, sign.
             await expect(page.getByText('This pauses XChain actions from your address.', { exact: false }))
                 .toBeVisible({ timeout: 30_000 });
-            const sign = main.getByRole('button', { name: `Lock address on ${REGTEST_CHAIN_LABEL}`, exact: true });
+            const sign = main.getByRole('button', { name: 'Lock address', exact: true });
             await expect(sign, 'Sign is live before LOCK was typed').toBeDisabled();
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);

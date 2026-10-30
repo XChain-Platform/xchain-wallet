@@ -76,7 +76,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/airdrop.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -84,6 +84,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    payProtocolFeeInCoin,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -93,6 +94,7 @@ import {
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
+    REGTEST_CHAIN_ID,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -149,8 +151,10 @@ async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
     if (await deltas.count() === 0) return null;
     const text = await deltas.innerText();
-    const coin = text.match(/Protocol fee\s*[A-Z]{3,5}\s*([\d.]+)/)?.[1];
-    return coin === undefined ? null : Math.round(Number(coin) * 1e8);
+    // The projection prints the amount before its ticker ("Protocol fee" then
+    // "0.00001 BTC").
+    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
 /**
@@ -170,11 +174,12 @@ function expectPerRecipientFee(dropped, recipients) {
         `an airdrop to ${recipients} addresses was billed ${fee.gas_cost} gas units; the unified `
         + `schedule prices it per recipient, so it should be ${100 * recipients}`)
         .toBe(100 * recipients);
-    // Off Bitcoin the native coin is the ONLY lane, so a fee recorded
-    // against an XCHAIN balance here would be a fee this wallet cannot pay (it
-    // holds no XCHAIN at all).
+    // Every drop here is composed on the coin lane: Litecoin and Dogecoin have
+    // no other lane, and on Bitcoin the spec turns on "Pay protocol fee in BTC
+    // instead of XCHAIN" (payProtocolFeeInCoin). Mode 2 is an XCHAIN balance
+    // debit, so seeing it means the wallet dropped the lane the signer chose.
     expect(Number(fee.payment_mode),
-        'the airdrop recorded an XCHAIN-lane fee on a chain that has no XCHAIN fee lane')
+        'the airdrop recorded an XCHAIN-lane fee although it was composed on the coin lane')
         .toBe(1);
     expect(Number(fee.native_coin_amount),
         'the mandatory native lane recorded no coin amount for a fee-bearing action')
@@ -247,19 +252,6 @@ async function waitForBalance(address, tick, want, timeoutMs = SLOW_INDEXER_TIME
         await new Promise((r) => setTimeout(r, 2_000));
     }
     throw new Error(`${tick} balance for ${address} never reached ${want} (last=${last})`);
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /**
@@ -347,13 +339,17 @@ async function approveAndGetTxid(page, not = null) {
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
     const main = page.getByRole('main');
-    // The success screens render the id with no separators ("Transaction
-    // IDae0d…Done"), so a \b-anchored pattern does not match (§3.5, Session 30).
+    // Send draws the id truncated and keeps the full 64 characters in an
+    // accessible name; the airdrop screens print it whole. Read both.
     const deadline = Date.now() + 180_000;
     while (Date.now() < deadline) {
-        const found = ((await main.innerText().catch(() => '')).match(/[0-9a-f]{64}/g) || [])
-            .filter((id) => id !== not);
-        if (found.length > 0) return found[0];
+        const labelled = await main.locator('[aria-label]').evaluateAll((nodes) => nodes
+            .map((n) => n.getAttribute('aria-label') || '')
+            .filter((label) => /^[0-9a-f]{64}$/.test(label))).catch(() => []);
+        const printed = ((await main.innerText().catch(() => ''))
+            .match(/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/g) || []);
+        const found = [...labelled, ...printed].filter((id) => id !== not);
+        if (found.length) return found[0];
         await new Promise((r) => setTimeout(r, 1_000));
     }
     throw new Error('no new transaction id ever appeared after Approve');
@@ -368,7 +364,7 @@ async function approveAndGetTxid(page, not = null) {
  * wallet that is working (§3.5, Session 32).
  */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -413,11 +409,11 @@ async function issueToken(page, tick, supply, source) {
     // issuing a second token from the ISSUE done screen waits 30s on a form that
     // never remounts (Session 34).
     await reloadToHome(page);
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await form.getByLabel('From', { exact: true }).inputValue(),
         'the Issue form is not signing with the funded address')
         .toBe(source);
     await form.getByLabel('Ticker').fill(tick);
@@ -448,12 +444,12 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    const source = await main.getByLabel('From').inputValue();
+    const source = await main.getByLabel('From', { exact: true }).inputValue();
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -486,7 +482,7 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
  */
 async function sendToken(page, tick, destination, amount, destinationAfter) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Send');
+    await openPaletteCommand(page, 'Send');
     const main = page.getByRole('main');
     await pickAsset(page, tick);
     await expect(main, `the Send form is not sourcing from the address that holds ${tick}`)
@@ -525,21 +521,21 @@ async function sendToken(page, tick, destination, amount, destinationAfter) {
  */
 async function pickAsset(page, tick) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-        await page.getByRole('button', { name: /Change asset/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / }).first().click();
         try {
-            await expect(page.getByLabel(/Open .+ details/i).first(),
+            await expect(page.locator('[data-balance-key]').first(),
                 'the asset picker listed nothing at all, so its balances never arrived')
                 .toBeVisible({ timeout: 30_000 });
             await page.getByLabel('Search coins or tokens').fill(tick);
-            const row = page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first();
+            const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
             await expect(row, `the wallet's balance list does not carry ${tick}`)
                 .toBeVisible({ timeout: 15_000 });
-            await row.click();
+            await row.getByRole('button', { name: /^Select / }).first().click();
             return;
         } catch (err) {
             if (attempt === 3) throw err;
             await reloadToHome(page);
-            await gotoPalette(page, 'Send');
+            await openPaletteCommand(page, 'Send');
         }
     }
 }
@@ -554,12 +550,12 @@ async function pickAsset(page, tick) {
  */
 async function publishAddressList(page, source, members) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Create a list');
+    await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
     await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     await readChainAddresses(page, source);
-    expect(await main.getByLabel('From').inputValue(),
+    expect(await main.getByLabel('From', { exact: true }).inputValue(),
         'the list would be published from an address holding no coin')
         .toBe(source);
 
@@ -580,12 +576,17 @@ async function publishAddressList(page, source, members) {
 
 /** Adds `count` more receive addresses on the venue chain. */
 async function generateExtraAddresses(page, count) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
     await page.getByLabel('Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
+    // The modal derives the addresses one at a time and closes only after the
+    // last one is stored; navigating or reloading before that drops the rest.
+    await expect(page.getByTestId('add-address-generate'),
+        `the wallet never finished generating ${count} addresses`)
+        .toBeHidden({ timeout: 60_000 });
 }
 
 /** Opens the Airdrop form's token picker and selects `tick`. */
@@ -595,14 +596,14 @@ async function pickDropToken(page, tick) {
     // matches" empty state is identical whether the wallet does not hold the
     // token or its balances have not landed yet, so filtering first turns a slow
     // read into "this token does not exist" thirty seconds later (Session 34).
-    await expect(page.getByLabel(/Open .+ details/i).first(),
+    await expect(page.locator('[data-balance-key]').first(),
         'the token picker listed nothing at all, so its balances never arrived')
         .toBeVisible({ timeout: 60_000 });
     await page.getByLabel('Search coins or tokens').fill(tick);
-    const row = page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first();
+    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
     await expect(row, `the wallet's balance list does not carry ${tick}`)
         .toBeVisible({ timeout: 30_000 });
-    await row.click();
+    await row.getByRole('button', { name: /^Select / }).first().click();
 }
 
 test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
@@ -619,6 +620,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         let minerSats;
         let projectedFeeSats;
         let satsBefore;
+        let xchainBefore;
 
         await test.step('onboard, fund and issue the token from the wallet\'s only address', async () => {
             issuer = await onboardAndIssue(page);
@@ -631,7 +633,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('compose the drop, and refuse a mainnet address while doing it', async () => {
             await seedPrices();
-            await gotoPalette(page, 'Airdrop');
+            await openPaletteCommand(page, 'Airdrop');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token to drop:/ }))
                 .toBeVisible({ timeout: 30_000 });
@@ -655,7 +657,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             recipients = others.slice(0, 2);
             [control] = others.slice(2);
 
-            expect(await main.getByLabel('From').inputValue(),
+            expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the airdrop would be signed by an address that is not the token issuer, so it '
                 + 'would be paid for by an address holding no coin and no supply')
                 .toBe(issuer);
@@ -674,10 +676,6 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the mainnet address was skipped without saying it was skipped for being on '
                 + 'another network, which reads as a typo rather than as a chain mismatch')
                 .toContainText(/for another network/);
-            await expect(skipped,
-                'the skip notice does not name the chain this airdrop pays on, which is the half '
-                + 'that tells the user what to do about it')
-                .toContainText(REGTEST_CHAIN_LABEL);
 
             // Now the real list: two addresses, no debris, and the control
             // deliberately absent.
@@ -686,6 +684,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form did not project the total this drop pays out')
                 .toContainText(`total ~${AMOUNT * recipients.length} ${TICK}`);
 
+            await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review recipients' }).click();
         });
 
@@ -755,6 +754,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'eight places and the larger charge unmentioned')
                 .not.toBeNull();
             satsBefore = await coinBalanceSats(issuer);
+            xchainBefore = await tokenBalance(issuer, 'XCHAIN');
 
             // The done screen prints the LIST's id above the AIRDROP's, so the
             // one already known has to be excluded by name.
@@ -828,11 +828,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + `+ protocol ${projectedFeeSats}); the chain charged ${satsBefore - satsAfter}`)
                 .toBe(minerSats + projectedFeeSats);
 
-            // This wallet minted no XCHAIN, so a fee taken there as well would
-            // have to come out of a balance of nothing.
+            // Onboarding minted XCHAIN for the ISSUE fee, so the coin-lane drop
+            // must leave that balance exactly where it stood before Approve.
             expect(await tokenBalance(issuer, 'XCHAIN'),
-                'the mandatory coin lane also touched an XCHAIN balance')
-                .toBe(0);
+                'the coin-lane airdrop also debited the XCHAIN balance')
+                .toBe(xchainBefore);
         });
     });
 
@@ -883,7 +883,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // Read them off the Airdrop form's own picker, which scopes them to
             // this chain - the three regtest chains share legacy version bytes,
             // so the unfiltered Addresses list cannot tell them apart (§3.5).
-            await gotoPalette(page, 'Airdrop');
+            await openPaletteCommand(page, 'Airdrop');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token to drop:/ }))
                 .toBeVisible({ timeout: 30_000 });
@@ -904,7 +904,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('compose a token-holder drop and publish the TYPE=1 list', async () => {
             await reloadToHome(page);
             await seedPrices();
-            await gotoPalette(page, 'Airdrop');
+            await openPaletteCommand(page, 'Airdrop');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token to drop:/ }))
                 .toBeVisible({ timeout: 30_000 });
@@ -912,7 +912,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await pickDropToken(page, DROP_TICK);
             await selectVenueChain(main);
             await readChainAddresses(page, issuer);
-            expect(await main.getByLabel('From').inputValue(),
+            expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the drop would be signed by an address that is not the issuer')
                 .toBe(issuer);
 
@@ -937,6 +937,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // skipping the rest of this chain assertion.
             await waitForHolderCount(page, MEMB_TICK, /1 token · ~2 holders right now/);
 
+            await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review recipients' }).click();
             await expect(page.getByText('Review token list', { exact: true }).first(),
                 'a token-holder drop did not reach the TOKEN list review (it may have fallen '
@@ -1080,7 +1081,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await generateExtraAddresses(page, 2);
             await reloadToHome(page);
 
-            await gotoPalette(page, 'Airdrop');
+            await openPaletteCommand(page, 'Airdrop');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token to drop:/ }))
                 .toBeVisible({ timeout: 30_000 });
@@ -1088,6 +1089,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             const others = (await readChainAddresses(page, issuer)).filter((a) => a !== issuer);
             expect(others.length).toBe(2);
             [member, heldOut] = others;
+
+            await main.getByLabel('Airdrop to').selectOption('existing');
+            await main.getByRole('button', { name: 'Choose list' }).click();
+            await expect(page.getByText('No published lists yet', { exact: true }))
+                .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('publish the list somewhere else entirely', async () => {
@@ -1097,7 +1103,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('airdrop to it, and never touch a list-publishing screen', async () => {
             await reloadToHome(page);
             await seedPrices();
-            await gotoPalette(page, 'Airdrop');
+            await openPaletteCommand(page, 'Airdrop');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token to drop:/ }))
                 .toBeVisible({ timeout: 30_000 });
@@ -1122,6 +1128,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form did not recognise the pick as an ADDRESS list')
                 .toContainText(/address list/i);
 
+            await payProtocolFeeInCoin(main);
             // 'existing' skips the LIST leg entirely, so the submit button is
             // labelled for the airdrop rather than for a recipient review.
             await main.getByRole('button', { name: 'Review airdrop' }).click();

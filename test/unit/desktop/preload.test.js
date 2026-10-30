@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Module, { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isValidSignerBridgeMessage } from '../../../packages/desktop/main/security.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const preloadPath = resolve(here, '../../../packages/desktop/preload.cjs');
@@ -48,12 +49,13 @@ function loadPreload() {
 }
 
 const expectedSurface = {
-    xchainWalletBridge: ['sendMessage', 'wipeStorage'],
+    xchainWalletBridge: ['saveBackupFile', 'sendMessage', 'wipeStorage'],
     xchainWalletDeepLink: ['onUri', 'takePending'],
     xchainWalletRegistry: ['getRemoteDescriptors'],
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
+    xchainWalletTrezorBridge: ['call', 'close'],
     xchainWalletUpdater: ['getState', 'install', 'onEvent'],
-    xchainWalletWindow: ['onStateChange', 'openDetached'],
+    xchainWalletWindow: ['onHidden', 'onStateChange', 'openDetached', 'setScreenProtected'],
 };
 
 describe('desktop preload API', () => {
@@ -83,7 +85,9 @@ describe('desktop preload API', () => {
 
         await bridge.sendMessage({ type: 'wallet.list', request: undefined });
         await bridge.wipeStorage();
+        await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history', initialContext: { walletId: 'w1' } });
+        await win.setScreenProtected(true);
         await updater.getState();
         await updater.install();
         await deepLink.takePending();
@@ -93,7 +97,9 @@ describe('desktop preload API', () => {
         expect(ipcRenderer.invoke.mock.calls).toEqual([
             ['xchain-wallet:message', { type: 'wallet.list', request: undefined }],
             ['xchain:wipe-storage'],
+            ['xchain:save-backup', { fileName: 'w-backup.xchain-wallet', content: '{}' }],
             ['xchain:open-window', { initialView: 'history', initialContext: { walletId: 'w1' } }],
+            ['xchain:screen-protection', true],
             ['xchain:updater-state'],
             ['xchain:updater-install', 'download'],
             ['xchain:deep-link-take'],
@@ -117,8 +123,15 @@ describe('desktop preload API', () => {
         const invalidCalls = [
             () => bridge.sendMessage(null),
             () => bridge.wipeStorage('path'),
+            () => bridge.saveBackupFile({ fileName: 'a.xchain-wallet', content: '{}', path: '/etc' }),
+            () => bridge.saveBackupFile({ fileName: 'a.xchain-wallet' }),
+            () => bridge.saveBackupFile(),
             () => win.openDetached({}),
+            () => win.onHidden(null),
             () => win.onStateChange(null),
+            () => win.setScreenProtected('yes'),
+            () => win.setScreenProtected(),
+            () => win.setScreenProtected(true, 2),
             () => updater.onEvent('listener'),
             () => updater.getState('extra'),
             () => updater.install('extra'),
@@ -160,6 +173,7 @@ describe('desktop preload API', () => {
     it('validates subscriptions and the unsubscribe functions they return', () => {
         const { worlds, ipcRenderer } = loadPreload();
         const subscriptions = [
+            worlds.get('xchainWalletWindow').onHidden,
             worlds.get('xchainWalletWindow').onStateChange,
             worlds.get('xchainWalletUpdater').onEvent,
             worlds.get('xchainWalletDeepLink').onUri,
@@ -173,7 +187,46 @@ describe('desktop preload API', () => {
             expect(() => unsubscribe()).not.toThrow();
         }
 
-        expect(ipcRenderer.on).toHaveBeenCalledTimes(4);
-        expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(4);
+        expect(ipcRenderer.on).toHaveBeenCalledTimes(5);
+        expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(5);
+    });
+
+    it('forwards a native hide notice without exposing the IPC event', () => {
+        const { worlds, listeners } = loadPreload();
+        const listener = vi.fn();
+        const off = worlds.get('xchainWalletWindow').onHidden(listener);
+
+        for (const receive of listeners.get('xchain:window-hidden')) receive({ sender: 'main' });
+        off();
+
+        expect(listener).toHaveBeenCalledWith();
+        expect(listeners.get('xchain:window-hidden').size).toBe(0);
+    });
+
+    it('accepts exactly the signer frames main accepts, so no frame is dropped silently', () => {
+        const postMessage = loadPreload().worlds.get('xchainWalletSignerBridge').postMessage;
+        const err = { name: 'Error', message: 'no' };
+        const frames = [
+            { kind: 'register', signerIds: ['signer-1'] },
+            { kind: 'unregister', signerIds: [] },
+            { kind: 'register', signerIds: ['x'.repeat(256)] },
+            { kind: 'register', signerIds: ['x'.repeat(257)] },
+            { kind: 'register', signerIds: [''] },
+            { kind: 'response', reqId: 1, ok: true, result: 'available' },
+            { kind: 'response', reqId: 1, ok: true, result: null },
+            { kind: 'response', reqId: 1, ok: true },
+            { kind: 'response', reqId: 1, ok: true, result: 1, error: err },
+            { kind: 'response', reqId: 1, ok: false, error: err },
+            { kind: 'response', reqId: 1, ok: false, error: err, result: 1 },
+            { kind: 'response', reqId: 1, ok: false, error: { name: '', message: 'no' } },
+            { kind: 'response', reqId: 1, ok: false, error: { name: 'Error', message: '' } },
+            { kind: 'response', reqId: 0, ok: true, result: 1 },
+            { kind: 'unknown' },
+        ];
+        for (const frame of frames) {
+            let preloadAccepts = true;
+            try { postMessage(frame); } catch { preloadAccepts = false; }
+            expect(preloadAccepts, JSON.stringify(frame).slice(0, 80)).toBe(isValidSignerBridgeMessage(frame));
+        }
     });
 });

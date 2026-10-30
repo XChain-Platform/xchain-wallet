@@ -26,6 +26,8 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import qrStyles from '../../ui/QrDisplay.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * @param {object} props
@@ -33,7 +35,7 @@ import qrStyles from '../../ui/QrDisplay.module.css';
  * @param {number} [props.size]   pixel width (default 200)
  * @param {string} [props.alt]    accessibility label (default 'QR code')
  */
-export function KeyQR({ value, size = 200, alt = 'QR code' }) {
+export function KeyQR({ value, size = 200, alt = t('components.keyQR.qrCode') }) {
     const [dataUrl, setDataUrl] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {

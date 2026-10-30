@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -23,6 +24,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
@@ -30,10 +32,11 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
+import { addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
@@ -117,6 +120,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     // true / false from the explorer, null when it does not say.
     const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isTick = String(listType) === '1';
@@ -163,6 +167,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -212,7 +217,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!(byChain?.[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch(() => { if (!cancelled) setLoadError('Failed to load addresses.'); });
@@ -270,6 +275,24 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             .catch(() => { if (!cancelled) setTickCoinSupported(false); });
         return () => { cancelled = true; };
     }, [chainId, isTick, messaging]);
+
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (isTick || !chainId || !descriptor?.coin || !descriptor?.networkKind) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({
+                    chainId, coin: descriptor?.coin, networkKind: descriptor?.networkKind,
+                })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, isTick, descriptor?.coin, descriptor?.networkKind, messaging]);
 
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
@@ -346,15 +369,14 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return airdropLib.classifyRecipients(parts, {
             coin: descriptor?.coin || null,
             network: descriptor?.networkKind || null,
-        });
-    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind]);
+        }, { anyCoins });
+    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind, anyCoins]);
 
     const itemIdentity = useCallback((item) => {
         const value = String(item);
         if (isTick) return value.toLowerCase();
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(value)
-            && (value === value.toLowerCase() || value === value.toUpperCase());
-        return bech32 ? value.toLowerCase() : value;
+        // Match address case variants with the same rule the recipient parser uses.
+        return airdropLib.bech32IdentityKey(value);
     }, [isTick]);
 
     const currentItemKeys = useMemo(
@@ -408,19 +430,19 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         ITEM: toRemove,
     }), [intermediateIndex, toRemove, trimmedMemo]);
     const firstActionSize = useMemo(
-        () => listActionSize(firstParams, descriptor, isWatcherMode ? null : fromAddress),
-        [firstParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(firstParams),
+        [firstParams],
     );
     const secondActionSize = useMemo(
-        () => listActionSize(secondParams, descriptor, isWatcherMode ? null : fromAddress),
-        [secondParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(secondParams),
+        [secondParams],
     );
     const secondReviewActionSize = useMemo(() => listActionSize({
         ...secondParams,
         // The first leg's index does not exist yet. Reserve a full uint64-width
         // decimal index so the add leg cannot strand an oversized remove leg.
         LIST_ACTION_INDEX: '9'.repeat(20),
-    }, descriptor, isWatcherMode ? null : fromAddress), [secondParams, descriptor, isWatcherMode, fromAddress]);
+    }), [secondParams]);
     const resultingCount = currentItems.length - toRemove.length + toAdd.length;
 
     const firstDecoded = useMemo(() => (
@@ -520,7 +542,10 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         if (typeof messaging.getListByActionIndex !== 'function') return null;
         let fresh;
         try {
-            fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
+            // Fresh, so the screen's own read of the list never answers this check.
+            fresh = currentListItems(await messaging.getListByActionIndex({
+                chainId, actionIndex: String(oldIndex), fresh: true,
+            }));
         } catch (err) {
             return explorerReadFailure(err, `check list #${oldIndex}`)?.message
                 || `Couldn't check list #${oldIndex}. Try again.`;
@@ -536,14 +561,9 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         event.preventDefault();
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (ownershipReason) { setFormError(ownershipReason); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            setFormError(rate > 0
-                ? 'Custom fee rate can have no more than 8 decimal places.'
-                : 'Custom fee rate must be greater than zero.');
-            return;
-        }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')
@@ -702,7 +722,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || owner === undefined) return wrap(<p className={styles.hint}>Loading…</p>);
     if (ownershipReason) return wrap(<StatusMessage variant="warning">{ownershipReason}</StatusMessage>);
 
@@ -711,7 +731,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     // copy is queued is the double-broadcast trap).
     if (queuedResult) {
         return wrap(
-            <QueuedResultPanel onDone={onBack} what="list fork" unsaved={queuedResult.unsaved} />,
+            <ResultScreen state="signed-not-broadcast" onDone={onBack} what="list fork" unsaved={queuedResult.unsaved} />,
         );
     }
 
@@ -787,7 +807,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                             membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
                             own edit screen:
                         </p>
-                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                        <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                             {REPOINT_TARGETS.map((t) => {
                                 const open = t.built ? repointHandlers[t.id] : undefined;
                                 return (
@@ -799,13 +819,13 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                                 );
                             })}
                         </ul>
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {resolution === false
                                     ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
-                                    : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                                    : `Unless list-edit resolution is active on this network, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
                             </p>
-                        </div>
+                        </StatusMessage>
                     </>
                 )}
 
@@ -847,11 +867,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     if (stage === 'review-2' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list removal"
                 onSubmit={handleSignSecond}
                 noValidate
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -866,8 +887,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             >
                 <p className={styles.summary}>{secondDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -934,11 +955,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list edit"
                 onSubmit={handleSignFirst}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -967,8 +989,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
@@ -1058,11 +1080,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Edit list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button type="submit" variant="primary">
                     Review
@@ -1084,7 +1107,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                         {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
                                 <Checkbox
@@ -1121,9 +1144,13 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 {toRemove.length + toAdd.length === 0 ? ' (no changes yet)' : ''}
             </p>
             {additions.invalid.length > 0 ? (
-                <p role="alert" className={styles.warning}>
+                <FieldNote variant="warning" role="alert">
                     Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
-                </p>
+                    {/* Say why a ^<index> address reference is in that list: it is not a typo. */}
+                    {!isTick && additions.addressRefs?.length > 0
+                        ? ` ${addressReferenceNote(additions.addressRefs.length)}`
+                        : null}
+                </FieldNote>
             ) : null}
             {!isTick ? (
                 <p className={styles.hint}>

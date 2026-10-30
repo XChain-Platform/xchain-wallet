@@ -23,11 +23,10 @@
     outline-offset: calc(var(--xc-space-1) * 0.5);
 }
 
-/* The QR card spans the form like the address field below it; only the code
-   inside is capped, so card, address and actions share one left edge. */
-.qrBox {
-    margin: 0;
-    max-width: none;
+/* The multisig address card flattens inside the wide form card like any card. */
+.multisigCard {
+    composes: card from '../../ui/Card.module.css';
+    margin-top: var(--xc-space-3);
 }
 
 .receiveQrDisplay {
@@ -36,10 +35,9 @@
     margin-bottom: var(--xc-space-3);
 }
 
-/* The address field and QR actions span the form like every other field, so
-   they share its left edge in the wide card; the shared frame still caps the
-   QR itself at --xc-qr-frame-size. The doubled class outranks QrDisplay's
-   .stack cap whichever stylesheet the bundle emits last. */
+/* The address field and QR actions span the form like every other field, while
+   the unframed QR itself stays capped at --xc-qr-frame-size. The doubled class
+   outranks QrDisplay's .stack cap whichever stylesheet the bundle emits last. */
 .receiveQrDisplay.receiveQrDisplay {
     max-width: none;
 }
@@ -49,9 +47,13 @@
     min-width: 0;
 }
 
+/* --xc-qr-fit-size is the height budget Receive measures from the route
+   scroller, so a short window shrinks the code until the address and the Copy
+   row fit under it. With room to spare the width cap is the smaller, and below a
+   scannable size Receive leaves it unset so the page scrolls instead. */
 .qrSurface {
     width: 100%;
-    max-width: var(--xc-qr-frame-size);
+    max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)));
     min-width: 0;
     margin-inline: auto;
 }
@@ -79,9 +81,9 @@
 
 /* Keep the QR content column inside the route scroller's visible height while
    its card, address field, and actions continue to share the same edges. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .qrSurface {
-        max-width: min(var(--xc-qr-frame-size), calc(var(--xc-viewport-h, 100vh) - 11rem));
+        max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)), calc(var(--xc-viewport-h, 100vh) - 11rem));
     }
 }
 
@@ -105,9 +107,11 @@
     margin: var(--xc-space-4) 0;
 }
 
+/* The field keeps a readable width: when large text or a narrow screen leaves
+   less than that beside the button, the button moves to its own line. */
 .labelEditor {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: end;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
@@ -117,30 +121,31 @@
     margin-bottom: 0;
 }
 
+.labelEditor > :first-child {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.labelEditor > :last-child {
+    flex: 0 0 auto;
+}
+
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-/* Four equal secondary buttons in two columns: one height, one-line labels,
-   both outer edges on the form's edges. */
+/* Four equal secondary buttons, two to a row while both labels fit and one to a
+   row when large text makes a pair wider than the form: one height, one-line
+   labels, both outer edges on the form's edges. */
 .qrActions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     margin-top: 0;
     align-items: stretch;
 }
 
 .qrActions > * {
-    width: 100%;
-    min-width: 0;
+    flex: 1 1 calc(50% - var(--xc-space-2) / 2);
+    min-width: max-content;
     box-sizing: border-box;
     height: var(--xc-control-h-md);
     min-height: var(--xc-control-h-md);
@@ -178,12 +183,9 @@
 
 /* §17.6 hardware receive-address confirmation block. */
 .hwVerify {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
 }

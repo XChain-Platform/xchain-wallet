@@ -62,9 +62,10 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-publish-lock.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    expectConfirmModal,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -79,6 +80,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -179,19 +181,6 @@ async function oracleFeeQuote({ address, coin, tick, fiat, escrow, blockTime }) 
     return explorerJson(`oraclefeequote?${q.toString()}`, { allowErrorBody: true });
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(2_400_000);
@@ -213,7 +202,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Oracle Operator' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Publish oracle price');
+            await openPaletteCommand(page, 'Publish oracle price');
             let main = page.getByRole('main');
             await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
             // D-145: this form mounted no chain picker at all until this
@@ -230,7 +219,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await seedPrices();
 
-            await gotoPalette(page, 'Publish oracle price');
+            await openPaletteCommand(page, 'Publish oracle price');
             main = page.getByRole('main');
             await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -248,10 +237,9 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form does not warn that a first price is inert for 24 hours')
                 .toContainText(`First price for ${TICK} in ${FIAT}`);
 
-            await main.getByRole('button', { name: 'Preview' }).click();
-            const review = page.getByRole('main');
-            await expect(review.getByText('Review price publish').or(review), 'no review stage')
-                .toBeVisible({ timeout: 30_000 });
+            await main.getByRole('button', { name: 'Publish price' }).click();
+            // A full-mode wallet signs from the shared confirm screen.
+            const review = await expectConfirmModal(page, 'the price publish', 60_000);
             // The review's three load-bearing statements: what it costs the
             // consumer, that it is inert, and who is already relying on this
             // oracle (nobody, on a first publish - and saying "nobody" is not
@@ -267,12 +255,14 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // The password box only renders when the signer is locked. An
             // in-session wallet is already unlocked here, so waiting for it
             // times out on a screen that is perfectly ready to sign.
-            const pw = page.getByLabel('Password');
+            const pw = review.getByLabel('Password', { exact: true });
             if (await pw.count() > 0) await pw.fill(PASSWORD);
-            await review.getByRole('button', { name: 'Publish price' }).click();
-            await expect(review, 'no transaction id ever appeared after Publish price')
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+            await page.getByTestId('confirm-approve').click();
+            const done = page.getByRole('main');
+            await expect(done, 'no transaction id ever appeared after approving the publish')
                 .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-            const txid = (await review.innerText()).match(/[0-9a-f]{64}/)?.[0];
+            const txid = (await done.innerText()).match(/[0-9a-f]{64}/)?.[0];
 
             const published = await waitForIndexedAction(txid);
             expect(String(published.action)).toBe('PRICE');
@@ -368,7 +358,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
                     .toBe(true);
                 await mineIfPending();
                 await page.getByRole('button', { name: /^Back/ }).first().click();
-                await gotoPalette(page, 'Publish oracle price');
+                await openPaletteCommand(page, 'Publish oracle price');
                 await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
             }
@@ -386,14 +376,14 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await mintXchain(page, MINT);
             await waitForTokenBalance(oracle, TICK, MINT);
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await selectPickerAsset(page, TICK);
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();

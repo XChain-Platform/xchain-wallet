@@ -1,9 +1,6 @@
 .root {
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-3) 0;
-    border: 1px dashed var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-surface-subtle, var(--xc-surface-raised));
 }
 
 .toggle {
@@ -58,15 +55,8 @@
 .hex {
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2);
-    width: 100%;
     resize: vertical;
     min-height: 4em;
-    box-sizing: border-box;
     overflow-x: hidden;
     overflow-wrap: anywhere;
     word-break: break-all;
@@ -103,27 +93,4 @@
 
 .copyBtn {
     align-self: flex-start;
-    cursor: pointer;
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-1) var(--xc-space-3);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.copyBtn:hover {
-    background: var(--xc-surface-raised);
-}
-
-.copyBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    /* Two pixels separates the focus ring; the spacing scale starts at four. */
-    outline-offset: 2px;
 }

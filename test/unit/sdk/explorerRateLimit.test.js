@@ -21,6 +21,7 @@ import {
     parseRateLimitResetMs,
     parseRetryAfterMs,
     rateLimitWaitMs,
+    retryRateLimitedPreflight,
 } from '../../../packages/core/src/sdk/explorerRateLimit.js';
 import {
     explorerErrorCode,
@@ -92,6 +93,76 @@ describe('Retry-After and ratelimit-reset parsing', () => {
     });
 });
 
+describe('pre-flight rate-limit recovery', () => {
+    const unavailable = {
+        verdict: 'pass',
+        findings: [{
+            code: 'DRYRUN_UNAVAILABLE',
+            message: 'The network dry-run was unavailable (The XChain explorer is busy. Try again shortly.); relying on client checks.',
+        }],
+    };
+
+    function sdkWith(limiter) {
+        return {
+            explorer: {
+                client: {
+                    defaults: { baseURL: 'https://explorer.example' },
+                    __xcRateLimiter: limiter,
+                },
+            },
+        };
+    }
+
+    it('honors the recorded Retry-After pause before a fresh attempt', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const run = vi.fn(async (attempt) => {
+            if (attempt === 0) {
+                limiter.block('explorer.example', 7_000, true);
+                return unavailable;
+            }
+            return { verdict: 'fail', findings: [] };
+        });
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toMatchObject({ verdict: 'fail' });
+        expect(run.mock.calls.map(([attempt]) => attempt)).toEqual([0, 1]);
+        expect(sleeps).toEqual([7_000]);
+    });
+
+    it('returns the local-only report when Retry-After exceeds the total bound', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const run = vi.fn(async () => {
+            limiter.block('explorer.example', 61_000, true);
+            return unavailable;
+        });
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toBe(unavailable);
+        expect(run).toHaveBeenCalledOnce();
+        expect(sleeps).toEqual([]);
+    });
+
+    it('does not retry an unreached dry-run that was not rate limited', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const timedOut = {
+            verdict: 'pass',
+            findings: [{
+                code: 'DRYRUN_UNAVAILABLE',
+                message: 'The network dry-run was unavailable (tier1 timeout after 4000ms); relying on client checks.',
+            }],
+        };
+        const run = vi.fn(async () => timedOut);
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toBe(timedOut);
+        expect(run).toHaveBeenCalledOnce();
+        expect(sleeps).toEqual([]);
+    });
+});
+
 describe('4xx handling', () => {
     it('surfaces a named 429 without retrying and pauses the next request', async () => {
         const { limiter, sleeps } = fakeLimiter();
@@ -111,6 +182,27 @@ describe('4xx handling', () => {
         // Later work honors the pause plus bounded wake-up jitter.
         expect(sleeps[0]).toBeGreaterThanOrEqual(4_000);
         expect(sleeps[0]).toBeLessThanOrEqual(5_000);
+    });
+
+    it('reports a host paused after a network failure as a network error, never a 429', async () => {
+        const { limiter } = fakeLimiter({ maxTotalMs: 1_000, baseBackoffMs: 18_000, maxRetries: 0 });
+        const offline = async () => { throw Object.assign(new Error('offline'), { code: 'ERR_NETWORK' }); };
+        const paused = (s, rateLimited) => Object.assign(new Error(rateLimited ? 'rate' : 'net'), { rateLimited });
+        await expect(limiter.request('h', null, offline, paused)).rejects.toMatchObject({ code: 'ERR_NETWORK' });
+        // The next call meets the backoff pause, which is longer than the layer waits.
+        await expect(limiter.request('h', null, async () => ok('x'), paused))
+            .rejects.toMatchObject({ rateLimited: false });
+        expect(limiter.pausedSeconds('h')).toBe(0);
+    });
+
+    it('still reports a host paused by a 429 as rate limited', async () => {
+        const { limiter } = fakeLimiter({ maxTotalMs: 1_000 });
+        const paused = (s, rateLimited) => Object.assign(new Error('rate'), { rateLimited, s });
+        await expect(limiter.request('h', null, async () => { throw http429({ 'retry-after': '18' }); }, paused))
+            .rejects.toMatchObject({ response: { status: 429 } });
+        await expect(limiter.request('h', null, async () => ok('x'), paused))
+            .rejects.toMatchObject({ rateLimited: true, s: 18 });
+        expect(limiter.pausedSeconds('h')).toBe(18);
     });
 
     it('never retries any other 4xx response', async () => {

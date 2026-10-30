@@ -221,16 +221,18 @@ function fakeAddress(chainId, tick, seed) {
     return prefix + body;
 }
 
-// Block number → action_index pair derived from the same seed so a row's
-// `block_index` and the leading half of its `action_index` agree. The
+// Block number → action_index pair derived from the same seed. The
+// action_index is a whole number, as the explorer's is: the dispenser detail
+// page rejects anything else, so a "block.tx" string here made every dev-shell
+// dispenser row open an error instead of the detail and Buy screens. The
 // History-style renderer pulls block_index for the "Block N" meta line.
 function fakeBlockFor(chainId, kind, tick, seed) {
     let n = 0;
     const s = `${chainId}|${kind}|${tick}|${seed}`;
     for (let i = 0; i < s.length; i++) n = (n * 131 + s.charCodeAt(i)) >>> 0;
     const blockIndex = 800000 + (n % 50000);
-    const tx = (n >> 8) % 200;
-    return { blockIndex, actionIndex: `${blockIndex}.${tx}` };
+    const tx = (n >>> 8) % 200;
+    return { blockIndex, actionIndex: String(blockIndex * 1000 + tx) };
 }
 
 function fakeActionIndex(chainId, kind, tick, seed) {
@@ -245,6 +247,28 @@ function fakeActionIndex(chainId, kind, tick, seed) {
  * @param {string} chainId
  */
 export function fakeDispensersFor(tick, chainId) {
+    const rows = buildFakeDispensers(tick, chainId);
+    for (const row of rows) servedDispensers.set(`${chainId}|${row.action_index}`, row);
+    return rows;
+}
+
+// Dispenser rows already handed out by fakeDispensersFor, keyed by chain and
+// action index, so the detail page's by-index lookup finds the row the list
+// showed.
+const servedDispensers = new Map();
+
+/**
+ * One dispenser served earlier by fakeDispensersFor, by action index. Used by
+ * the dev-mock SDK's getAction path; null for anything it never served.
+ *
+ * @param {string | number} actionIndex
+ * @param {string} chainId
+ */
+export function fakeDispenserByActionIndex(actionIndex, chainId) {
+    return servedDispensers.get(`${chainId}|${String(actionIndex)}`) || null;
+}
+
+function buildFakeDispensers(tick, chainId) {
     const native = nativeTickFor(chainId);
     const now = Math.floor(Date.now() / 1000);
     // Three open dispensers, varying price + remaining stock + age so
@@ -370,13 +394,21 @@ export function fakeSwapsFor(tick, chainId) {
  */
 export function fakeHoldersFor(tick, chainId) {
     // 12 holders with a power-law distribution so the rendered share
-    // column has interesting variance.
+    // column has interesting variance. The envelope and display-unit amounts
+    // match the explorer response consumed by dividend payout math.
     const weights = [42, 18, 11, 7, 5, 4, 3, 3, 2, 2, 2, 1];
     const totalUnits = 100000;
-    return weights.map((w, i) => ({
+    const data = weights.map((w, i) => ({
         address: fakeAddress(chainId, tick, 300 + i),
-        quantity: String(Math.floor(totalUnits * (w / 100)) * 10 ** 8),
+        amount: String(Math.floor(totalUnits * (w / 100))),
     }));
+    return {
+        tick: String(tick).toUpperCase(),
+        supply: String(totalUnits),
+        decimals: 8,
+        total: data.length,
+        data,
+    };
 }
 
 // Tick → (rowFromTOKENS_BY_COIN, divisibility, fiatRate). Used to back

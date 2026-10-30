@@ -87,6 +87,59 @@ afterEach(() => {
 });
 
 describe('form drafts across auto-lock', () => {
+    it('restores every non-secret field of a multi-recipient Send', async () => {
+        const messaging = createMessaging();
+        const first = mountForm('send', messaging);
+        fireEvent.change(await screen.findByLabelText(/^To$/), {
+            target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+        });
+        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'XCP' } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2.5' } });
+        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/i }));
+        fireEvent.change(screen.getByLabelText(/Recipient 2 address/i), {
+            target: { value: 'bc1qsecondrecipient0000000000000000000000000' },
+        });
+        fireEvent.change(screen.getByLabelText(/Recipient 2 amount/i), {
+            target: { value: '1.25' },
+        });
+        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
+
+        const storageKey = `xc:formdraft:send:${WALLET_ID}`;
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(storageKey));
+            expect(saved.values).toMatchObject({
+                toAddress: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+                tick: 'XCP',
+                amount: '2.5',
+                perRecipientToken: true,
+                extraLegs: [{
+                    to: 'bc1qsecondrecipient0000000000000000000000000',
+                    amount: '1.25',
+                }],
+            });
+            expect(saved.values).not.toHaveProperty('password');
+            expect(saved.values).not.toHaveProperty('gatedScanPassword');
+        });
+
+        first.unmount();
+        mountForm('send', messaging);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => {
+            expect(document.getElementById('send-destination')).toHaveValue(
+                'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+            );
+            expect(screen.getByLabelText(/^Token$/)).toHaveValue('XCP');
+            expect(document.getElementById('send-amount')).toHaveValue('2.5');
+            expect(screen.getByLabelText(/Recipient 2 address/i)).toHaveValue(
+                'bc1qsecondrecipient0000000000000000000000000',
+            );
+            expect(screen.getByLabelText(/Recipient 2 amount/i)).toHaveValue('1.25');
+            expect(screen.getByRole('switch', { name: /different token/i })).toBeChecked();
+        });
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
     it('does not offer a default-only Send record as an unfinished payment', async () => {
         localStorage.setItem(`xc:formdraft:send:${WALLET_ID}`, JSON.stringify({
             savedAt: Date.now(),
@@ -105,6 +158,96 @@ describe('form drafts across auto-lock', () => {
         expect(screen.queryByText(/Your unfinished payment was saved as a draft/)).toBeNull();
         await waitFor(() => {
             expect(localStorage.getItem(`xc:formdraft:send:${WALLET_ID}`)).toBeNull();
+        });
+    });
+
+    it.each([
+        { kind: 'send', label: /^To$/, value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', notice: /Nothing was sent\./ },
+        { kind: 'issue-token', label: /^Ticker$/, value: 'LOCKDRAFT', notice: /Nothing was submitted\./ },
+        { kind: 'dispenser', label: /^Give amount/, value: '12.5', notice: /Nothing was submitted\./ },
+    ])('leaves no $kind draft after Discard and leave', async ({ kind, label, value, notice }) => {
+        const messaging = createMessaging();
+        const first = mountForm(kind, messaging);
+        fireEvent.change(await screen.findByLabelText(label), { target: { value } });
+
+        const storageKey = `xc:formdraft:${kind}:${WALLET_ID}`;
+        await waitFor(() => expect(localStorage.getItem(storageKey)).not.toBeNull());
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^Back/ })[0]);
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard and leave' }));
+
+        // The confirm re-renders the form before the host navigates away;
+        // that render must not write the discarded values back.
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Discard and leave' })).toBeNull());
+        await new Promise((resolve) => { setTimeout(resolve, 50); });
+        expect(localStorage.getItem(storageKey)).toBeNull();
+
+        first.unmount();
+        mountForm(kind, messaging);
+        expect(await screen.findByLabelText(label)).toBeInTheDocument();
+        expect(screen.queryByText(notice)).toBeNull();
+        // A fresh form may autosave its own defaults; the discarded value
+        // must not come back.
+        expect(localStorage.getItem(storageKey) || '').not.toContain(value);
+    });
+
+    it('keeps an unrestored Send draft when the form is left clean', async () => {
+        const storageKey = `xc:formdraft:send:${WALLET_ID}`;
+        const stored = JSON.stringify({
+            savedAt: Date.now(),
+            values: { chainId: CHAIN_ID, toAddress: '', tick: 'BTC', amount: '0.5', memo: '' },
+        });
+        localStorage.setItem(storageKey, stored);
+
+        mountForm('send', createMessaging());
+        expect(await screen.findByText(/Nothing was sent\./)).toBeInTheDocument();
+        fireEvent.click(screen.getAllByRole('button', { name: /^Back/ })[0]);
+
+        expect(screen.queryByRole('button', { name: 'Discard and leave' })).toBeNull();
+        expect(localStorage.getItem(storageKey)).toBe(stored);
+    });
+
+    it.each([
+        {
+            kind: 'send',
+            label: /^To$/,
+            field: 'toAddress',
+            stored: { chainId: CHAIN_ID, amount: '0.5' },
+            value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+        },
+        {
+            kind: 'issue-token',
+            label: /^Ticker$/,
+            field: 'ticker',
+            stored: { chainId: CHAIN_ID, ticker: 'OLDTOKEN' },
+            value: 'NEWTOKEN',
+        },
+        {
+            kind: 'dispenser',
+            label: /^Give amount/,
+            field: 'giveAmount',
+            stored: { chainId: CHAIN_ID, giveAmount: '1' },
+            value: '12.5',
+        },
+    ])('keeps autosaving $kind when Restore finds no draft', async ({
+        kind, label, field, stored, value,
+    }) => {
+        const storageKey = `xc:formdraft:${kind}:${WALLET_ID}`;
+        localStorage.setItem(storageKey, JSON.stringify({
+            savedAt: Date.now(),
+            network: 'mainnet',
+            values: stored,
+        }));
+        mountForm(kind, createMessaging());
+
+        const restore = await screen.findByRole('button', { name: 'Restore' });
+        localStorage.removeItem(storageKey);
+        fireEvent.click(restore);
+        fireEvent.change(await screen.findByLabelText(label), { target: { value } });
+
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(storageKey));
+            expect(saved.values[field]).toBe(value);
         });
     });
 

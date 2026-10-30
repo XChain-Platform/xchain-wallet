@@ -184,6 +184,42 @@ describe('address formats', () => {
     });
 });
 
+// The indexer's bech32Decode drops a LIST item that breaks a witness rule into
+// list_items_invalid, so every case here must be rejected by the wallet too.
+describe('segwit witness rules (same as the indexer bech32Decode)', () => {
+    const bytes = (n) => new Uint8Array(n).fill(7);
+    const withPadding = (codec, version, program) => {
+        const words = [version, ...codec.toWords(program)];
+        words[words.length - 1] |= 1;
+        return codec.encode('bc', words);
+    };
+
+    it('accepts v0 20/32-byte bech32 and v1 32-byte bech32m, in either single case', () => {
+        for (const address of [segwit('bc'), taproot('bc'),
+            bech32.encode('bc', [0, ...bech32.toWords(bytes(32))])]) {
+            expect(isValidAddressForChain(address, 'bitcoin', 'mainnet'), address).toBe(true);
+            expect(isValidAddressForChain(address.toUpperCase(), 'bitcoin', 'mainnet'), address).toBe(true);
+        }
+    });
+
+    it.each([
+        ['v1 with a bech32 checksum (pre-BIP350 Taproot)', bech32.encode('bc', [1, ...bech32.toWords(bytes(32))])],
+        ['BIP350 invalid vector, v1 with a bech32 checksum', 'bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd'],
+        ['v0 with a bech32m checksum', bech32m.encode('bc', [0, ...bech32m.toWords(bytes(20))])],
+        ['v0 with a 16-byte program (BIP173 vector)', 'BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P'],
+        ['v0 with a 21-byte program', bech32.encode('bc', [0, ...bech32.toWords(bytes(21))])],
+        ['v1 with a 1-byte program', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(1))])],
+        ['v1 with a 41-byte program', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(41))])],
+        ['witness version 17', bech32m.encode('bc', [17, ...bech32m.toWords(bytes(20))])],
+        ['non-zero padding bits', withPadding(bech32m, 1, bytes(32))],
+        ['an extra padding word', bech32.encode('bc', [0, ...bech32.toWords(bytes(20)), 0])],
+        ['a string over 90 characters', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(60))], false)],
+    ])('rejects %s', (_label, address) => {
+        expect(isValidAddressForChain(address, 'bitcoin', 'mainnet')).toBe(false);
+        expect(isValidAddressAnyNetwork(address)).toBe(false);
+    });
+});
+
 describe('addressValidationError', () => {
     const descriptor = (coin, networkKind) => ({ coin, networkKind });
 
@@ -200,10 +236,19 @@ describe('addressValidationError', () => {
     it.each([
         ['base58 checksum', `${legacy(0x00).slice(0, -1)}3`],
         ['bech32 checksum', `${segwit('bc').slice(0, -1)}p`],
-        ['plain text', 'not an address'],
     ])('uses plain typo copy for a bad %s', (_name, address) => {
         expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
             .toBe('This address has a typo. Check it and try again.');
+    });
+
+    it.each([
+        ['plain text', 'not an address'],
+        ['one word', 'notanaddress'],
+        ['too short', '1abc'],
+        ['punctuation', 'hello, world!'],
+    ])('says text that is not an address (%s) is not a valid address', (_name, address) => {
+        expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
+            .toBe('This is not a valid address.');
     });
 });
 
@@ -276,5 +321,49 @@ describe('detectAddressCoin', () => {
     it('still returns null for the genuinely shared testnet bytes', () => {
         expect(detectAddressCoin(legacy(0x6f))).toBeNull();
         expect(detectAddressCoin(legacy(0xc4))).toBeNull();
+    });
+});
+
+describe('addressValidationError for a payment link in an address field', () => {
+    const btc = { coin: 'bitcoin', networkKind: 'mainnet' };
+
+    it('names a payment link instead of calling it a typo', () => {
+        for (const text of [
+            'bitcoin:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=1',
+            'BITCOIN:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'web+xchain:BTC/send',
+        ]) {
+            expect(addressValidationError(text, btc), text).toMatch(/payment link, not an address/);
+        }
+    });
+
+    it('keeps the typo copy for other invalid text', () => {
+        expect(addressValidationError('bc1qnotanaddress', btc)).toMatch(/typo/);
+    });
+});
+
+// Base58 decoding is quadratic in its input, so a pasted blob of tens of
+// thousands of characters would take minutes to refuse; every validator turns
+// a string longer than any address encoding away before it decodes anything.
+describe('strings far longer than any address', () => {
+    const blob = 'x'.repeat(30_000);
+
+    it('are refused without decoding them', () => {
+        const started = performance.now();
+        expect(isValidAddressForChain(blob, 'bitcoin', 'mainnet')).toBe(false);
+        expect(isValidAddressAnyNetwork(blob)).toBe(false);
+        expect(detectAddressChain(blob)).toBeNull();
+        expect(detectAddressCoin(blob)).toBeNull();
+        expect(addressValidationError(blob, { coin: 'bitcoin', networkKind: 'mainnet' }))
+            .toBe('This is not a valid address.');
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+
+    it('keep accepting the longest real address', () => {
+        const words = bech32.toWords(new Uint8Array(32));
+        const taproot = bech32.encode('bc', [0, ...words], 90);
+        expect(taproot.length).toBeLessThanOrEqual(90);
+        expect(isValidAddressForChain(taproot, 'bitcoin', 'mainnet')).toBe(true);
     });
 });

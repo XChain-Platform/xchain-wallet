@@ -97,6 +97,13 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  *          it as 'failed' or delete it. Additive and undefined-tolerant
  * @property {string | null} [commitTxid]  that landed commit's txid, which
  *          the queued record's own txid (the reveal's) no longer names
+ * @property {string | null} [revealTxHex]  the signed reveal or phase-2 spend of a
+ *          two-phase action, stamped before its commit goes out. While
+ *          `commitLanded` is not true, `txHex` is the commit and every send of
+ *          this record sends the commit and then these bytes, never the commit
+ *          alone. Additive and undefined-tolerant: a record written before it,
+ *          or for a single-transaction action, carries none and sends `txHex` alone
+ * @property {string | null} [revealTxid]  that reveal's txid, the action's identity
  */
 
 /**
@@ -257,7 +264,39 @@ export function validatePendingTx(record) {
         r.commitTxid === undefined || r.commitTxid === null || isNonEmptyString(r.commitTxid),
         'must be null or a non-empty string',
     );
+    // The reveal that follows a two-phase commit, written only by the submit
+    // checkpoint and the queue that carries it. Undefined on every older record.
+    check(
+        errors,
+        'revealTxHex',
+        r.revealTxHex === undefined || r.revealTxHex === null || isNonEmptyString(r.revealTxHex),
+        'must be null or a non-empty string',
+    );
+    check(
+        errors,
+        'revealTxid',
+        r.revealTxid === undefined || r.revealTxid === null || isNonEmptyString(r.revealTxid),
+        'must be null or a non-empty string',
+    );
     return result(errors);
+}
+
+/**
+ * The reveal a record still owes after its `txHex`: the signed reveal or phase-2
+ * spend of a two-phase action whose commit has not landed. Null for a record
+ * with none (every record written before the field, and every single-transaction
+ * action) and for one whose commit landed, where `txHex` already is the reveal.
+ *
+ * @param {{ revealTxHex?: unknown, revealTxid?: unknown, commitLanded?: unknown } | null | undefined} record
+ * @returns {{ txHex: string, txid: string | null } | null}
+ */
+export function queuedRevealOf(record) {
+    if (!record || record.commitLanded === true) return null;
+    if (typeof record.revealTxHex !== 'string' || !record.revealTxHex) return null;
+    return {
+        txHex: record.revealTxHex,
+        txid: typeof record.revealTxid === 'string' && record.revealTxid ? record.revealTxid : null,
+    };
 }
 
 /**

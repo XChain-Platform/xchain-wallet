@@ -12,6 +12,8 @@ import {
     permissionsToVerbs,
     bpsToPercent,
 } from '../utils/contractConsentLabels.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * Phase F / PC-39: inline consent disclosure for the review screens of
@@ -55,10 +57,9 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
 
     const provenance = (
         <>
-            <dt className={labelClassName}>Where this comes from</dt>
+            <dt className={labelClassName}>{t('components.contractConsentPanel.whereThisComesFrom')}</dt>
             <dd className={valueClassName}>
-                Reported by the XChain index, not checked against the chain by
-                this wallet.
+                {t('components.contractConsentPanel.reportedByTheXchainIndex')}
             </dd>
         </>
     );
@@ -67,11 +68,9 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     if (status === 'unavailable') {
         return (
             <>
-                <dt className={labelClassName}>Permission you grant</dt>
+                <dt className={labelClassName}>{t('components.contractConsentPanel.permissionYouGrant')}</dt>
                 <dd className={valueClassName}>
-                    The wallet couldn&rsquo;t look up which actions you would grant this
-                    contract permission to take. Try again, or continue only if you
-                    trust the author.
+                    {t('components.contractConsentPanel.theWalletCouldnTLook')}
                 </dd>
             </>
         );
@@ -80,11 +79,11 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     const pct = bpsToPercent(maxTakeBps);
     const feeRows = (
         <>
-            <dt className={labelClassName}>Max fee it can take</dt>
+            <dt className={labelClassName}>{t('components.contractConsentPanel.maxFeeItCanTake')}</dt>
             <dd className={valueClassName}>
                 {pct !== null
                     ? pct
-                    : 'No limit of its own, so the network limit applies.'}
+                    : t('components.contractConsentPanel.noLimitOfItsOwn')}
             </dd>
         </>
     );
@@ -93,11 +92,9 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     if (status === 'unrestricted') {
         return (
             <>
-                <dt className={labelClassName}>Permission you grant</dt>
+                <dt className={labelClassName}>{t('components.contractConsentPanel.permissionYouGrant')}</dt>
                 <dd className={valueClassName}>
-                    Anything. By continuing, you grant this contract permission to
-                    take any action the protocol allows on your behalf. The contract
-                    set no limits on itself, so continue only if you trust the author.
+                    {t('components.contractConsentPanel.anythingByContinuingYouGrant')}
                 </dd>
                 {feeRows}
                 {provenance}
@@ -109,21 +106,21 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
 
     return (
         <>
-            <dt className={labelClassName}>Permission you grant</dt>
+            <dt className={labelClassName}>{t('components.contractConsentPanel.permissionYouGrant')}</dt>
             <dd className={valueClassName}>
                 {verbs && verbs.length > 0 ? (
                     <>
                         <p style={{ margin: '0 0 0.25rem' }}>
-                            By continuing, you grant this contract permission to:
+                            {t('components.contractConsentPanel.byContinuingYouGrantThis')}
                         </p>
                         <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
                             {verbs.map((v) => (
-                                <li key={v}>It can {v}.</li>
+                                <li key={v}>{t('components.contractConsentPanel.itCan')} {v}.</li>
                             ))}
                         </ul>
                     </>
                 ) : (
-                    'You grant no action permissions: this contract declared it can take no actions on your behalf.'
+                    t('components.contractConsentPanel.youGrantNoActionPermissions')
                 )}
             </dd>
             {feeRows}

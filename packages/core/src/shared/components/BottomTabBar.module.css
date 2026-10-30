@@ -100,44 +100,9 @@
     word-break: normal;
 }
 
-.sheet {
-    box-sizing: border-box;
-    position: fixed;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
-    bottom: 0;
-    background: var(--xc-surface-raised);
-    color: var(--xc-text);
-    border-top: 1px solid var(--xc-border);
-    border-start-start-radius: var(--xc-radius-lg, 12px);
-    border-start-end-radius: var(--xc-radius-lg, 12px);
-    z-index: var(--xc-z-modal);
-    max-height: 70vh;
-    max-height: min(70vh, var(--xc-viewport-h, 100vh));
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding: var(--xc-space-2)
-        env(safe-area-inset-right, 0px)
-        calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3)))
-        env(safe-area-inset-left, 0px);
-    box-shadow: var(--xc-shadow-bottom-sheet);
-}
-
-.handle {
-    grid-column: 1 / -1;
-    width: 36px;
-    height: 4px;
-    margin: 0 auto var(--xc-space-1);
-    border-radius: var(--xc-radius-xs);
-    background: var(--xc-border);
-}
-
 .sheetTitle {
     min-width: 0;
     margin: 0;
-    padding-inline-start: var(--xc-space-2);
     font-size: var(--xc-text-lg);
     line-height: 1.25;
     overflow-wrap: anywhere;
@@ -167,12 +132,41 @@
 .sheetItem:hover,
 .sheetItem:focus-visible {
     background: var(--xc-surface);
-    outline: none;
 }
 
 .sheetItem:focus-visible {
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: -2px;
+}
+
+/* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
+   specificity 0,3,0) zeroes the row border, so these rules name the list and
+   item attributes to outrank it. A row keeps a 1px transparent border at rest
+   (the row is border-box, so its size is unchanged) and draws it in the control
+   border colour on hover, so the near-white hover fill has a real edge. Keyboard
+   focus keeps its 2px accent ring. */
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item] {
+    border: 1px solid transparent;
+}
+
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
+    border-color: var(--xc-control-border);
+}
+
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+/* Forced colors uses the selection colour for both interactive outlines. */
+@media (forced-colors: active) {
+    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
+        border-color: Highlight;
+    }
+
+    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
+        outline-color: Highlight;
+    }
 }
 
 .sheetItemActive {
@@ -199,6 +193,11 @@
 
 /* Unread count pill on a sheet row (e.g. Messaging). */
 .sheetBadge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
     box-sizing: border-box;
     min-width: var(--xc-badge-height-sm);
@@ -228,7 +227,7 @@
 
 /* A shorter row leaves room for route content on landscape phones without
    reducing the tab buttons below the shared pointer-target floor. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         min-height: 2.75rem;
     }
@@ -242,9 +241,5 @@
         --xc-icon-size: var(--xc-icon-sm);
         width: var(--xc-icon-sm);
         height: var(--xc-icon-sm);
-    }
-
-    .sheet {
-        max-height: calc(100% - 44px - env(safe-area-inset-bottom, 0px));
     }
 }

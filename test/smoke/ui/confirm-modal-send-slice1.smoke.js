@@ -129,7 +129,7 @@ assert.match(hookSrc, /isCredentialFailure\(err\)/, 'hook classifies credential 
 assert.match(hookSrc, /reason:\s*'bad-credentials'/, 'credential failure re-prompts instead of settling');
 assert.match(hookSrc, /!optsRef\.current\.reservationId/, 'reservation guarded against re-reserve on retry');
 const modalSrc = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
-assert.match(modalSrc, /data-testid="confirm-error"/, 'modal has an in-modal error surface');
+assert.match(modalSrc, /testId="confirm-error"/, 'modal has an in-modal error surface');
 
 // --- the confirm surface is STYLED (regression guard) ---------------
 // It shipped unstyled once: the three components used global class-name

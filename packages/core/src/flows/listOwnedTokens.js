@@ -44,7 +44,9 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
     const sdk = sdkRegistry.get(chainId);
     if (typeof sdk.getTokens !== 'function') return [];
     const trimmed = address.trim();
-    const tokensRaw = await sdk.getTokens(trimmed, 'address', { limit: cappedLimit }).catch(() => []);
+    // A failed lookup rejects. Read as an empty list it tells My tokens this
+    // address owns nothing, and the screen's own load-failure notice never shows.
+    const tokensRaw = await sdk.getTokens(trimmed, 'address', { limit: cappedLimit });
     const tokenRowsRaw = Array.isArray(tokensRaw)
         ? tokensRaw
         : (Array.isArray(tokensRaw?.data) ? tokensRaw.data : []);

@@ -121,6 +121,37 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(2);
         expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
     });
+
+    it('renders contact names containing markup as text in the list', () => {
+        const name = '<img src=x onerror="globalThis.contactExecuted = true">';
+        const { container } = mount({
+            contacts: [{ id: 'markup', name, entries: [bitcoinEntry] }],
+        });
+
+        expect(screen.getByText(name)).toBeInTheDocument();
+        expect(container.querySelector('img')).toBeNull();
+        expect(globalThis.contactExecuted).toBeUndefined();
+    });
+
+    it('neutralizes directional and zero-width controls in contact names', () => {
+        const hostileName = 'Alice\u202Etxt.exe\u200B';
+        mount({
+            contacts: [{ id: 'hostile', name: hostileName, entries: [bitcoinEntry] }],
+        });
+
+        expect(screen.queryByText(hostileName)).toBeNull();
+        expect(screen.getByText('Alice\u2426txt.exe')).toBeInTheDocument();
+        expect(screen.getByText('bc1-alice')).toBeInTheDocument();
+    });
+
+    it('ignores a malformed stored contact while keeping valid rows usable', () => {
+        const { props } = mount({
+            contacts: [{ id: 'broken', name: 'Broken', entries: {} }, ...contacts],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /Alice.*bc1-alice/ }));
+        expect(props.onPick).toHaveBeenCalledWith(bitcoinEntry);
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {

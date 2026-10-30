@@ -58,6 +58,7 @@ import { LinkForm } from '../../packages/core/src/shared/routes/LinkForm.jsx';
 import { BatchComposerForm } from '../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { PlaceOrderPanel } from '../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMessage.jsx';
+import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -85,6 +86,8 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    // A token record cached by one case must not answer the issuer check of the next.
+    __clearTokenInfoCache();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -92,6 +95,20 @@ beforeEach(() => {
             'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
         ],
     });
+});
+
+// Owner-only token actions refuse until the issuer is confirmed; this record
+// names the auto-selected source as JDOG's issuer for the cases that need it.
+const OWNED_JDOG = Object.freeze({
+    getTokenInfo: ({ tick } = {}) => Promise.resolve({ chainId: CHAIN, tick, creator: HD_ADDRESS.address, locks: {} }),
+});
+
+// Dividend Review needs a complete holder list, so the dividend cases answer
+// the holder read with a whole set and let it land; the token lookups settle
+// in the same wait, so they answer with real tokens.
+const JDOG_HOLDERS = Object.freeze({
+    getHoldersForToken: () => Promise.resolve({ data: [{ address: 'bc1qholderjdog', amount: '10' }], total: 1 }),
+    getTokenInfo: ({ tick } = {}) => Promise.resolve({ chainId: CHAIN, tick, divisibility: 8, totalSupply: '1000000', locks: {} }),
 });
 
 // Recording messaging mock. Real shapes for the calls the confirm pipeline
@@ -392,9 +409,9 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('DividendForm composes DIVIDEND and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DividendForm,
-            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
             actionLabel: 'Pay dividend',
-            steps: [openTokenField('Dividend token'), pickToken('XCHAIN')],
+            steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
         });
         expectSingleEncode(calls, {
@@ -529,7 +546,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('ControllerBindForm composes the host-built bind action and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Bind',
             fill: (utils) => setValue(utils, 'Guard contract', '7'),
         });
@@ -552,7 +569,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('ControllerBindForm composes an UNBIND with no guard contract at all', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Unbind',
             fill: (utils) => {
                 fireEvent.click(utils.getByLabelText(/^Unbind/));
@@ -710,7 +727,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('TokenAdminForm composes ISSUE and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
-            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Update token',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
         });
@@ -735,6 +752,63 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             submitMethod: 'advancedAction',
         });
         expect(submit.args.action).toBe('BROADCAST');
+    });
+
+    describe('AdvancedActionsForm gates irreversible raw actions behind a typed word', () => {
+        const fieldsFor = (fields) => ({
+            messagingOverrides: {
+                listActions: () => Promise.resolve(['DESTROY', 'BROADCAST']),
+                getActionFormats: () => Promise.resolve({ 0: ['VERSION', ...fields].join('|') }),
+                getActionFields: () => Promise.resolve(fields),
+            },
+        });
+        const approveButton = (utils) => Array.from(utils.container.querySelectorAll('button'))
+            .find((button) => /approve/i.test(button.textContent || ''));
+
+        it('keeps Approve disabled for DESTROY until DESTROY is typed', async () => {
+            const { utils } = await mountFilledForm({
+                Form: AdvancedActionsForm,
+                props: fieldsFor(['TICK', 'AMOUNT']),
+                fill: (u) => {
+                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'DESTROY' } });
+                },
+            });
+            await domAct(async () => { await drainMicrotasks(); });
+            setValue(utils, 'TICK', 'JDOG');
+            setValue(utils, 'AMOUNT', '5');
+            await clickAction(utils, 'Sign action');
+
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', 'destroy');
+                await drainMicrotasks();
+            });
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', ' DESTROY ');
+                await drainMicrotasks();
+            });
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', 'DESTROY');
+                await drainMicrotasks();
+            });
+            expect(approveButton(utils).disabled).toBe(false);
+        });
+
+        it('asks for no typed word on an action that can be undone', async () => {
+            const { utils } = await mountFilledForm({
+                Form: AdvancedActionsForm,
+                props: fieldsFor([]),
+                fill: (u) => {
+                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
+                },
+            });
+            await clickAction(utils, 'Sign action');
+
+            expect(utils.queryByLabelText(/to confirm/)).toBeNull();
+            expect(approveButton(utils).disabled).toBe(false);
+        });
     });
 
     it('TokenWizard skips its own preview/sign stages and confirms the composed ISSUE', async () => {
@@ -811,7 +885,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             }),
         }));
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
@@ -874,6 +948,42 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // The review stage has no fee toggle, so a resumed AIRDROP can only pay
+    // the way the LIST did if the pending record carries that choice. Without
+    // it a Bitcoin airdrop whose LIST paid in BTC moved onto the XCHAIN balance.
+    it.each([
+        [true, true],
+        [false, undefined],
+        [undefined, undefined],
+    ])('AirdropForm resumes leg 2 on the fee lane the LIST chose (record %s)', async (recorded, expected) => {
+        const { calls } = await driveThroughConfirm({
+            Form: AirdropForm,
+            props: {
+                resumeId: 'pa-1',
+                messagingOverrides: {
+                    listPendingAirdropsForWallet: () => Promise.resolve([{
+                        id: 'pa-1',
+                        walletId: 'w',
+                        chainId: CHAIN,
+                        fromAddress: HD_ADDRESS.address,
+                        token: 'JDOG',
+                        amountPer: '5',
+                        recipients: ['bc1qrecipientone', 'bc1qrecipienttwo'],
+                        listTxid: 'listtx',
+                        listActionIndex: '77',
+                        stage: 'ready-to-airdrop',
+                        ...(recorded === undefined ? {} : { payFeeInNativeCoin: recorded }),
+                    }]),
+                },
+            },
+            actionLabel: /^Sign airdrop/,
+        });
+        const submit = expectSingleEncode(calls, { action: 'AIRDROP', submitMethod: 'airdropAction' });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.encoderOpts?.payFeeInNativeCoin).toBe(expected);
+        expect(submit.args.payFeeInNativeCoin).toBe(expected);
+    });
+
     it('DispenserForm composes DISPENSER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DispenserForm,
@@ -924,7 +1034,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('SellOwnershipForm composes ORDER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: SellOwnershipForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'List name for sale',
             fill: (utils) => setValue(utils, /^Price/, '5'),
         });
@@ -1181,9 +1291,9 @@ describe('Hardware signers confirm on the single-encode surface', () => {
         {
             name: 'DividendForm',
             Form: DividendForm,
-            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
             actionLabel: 'Pay dividend',
-            steps: [openTokenField('Dividend token'), pickToken('XCHAIN')],
+            steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
             software: 'dividendAction',
             hardware: 'dividendActionHw',
@@ -1191,7 +1301,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
         {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
-            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Update token',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
             software: 'issueToken',
@@ -1523,7 +1633,9 @@ const SUBMIT_FAILURES = [
 function expectFailureBesideAction(utils, spec, shown, hidden) {
     const message = utils.getByText(shown);
     const action = utils.getByRole('button', { name: spec.actionLabel });
-    expect(message.closest('form')).toBe(action.closest('form'));
+    // The failure leads the action's form page: the notice slot just above the
+    // form (its card, when wide), never a box inside it or another form's.
+    expect(action.closest('form').previousElementSibling).toContainElement(message);
     expect(utils.container.textContent || '').not.toContain(hidden);
     spec.expectValues(utils);
 }

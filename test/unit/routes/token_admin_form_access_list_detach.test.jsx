@@ -31,7 +31,8 @@ function mountAccessLists(chainId) {
         getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [chainId]: { id: SOURCE.id } }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ allowList: '412', blockList: null }),
+        // Token policy settings are owner-only; SOURCE issued the token.
+        getTokenInfo: vi.fn().mockResolvedValue({ allowList: '412', blockList: null, creator: SOURCE.address }),
         getListByActionIndex: vi.fn().mockResolvedValue({ members: [] }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),

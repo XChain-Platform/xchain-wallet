@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { actionTextSafetyError, MAX_MEMO_BYTES } from './actionTextSafety.js';
+
 // The chain's MEMO length ceiling, checked at the form so an overlong memo is
 // refused before compose instead of by the pre-flight or, on the legacy lane,
 // by the indexer after the fee is spent.
@@ -18,7 +20,7 @@
  * handler there refuses a longer one with `invalid: MEMO (length)`, for
  * example src/actions/list.js validateFields. Change both together.
  */
-export const MAX_MEMO_LENGTH = 250;
+export const MAX_MEMO_LENGTH = MAX_MEMO_BYTES;
 
 /**
  * Hint under every optional Memo field. It replaced "Protocol rejects | or ;.",
@@ -46,7 +48,28 @@ export function utf8ByteLength(value) {
  * @returns {string | null}
  */
 export function memoLengthError(memo) {
+    const safetyError = actionTextSafetyError(memo, 'Memo');
+    if (safetyError) return safetyError;
     const bytes = utf8ByteLength(memo);
     if (bytes <= MAX_MEMO_LENGTH) return null;
     return `Memo is ${bytes} bytes; the network accepts at most ${MAX_MEMO_LENGTH} bytes.`;
+}
+
+// C0 and C1 control characters (NUL, tab, line breaks, escape and the rest) plus the
+// bidirectional embedding and override marks U+202A-U+202E and U+2066-U+2069.
+// A memo is public text shown on review screens and explorers: controls corrupt the
+// pipe-delimited action line and an override reorders the text printed after it.
+// Joiners, direction marks (U+200E, U+200F) and emoji sequences stay allowed.
+const MEMO_UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
+
+/**
+ * The form error for a memo holding control characters or text-direction
+ * overrides, or null when it is clean. Pass the memo as it goes on the wire.
+ *
+ * @param {string | null | undefined} memo
+ * @returns {string | null}
+ */
+export function memoCharacterError(memo) {
+    if (!MEMO_UNSAFE_CHARS.test(String(memo ?? ''))) return null;
+    return "A memo can't include control characters or text direction overrides.";
 }

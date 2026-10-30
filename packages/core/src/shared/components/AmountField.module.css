@@ -48,14 +48,8 @@
     min-width: 0;
 }
 
-.pasteAction,
-.pasteAction > span {
-    display: contents !important;
-}
-
 /* The wrapper class lifts these above the kit Button's own position rule,
    which would otherwise win whenever its stylesheet loads later. */
-.amountFieldWrap .pasteAction button,
 .amountFieldWrap .maxAction {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
@@ -68,32 +62,13 @@
     height: calc(var(--amount-control-height) - var(--xc-space-2));
     min-height: calc(var(--amount-control-height) - var(--xc-space-2));
     white-space: nowrap;
-}
-
-.pasteAction button {
-    inset-inline-end: var(--xc-space-1);
-    gap: var(--xc-space-1);
-    padding-inline: calc(var(--xc-space-1) / 2);
-}
-
-.hasMax .pasteAction button {
-    inset-inline-end: calc(var(--amount-action-width) + var(--xc-space-1));
-}
-
-.amountFieldWrap .maxAction {
     inset-inline-end: var(--xc-space-1);
     padding-inline: var(--xc-space-2);
 }
 
-.pasteAction button > span,
 .maxAction > span {
     min-width: max-content;
     white-space: nowrap;
-}
-
-.pasteAction [role='alert'] {
-    flex: 1 0 100%;
-    margin-block-start: var(--xc-help-gap);
 }
 
 .amountFieldWrap input,
@@ -103,8 +78,27 @@
     unicode-bidi: isolate;
 }
 
+/* A linked amount can run to a hundred digits, and a grouped number has no
+   space to break at, so its estimate wraps inside the toggle instead of
+   running past both edges of it. */
+.amountSwapValue {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .amountFieldWrap input {
     min-width: 0;
+}
+
+/* The input stays left to right, so its inline end is the right edge even on
+   a page that reads right to left, where Max sits at the left. In that case
+   the room for it moves to the input's inline start, and the
+   digits align to the field's start edge (the right). The inline padding is
+   written by the component, hence the override. */
+:global(html[dir='rtl']) .amountFieldWrap input {
+    padding-inline-start: var(--amount-end-room, var(--xc-control-padding-x));
+    padding-inline-end: var(--xc-control-padding-x) !important;
+    text-align: end;
 }
 
 .amountFooter {

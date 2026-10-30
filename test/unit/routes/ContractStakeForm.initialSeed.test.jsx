@@ -23,7 +23,7 @@
 // rather than the callers that reach it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
@@ -177,6 +177,45 @@ describe('ContractStakeForm unstake availability', () => {
 
         expect(await screen.findByText('7 PEPECASH staked')).toBeInTheDocument();
     });
+
+    it('matches a stored lowercase signing key case-insensitively and refuses a different key', async () => {
+        const storedKey = 'abcdef0123456789'.repeat(4);
+        const mixedKey = 'AbCdEf0123456789'.repeat(4);
+        const pendingStakeLookups = [];
+        const getContractStakesForAddress = vi.fn(() => new Promise((resolve) => {
+            pendingStakeLookups.push(resolve);
+        }));
+        const row = {
+            target_contract_index: CONTRACT_INDEX,
+            tick: 'PEPECASH',
+            signing_pubkey: storedKey,
+            amount: '11',
+        };
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: storedKey.toUpperCase(),
+            initialFromAddress: POSITION_ADDRESS,
+        }, { getContractStakesForAddress });
+
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(1));
+        await act(async () => { pendingStakeLookups[0]([row]); });
+        expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Signing public key'), {
+            target: { value: mixedKey },
+        });
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(2));
+        await act(async () => { pendingStakeLookups[1]([row]); });
+        expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Signing public key'), {
+            target: { value: 'f'.repeat(64) },
+        });
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(3));
+        await act(async () => { pendingStakeLookups[2]([row]); });
+        await waitFor(() => expect(screen.queryByText('11 PEPECASH staked')).not.toBeInTheDocument());
+    });
 });
 
 describe('ContractStakeForm stake amount validation', () => {
@@ -313,5 +352,38 @@ describe('ContractStakeForm exact partial unstake', () => {
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         expect(composeForConfirm.mock.calls[0][0].actionData.params.AMOUNT)
             .toBe('90071992.54740901');
+    });
+});
+
+describe('ContractStakeForm penalty warning', () => {
+    it('tells the staker in plain words that the contract can take their staked tokens', async () => {
+        mountForm({
+            initialMode: 'stake',
+            initialSigningPubkey: 'a'.repeat(64),
+        }, {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ACTIVE_ADDRESS,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                        tokens: [{ tick: 'XCHAIN', quantity: '5', divisibility: 8 }],
+                    },
+                }],
+            }),
+        });
+        expect(await screen.findByText('Penalty destination')).toBeInTheDocument();
+        expect(screen.queryByText('Slashed funds')).not.toBeInTheDocument();
+
+        fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
+            target: { value: '1' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        const review = await screen.findByRole('form', { name: 'Stake review' });
+        expect(review).toHaveTextContent('Penalty risk');
+        expect(review).toHaveTextContent('This contract can take some or all of your staked tokens as a penalty.');
+        expect(review).toHaveTextContent('Penalties are sent to');
+        expect(review).not.toHaveTextContent(/slash/i);
     });
 });

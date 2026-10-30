@@ -42,6 +42,20 @@ describe('decodeAction low-coverage branches', () => {
         );
     });
 
+    it('warns about exactly the categories a sweep selects', () => {
+        const escrowOnly = decodeAction({
+            action: 'SWEEP',
+            params: { DESTINATION: 'destination', BALANCES: '0', OWNERSHIPS: '0', DISPENSERS: '1' },
+        });
+        expect(escrowOnly.warnings[0]).toBe(
+            'Sweep moves the selected categories (open dispensers) from the source address. Double-check the destination.',
+        );
+        const defaults = decodeAction({ action: 'SWEEP', params: { DESTINATION: 'destination' } });
+        expect(defaults.warnings[0]).toBe(
+            'Sweep moves the selected categories (balances, ownerships) from the source address. Double-check the destination.',
+        );
+    });
+
     it('marks the missing ticker in a multi-destroy leg', () => {
         const decoded = decodeAction({
             action: 'DESTROY',

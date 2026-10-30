@@ -9,35 +9,36 @@
 // contact legal@dankest.llc.
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    WALLET_UNLOCK,
+    approve,
+    gotoPalette,
+    readDoneTxid,
+} from '../../fixtures/testnet_walk.js';
 import {
     GAS_TICK,
     INDEXED_WAIT_MS,
     TESTNET_COIN,
-    assertTreasuryKey,
-    buildTreasuryFunding,
     checkTestnetVenue,
     liveVenue,
-    mintXchain,
     readRunInput,
     readTestnetReceiveAddress,
     switchToTestnet,
     testnetEndpoints,
     unlockAfterReload,
     waitForActivationHeight,
-    waitForFundingConfirmed,
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/testnet.js';
+import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
+import { MINT_AMOUNT } from '../../fixtures/testnet_gas_preflight.js';
+import { mintTestnetXchain } from '../../fixtures/testnet_mint.js';
+import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
+import { activationTarget, waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
-const WALLET_UNLOCK = 'testnetpassword123';
-const FUNDING_SATS = 500_000;
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
-const MINT_AMOUNT = 200;
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
 // Activation is several blocks past the stake, each of which can carry the same future wait.
 const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
@@ -45,83 +46,8 @@ const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
 
-// The funded wallet has a random seed, so its phrase is the only way back to the
-// sats sent to it. It is written here, owner-only, before any funding is sent.
-const RECOVERY_DIR = path.join(os.tmpdir(), 'xchain-wallet-testnet-recovery');
-
-function recordRecovery(address, phrase) {
-    mkdirSync(RECOVERY_DIR, { recursive: true, mode: 0o700 });
-    const file = path.join(RECOVERY_DIR, `stake-unstake-${address}.json`);
-    writeFileSync(file, JSON.stringify({ address, phrase: phrase.join(' ') }), { mode: 0o600 });
-    return file;
-}
-
 function signingPubkey() {
     return randomBytes(32).toString('hex');
-}
-
-async function fundAddress(treasury, destination) {
-    assertTreasuryKey(treasury);
-    const view = await venue.utxos(treasury.address);
-    const tx = buildTreasuryFunding({
-        treasury,
-        utxos: Array.isArray(view?.utxos) ? view.utxos : [],
-        destination,
-        sendSats: FUNDING_SATS,
-    });
-    const result = await venue.broadcast(tx.txHex);
-    const txid = result?.txid || tx.txid;
-    await waitForFundingConfirmed(venue, destination, txid, { timeoutMs: INCLUSION_TIMEOUT });
-    return txid;
-}
-
-async function approve(page) {
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 120_000 });
-    const password = page.getByLabel('Password', { exact: true });
-    if (await password.count() && await password.isVisible()) await password.fill(WALLET_UNLOCK);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
-}
-
-async function gotoStaking(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 30_000 });
-    await dialog.getByRole('combobox').fill('Staking');
-    await dialog.getByRole('option', { name: /^Staking\b/ }).first().click();
-}
-
-async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('code, dd')
-        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
-    await expect(value).toBeVisible({ timeout: 120_000 });
-    const txid = (await value.innerText()).trim();
-    expect(txid).toMatch(/^[0-9a-f]{64}$/);
-    return txid;
-}
-
-async function explorerRows(path) {
-    const response = await fetch(`${explorerUrl}/${TESTNET_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`explorer returned HTTP ${response.status} for ${path}`);
-    const body = await response.json();
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body?.data)) return body.data;
-    if (Array.isArray(body?.rows)) return body.rows;
-    return [];
-}
-
-async function waitForResidual(address, actionIndex) {
-    const deadline = Date.now() + INCLUSION_TIMEOUT;
-    while (Date.now() < deadline) {
-        const rows = await explorerRows(`stakes/${address}/source`).catch(() => []);
-        const row = rows.find((item) => Number(item.action_index) === Number(actionIndex));
-        if (row) return row;
-        await new Promise((resolve) => setTimeout(resolve, 30_000));
-    }
-    throw new Error(`residual stake for action ${actionIndex} was not indexed`);
 }
 
 test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
@@ -141,29 +67,46 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
     test.afterAll(async () => {
         if (!fundedAddress) return;
-        const view = await venue.utxos(fundedAddress).catch(() => null);
-        const left = (view?.utxos || []).reduce((sum, u) => sum + Number(u.value), 0);
-        if (left > 0) {
-            console.warn(`[testnet ${TESTNET_COIN}] ${left} sats remain on ${fundedAddress}; `
-                + `restore the wallet from ${recoveryFile} to recover them`);
-        }
+        const notice = await leftoverNotice(venue, fundedAddress, {
+            file: recoveryFile,
+            destination: treasury?.address,
+        });
+        if (notice) console.warn(notice);
     });
 
     test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
         let address;
+        let activationHeight;
         let pubkey;
         let stake;
 
         await test.step('fund a new wallet and mint XCHAIN', async () => {
-            const phrase = await createWallet(page, { password: WALLET_UNLOCK });
+            const phrase = await createWallet(page, {
+                password: WALLET_UNLOCK,
+                waitForBalances: false,
+            });
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
-            recoveryFile = recordRecovery(address, phrase);
-            await fundAddress(treasury, address);
+            // The funded wallet has a random seed, so its phrase is the only way back to the
+            // sats sent to it. It is written here, owner-only, before any funding is sent.
+            recoveryFile = writeRecoveryRecord(address, phrase);
+            const fundingTxid = await fundTestnetAddress(venue, treasury, address, {
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
+            test.info().annotations.push({ type: 'txid', description: `funding ${fundingTxid}` });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
-            await mintXchain(page, MINT_AMOUNT);
+            const mintTxid = await mintTestnetXchain(page, MINT_AMOUNT, {
+                explorerUrl,
+                coin: TESTNET_COIN,
+            });
+            test.info().annotations.push({ type: 'txid', description: `mint ${mintTxid}` });
+            const mint = await waitForValidAction(venue, mintTxid, {
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
+            expect(mint.action).toBe('MINT');
+            expect(mint.source).toBe(address);
             await waitForTokenBalance(venue, address, GAS_TICK, MINT_AMOUNT, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
@@ -173,19 +116,21 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
         await test.step('stake under a new signing key', async () => {
             pubkey = signingPubkey();
-            await gotoStaking(page);
+            await gotoPalette(page, 'Staking');
             await page.getByRole('button', { name: 'New stake', exact: true }).click();
             await page.getByRole('button', { name: /^Validator staking/ }).click();
             const main = page.getByRole('main');
             await expect(main.getByLabel('From', { exact: true })).toHaveValue(address);
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
-            await expect(main.getByText('✓ No existing stake for this pubkey; defaulting to New stake.'))
+            await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
             await main.getByRole('button', { name: 'Stake', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Stake broadcast\./)).toBeVisible({ timeout: 120_000 });
-            stake = await waitForValidAction(venue, await readDoneTxid(page), {
+            const stakeTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `stake ${stakeTxid}` });
+            stake = await waitForValidAction(venue, stakeTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(stake.action).toBe('STAKE');
@@ -193,17 +138,18 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             expect(stake.source).toBe(address);
             expect(String(stake.signing_pubkey).toLowerCase()).toBe(pubkey);
             expect(Number(stake.amount)).toBeCloseTo(Number(STAKE_AMOUNT), 8);
+            activationHeight = activationTarget(stake);
         });
 
         await test.step('wait for the indexed activation height', async () => {
-            await waitForActivationHeight(venue, Number(stake.activation_block) + 1, {
+            await waitForActivationHeight(venue, activationHeight, {
                 timeoutMs: ACTIVATION_TIMEOUT,
             });
         });
 
         await test.step('partially unstake and wait for the valid action', async () => {
-            await gotoStaking(page);
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            await gotoPalette(page, 'Staking');
+            const row = page.getByRole('button', { name: /^Open (Validator stake), / });
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
             await page.getByRole('group', { name: 'Stake actions' })
@@ -214,7 +160,9 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Unstake broadcast\./)).toBeVisible({ timeout: 120_000 });
-            const unstake = await waitForValidAction(venue, await readDoneTxid(page), {
+            const unstakeTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `unstake ${unstakeTxid}` });
+            const unstake = await waitForValidAction(venue, unstakeTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(unstake.action).toBe('UNSTAKE');
@@ -223,7 +171,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             expect(Number(unstake.amount)).toBeCloseTo(Number(UNSTAKE_AMOUNT), 8);
             expect(String(unstake.tx_data).split('|')).toHaveLength(4);
 
-            const residual = await waitForResidual(address, unstake.action_index);
+            const residual = await waitForResidualStake(address, unstake.action_index, {
+                explorerUrl,
+                coin: TESTNET_COIN,
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
             expect(residual.status).toBe('valid');
             expect(Number(residual.version)).toBe(2);
             expect(String(residual.signing_pubkey).toLowerCase()).toBe(pubkey);

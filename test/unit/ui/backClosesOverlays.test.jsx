@@ -13,7 +13,7 @@
 // registered, Back on Home with the header settings popover open closed the
 // whole app on an LG K51.
 
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, cleanup, fireEvent, screen } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
@@ -23,6 +23,10 @@ import { BottomTabBar } from '../../../packages/core/src/shared/components/Botto
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { useFormLeaveGuard } from '../../../packages/core/src/shared/hooks/useFormLeaveGuard.js';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 const armed = () => Boolean(window.history.state && window.history.state.xcBack);

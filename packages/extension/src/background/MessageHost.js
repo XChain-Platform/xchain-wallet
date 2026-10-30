@@ -128,6 +128,20 @@ export class MessageHost {
     }
 
     /**
+     * Replace a registered handler with one built around it, for a rule that
+     * spans many routes. Throws for a type nobody registered, so a list of
+     * routes cannot name one that does not exist.
+     *
+     * @param {string} type
+     * @param {(handler: MessageHandler<any, any>) => MessageHandler<any, any>} build
+     */
+    wrap(type, build) {
+        const handler = this._handlers.get(type);
+        if (!handler) throw new Error(`MessageHost.wrap: type "${type}" is not registered`);
+        this._handlers.set(type, build(handler));
+    }
+
+    /**
      * @param {{ type: string, request?: unknown }} message
      * @returns {Promise<MessageResponse>}
      */

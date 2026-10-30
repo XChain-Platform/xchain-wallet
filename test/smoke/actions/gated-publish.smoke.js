@@ -93,7 +93,7 @@ assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm pag
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
 assert.match(form, /t\('gatedPublish\.packKeyHash'\)/, 'done screen labels KEY_HASH through t()');
 assert.match(en['gatedPublish.packKeyHash'], /Pack key hash/, 'done screen surfaces KEY_HASH');
-assert.match(form, /QueuedResultPanel/, 'signed but unbroadcast publishes use the queued-result state');
+assert.match(form, /ResultScreen/, 'signed but unbroadcast publishes use the queued-result state');
 
 // ---- ManageToken entry + 3-shell wiring ---------------------------------
 const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');

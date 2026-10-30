@@ -37,9 +37,6 @@ for (const [token, value] of Object.entries({
     '--xc-control-h-sm': '28px',
     '--xc-control-h-md': '36px',
     '--xc-control-h-lg': '44px',
-    '--xc-control-font-sm': '13px',
-    '--xc-control-font-md': '14px',
-    '--xc-control-font-lg': '16px',
     '--xc-control-pad-x-sm': '8px',
     '--xc-control-pad-x-md': '12px',
     '--xc-control-pad-x-lg': '16px',
@@ -55,6 +52,14 @@ for (const [token, value] of Object.entries({
 })) {
     assert.match(tokensCss, new RegExp(`${token}:\\s*${value.replace('.', '\\.')}\\s*;`),
         `${token} uses the measured mouse value`);
+}
+// Control text reads the rem type tokens, so it follows the text-size setting.
+for (const [token, value] of Object.entries({
+    '--xc-control-font-sm': 'var(--xc-text-sm)',
+    '--xc-control-font-md': 'var(--xc-text-md)',
+    '--xc-control-font-lg': 'var(--xc-text-lg)',
+})) {
+    assert.ok(tokensCss.includes(`${token}: ${value};`), `${token} reads the type token`);
 }
 assert.match(tokensCss, /--xc-radius-control:\s*var\(--xc-control-radius\)/,
     'the legacy control radius aliases the measured radius');

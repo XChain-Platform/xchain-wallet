@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ChainBadge,
@@ -29,6 +29,8 @@ import {
     pickableSharedLists,
     platformBadgeText,
     shortOwner,
+    directoryText,
+    DIRECTORY_NAME_MAX_CHARS,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
 import local from './SharedListDirectory.module.css';
@@ -57,6 +59,19 @@ function normalizeEntry(entry) {
     };
 }
 
+function isEntryRecord(entry) {
+    return entry !== null && typeof entry === 'object' && !Array.isArray(entry);
+}
+
+// A row the directory can show names a list type, a home chain and a list
+// index; anything less renders as a phantom row nobody can open. The index
+// text itself is shown neutralized, so its content is not checked here.
+function isDirectoryRow(entry) {
+    return (entry.type === 'token' || entry.type === 'address')
+        && entry.homeChain != null && String(entry.homeChain).length > 0
+        && entry.homeListIndex != null && String(entry.homeListIndex).length > 0;
+}
+
 function homeDescriptor(homeChain, viewingChainId) {
     const direct = chainRegistry.get(String(homeChain));
     if (direct) return direct;
@@ -73,7 +88,7 @@ function homeDescriptor(homeChain, viewingChainId) {
 }
 
 function valueOrUnknown(value) {
-    return value == null || value === '' ? '?' : String(value);
+    return value == null || value === '' ? '?' : directoryText(value);
 }
 
 /**
@@ -103,7 +118,10 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             .then((response) => {
                 if (cancelled) return;
                 setDirectory({
-                    lists: Array.isArray(response?.lists) ? response.lists.map(normalizeEntry) : [],
+                    // A malformed row does not discard the valid rows returned beside it.
+                    lists: Array.isArray(response?.lists)
+                        ? response.lists.filter(isEntryRecord).map(normalizeEntry).filter(isDirectoryRow)
+                        : [],
                     unavailable: Array.isArray(response?.unavailable) ? response.unavailable : [],
                 });
             })
@@ -139,11 +157,22 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         });
     }, [chainId, query, visibleLists]);
 
-    useEffect(() => {
+    // Return to the first page when the listing changes. This is done while
+    // rendering rather than in an effect: an effect runs after paint, so a
+    // Load more click made in that gap queued its update first and the late
+    // reset then overwrote it with a single page.
+    const [pageScope, setPageScope] = useState({ filterType, mode, directory });
+    if (pageScope.filterType !== filterType || pageScope.mode !== mode || pageScope.directory !== directory) {
+        setPageScope({ filterType, mode, directory });
         setVisibleLimit(PAGE_SIZE);
-    }, [filterType, mode, directory]);
+    }
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
+    // Chains that did not answer, as badges for the single notice. An unknown
+    // chain id has no badge, so it is counted by the notice but not named.
+    const unavailableDescriptors = (directory?.unavailable || [])
+        .map((id) => chainRegistry.get(id))
+        .filter(Boolean);
 
     const header = (
         <PageHeader
@@ -151,9 +180,9 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
         />
     );
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, notices) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>{children}</ListPage>
+            <ListPage notices={notices} toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
@@ -161,7 +190,6 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         return wrap(
             <StatusMessage
                 variant="error"
-                className={styles.error}
                 recovery={{ label: 'Try again', onAction: () => setDirectoryReload((value) => value + 1) }}
             >
                 {loadError}
@@ -191,19 +219,27 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         </div>
     );
 
+    // One notice for every chain that did not answer, not one per chain.
+    const unavailableNotice = directory.unavailable.length > 0 ? (
+        <StatusMessage variant="error">
+            Shared lists unavailable
+            {unavailableDescriptors.length > 0 ? ' from ' : null}
+            {unavailableDescriptors.map((descriptor, index) => (
+                <Fragment key={descriptor.id || index}>
+                    {index === 0 ? null : ' '}
+                    <ChainBadge descriptor={descriptor} size="sm" />
+                </Fragment>
+            ))}
+            . Try again in a moment.
+        </StatusMessage>
+    ) : null;
+
     const filteredType = listType(filterType);
     return wrap(
         <>
-            {directory.unavailable.map((unavailableChain) => {
-                const descriptor = chainRegistry.get(unavailableChain);
-                return (
-                    <p className={styles.error} key={unavailableChain}>
-                        Shared lists unavailable{descriptor ? <> from <ChainBadge descriptor={descriptor} size="sm" /></> : null}.
-                    </p>
-                );
-            })}
-
-            {matchingLists.length === 0 ? (
+            {/* With that notice up and no search typed, an empty state would be a
+                second message for the same state. */}
+            {matchingLists.length === 0 && directory.unavailable.length > 0 && !query.trim() ? null : matchingLists.length === 0 ? (
                 <EmptyState
                     title={query.trim()
                         ? "No matching shared lists"
@@ -211,7 +247,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                     body={query.trim()
                         ? "Matching shared lists appear here after you change or clear the search."
                         : mode === "pick"
-                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a chain where one is published.`
+                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a network where one is published.`
                             : "Published shared lists appear here after you or someone else publishes one."}
                 />
             ) : (
@@ -243,6 +279,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             )}
         </>,
         toolbar,
+        unavailableNotice,
     );
 }
 
@@ -274,10 +311,10 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             {entry.name ? (
                 <>
                     <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name)}</dd>
+                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name, { maxLength: DIRECTORY_NAME_MAX_CHARS })}</dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Home chain</dt>
+            <dt className={styles.detailsLabel}>Home network</dt>
             <dd className={styles.detailsValue}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
             </dd>
@@ -291,7 +328,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             <dd className={styles.detailsValue}>{shortOwner(entry.owner) || '?'}</dd>
             <dt className={styles.detailsLabel}>Share block</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.shareBlock)}</dd>
-            <dt className={styles.detailsLabel}>On this chain</dt>
+            <dt className={styles.detailsLabel}>On this network</dt>
             <dd className={styles.detailsValue}>{bindLabel(entry)}</dd>
             {badge ? (
                 <>

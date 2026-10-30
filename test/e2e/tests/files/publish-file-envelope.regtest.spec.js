@@ -18,7 +18,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -39,19 +39,6 @@ const STAMP = Date.now().toString().slice(-6);
 const FILE_NAME = `taproot-${STAMP}.bin`;
 const TITLE = 'Taproot test 50k';
 const MEMO = 'wallet QA taproot envelope';
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 // The Taproot envelope is Bitcoin's; the other venues have no p2tr descriptor.
 test.skip(REGTEST_COIN !== 'RBTC', 'the Taproot envelope is offered on Bitcoin only');
@@ -74,10 +61,10 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
 
         const main = page.getByRole('main');
         await test.step('fill Publish file with a file the legacy cap refuses', async () => {
-            await gotoPalette(page, 'Publish file');
+            await openPaletteCommand(page, 'Publish file');
             await expect(main.getByRole('radiogroup', { name: 'Publish mode' })).toBeVisible({ timeout: 30_000 });
             await main.getByRole('radio', { name: /Public/ }).check();
-            await selectVenueChain(main, 'Chain');
+            await selectVenueChain(main, 'Network');
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 

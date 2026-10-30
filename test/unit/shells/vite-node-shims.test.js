@@ -56,6 +56,14 @@ describe.each(CONFIGS)('%s shell vite config', (_name, path) => {
         expect(https, 'https alias missing').toBe(http);
     });
 
+    // The SDK's carrier verifier inflates a compressed rawData push with
+    // zlib.inflateRawSync. Without this alias the bundle hands it an empty
+    // module and every compressed P2SH/P2WSH compose is refused as tampered.
+    it('aliases zlib to the browser inflate shim', async () => {
+        const mod = await import(path);
+        expect(aliasFor(mod.default?.resolve?.alias, 'zlib'), 'zlib alias missing').toMatch(/zlib-browser\.js$/);
+    });
+
     it('defines require.main as undefined for browser bundles', async () => {
         const mod = await import(path);
         expect(mod.default?.define?.['require.main']).toBe('undefined');

@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormNotice, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -42,7 +42,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { copyText } from '../clipboard.js';
 import styles from './ResumeConfirm.module.css';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -198,7 +198,8 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
             >
                 <FormPage label="Unsigned transaction">
                     {composed?.psbt ? (
-                        <WatcherResultPanel
+                        <ResultScreen
+                            state="unsigned"
                             result={{
                                 psbtHex: String(composed.psbt),
                                 encoding: composed.encoding,
@@ -211,7 +212,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                             }}
                         />
                     ) : (
-                        <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                        <FormNotice variant="error">The unfinished transaction has no unsigned PSBT to export.</FormNotice>
                     )}
                 </FormPage>
             </Screen>
@@ -269,9 +270,13 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 />
             )}
         >
-            <FormPage label={title}>
-                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+            <FormPage
+                label={title}
+                status={[
+                    error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                    copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null,
+                ]}
+            >
                 {result ? (
                     <section
                         className={styles.resultCard}

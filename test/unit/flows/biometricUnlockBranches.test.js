@@ -56,11 +56,13 @@ function installWebAuthn({ available = true, create, get } = {}) {
     });
 }
 
+// Hand out a fresh PRF buffer per ceremony, as a browser does: the flow
+// zeroes the buffer it was given once the wrap key is used.
 function credentialWithPrf(prf, rawId = new Uint8Array([1, 2, 3])) {
     return {
         rawId: rawId.buffer,
         getClientExtensionResults: () => ({
-            prf: { results: { first: prf.buffer } },
+            prf: { results: { first: prf.slice().buffer } },
         }),
     };
 }

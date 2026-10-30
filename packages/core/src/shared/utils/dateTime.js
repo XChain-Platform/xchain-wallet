@@ -127,3 +127,28 @@ export function formatLocalDateTime(timestamp, locale) {
         return date.toUTCString();
     }
 }
+
+/**
+ * Absolute time for a Unix timestamp in SECONDS, as an action's EXPIRATION field
+ * carries it. formatLocalDateTime guesses seconds or milliseconds from the size
+ * of the number and reads a date past the year 5138 as milliseconds; a field
+ * known to be seconds is converted first.
+ *
+ * @param {unknown} seconds digits only, up to 12 of them
+ * @param {string} [locale]
+ * @returns {string | null} null when the value is not a plain count of seconds
+ */
+export function formatUnixSecondsLocal(seconds, locale) {
+    const text = String(seconds ?? '').trim();
+    if (!/^\d{1,12}$/.test(text)) return null;
+    const date = new Date(Number(text) * SECOND_MS);
+    if (Number.isNaN(date.getTime())) return null;
+    try {
+        return date.toLocaleString(getFormatLocale(locale), {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+    } catch {
+        return date.toUTCString();
+    }
+}

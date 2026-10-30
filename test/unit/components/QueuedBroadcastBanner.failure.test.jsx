@@ -43,6 +43,7 @@ vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => toastApi,
 }));
 
+const { isAutoLockHeld } = await import('../../../packages/core/src/shared/hooks/autoLockGuard.js');
 const { QueuedBroadcastBanner, queuedBroadcastFailure } = await import(
     '../../../packages/core/src/shared/components/QueuedBroadcastBanner.jsx');
 
@@ -76,6 +77,19 @@ async function renderWith(rows) {
 function pressBroadcast(index = 0) {
     fireEvent.click(screen.getAllByRole('button', { name: /send now/i })[index]);
 }
+
+describe('QueuedBroadcastBanner and auto-lock', () => {
+    it('holds auto-lock while a queued transaction is sent', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        let finish;
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        pressBroadcast();
+        await waitFor(() => expect(isAutoLockHeld()).toBe(true));
+        queue = [];
+        await act(async () => { finish(undefined); });
+        await waitFor(() => expect(isAutoLockHeld()).toBe(false));
+    });
+});
 
 describe('QueuedBroadcastBanner after a failed broadcast', () => {
     it('drops a permanently rejected row at once and says it was removed', async () => {
@@ -115,7 +129,7 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe(
+        expect(alert.textContent.slice(1)).toBe(
             'Sending failed, and the transaction is still queued. Try again in 3 seconds.',
         );
         expect(alert.textContent).not.toMatch(/Encoder RPC|ETIMEDOUT/);
@@ -134,12 +148,25 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts[0].message).not.toMatch(/broadcast\.queue:|compose/i);
     });
 
+    it('says the send is underway in another window instead of asking for a retry', async () => {
+        await renderWith([entry('a', 'Deploy contract')]);
+        broadcastImpl = async () => {
+            throw named('QueuedBroadcastInFlightError', 'broadcast.queue: entry "a" is already being broadcast');
+        };
+        pressBroadcast();
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toMatch(/being sent from another window/);
+        expect(alert.textContent).not.toMatch(/Try again/);
+        expect(alert.textContent).not.toMatch(/broadcast\.queue/);
+        expect(screen.getByText('Deploy contract')).toBeTruthy();
+    });
+
     it('hides an unrelated host error while the row is still waiting to send', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async () => { throw new Error('boom'); };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe('Could not send this transaction. It is still waiting to send. Try again.');
+        expect(alert.textContent.slice(1)).toBe('Could not send this transaction. It is still waiting to send. Try again.');
         expect(screen.getByText('Send 1 XCP')).toBeTruthy();
     });
 

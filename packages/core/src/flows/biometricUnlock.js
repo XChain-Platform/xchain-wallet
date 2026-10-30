@@ -130,6 +130,7 @@ export class BiometricPrfUnavailableError extends Error {
 // @typedef {Object} BiometricProvider
 // @property {() => Promise<boolean>} isSupported
 // @property {() => boolean} isRegistered
+// @property {() => Promise<boolean | null>} [confirmRegistered]   asks the backing store afresh; null when it cannot tell
 // @property {(opts: { password: string, accountName?: string }) => Promise<void>} register
 // @property {() => Promise<string>} unlock      resolves to the wallet password
 // @property {() => void | Promise<void>} clear
@@ -304,10 +305,18 @@ async function webauthnRegister({ password, accountName = 'XChain Wallet' }) {
         throw new BiometricPrfUnavailableError();
     }
 
+    // Zero the wrap key, its PRF source and the password bytes even when the
+    // seal throws (prfOutput views the authenticator's buffer, so that is wiped too).
     const key = prfOutput.slice(0, 32);
     const passwordBytes = new TextEncoder().encode(password);
-    const ciphertext = await aeadEncrypt(key, passwordBytes);
-    key.fill(0);
+    let ciphertext;
+    try {
+        ciphertext = await aeadEncrypt(key, passwordBytes);
+    } finally {
+        key.fill(0);
+        prfOutput.fill(0);
+        passwordBytes.fill(0);
+    }
 
     persistRecord({
         credentialId: bytesToBase64(credentialId),
@@ -340,10 +349,18 @@ async function webauthnUnlock() {
         throw new BiometricPrfUnavailableError();
     }
 
+    // Zero the wrap key, its PRF source and the password bytes on every exit,
+    // a failed GCM tag check included.
     const key = prfOutput.slice(0, 32);
-    const plaintext = await aeadDecrypt(key, ciphertext);
-    key.fill(0);
-    return new TextDecoder().decode(plaintext);
+    let plaintext = null;
+    try {
+        plaintext = await aeadDecrypt(key, ciphertext);
+        return new TextDecoder().decode(plaintext);
+    } finally {
+        key.fill(0);
+        prfOutput.fill(0);
+        if (plaintext) plaintext.fill(0);
+    }
 }
 
 /** @type {BiometricProvider} */
@@ -499,12 +516,15 @@ export function clearBiometricCredential() {
  * enrolment stays. Anything else, an absent flag included, clears.
  *
  * @param {{ vaultRekeyed?: boolean } | null | undefined} changeResult   what wallet.changePassword returned
- * @returns {Promise<boolean>} true when an enrolment was cleared
+ * @returns {Promise<boolean>} true when a clear ran: an enrolment existed, or none could be ruled out
  * @throws {Error} when an enrolment existed and could not be cleared
  */
 export async function retireBiometricAfterPasswordChange(changeResult) {
     if (changeResult?.vaultRekeyed === false) return false;
-    if (!isBiometricRegistered()) return false;
+    // A cached "not registered" is not proof: a native status probe that
+    // failed at startup leaves the cache false while a wrap is stored. So the
+    // store is asked again, and only a definite "none" skips the clear.
+    if (!isBiometricRegistered() && (await confirmBiometricRegistered()) === false) return false;
     await clearBiometricCredential();
     if (isBiometricRegistered()) {
         throw new Error('biometricUnlock: the enrolment is still present after clearing');
@@ -515,6 +535,25 @@ export async function retireBiometricAfterPasswordChange(changeResult) {
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
+
+/**
+ * Whether an enrolment exists, asked of the backing store rather than a cache:
+ * true or false when the provider can tell, null when it cannot. A provider
+ * without `confirmRegistered` answers from `isRegistered()`, which for
+ * WebAuthn reads the stored record itself.
+ *
+ * @returns {Promise<boolean | null>}
+ */
+async function confirmBiometricRegistered() {
+    const provider = activeProvider();
+    if (typeof provider.confirmRegistered !== 'function') return isBiometricRegistered();
+    try {
+        const answer = await provider.confirmRegistered();
+        return typeof answer === 'boolean' ? answer : null;
+    } catch (_err) {
+        return null;
+    }
+}
 
 function getStorage() {
     try {

@@ -33,6 +33,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(),
 }));
+// Each chunked leg composes (and tamper-checks) its PSBT before submit; this
+// suite is about the meta preflight, so compose hands back a minimal checked envelope.
+vi.mock('../../../packages/core/src/flows/composeActionForConfirm.js', () => ({
+    composeActionForConfirm: vi.fn(async ({ actionData }) => ({
+        psbt: 'checked-psbt',
+        encoding: 'OP_RETURN',
+        actionString: 'DEPLOY|' + actionData.params.VERSION,
+        version: actionData.params.VERSION,
+        deferredOutputs: [],
+        adsPlan: { canSubmit: false },
+        tamperVerified: true,
+    })),
+}));
 vi.mock('../../../packages/core/src/flows/sendToken.js', () => ({
     normalizeSource: vi.fn((from) => ({
         address: from.address,

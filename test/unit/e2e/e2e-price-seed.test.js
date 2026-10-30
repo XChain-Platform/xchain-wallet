@@ -27,10 +27,12 @@ import {
     MIN_SEED_MARGIN_SECONDS,
     NATIVE_FEE_ONLY,
     ORACLE_MAX_PRICE_AGE_SECONDS,
+    PRICE_SEED_MARKER_FLOOR,
     SYNTHETIC_ROUNDS,
     VENUE_PRICE,
     XCHAIN_PAIR,
     XCHAIN_USD_PRICE,
+    clearStaleSeedRows,
     planPairRows,
     planSeedRows,
     priceBand,
@@ -41,6 +43,7 @@ import {
     settlePrice,
     unusablePriceMessage,
     venueDisagreement,
+    writePriceSeedRows,
     writeRowsScript,
 } from '../../e2e/fixtures/priceSeed.js';
 
@@ -334,6 +337,140 @@ describe('e2e price seed', () => {
             expect(script).toContain('ON DUPLICATE KEY UPDATE');
         });
 
+        it('accepts the venue own regtest oracle and skips every fixture row', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [
+                    { validator_count: 1, source_action_index: null },
+                    { validator_count: 1, source_action_index: null },
+                ];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).resolves.toBe(0);
+            expect(calls).toHaveLength(1);
+            expect(calls[0].sql).toContain("status = 'finalized'");
+            expect(calls[0].sql).toContain('INTERVAL 5 MINUTE');
+            expect(calls[0].sql).toContain('validator_count');
+            expect(calls[0].sql).toContain('source_action_index');
+            expect(calls[0].params).toEqual([PRICE_SEED_MARKER_FLOOR]);
+        });
+
+        it('still refuses a foreign live oracle before writing any fixture row', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [
+                    { validator_count: 1, source_action_index: null },
+                    { validator_count: 3, source_action_index: null },
+                ];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/foreign oracle/);
+            expect(calls).toHaveLength(1);
+        });
+
+        it('also refuses a published foreign round with one validator', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [{ validator_count: 1, source_action_index: 42 }];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/foreign oracle/);
+            expect(calls).toHaveLength(1);
+        });
+
+        it('keys the live-oracle check below every synthetic round a sibling seed writes', () => {
+            expect(SYNTHETIC_ROUNDS.every((round) => round >= PRICE_SEED_MARKER_FLOOR)).toBe(true);
+            expect(PRICE_SEED_MARKER_FLOOR).toBe(990001);
+        });
+
+        it('writes every planned row when the hub database oracle is idle', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return calls.length === 1 ? [] : { affectedRows: 1 };
+            };
+
+            await expect(writePriceSeedRows(query, rows)).resolves.toBe(rows.length);
+            expect(calls).toHaveLength(rows.length + 1);
+            expect(calls.slice(1).every(call => call.sql.includes('INSERT INTO price_snapshots')))
+                .toBe(true);
+        });
+
+        // The wallet CI venue, 2026-10-25: the hub finalized BTC/USD every minute (round 131952, 61s old)
+        // while a ten-hour-old synthetic 888100012 outranked it, so the indexer chose the
+        // stale row and every run failed setup on "no current oracle price for BTC/USD".
+        describe('stale fixture rounds above a live oracle', () => {
+            const NOW = 1_792_917_181;
+            const table = () => [
+                { coinPair: 'BTC/USD', round: 131952, timestamp: NOW - 61, price: '80333' },
+                { coinPair: 'BTC/USD', round: 888100012, timestamp: NOW - 37566, price: '100000' },
+                { coinPair: 'XCHAIN/USD', round: 131952, timestamp: NOW - 61, price: '1.8' },
+                { coinPair: 'XCHAIN/USD', round: 888100011, timestamp: NOW - 37566, price: '2' },
+                { coinPair: 'XCHAIN/USD', round: 999200011, timestamp: NOW - 30, price: '2' },
+                { coinPair: 'LTC/USD', round: 888100012, timestamp: NOW - 37566, price: '100000' },
+            ];
+            // Executes the one DELETE clearStaleSeedRows issues against an in-memory table.
+            const fakeDb = (rowsIn) => {
+                const calls = [];
+                const query = async (sql, params) => {
+                    calls.push({ sql, params });
+                    const [pairsIn, roundsIn] = [...sql.matchAll(/IN \(([?,]+)\)/g)].map((m) => m[1].split(',').length);
+                    const pairs = params.slice(0, pairsIn);
+                    const rounds = params.slice(pairsIn, pairsIn + roundsIn);
+                    const before = params[pairsIn + roundsIn];
+                    const keep = rowsIn.filter((r) => !(pairs.includes(r.coinPair) && rounds.includes(r.round)
+                        && r.timestamp < before));
+                    const affectedRows = rowsIn.length - keep.length;
+                    rowsIn.splice(0, rowsIn.length, ...keep);
+                    return { affectedRows };
+                };
+                return { query, calls };
+            };
+
+            it('clears them so the indexer selects the live round again', async () => {
+                const rowsNow = table();
+                expect(selectedSnapshot(rowsNow, 'BTC/USD', NOW).round).toBe(888100012);
+                const { query } = fakeDb(rowsNow);
+                const cleared = await clearStaleSeedRows(query, {
+                    pairs: ['XCHAIN/USD', 'BTC/USD'], rounds: SYNTHETIC_ROUNDS,
+                    staleBefore: NOW - ORACLE_MAX_PRICE_AGE_SECONDS,
+                });
+                expect(cleared).toBe(2);
+                expect(selectedSnapshot(rowsNow, 'BTC/USD', NOW).round).toBe(131952);
+                // A sibling suite's seed that still prices, and a pair this run does
+                // not price, are left exactly as they were.
+                expect(rowsNow.some((r) => r.round === 999200011)).toBe(true);
+                expect(rowsNow.some((r) => r.coinPair === 'LTC/USD')).toBe(true);
+            });
+
+            it('never deletes a real round however old it is', async () => {
+                const rowsNow = [{ coinPair: 'BTC/USD', round: 5, timestamp: 1, price: '1' }];
+                const { query } = fakeDb(rowsNow);
+                await clearStaleSeedRows(query, { pairs: ['BTC/USD'], rounds: SYNTHETIC_ROUNDS, staleBefore: NOW });
+                expect(rowsNow).toHaveLength(1);
+            });
+
+            it('issues nothing without pairs, rounds or a clock', async () => {
+                const { query, calls } = fakeDb(table());
+                expect(await clearStaleSeedRows(query, { pairs: [], rounds: SYNTHETIC_ROUNDS, staleBefore: NOW })).toBe(0);
+                expect(await clearStaleSeedRows(query, { pairs: ['BTC/USD'], rounds: [], staleBefore: NOW })).toBe(0);
+                expect(await clearStaleSeedRows(query, { pairs: ['BTC/USD'], rounds: SYNTHETIC_ROUNDS, staleBefore: NaN })).toBe(0);
+                expect(calls).toHaveLength(0);
+            });
+
+            it('runs from the write script only after the writer stood aside, at chain time minus the price age', () => {
+                const script = writeRowsScript(rows, { chainTime: CHAIN });
+                expect(script).toContain('async function clearStaleSeedRows');
+                expect(script).toContain('written === 0');
+                expect(script).toContain('const STALE_BEFORE = ' + (CHAIN - ORACLE_MAX_PRICE_AGE_SECONDS) + ';');
+                expect(script).toContain('const SYNTHETIC_ROUNDS = ' + JSON.stringify(SYNTHETIC_ROUNDS) + ';');
+                expect(writeRowsScript(rows)).toContain('const STALE_BEFORE = null;');
+            });
+        });
+
         it('expands the pair list into real placeholders', () => {
             // The mariadb driver does not expand an array into an IN list; it
             // binds it as a single value and matches nothing, which would report
@@ -352,6 +489,18 @@ describe('e2e price seed', () => {
             });
             expect(msg).toMatch(/VENUE state, not a wallet defect/);
             expect(msg).toMatch(/no current oracle price/);
+        });
+
+        it('never claims a write when the venue oracle made the seed stand aside', () => {
+            const msg = unusablePriceMessage({
+                regtestCoin: 'RBTC', seeded: false, liveOracle: true, cleared: 2,
+                reason: 'invalid: no current oracle price for BTC/USD (missing or stale beyond 4500s)',
+                state: { wrote: [], cleared: 2 },
+            });
+            expect(msg).toMatch(/wrote NO rows/);
+            expect(msg).toMatch(/cleared 2 stale fixture round/);
+            expect(msg).not.toMatch(/DID write/);
+            expect(msg).not.toMatch(/could\s+not be reached over SSH/);
         });
 
         it('says what was tried, so a seeded failure points at shadowing', () => {

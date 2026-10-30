@@ -60,7 +60,8 @@ describe('PriceAlertForm', () => {
         expect(action).toBeDisabled();
         expect(action.getAttribute('aria-describedby')).toBe(target.getAttribute('aria-describedby'));
         const reason = document.getElementById(target.getAttribute('aria-describedby'));
-        expect(reason).toBe(screen.getByRole('status'));
+        expect(reason).toHaveClass('sr-only');
+        expect(screen.queryByRole('status')).toBeNull();
         expect(reason).toHaveTextContent('Enter a target price to continue.');
     });
 
@@ -145,7 +146,12 @@ describe('PriceAlertForm', () => {
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '0' } });
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Enter a price greater than zero.');
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('Enter a price greater than zero.');
+        // The bad price is the price field's own error, read with the field.
+        const target = screen.getByRole('textbox', { name: 'Target price' });
+        expect(target.getAttribute('aria-describedby')).toContain(alert.id);
+        expect(screen.queryByRole('status')).toBeNull();
         expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
         expect(onCreate).not.toHaveBeenCalled();
     });
@@ -172,5 +178,16 @@ describe('PriceAlertForm', () => {
             targetFiat: 64000,
             fiatCurrency: 'eur',
         }));
+    });
+
+    it('keeps an unavailable coin visible while editing an existing alert', () => {
+        render(<PriceAlertForm
+            initialAlert={{ chainId: 'retired-mainnet', direction: 'above', targetFiat: 10 }}
+            onCreate={vi.fn()}
+        />);
+
+        const coin = screen.getByLabelText('Coin');
+        expect(coin.value).toBe('retired-mainnet');
+        expect(screen.getByRole('option', { name: 'Retired (unavailable)' })).toBeTruthy();
     });
 });

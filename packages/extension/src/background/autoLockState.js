@@ -27,8 +27,21 @@
 // State lives in chrome.storage.session: it survives service-worker eviction
 // within the browser session (so the alarm keeps working across SW restarts)
 // but is cleared on browser close, the same lifetime as the session key.
+//
+// The backstop fails closed. A record storage cannot read is an unknown
+// deadline, so the read throws AutoLockStateUnreadableError and the alarm
+// locks; an arm storage refuses reports `saved: false` so the route locks,
+// since a restarted worker would find no record and never lock.
 
 const KEY = 'xchain:autolock';
+
+// The session.autolock reply reason for an arm storage refused; the shared
+// useAutoLockPolicy hook reads the same literal.
+export const AUTO_LOCK_UNSAVED = 'auto-lock-unsaved';
+
+// Ordinary clock corrections (NTP steps, a second device syncing) stay well
+// inside this; anything larger is treated as a clock set backwards.
+const CLOCK_ROLLBACK_TOLERANCE_MS = 5 * 60 * 1000;
 
 function sessionArea() {
     return globalThis.chrome?.storage?.session ?? null;
@@ -39,30 +52,78 @@ function sessionArea() {
  * @property {boolean} armed          foreground says auto-lock applies to the active wallet
  * @property {number} idleMs          idle threshold (already clamped by the foreground)
  * @property {number} lastActivity    ms epoch of the last observed UI activity
+ * @property {number} [armedAt]       ms epoch the surface issued the arm on record,
+ *                                    so a disarm issued before it cannot undo it
  */
 
-/** @returns {Promise<AutoLockState | null>} */
+// The state this worker last set that storage refused to take, or undefined
+// when storage holds everything this worker set. A refused arm would otherwise
+// leave the alarm reading no record and never locking, while the popup that
+// sent the arm believes the backstop is set. Kept per worker: a restart drops
+// it along with every other in-memory copy.
+/** @type {AutoLockState | null | undefined} */
+let unsavedState;
+
+/** Storage refused the read, so the armed deadline is unknown. */
+export class AutoLockStateUnreadableError extends Error {
+    constructor(cause) {
+        super('auto-lock record could not be read');
+        this.name = 'AutoLockStateUnreadableError';
+        this.cause = cause;
+    }
+}
+
+/**
+ * Null means no record. A read storage refuses throws
+ * AutoLockStateUnreadableError rather than reading as no record, which would
+ * leave a restarted worker with no deadline to enforce.
+ *
+ * @returns {Promise<AutoLockState | null>}
+ */
 export async function readAutoLockState() {
+    if (unsavedState !== undefined) return unsavedState ? { ...unsavedState } : null;
     const area = sessionArea();
     if (!area) return null;
+    let got;
     try {
-        const got = await area.get(KEY);
-        const v = got?.[KEY];
-        if (!v || typeof v !== 'object') return null;
-        return {
-            armed: v.armed === true,
-            idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
-            lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
-        };
+        got = await area.get(KEY);
+    } catch (err) {
+        throw new AutoLockStateUnreadableError(err);
+    }
+    const v = got?.[KEY];
+    if (!v || typeof v !== 'object') return null;
+    /** @type {AutoLockState} */
+    const state = {
+        armed: v.armed === true,
+        idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
+        lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
+    };
+    if (typeof v.armedAt === 'number') state.armedAt = v.armedAt;
+    return state;
+}
+
+// The read the writers below start from; an unreadable record reads as absent
+// there, since each of them writes a whole record anyway.
+async function readForUpdate() {
+    try {
+        return await readAutoLockState();
     } catch {
         return null;
     }
 }
 
+/** @returns {Promise<boolean>} whether storage took the record */
 async function writeAutoLockState(next) {
     const area = sessionArea();
-    if (!area) return;
-    try { await area.set({ [KEY]: next }); } catch { /* best-effort */ }
+    if (!area) return true;
+    try {
+        await area.set({ [KEY]: next });
+        unsavedState = undefined;
+        return true;
+    } catch {
+        unsavedState = { ...next };
+        return false;
+    }
 }
 
 /**
@@ -70,27 +131,56 @@ async function writeAutoLockState(next) {
  * Updating an armed session keeps its activity stamp so a shorter timeout
  * takes effect against idle time that has already elapsed.
  *
- * @param {{ armed: boolean, idleMs?: number, activity?: boolean }} signal
+ * Resolves `saved: false` only for an arm storage refused. A refused
+ * disarm or activity stamp stays in this worker's memory: the record left in
+ * storage then locks a restarted worker sooner, never later.
+ *
+ * `issuedAt` is when the surface issued the signal, kept across its retries.
+ * A disarm issued before the arm on record changes nothing: it is a retry
+ * that reached the worker after a newer arm, typically one the Locked screen
+ * sent while the worker had no host and that landed after the unlock rebuilt
+ * it. An arm is never refused on its stamp, so a clock set backwards can
+ * only keep a session armed, never leave one disarmed.
+ *
+ * @param {{ armed: boolean, idleMs?: number, activity?: boolean, issuedAt?: number }} signal
  * @param {number} now
+ * @returns {Promise<{ saved: boolean }>}
  */
 export async function applyAutoLockSignal(signal, now) {
+    const issuedAt = Number.isFinite(signal?.issuedAt) ? Number(signal.issuedAt) : null;
     if (!signal || signal.armed !== true) {
+        if (issuedAt !== null) {
+            const current = await readForUpdate();
+            if (current?.armed && typeof current.armedAt === 'number' && issuedAt < current.armedAt) {
+                return { saved: true };
+            }
+        }
         // Disarm: keep the record but flip armed off so the alarm no-ops.
         await writeAutoLockState({ armed: false, idleMs: 0, lastActivity: now });
-        return;
+        return { saved: true };
     }
     const idleMs = Number(signal.idleMs);
-    const current = await readAutoLockState();
-    if (signal.activity === true && !current?.armed) return;
+    const current = await readForUpdate();
+    if (signal.activity === true && !current?.armed) return { saved: true };
     let lastActivity = now;
     if (signal.activity !== true && current?.armed && current.lastActivity > 0) {
         lastActivity = current.lastActivity;
     }
-    await writeAutoLockState({
+    // An activity report keeps the arm stamp; an arm moves it forward only.
+    const priorArmedAt = current?.armed && typeof current.armedAt === 'number' ? current.armedAt : null;
+    let armedAt = priorArmedAt;
+    if (signal.activity !== true && issuedAt !== null) {
+        armedAt = priorArmedAt === null ? issuedAt : Math.max(priorArmedAt, issuedAt);
+    }
+    /** @type {AutoLockState} */
+    const next = {
         armed: true,
         idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
         lastActivity,
-    });
+    };
+    if (armedAt !== null) next.armedAt = armedAt;
+    const written = await writeAutoLockState(next);
+    return { saved: written || signal.activity === true };
 }
 
 /**
@@ -101,7 +191,7 @@ export async function applyAutoLockSignal(signal, now) {
  * @param {number} now
  */
 export async function stampAutoLockActivity(now) {
-    const state = await readAutoLockState();
+    const state = await readForUpdate();
     if (!state || !state.armed) return;
     await writeAutoLockState({ ...state, lastActivity: now });
 }
@@ -110,7 +200,14 @@ export async function stampAutoLockActivity(now) {
 export async function clearAutoLockState() {
     const area = sessionArea();
     if (!area) return;
-    try { await area.remove(KEY); } catch { /* best-effort */ }
+    try {
+        await area.remove(KEY);
+        unsavedState = undefined;
+    } catch {
+        // Read as cleared, as asked: the earlier deadline left in storage
+        // would otherwise lock the next session the moment it unlocks.
+        unsavedState = null;
+    }
 }
 
 /**
@@ -127,5 +224,10 @@ export function shouldAutoLock(state, now) {
     if (!state || state.armed !== true) return false;
     if (!(typeof state.idleMs === 'number' && state.idleMs > 0)) return false;
     if (!(typeof state.lastActivity === 'number' && state.lastActivity > 0)) return false;
+    // A stamp ahead of the clock means the wall clock moved backwards since it
+    // was written, so the idle time cannot be measured. Locking is the safe
+    // answer: waiting for the clock to catch up would keep the session open
+    // for as long as the clock was set back.
+    if (state.lastActivity - now > CLOCK_ROLLBACK_TOLERANCE_MS) return true;
     return now - state.lastActivity >= state.idleMs;
 }

@@ -105,7 +105,7 @@ describe('main screen rendering', () => {
         );
 
         await screen.findByText('No activity yet');
-        expect(screen.getByText('Activity appears here after you send or receive on a selected chain.')).toBeTruthy();
+        expect(screen.getByText('Activity appears here after you send or receive on a selected network.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Start receiving' }));
         expect(onReceive).toHaveBeenCalledOnce();
         expectEveryButtonNamed(view.container);

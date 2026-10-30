@@ -63,16 +63,16 @@
 // the last thing standing between a user and handing an address's entire
 // contents to a stranger. It is asserted on the way past.
 //
-// RUN IT ON BITCOIN OR DOGECOIN:
+// RUN IT ON BITCOIN OR DOGECOIN (a Dogecoin run also tunnels the Bitcoin rail's
+// encoder 3023 and miner 3025, since its XCHAIN arrives over the bridge):
 //   cd test/e2e && XC_REGTEST_COIN=RBTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/sweep/force-close-and-broadcast.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
     fundAddress,
-    mintXchain,
     nudgeChain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -85,10 +85,16 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    selectDispenserOnSource,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
+import { fundXchain } from '../../fixtures/gasToken.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Three fee-bearing broadcasts ride on this address: mint, dispenser, sweep. */
+/**
+ * Fee-bearing broadcasts ride on this address: the mint (on Bitcoin only, since
+ * off Bitcoin the tokens arrive over the bridge), the dispenser and the sweep.
+ */
 const FUNDING = 2;
 const TICK = 'XCHAIN';
 const MINT = 1000;
@@ -124,26 +130,6 @@ async function explorerJson(path) {
         signal: AbortSignal.timeout(15_000),
     });
     return res.json();
-}
-
-/**
- * Opens a screen through the command palette.
- *
- * Lifted from tests/dispensers/refill-ceiling: the palette is the one entry
- * point every shell has, and SweepForm has no nav row of its own - the only
- * other ways in are the actions menu and MigrateToBip39's per-chain deep link.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /** Waits for the confirm surface itself, WITHOUT requiring Approve to be live. */
@@ -294,9 +280,9 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // The dispenser form READS the wallet's own venue-chain
             // address, the same way the dispenser specs do: addresses derive
             // from a random seed, so the spec cannot know it in advance.
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             source = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -307,17 +293,23 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-            await mintXchain(page, MINT);
+            // Off Bitcoin the bridged XCHAIN is mint-locked, so the balance is
+            // minted on Bitcoin regtest and locked across to this source.
+            await fundXchain(page, { address: source, amount: MINT, password: PASSWORD });
             await waitForTokenBalance(source, TICK, MINT, 1_200_000);
             await seedPrices();
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
+            // The dispenser opens on the Source, so the sweep of that address has a
+            // dispenser to force-close.
+            await selectDispenserOnSource(page);
+
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await selectPickerAsset(page, TICK);
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
@@ -351,9 +343,11 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
         let before;
         let destBefore;
+        /** The XCHAIN protocol fee the sweep's confirm screen quoted, 0 when it quoted none. */
+        let sweepFeeXchain = 0;
 
         await test.step('drive the sweep wizard, with the dispenser force-close selected', async () => {
-            await gotoPalette(page, 'Sweep address');
+            await openPaletteCommand(page, 'Sweep address');
             const main = page.getByRole('main');
             // Screen facts (SweepForm.jsx + ui/PageHeader.jsx + ui/Screen.jsx):
             //   - The page title ("Sweep address" free-entry, "Sweep to new
@@ -375,7 +369,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
                 + 'this run funded, so it would sweep the wrong address')
                 .toHaveValue(source, { timeout: 30_000 });
 
-            await main.getByLabel('Destination address').fill(DESTINATION);
+            await main.getByRole('textbox', { name: 'Destination address', exact: true }).fill(DESTINATION);
 
             // The loud third-party path. This alert is the only thing between a
             // user and handing an address's entire contents to a stranger, and
@@ -439,6 +433,19 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
                 .toBeVisible({ timeout: 30_000 });
             await typed.fill('SWEEP');
 
+            // On Bitcoin the sweep pays its protocol fee in XCHAIN out of the
+            // balance it moves, so the destination receives the free balance
+            // less this fee. It is read off the screen the user approved: the
+            // fee is a hub setting, and on a coin-fee lane there is no line.
+            await expect(approve, 'Approve never went live after the confirmation word was typed')
+                .toBeEnabled({ timeout: 120_000 });
+            const feeLine = page.getByTestId('confirm-protocol-fee');
+            if (await feeLine.count() > 0) {
+                const said = await feeLine.innerText();
+                sweepFeeXchain = Number(said.match(new RegExp(`([\\d.]+)\\s*${TICK}\\b`))?.[1]);
+                expect(Number.isFinite(sweepFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
+            }
+
             txid = await approveAndGetTxid(page);
 
             // The campaign's one unreproduced observation, asserted as its own
@@ -486,10 +493,10 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // The protocol fee is debited from the swept balance before it is
             // credited (indexer actions/sweep.js), and its size is a function of
             // the db-hits fee schedule and the LEGACY_FEE_NUMERIC_DBHITS
-            // flag-day - so it is BOUNDED here rather than pinned to a figure
-            // this spec would have to re-derive on every schedule change. What
-            // is pinned is the part that matters: essentially all of it arrived,
-            // and none of it went anywhere else.
+            // flag-day, so the spec takes the figure the confirm screen quoted
+            // rather than re-deriving it. The credit must equal the free balance
+            // less that quoted fee: nothing else may go missing, and the user
+            // must have been told the true cost before signing.
             // THE ESCROW DOES NOT TRAVEL WITH THE SWEEP, AND IT IS EASY TO
             // FORGET THAT. A sweep can only move the FREE balance - the
             // dispenser's ESCROW is still committed to the dispenser at the
@@ -511,15 +518,16 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // closes exactly and nothing was lost.
             const escrowStillCounted = ESCROW - escrowNetted;
             const movable = before - escrowStillCounted;
+            const expected = movable - sweepFeeXchain;
             expect(credited, 'the destination was credited MORE than the free balance a sweep '
                 + 'could move, so something other than the sweep paid it')
                 .toBeLessThanOrEqual(movable);
-            expect(movable - credited,
-                `only ${credited} of the ${movable} FREE ${TICK} reached the destination (the `
-                + `address read ${before}, of which ${escrowStillCounted} is dispenser escrow that settles at `
-                + 'close time). The shortfall is far larger than any protocol fee, so the sweep '
-                + 'lost tokens on the way')
-                .toBeLessThan(0.01);
+            expect(Math.abs(expected - credited),
+                `only ${credited} of the ${movable} FREE ${TICK} reached the destination, where the `
+                + `confirm screen's ${sweepFeeXchain} ${TICK} protocol fee leaves ${expected} (the address `
+                + `read ${before}, of which ${escrowStillCounted} is dispenser escrow that settles at close `
+                + 'time), so the sweep lost tokens on the way')
+                .toBeLessThan(1e-6);
         });
 
         await test.step('the force-close reached the dispenser at the source', async () => {

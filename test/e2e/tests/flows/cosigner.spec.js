@@ -28,14 +28,10 @@ async function installCoSignerDerivationStub(page) {
     await page.route('**/src/hostBridge.js*', async (route) => {
         const response = await route.fetch();
         const source = await response.text();
-        const seam = '    const sdk = {\n        wallet: {';
-        const replacement = `    const sdk = {
-        coSigner: {
-            deriveMuSig2P2TR() {
-                return { address: '${AGGREGATE_ADDRESS}' };
-            },
-        },
-        wallet: {`;
+        // The dev SDK derives a marker address from the keys; the stub pins one
+        // fixed address so the screens can be read by it.
+        const seam = '            deriveMuSig2P2TR(publicKeys) {\n';
+        const replacement = `${seam}                return { address: '${AGGREGATE_ADDRESS}', tweaks: [] };\n`;
         expect(source, 'the dev SDK construction seam changed').toContain(seam);
         await route.fulfill({ response, body: source.replace(seam, replacement) });
     });
@@ -62,10 +58,7 @@ async function expectNoHorizontalOverflow(page, label) {
     ).toBeLessThanOrEqual(clientWidth + 1);
 }
 
-// Known product defect, listed for a fix: in CoSignerPolicyEditor's per-action
-// limit row the Remove button (md) aligns to the bottom of AmountField, which is
-// its sm Paste footer, not the field. Remove this entry once the row is fixed.
-const KNOWN_MISMATCHES = [['Paste from clipboard', 'Remove']];
+const KNOWN_MISMATCHES = [];
 
 async function expectSharedLineControlsMatch(page, label) {
     await settleLayout(page);
@@ -144,7 +137,7 @@ async function configurePolicy(page) {
 
     const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
     await perAction.getByRole('button', { name: '+ Add limit' }).click();
-    await perAction.getByLabel('Action').selectOption('SEND');
+    await perAction.getByLabel('Action', { exact: true }).selectOption('SEND');
     await perAction.getByLabel('Token').fill('BTC');
     await perAction.getByLabel('Max amount').fill('0.25');
 

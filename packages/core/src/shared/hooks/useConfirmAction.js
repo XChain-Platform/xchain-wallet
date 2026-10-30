@@ -33,25 +33,55 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     broadcastFailureKindFromError,
     BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+    isAlreadyOnNetworkRejection,
 } from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
 import { isHardPreflightFinding, preflightFindingKey } from '../utils/preflightFindingKey.js';
+import { APPROVE_REFUSAL_NAME } from '../utils/approveRefusal.js';
 import {
     clearQueuedResultHandoff,
     setQueuedResultHandoff,
 } from '../utils/submitFailureMessage.js';
 import { holdAutoLock } from './autoLockGuard.js';
+import { randomUUID } from '../../util/uuid.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
+const confirmEndListeners = new Set();
+
+/**
+ * Clear the live confirmation and tell the shells how it ended.
+ *
+ * @param {{ approved: boolean, left: boolean }} outcome
+ */
+function endActiveConfirm(outcome) {
+    activeInstanceId = null;
+    for (const listener of [...confirmEndListeners]) {
+        try { listener(outcome); } catch { /* one shell's listener cannot stop the others */ }
+    }
+}
 
 export class ConfirmActionBusyError extends Error {
     constructor() { super('A confirmation is already in progress in this window.'); this.name = 'ConfirmActionBusyError'; this.reason = 'busy'; }
 }
 export class UserRejectedError extends Error {
     constructor() { super('User rejected the action.'); this.name = 'UserRejectedError'; this.reason = 'user-rejected'; }
+}
+
+/**
+ * Mark an error an onApprove callback throws before it signs anything, such as
+ * an Approve-time re-read that finds the reviewed terms changed. Approve then
+ * hands the encoder's reserved inputs back, so the fresh review the refusal
+ * asks for can compose instead of finding every input held for minutes.
+ *
+ * @template {Error} E
+ * @param {E} err
+ * @returns {E}
+ */
+export function refusedBeforeSigning(err) {
+    return Object.assign(err, { refusedBeforeSigning: true });
 }
 
 /** @typedef {'idle'|'composing'|'preflighting'|'ready'|'signing'|'rechecking'|'done'|'error'|'signed-not-broadcast'} ConfirmPhase */
@@ -73,8 +103,46 @@ export function isConfirmOpenPhase(phase) {
     return OPEN_PHASES.includes(/** @type {string} */ (phase));
 }
 
+/**
+ * Is a confirmation running in this window, from its compose through its
+ * terminal state? A shell that would remount the open screen for an
+ * unrelated reason asks first, since a remount ends the review.
+ */
+export function isConfirmActive() {
+    return activeInstanceId !== null;
+}
+
+/**
+ * Hear each confirmation in this window end. `approved` is true once Approve
+ * was pressed, so a signing or broadcast result (or its failure) is on screen;
+ * false for a review the user cancelled or that never reached Approve.
+ * `left` is true when the form unmounted, which a navigation does.
+ *
+ * @param {(outcome: { approved: boolean, left: boolean }) => void} listener
+ * @returns {() => void}
+ */
+export function subscribeConfirmEnd(listener) {
+    confirmEndListeners.add(listener);
+    return () => { confirmEndListeners.delete(listener); };
+}
+
+// The confirmation in this window whose Approve is signing or broadcasting.
+let approvingInstanceId = null;
+
+/**
+ * Is an approved confirmation in this window still signing or broadcasting?
+ * Its result is the person's only word on what left the wallet, so a shell
+ * that would leave the screen for another surface's change waits for it.
+ */
+export function isConfirmApproving() {
+    return approvingInstanceId !== null;
+}
+
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
+    // Names this window in reservation ids. A Symbol's description is the same text in
+    // every window, so it cannot tell two windows apart.
+    const windowTag = useRef(randomUUID()).current;
     const abortRef = useRef(null);
     const resolveRef = useRef(null);
     const rejectRef = useRef(null);
@@ -116,7 +184,7 @@ export function useConfirmAction() {
     const [source, setSource] = useState(null);
 
     const teardown = useCallback(() => {
-        activeInstanceId = null;
+        endActiveConfirm({ approved: approvalBeganRef.current, left: !mountedRef.current });
         if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
         // Release any reservation this instance registered.
         const o = optsRef.current;
@@ -168,7 +236,7 @@ export function useConfirmAction() {
             if (activeInstanceId !== instanceId) return;
             releaseUnlessApproving(composedRef.current);
             if (approvalBeganRef.current) {
-                activeInstanceId = null;
+                endActiveConfirm({ approved: true, left: true });
                 return;
             }
             settleReject(new UserRejectedError());
@@ -204,6 +272,10 @@ export function useConfirmAction() {
      *   Called only when the composed action actually attaches a native-coin
      *   fee output; a composed amount outside the fresh band interrupts
      *   instead of signing.
+     * @param {() => Promise<Error | string | null>} [args.recheckBeforeSign]
+     * The form's last re-check, run after every other one and before
+     *   signing. Null lets Approve sign; an Error or a sentence (or a throw)
+     *   interrupts with that message and leaves the PSBT unsigned.
      * @param {(token: string) => Promise<any>} [args.releaseEncoderInputs]
      * Redeems the host's `releaseEncoderInputsToken` (messaging.releaseEncoderInputs)
      *   on Reject, an aborted compose or unmount, so the encoder frees the inputs it held.
@@ -352,9 +424,13 @@ export function useConfirmAction() {
         if (!args || !built) return;
         if (approveInFlightRef.current) return;
         approveInFlightRef.current = true;
+        approvingInstanceId = instanceId;
         const settleUnmountedInterruption = (err = new UserRejectedError()) => {
-            if (mountedRef.current) return;
+            // Every interruption returns before anything was signed or sent, so the
+            // reservation is the user's again: Reject and leaving the page must
+            // release it, whether the page is still mounted or not.
             approvalBeganRef.current = false;
+            if (mountedRef.current) return;
             releaseUnlessApproving(built);
             settleReject(err);
         };
@@ -468,6 +544,33 @@ export function useConfirmAction() {
             updateMounted(() => setPhase('signing'));
         }
 
+        // The form's own last word before signing. An action whose validity
+        // rests on chain state the wallet does not control (who owns a token
+        // name) re-reads that state here, after the user has read the review,
+        // and an answer other than null stops the signature. A re-check that
+        // throws refuses too: the form chose to ask, so an unanswered question
+        // never signs. Ungated by staleness for the same reason as the
+        // re-quote above: what it protects can change one block after compose.
+        if (typeof args.recheckBeforeSign === 'function') {
+            updateMounted(() => setPhase('rechecking'));
+            let refusal = null;
+            try {
+                refusal = await args.recheckBeforeSign();
+            } catch (err) {
+                refusal = err;
+            }
+            if (refusal) {
+                const err = refusal instanceof Error ? refusal : new Error(String(refusal));
+                updateMounted(() => {
+                    setError(err);
+                    setPhase('ready');
+                });
+                settleUnmountedInterruption(err);
+                return { interrupted: true, reason: 'recheck-refused' };
+            }
+            updateMounted(() => setPhase('signing'));
+        }
+
         // §4.7 reservation at Approve (post sync-disable, before async signing).
         // Guarded on reservationId: a credential re-prompt (§5.3.4) calls
         // approve() again for the SAME composed PSBT, and re-reserving would
@@ -482,7 +585,7 @@ export function useConfirmAction() {
             ? args.reserve
             : reserveFromSimulation(built.simulation);
         if (args.reservationLedger && reserve && reserve.tick && !optsRef.current.reservationId) {
-            const rid = built.actionString + ':' + String(instanceId).slice(0, 8) + ':' + Date.now();
+            const rid = built.actionString + ':' + windowTag + ':' + Date.now();
             optsRef.current.reservationId = rid;
             try {
                 await args.reservationLedger.reserve({
@@ -504,6 +607,7 @@ export function useConfirmAction() {
                     setError(hardwareRetryError);
                     setPhase('ready');
                 });
+                approvalBeganRef.current = false;
                 return { interrupted: true, reason: 'hardware-retry' };
             }
 
@@ -547,13 +651,34 @@ export function useConfirmAction() {
             if (kind === 'permanent') {
                 // Can never confirm as-is (inputs spent / confirmed conflict).
                 // PendingTx is already `failed` (or `broadcast` when the commit had
-                // landed); re-signing is forbidden, so the caller must re-compose. Terminal error.
+                // landed); re-signing is forbidden, so the caller must re-compose.
+                // The dead build cannot spend its held inputs, so a fresh compose
+                // gets them back immediately. A release failure does not replace
+                // the refusal because the encoder also expires the hold itself.
+                if (!isAlreadyOnNetworkRejection(err)) {
+                    try {
+                        await releaseEncoderInputs(
+                            built,
+                            releasedEncoderInputsRef.current,
+                            args.releaseEncoderInputs,
+                        );
+                    } catch { /* the reservation lapses on its own */ }
+                }
                 updateMounted(() => {
                     setPhase('error');
                     setError(err);
                 });
                 settleReject(err);
                 return undefined;
+            }
+
+            // The caller refused before signing, or the form's own Approve-time
+            // check refused before anything was signed, so nothing can spend the
+            // reserved inputs: hand them back like a Reject would. Kept, the hold
+            // refuses every compose over the same coins for minutes.
+            if (err?.refusedBeforeSigning === true || err?.name === APPROVE_REFUSAL_NAME) {
+                approvalBeganRef.current = false;
+                releaseUnlessApproving(built);
             }
 
             // Everything else is terminal.
@@ -566,10 +691,11 @@ export function useConfirmAction() {
         }
         } finally {
             approveInFlightRef.current = false;
+            if (approvingInstanceId === instanceId) approvingInstanceId = null;
             releaseAutoLock();
         }
     }, [
-        report, acknowledged, instanceId, settleResolve, settleReject,
+        report, acknowledged, instanceId, windowTag, settleResolve, settleReject,
         updateMounted, releaseUnlessApproving,
     ]);
 

@@ -35,7 +35,11 @@ assert.match(form, /cannot wake itself early|cannot be undone before the wake bl
 assert.match(form, /label="Duration \(blocks\)"/, 'finite pause input names its block unit');
 assert.match(form, /native coins are not\s+locked/, 'address copy distinguishes protocol actions from native coins');
 assert.match(form, /label="Wake condition"/, 'legacy review repeats the exact wake rule');
-assert.match(form, /toUpperCase\(\) === 'LOCK'/, 'address mode requires a typed confirm');
+assert.match(
+    form,
+    /const typedConfirmOk = isTick \|\| isExactTypedConfirmation\(typedConfirm, 'LOCK'\)/,
+    'address mode requires the shared exact-match typed confirm',
+);
 assert.match(form, /label="Type LOCK to confirm"/, 'typed confirm uses the screen\'s own verb');
 assert.ok(!/humanizeError\(err, 'sleep'\)|'Sleep failed\.'|Type SLEEP to confirm/.test(form), 'no raw SLEEP wording in user-facing copy');
 assert.match(form, /interpretSleep/, 'current pause state shown');

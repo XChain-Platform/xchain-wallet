@@ -1,13 +1,10 @@
 /* WalletDetails read-only metadata list. */
 .detailList {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: 0;
     margin: 0;
-    padding: 0;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .detailRow {
@@ -107,15 +104,19 @@
 }
 
 /* Scoped to the row so the absolute placement outranks the kit Button's
-   position and variant whatever order the stylesheets load in. */
+   position and variant whatever order the stylesheets load in. The button is
+   centred with auto block margins, not a translate: the kit's pressed state
+   sets its own transform, which replaced a centring translate and dropped the
+   button half its height on press, so the release landed on the row and the
+   click never reached the button. */
 .rowWrap .rowMenuBtn {
     appearance: none;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     position: absolute;
-    top: 50%;
+    inset-block: 0;
+    margin-block: auto;
     inset-inline-end: 8px;
-    transform: translateY(-50%);
     z-index: 1;
     width: var(--xc-button-height);
     height: var(--xc-button-height);
@@ -125,9 +126,7 @@
     justify-content: center;
     color: var(--xc-text-muted);
     cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-    font-size: 18px;
-    line-height: 1;
+    border-radius: var(--xc-control-radius);
 }
 
 .rowWrap .rowMenuBtn:hover {

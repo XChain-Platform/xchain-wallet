@@ -178,6 +178,26 @@ export const nativeBiometricProvider = {
     },
 
     /**
+     * Ask the device afresh whether a wrap is stored. Unlike
+     * `refreshBiometricEnrollment`, a probe that fails or answers without an
+     * `enrolled` flag gives null, not false: a password change about to
+     * retire the wrap must not read "could not ask" as "there is none".
+     *
+     * @returns {Promise<boolean | null>}
+     */
+    async confirmRegistered() {
+        if (!hasNativeVault()) return false;
+        try {
+            const reply = await callNativeVault('biometricStatus');
+            if (typeof reply?.enrolled !== 'boolean') return null;
+            enrolledCache = reply.enrolled;
+            return enrolledCache;
+        } catch (_err) {
+            return null;
+        }
+    },
+
+    /**
      * Wrap the password behind a fresh biometric authentication.
      *
      * The prompt at enrollment time is not ceremony: it proves the person
@@ -219,10 +239,20 @@ export const nativeBiometricProvider = {
                 return new TextDecoder().decode(base64ToBytes(reply.secret));
             }
             case VaultStatus.ABSENT:
-                // The wrap is gone: enrollment changed, or the key was
-                // invalidated. Drop the cached flag so the affordance stops
-                // being offered, and let the user fall back to the password.
+                // The wrap is gone or can never open again: enrollment
+                // changed, or the key was invalidated. Android deletes its
+                // key at that point; iOS leaves the invalidated Keychain item
+                // in place, still holding the password as it was at
+                // enrolment, and a later password change skips the native
+                // clear because it reads the cached flag this branch drops.
+                // So the wrap is discarded here, then the user falls back to
+                // the password whether or not the discard went through.
                 enrolledCache = false;
+                try {
+                    await callNativeVault('biometricClear');
+                } catch (_err) {
+                    // The password fallback stands either way.
+                }
                 throw new BiometricNotRegisteredError();
             default:
                 if (reply?.detail === BIOMETRIC_CANCELLED_DETAIL) throw new BiometricCancelledError();

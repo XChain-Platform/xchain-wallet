@@ -26,6 +26,8 @@
 // opposite job (classifying node / SDK failures into recovery causes); use
 // this one when the flow layer already owns the wording.
 
+import { t } from '../../i18n/index.js';
+
 // A leading `identifier:` or `some.namespaced.identifier:` segment. Anchored
 // on a lowercase first letter and no internal whitespace, so real copy
 // ("Note: keep a backup") is not mistaken for a function prefix.
@@ -33,13 +35,43 @@ export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.
-const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token/i;
+const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token|a listener indicated an asynchronous response|the message port closed before a response was received/i;
 const ERROR_CODE = /\b(?:ERR_[A-Z0-9_]+|E_[A-Z0-9_]+|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b/;
 const INTERNAL_NAME = /\b[A-Z][A-Za-z0-9]+(?:Error|Exception)\b/;
 const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|(?:^|\n)\s*at\s+\S+|\b[A-Za-z0-9_.-]+\.(?:[cm]?js|jsx|ts|tsx):\d+:\d+\b|request failed with status code\s+\d{3}|^(?:rpc|http)\s+(?:error|code)\b/i;
 const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
 const ENCODER_REFUSAL_PREFIX = /^Encoder RPC error:\s*/i;
 const MAX_REFUSAL_REASON_LENGTH = 500;
+// Codes on errors the wallet itself raises with a sentence written for the user
+// (the confirm page's refusals, a cosigner reply whose signature or step 1
+// nonce does not check out); the code names the case and is not developer
+// output, so it must not hide that sentence.
+const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT', 'MULTISIG_SIGNATURE_INVALID', 'MULTISIG_NONCE_INVALID']);
+// A rejected private key carries the SDK's machine code beside a sentence the
+// flow already wrote for the user (wifFailureMessage), so the code must not
+// hide that sentence.
+const USER_COPY_ERROR_NAMES = new Set(['InvalidWifError']);
+// The encoder's coin-selection shortfall is a build failure, not a rule the
+// node enforced, so it keeps the encoder copy that says nothing was signed or
+// sent instead of being shown as a bare reason.
+const COIN_SELECTION_SHORTFALL = /^insufficient funds: (?:selected inputs total|all \d+ candidate input)/i;
+const INTERNAL_RPC_FAILURE = /^internal (?:server )?error\b/i;
+
+/**
+ * True when the encoder returned a service failure rather than a protocol
+ * verdict. The encoder uses -32010 for real refusals too, so a reserved server
+ * code is treated as a failure only when it carries no machine-readable reason.
+ * The text check preserves that distinction after messaging drops RPC details.
+ */
+function isInternalRpcFailure(e, reason) {
+    if (INTERNAL_RPC_FAILURE.test(reason)) return true;
+    const rpcError = e.details?.rpcError || e.rpcError;
+    const code = Number(rpcError?.code);
+    if (code === -32603) return true;
+    if (!Number.isInteger(code) || code < -32099 || code > -32000) return false;
+    const protocolReason = rpcError?.data?.reason || e.details?.context?.reason || e.data?.reason;
+    return !String(protocolReason || '').trim();
+}
 
 /**
  * True when text contains a machine error code or an internal error type.
@@ -103,10 +135,52 @@ export function protocolRefusalReason(err) {
     const message = errorText(err);
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
-    if (!reason || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
+    if (!reason || isInternalRpcFailure(e, reason) || COIN_SELECTION_SHORTFALL.test(reason)
+        || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
         return null;
     }
     return reason.slice(0, MAX_REFUSAL_REASON_LENGTH).trimEnd();
+}
+
+/**
+ * True when `text`, a wallet sentence quoting a network verdict, may be shown
+ * as written. A verdict names the protocol field it refused (`MINT_ADDRESS_MAX`,
+ * `ORACLE_ADDRESS`), which the general filter reads as an error code; that is
+ * the user's one clue to what to change, so only the checks that mark real
+ * developer output apply here, the same ones `protocolRefusalReason` uses.
+ *
+ * @param {unknown} text
+ * @returns {boolean}
+ */
+export function isShowableRefusal(text) {
+    const value = typeof text === 'string' ? text.trim() : '';
+    return Boolean(value)
+        && value.length <= MAX_REFUSAL_REASON_LENGTH
+        && !DEV_PREFIX.test(value)
+        && !INTERNALS.test(value)
+        && !INTERNAL_NAME.test(value)
+        && !WIRE_TEXT.test(value)
+        && !SERIALIZED_DATA.test(value);
+}
+
+/** Shown when the SDK refuses to build an address of a type it does not know. */
+export const UNSUPPORTED_ADDRESS_TYPE_MESSAGE = 'This address type is not available yet. Choose another address type.';
+
+/**
+ * The clear message for the SDK's unknown-address-type refusal, or null for any
+ * other error. The refusal names the SDK's own list of types, which is
+ * developer output, and without this branch it falls to the caller's generic
+ * fallback (for address generation, a hint about unlocking the wallet).
+ *
+ * @param {unknown} err
+ * @returns {string|null}
+ */
+export function unsupportedAddressTypeMessage(err) {
+    const code = err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
+    if (code === 'INVALID_ADDRESS_TYPE' || /unknown address type/i.test(errorText(err))) {
+        return UNSUPPORTED_ADDRESS_TYPE_MESSAGE;
+    }
+    return null;
 }
 
 /**
@@ -116,11 +190,26 @@ export function protocolRefusalReason(err) {
  * @returns {string}
  */
 export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
+    if (isVaultConflictError(err)) return t('common.vaultConflict');
     const refusal = protocolRefusalReason(err);
     if (refusal) return refusal;
+    const unsupportedType = unsupportedAddressTypeMessage(err);
+    if (unsupportedType) return unsupportedType;
     const text = errorText(err);
     if (isDeveloperMessage(err)) return fallback;
     return text;
+}
+
+/**
+ * A vault write can cross a shell message boundary and lose its prototype.
+ * The error name remains stable in every shell, so it is the discriminator.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isVaultConflictError(err) {
+    return Boolean(err && typeof err === 'object'
+        && /** @type {any} */ (err).name === 'VaultConflictError');
 }
 
 /**
@@ -139,7 +228,7 @@ export function isDeveloperMessage(err) {
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
         if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
-        if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && !USER_COPY_ERROR_NAMES.has(String(e.name || '')) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
         || containsInternalErrorIdentifier(text)

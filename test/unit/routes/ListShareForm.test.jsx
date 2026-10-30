@@ -196,15 +196,17 @@ describe('ListShareForm', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('requires the case-sensitive SHARE confirmation before Review', async () => {
+    it('requires exact uppercase SHARE before Review', async () => {
         const messaging = mount();
         const confirm = await screen.findByLabelText('Type SHARE to confirm');
         const review = screen.getByRole('button', { name: 'Review' });
 
         expect(review.disabled).toBe(true);
-        fireEvent.change(confirm, { target: { value: 'share' } });
-        expect(review.disabled).toBe(true);
-        fireEvent.change(confirm, { target: { value: ' SHARE ' } });
+        for (const value of ['share', ' SHARE', 'SHARE ', 'Share']) {
+            fireEvent.change(confirm, { target: { value } });
+            expect(review.disabled).toBe(true);
+        }
+        fireEvent.change(confirm, { target: { value: 'SHARE' } });
         expect(review.disabled).toBe(false);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
@@ -280,6 +282,17 @@ describe('ListShareForm', () => {
         expect(screen.getByText(/share signed by another address will be refused/i)).toBeTruthy();
     });
 
+    it('puts the owner reason and the list reasons in one warning notice', async () => {
+        mount({ addresses: [ACTIVE_RECORD], detail: baseDetail({ type: 9 }) });
+
+        const owner = await screen.findByText(/current owner.*is not an address in this wallet/i);
+        const notice = owner.closest('[role="alert"]');
+        expect(notice).toBeTruthy();
+        expect(notice.textContent).toMatch(/Only token and address lists can be shared/);
+        expect(document.querySelectorAll('[role="alert"]').length).toBe(1);
+        expect(notice.textContent.indexOf('current owner')).toBeLessThan(notice.textContent.indexOf('Only token'));
+    });
+
     it.each([
         ['false', { share: false, transfer: true, union: true }],
         ['absent', { transfer: true, union: true }],
@@ -296,5 +309,21 @@ describe('ListShareForm', () => {
         expect(screen.getByLabelText('Type SHARE to confirm').disabled).toBe(true);
         expect(screen.getByLabelText('Pay protocol fee in BTC instead of XCHAIN').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('stops before signing when the list changed owner after the form opened', async () => {
+        const messaging = mount();
+        fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
+            target: { value: 'SHARE' },
+        });
+        messaging.getListByActionIndex.mockResolvedValueOnce(baseDetail({
+            state: { owner: ROOT_OWNER, edit_resolution_active: true, current_list: ['bc1qmember'] },
+        }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            'This list has a different owner than when this screen opened. Review the owner and try again.',
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

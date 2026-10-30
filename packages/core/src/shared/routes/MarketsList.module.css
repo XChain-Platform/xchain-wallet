@@ -20,14 +20,11 @@
    name for a token, and a chevron. Receive's selector is icon-only now, so
    Markets owns this card. */
 .assetCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-block-end: var(--xc-space-3);
     color: var(--xc-text);
     text-align: start;
@@ -63,10 +60,8 @@
 
 /* The market list sits in the same card chrome as the selector. */
 .marketsCard {
+    composes: flush from '../../ui/Card.module.css';
     margin-block-end: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -115,6 +110,34 @@
     cursor: pointer;
 }
 
+/* The change and depth figures keep their full width. A trailing slot capped at
+   half the row centred an overflowing figure column, so at larger text sizes
+   the depth pill spilled past the button into the row padding; the pair name
+   gives way instead. */
+.marketButton .marketTrailing {
+    flex: 0 0 auto;
+    max-width: none;
+}
+
+.pairChip {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.pairTick {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The quote side (usually a short coin) keeps its full width up to half the
+   chip, so the long side is the one that gives way. */
+.pairTick:last-child {
+    flex-shrink: 0;
+    max-width: 50%;
+}
+
 .marketButton:disabled {
     cursor: not-allowed;
 }
@@ -130,4 +153,26 @@
 .paginationCount {
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+/* The tab strip keeps its natural width beside the search field when there is
+   room. On a phone it takes its own full-width row and each tab shares it, so
+   the strip's underline and the selected tab's underline span the row. */
+.marketTabs {
+    flex: 1 1 100%;
+}
+
+.marketTabs > * {
+    flex: 1 1 0;
+}
+
+@media (min-width: 600px) {
+    .marketTabs {
+        flex: 0 0 auto;
+        width: auto;
+    }
+
+    .marketTabs > * {
+        flex: 0 1 auto;
+    }
 }

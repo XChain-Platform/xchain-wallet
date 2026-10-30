@@ -227,6 +227,17 @@ describe('SweepForm form-level errors (D-58)', () => {
         expect(q.container).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
+    it('says a malformed destination once, under the field only', async () => {
+        const q = await mountSweep();
+
+        fireEvent.change(q.destination(), { target: { value: 'not-an-address' } });
+        fireEvent.click(q.submit());
+
+        await waitFor(() => expect(q.alerts()).toMatch(/not a valid Bitcoin address/i));
+        const copies = q.container.textContent.split('is not a valid Bitcoin address').length - 1;
+        expect(copies).toBe(1);
+    });
+
     it('an empty destination errors with the reason instead of a dead button', async () => {
         const q = await mountSweep();
 
@@ -306,6 +317,24 @@ describe('SweepForm form-level errors (D-58)', () => {
     });
 });
 
+describe('SweepForm destination spelling', () => {
+    it('treats the capitalised source address as the source itself', async () => {
+        const q = await mountSweep();
+        fireEvent.change(q.destination(), { target: { value: SOURCE.address.toUpperCase() } });
+        fireEvent.click(q.submit());
+        await waitFor(() => expect(q.alerts()).toMatch(/would move nothing anywhere/));
+    });
+
+    it('does not announce a capitalised copy of an own address as a third party', async () => {
+        const second = { ...SOURCE, id: 'addr-own-2', address: OTHER };
+        const q = await mountSweep({
+            addressesByChain: { [CHAIN]: [SOURCE, second] },
+        });
+        fireEvent.change(q.destination(), { target: { value: OTHER.toUpperCase() } });
+        await waitFor(() => expect(q.container.textContent).not.toContain('Not your address'));
+    });
+});
+
 describe('SweepForm gated key details', () => {
     it('lists every missing unlock key hash', async () => {
         const { container, missingHash } = await mountGatedSweep();
@@ -325,6 +354,22 @@ describe('SweepForm preview and navigation states', () => {
             expect(q.container.textContent).toContain(
                 'Nothing is currently shown in the selected categories.',
             );
+        });
+    });
+
+    it('renders one unavailable help line when multiple selected categories fail preview', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => Promise.resolve({
+                ...EMPTY_PREVIEW,
+                balances: { rows: [], error: 'balance preview failed' },
+                ownerships: { rows: [], error: 'ownership preview failed' },
+            }),
+        });
+
+        await waitFor(() => {
+            const copies = Array.from(q.container.querySelectorAll('p'))
+                .filter((node) => node.textContent === 'Preview unavailable for this category; the sweep still moves it.');
+            expect(copies).toHaveLength(1);
         });
     });
 

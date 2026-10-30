@@ -31,7 +31,11 @@ try {
     const sameB = join(work, 'same.json');
     writeFileSync(differA, '{"name":"x","version":"1.0.0"}');
     writeFileSync(differB, '{"name":"x","version":"1.0.1"}');
-    writeFileSync(sameB, '{"name":"x","version":"1.0.0","key":"K","update_url":"U"}');
+    const keyedB = join(work, 'keyed.json');
+    // The store injects update_url only, so a manifest differing by update_url alone is the same.
+    writeFileSync(sameB, '{"name":"x","version":"1.0.0","update_url":"U"}');
+    // key stays in the comparison: a differing key must fail.
+    writeFileSync(keyedB, '{"name":"x","version":"1.0.0","key":"K"}');
 
     // Reach the same release directory through a symlink, and a copy of manifest-diff through a spaced path.
     const link = join(work, 'rel-link');
@@ -49,6 +53,9 @@ try {
         const same = node(script, [differA, sameB]);
         assert.equal(same.status, 0, same.stderr);
         assert.match(same.stdout, /manifest-diff: ok/);
+        const keyed = node(script, [differA, keyedB]);
+        assert.equal(keyed.status, 1, 'manifest-diff ignored a differing key');
+        assert.match(keyed.stderr, /key/);
     }
 
     // A pin path that does not exist is exit 3; a skipped CLI would exit 0 having said nothing.

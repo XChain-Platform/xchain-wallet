@@ -299,7 +299,7 @@ fi
 # --- Pristine-clone gate (§6) ------------------------------------
 #
 # The tag must exist, HEAD must be sitting on it, and the worktree must
-# be clean. This is not defensive programming: `~/Sites` is shared with a
+# be clean. This is not defensive programming: the dev checkout directory is shared with a
 # second coder over NFS and a neighbour's uncommitted edits have compiled
 # into a wallet build there before. A release signed out of that tree
 # carries their work-in-progress under the maintainer's signature, and
@@ -479,6 +479,50 @@ if [[ -z "$TAG_VERSION" ]]; then
     echo "sign.sh: --tag '$TAG' carries no X.Y.Z version to check the artifacts against." >&2
     exit 2
 fi
+
+derive_extension_version() {
+    local release="$1" major minor patch lane_number value segment
+    if [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number=""
+    elif [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-(rc|beta)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number="${BASH_REMATCH[5]}"
+        for segment in "$major" "$minor" "$patch" "$lane_number"; do
+            [[ "$segment" =~ ^[0-9]{1,5}$ ]] || return 1
+            value=$((10#$segment))
+            (( value <= 65535 )) || return 1
+        done
+        (( 10#$lane_number > 0 )) || return 1
+        printf '0.%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$lane_number))"
+        return 0
+    elif [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-respin\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number="${BASH_REMATCH[4]}"
+    else
+        return 1
+    fi
+
+    for segment in "$major" "$minor" "$patch" ${lane_number:+"$lane_number"}; do
+        [[ "$segment" =~ ^[0-9]{1,5}$ ]] || return 1
+        value=$((10#$segment))
+        (( value <= 65535 )) || return 1
+    done
+    if [[ -n "$lane_number" ]]; then
+        (( 10#$lane_number > 0 )) || return 1
+        printf '%d.%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$patch))" "$((10#$lane_number))"
+    else
+        printf '%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$patch))"
+    fi
+}
+
+TAG_RELEASE_VERSION="${TAG#v}"
+if ! EXPECTED_EXTENSION_VERSION="$(derive_extension_version "$TAG_RELEASE_VERSION")"; then
+    echo "sign.sh: --tag '$TAG' cannot be represented as a Chrome extension version." >&2
+    echo "  Expected M.m.p, M.m.p-rc.N, M.m.p-beta.N or M.m.p-respin.N" >&2
+    echo "  with components from 0 through 65535 and a positive lane number." >&2
+    exit 2
+fi
 VERSION_MISMATCH=""
 while IFS= read -r artifact; do
     name="$(basename "$artifact")"
@@ -528,12 +572,16 @@ while IFS= read -r artifact; do
     # No node_modules in a pristine clone (row 50), so this stays dependency
     # free: unzip to stdout, and a regex over the one field.
     inner="$(unzip -p "$artifact" manifest.json 2>/dev/null \
-        | grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' \
-        | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+        | grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+){0,3}"' \
+        | head -1 | grep -oE '[0-9]+(\.[0-9]+){0,3}' || true)"
     if [[ -z "$inner" ]]; then
         INTERNAL_MISMATCH+="    $name: no readable manifest.json version inside the zip"$'\n'
-    elif [[ "$inner" != "$TAG_VERSION" ]]; then
-        INTERNAL_MISMATCH+="    $name: manifest.json says $inner, the tag says $TAG_VERSION"$'\n'
+    elif [[ "$inner" != "$EXPECTED_EXTENSION_VERSION" ]]; then
+        if [[ "$EXPECTED_EXTENSION_VERSION" == "$TAG_RELEASE_VERSION" ]]; then
+            INTERNAL_MISMATCH+="    $name: manifest.json says $inner, the tag says $TAG_RELEASE_VERSION"$'\n'
+        else
+            INTERNAL_MISMATCH+="    $name: manifest.json says $inner, tag $TAG_RELEASE_VERSION derives to $EXPECTED_EXTENSION_VERSION"$'\n'
+        fi
     fi
 done < <(find "$INPUT_DIR" -maxdepth 1 -type f | sort)
 
@@ -758,6 +806,11 @@ xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 # signature says they do: an artifact signed under the wrong arch installs,
 # verifies against this manifest, and cannot start.
 xr_check_payload_arches "$INPUT_DIR"
+# Guarded expansion: an empty array under set -u aborts on bash 3.2.
+PAYLOAD_UNCHECKED=""
+if [[ ${#XR_PAYLOAD_UNCHECKED[@]} -gt 0 ]]; then
+    PAYLOAD_UNCHECKED="$(printf '%s\n' "${XR_PAYLOAD_UNCHECKED[@]}")"
+fi
 
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
@@ -889,7 +942,8 @@ if [[ "$UNATTENDED" -eq 1 && "$RELEASE_SET" != "staging" ]]; then
     SIGNING_PROVENANCE="unattended"
 fi
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
-    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS" "$SIGNING_PROVENANCE"
+    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS" "$SIGNING_PROVENANCE" \
+    "$PAYLOAD_UNCHECKED"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
 # Loopback pinentry ONLY when a passphrase file was supplied. The array

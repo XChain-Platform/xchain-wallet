@@ -18,8 +18,8 @@ import { useCommandPalette } from '../../../packages/core/src/shared/commandPale
 
 afterEach(() => cleanup());
 
-function Harness({ enabled = true, handlers }) {
-    useKeyboardShortcuts({ enabled, handlers });
+function Harness({ enabled = true, handlers, overrides }) {
+    useKeyboardShortcuts({ enabled, handlers, overrides });
     // An input to exercise the editable-focus guard.
     return <input aria-label="field" />;
 }
@@ -35,10 +35,10 @@ const press = (init) => fireEvent.keyDown(document.body, init);
 describe('useKeyboardShortcuts', () => {
     it('fires modifier combos outside editable fields', () => {
         const h = setup();
-        press({ key: 'l', ctrlKey: true });
-        expect(h.lock).toHaveBeenCalledOnce();
-        press({ key: ',', ctrlKey: true });
-        expect(h.navigate).toHaveBeenCalledWith('settings');
+        press({ key: 'k', ctrlKey: true });
+        expect(h.lock).not.toHaveBeenCalled();
+        press({ key: '/', ctrlKey: true });
+        expect(h.openHelp).toHaveBeenCalledOnce();
     });
 
     it('maps mod to Meta on macOS and Control on Windows and Linux', () => {
@@ -69,10 +69,34 @@ describe('useKeyboardShortcuts', () => {
         expect(palette.open).toBe(false);
     });
 
-    it('Cmd/Ctrl+N maps to a new send', () => {
+    it('G then N maps to a new send, and the browser-held combos do nothing', () => {
         const h = setup();
-        press({ key: 'n', ctrlKey: true });
+        press({ key: 'g' });
+        press({ key: 'n' });
         expect(h.navigate).toHaveBeenCalledWith('send');
+        h.navigate.mockClear();
+        press({ key: 'n', ctrlKey: true });
+        press({ key: 'l', ctrlKey: true });
+        press({ key: ',', ctrlKey: true });
+        expect(h.navigate).not.toHaveBeenCalled();
+        expect(h.lock).not.toHaveBeenCalled();
+    });
+
+    it('G then L locks and G then E opens settings', () => {
+        const h = setup();
+        press({ key: 'g' });
+        press({ key: 'l' });
+        expect(h.lock).toHaveBeenCalledOnce();
+        press({ key: 'g' });
+        press({ key: 'e' });
+        expect(h.navigate).toHaveBeenLastCalledWith('settings');
+    });
+
+    it('a stored combo override still fires for a moved default', () => {
+        const h = { navigate: vi.fn(), lock: vi.fn(), openHelp: vi.fn() };
+        render(<Harness handlers={h} overrides={{ lock: 'mod+j' }} />);
+        press({ key: 'j', ctrlKey: true });
+        expect(h.lock).toHaveBeenCalledOnce();
     });
 
     it('does NOT handle Cmd/Ctrl+K (owned by the command palette)', () => {

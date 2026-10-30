@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign §11.5's last leg: the Approve-time re-quote, driven by
-// actually moving the price out from under an open confirm screen.
+// Campaign §11.5's last leg: the Approve-time re-quote, driven by a price
+// that differs between compose and Approve under an open confirm screen.
 //
 // WHY THIS IS THE EXPENSIVE ONE. A native-coin protocol fee is a REAL output,
 // sized at COMPOSE from the indexer's quote, and FORFEITED when the action is
@@ -21,28 +21,21 @@
 // and the protocol fee is kept. A confirm screen left open while the user
 // checks something else is the ordinary way to get there.
 //
-// Before the wallet re-ran its per-block pre-flight ("Checked at block
-// N") but never re-checked the AMOUNT, so it broadcast the PSBT it had already
-// built. This spec is the proof that it now refuses instead.
+// This spec is the proof that the wallet re-checks the AMOUNT at Approve and
+// refuses, instead of broadcasting the PSBT it already built.
 //
-// THE MOVE IS ENGINEERED, NOT WAITED FOR, and the arithmetic is the whole test:
-// at BTC/USD $100,000 an ISSUE's fee quotes 2,000 sats. Halving the price to
-// $50,000 doubles the requirement to 4,000, whose `minAcceptable` is 3,800. The
-// composed transaction pays 2,000, which is below it - verdict `short`, the one
-// the money depends on.
-//
-// TWO VENUE FACTS THIS RUN DEPENDS ON, both learned the hard way elsewhere in
-// this campaign:
-// - The indexer MEMOIZES its verdict per block height, so a re-quote
-//     at the same height replays the old answer and reads exactly like "the
-//     re-price did not work". Mine after writing.
-//   - `seedPrices()` deliberately refuses to write over a venue that already
-//     prices, which is right for setup and useless here, so this spec writes
-//     the rows itself through the same credential-free `runInIndexer` path.
-//
-// The price is restored at the end. It is a shared venue.
+// THE MOVE IS ENGINEERED AT COMPOSE, AND APPROVE READS THE VENUE AS IT IS. The
+// venue's hub prices the coin from its own oracle, and the e2e price seed
+// stands aside for a live oracle (priceSeed.js), so the venue's price cannot be
+// moved from here. Instead the wallet composes while every native-fee quote it
+// fetches is the venue's own answer valued at TWICE the coin price: half the
+// sats, half the band. Once Approve is live the rewrite is removed, so the
+// Approve-time re-quote reaches the venue's real oracle, which asks for about
+// double what the composed transaction pays - the `short` verdict the money
+// depends on, judged against the fee the hub actually quotes. Nothing is
+// written to the venue, so there is nothing to restore.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -54,23 +47,23 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     REGTEST_TICKER,
-    runInIndexer,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
 } from '../../fixtures/regtest.js';
-import { VENUE_PRICE, SYNTHETIC_ROUNDS, writeRowsScript } from '../../fixtures/priceSeed.js';
+import { feeQuoteAtCoinPriceFactor } from '../../fixtures/feeQuoteAtPrice.js';
+import { EXPLORER_RATE_LIMIT_DEFAULTS } from '../../../../packages/core/src/sdk/explorerRateLimit.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 100;
 const SUPPLY = '1000';
 const TICK = `RQT${Date.now().toString().slice(-6)}`;
 
-// Half the fixture's price, so the fee requirement doubles. Chosen as a factor
-// rather than an absolute so this keeps meaning the same thing if the fixture's
-// price is ever retuned.
-const HALVED = (base) => (Number(base) / 2).toFixed(8);
+// The coin price the compose-time quotes are valued at, as a multiple of the
+// venue's own. Doubling it halves the fee, so the venue's real quote at Approve
+// asks for twice what the composed transaction pays.
+const COMPOSE_PRICE_FACTOR = 2;
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -96,42 +89,46 @@ async function mempoolSize() {
 }
 
 /**
- * Re-prices the venue's coin pair, then mines until the public read agrees.
+ * Serves the venue's own native-fee quotes valued at COMPOSE_PRICE_FACTOR times
+ * its coin price until the returned `release` is called.
  *
- * Every round the venue already carries for the pair is rewritten, not just the
- * highest: selection is `ORDER BY round_number DESC`, so leaving a higher row
- * behind would leave the old price winning and the spec would silently prove
- * nothing. Only rounds the tree mints synthetically are touched.
+ * Identity fields pass through untouched (feeQuoteAtCoinPriceFactor), so the
+ * composed transaction and the Approve-time re-quote stay comparable.
+ *
+ * `release` also outlasts the wallet's read reuse window: a GET answered that
+ * recently is served again instead of re-sent, so an Approve inside it would
+ * re-quote against the answer this route served rather than the venue.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<{ served: () => number | null, release: () => Promise<void> }>}
  */
-async function reprice(coinPair, price, quoteParams) {
-    const wallTime = Math.floor(Date.now() / 1000);
-    const rows = SYNTHETIC_ROUNDS.map((roundNumber) => ({
-        coinPair, price, roundNumber, blockTimestamp: wallTime,
-    }));
-    await runInIndexer(writeRowsScript(rows));
-
-    // The verdict is memoized per block height, so a new block is what makes
-    // the new price observable at all.
-    for (let i = 0; i < 6; i++) {
-        await minerRpc('generate_blocks', { count: 1 }).catch(() => {});
-        await new Promise((r) => setTimeout(r, 2_500));
-        const q = await feeQuoteSats(quoteParams);
-        if (q.valid) return q;
-    }
-    throw new Error(`re-pricing ${coinPair} to ${price} never became visible to /feequote`);
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+async function holdComposeQuotesAtHigherPrice(page) {
+    const pattern = `${EXPLORER_URL}/${REGTEST_COIN}/api/feequote**`;
+    let lastServedSats = null;
+    let lastServedAt = 0;
+    const handler = async (route) => {
+        const response = await route.fetch();
+        const revalued = feeQuoteAtCoinPriceFactor(
+            await response.json().catch(() => null), COMPOSE_PRICE_FACTOR);
+        if (!revalued) {
+            await route.fulfill({ response });
+            return;
+        }
+        lastServedSats = Number(revalued.requiredFeeSats);
+        lastServedAt = Date.now();
+        await route.fulfill({ response, json: revalued });
+    };
+    await page.route(pattern, handler);
+    return {
+        served: () => lastServedSats,
+        release: async () => {
+            await page.unroute(pattern, handler);
+            await expect.poll(() => Date.now() - lastServedAt, {
+                message: 'the compose-time quote is still inside the wallet\'s read reuse window',
+                timeout: EXPLORER_RATE_LIMIT_DEFAULTS.reuseMs * 5,
+            }).toBeGreaterThan(EXPLORER_RATE_LIMIT_DEFAULTS.reuseMs * 2);
+        },
+    };
 }
 
 function feeToggle(scope) {
@@ -158,17 +155,16 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
     test.setTimeout(1_800_000);
 
     test('a fee that went short between compose and Approve is refused, not broadcast', async ({ page }) => {
-        const venue = VENUE_PRICE[REGTEST_COIN];
-        expect(venue, `no fixture price for ${REGTEST_COIN}`).toBeTruthy();
         const params = `${TICK}|${SUPPLY}|0|0|0`;
         let source;
         let composedSats;
+        let composeQuotes;
 
         await test.step('onboard, fund, and record what the fee costs now', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Requote Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -185,14 +181,14 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
 
             const q = await feeQuoteSats(params);
             expect(q.valid, `the venue cannot price this action (${q.status})`).toBe(true);
-            composedSats = q.sats;
-            expect(composedSats, 'the quoted fee is not a positive number of sats').toBeGreaterThan(0);
+            expect(q.sats, 'the quoted fee is not a positive number of sats').toBeGreaterThan(0);
         });
 
-        await test.step('compose with the coin fee attached and hold the confirm screen', async () => {
+        await test.step('compose at the higher coin price and hold the confirm screen', async () => {
+            composeQuotes = await holdComposeQuotesAtHigherPrice(page);
             // The funding step reloads to pick the balance up, which unmounts the
             // route back to Home - so the form has to be re-opened, not reused.
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -210,16 +206,20 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
             await expect(page.getByTestId('confirm-approve'),
                 'Approve was not enabled before the price moved, so this run cannot attribute the refusal')
                 .toBeEnabled({ timeout: 120_000 });
+            composedSats = composeQuotes.served();
+            expect(composedSats, 'the compose never fetched a native-fee quote, so nothing was priced')
+                .toBeGreaterThan(0);
         });
 
-        await test.step('halve the coin price under the open screen', async () => {
-            const halved = HALVED(venue.price);
-            const after = await reprice(venue.coinPair, halved, params);
+        await test.step('the coin price falls back to the venue\'s own under the open screen', async () => {
+            await composeQuotes.release();
+            const after = await feeQuoteSats(params);
+            expect(after.valid, `the venue cannot price this action at Approve (${after.status})`).toBe(true);
             // eslint-disable-next-line no-console
-            console.log(`[§11.5 requote] ${venue.coinPair} ${venue.price} -> ${halved}: `
-                + `fee ${composedSats} -> ${after.sats} sats (composed pays ${composedSats})`);
+            console.log(`[§11.5 requote] fee ${composedSats} -> ${after.sats} sats `
+                + `(composed pays ${composedSats}, the venue quotes ${after.sats})`);
             expect(after.sats,
-                'halving the coin price did not raise the required fee, so the band was never crossed '
+                'the venue does not ask for more than the composed fee, so the band was never crossed '
                 + 'and this run would pass for the wrong reason')
                 .toBeGreaterThan(composedSats);
             // The refusal only bites BELOW minAcceptable (0.95x), so state the
@@ -247,10 +247,6 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
             expect(await coinBalanceSats(source),
                 'the payer\'s balance moved, so a miner fee was paid for an action the wallet refused')
                 .toBe(before);
-        });
-
-        await test.step('put the venue price back', async () => {
-            await reprice(venue.coinPair, Number(venue.price).toFixed(8), params);
         });
     });
 });

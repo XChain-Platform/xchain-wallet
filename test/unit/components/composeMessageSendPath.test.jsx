@@ -175,8 +175,21 @@ describe('message validation is visible from the primary action', () => {
         expect(alertText(utils)).toMatch(/Write a message to send/);
     });
 
+    it('shows unsafe invisible characters on the message field and blocks compose', async () => {
+        const messaging = stubMessaging();
+        const utils = await openFilledForm(messaging);
+
+        fireEvent.change(utils.getByLabelText('Message'), {
+            target: { value: 'pay\u202Etxt\u200Bnow' },
+        });
+
+        expect(utils.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
+        expect(sendButton(utils)).toBeDisabled();
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
     it.each([
-        ['', /greater than zero/i],
+        ['', /enter a custom fee rate\./i],
         ['0', /greater than zero/i],
         ['-1', /greater than zero/i],
         ['1.123456789', /at most 8 decimal places/i],
@@ -368,5 +381,25 @@ describe('the message is funded from the active address (issue #11)', () => {
         expect(call.broadcastChainId).toBe(LTC);
         expect(call.from.addressId, 'switching delivery network fell back to the first-listed address')
             .toBe(ltcActive.id);
+    });
+});
+
+describe('a recipient key that does not belong to the address', () => {
+    it('says the key does not match the address instead of offering a retry', async () => {
+        const mismatch = Object.assign(
+            new Error(`messageAction: the public key returned for ${RECIPIENT} does not derive to that address.`),
+            { name: 'PubkeyMismatchError', address: RECIPIENT },
+        );
+        const messaging = stubMessaging({
+            composeMessageForConfirm: vi.fn(() => Promise.reject(mismatch)),
+        });
+        const utils = await openFilledForm(messaging);
+
+        await pressSend(utils);
+
+        expect(messaging.composeMessageForConfirm).toHaveBeenCalledTimes(1);
+        expect(alertText(utils)).toMatch(/doesn't belong to their address, so nothing was signed or sent/);
+        expect(alertText(utils)).not.toMatch(/Something went wrong/);
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
     });
 });

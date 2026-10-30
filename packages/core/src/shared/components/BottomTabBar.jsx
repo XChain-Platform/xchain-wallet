@@ -13,13 +13,18 @@ import { Icon } from '@xchain-wallet/core/ui';
 import {
     formatBadgeCount,
     isNavItemActive,
+    navItem,
 } from './LeftNav.jsx';
-import { ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
-import { OverlaySurface } from './OverlaySurface.jsx';
+import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
+// The More sheet opens only on a tap, so its surface and styles load on demand.
+import { OverlaySurfaceOnDemand as OverlaySurface } from './onDemandOverlays.js';
+import { openWhenLoaded, useIdlePreload } from '../utils/onDemandComponent.js';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import PLATFORM_LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -34,8 +39,9 @@ import PLATFORM_LINKS from '../platform-links.json';
  * of the wallet.
  *
  * Visibility: this component renders itself unconditionally; the
- * parent (`<FullLayoutWithNav>`) hides it via CSS above 600px so
- * tablets and desktops keep the left-nav layout. Below 600px the
+ * parent (`<FullLayoutWithNav>`) mounts it only in the compact tier
+ * (container under 640px), so tablets and desktops keep the left-nav
+ * layout. In the compact tier the
  * sheet floats above main content and the route gets enough
  * bottom-padding to clear the bar.
  *
@@ -59,24 +65,20 @@ import PLATFORM_LINKS from '../platform-links.json';
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
-const PRIMARY_TABS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
-    // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
-];
+// The thumb-row tabs, in TAB_BAR_DESTINATIONS order, with the sidebar's labels
+// and icons. `spendable` marks the Send row signer mode promises is gone.
+const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map(navItem);
 
 const SHEET_PRIMARY = [
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
+    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
+    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
+    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
+    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
-    { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
+    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
@@ -106,6 +108,7 @@ export function BottomTabBar({
     const [rovingTab, setRovingTab] = useState(null);
     const moreTriggerRef = useRef(null);
     const sheetRef = useRef(null);
+    useIdlePreload(OverlaySurface);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
     useFocusTrap(sheetRef, { active: sheetOpen, restoreFocusRef: moreTriggerRef });
@@ -149,7 +152,7 @@ export function BottomTabBar({
     );
     // The Wallet Mode screen tells a signer-mode user "Send / receive
     // screens are hidden; this wallet does not broadcast". The bottom bar is
-    // the whole navigation below 600px, so leaving Send in the thumb row would
+    // the whole navigation in the compact tier, so leaving Send in the thumb row would
     // break that promise on exactly the device most likely to be the signer.
     const primaryTabs = PRIMARY_TABS.filter((tab) => !tab.spendable || !isSignerMode);
     // Messaging lives behind "More", so any unread inside the sheet also needs a
@@ -200,7 +203,7 @@ export function BottomTabBar({
 
     return (
         <>
-            <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
+            <nav className={styles.bar} aria-label={t('components.bottomTabBar.bottomNavigation')} onKeyDown={onBarKeyDown}>
                 {/* Navigation tabs stay native buttons to preserve roving focus and full-row semantics. */}
                 {primaryTabs.map((tab) => {
                     const active = tab.id === activeTab;
@@ -235,7 +238,11 @@ export function BottomTabBar({
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onFocus={() => setRovingTab('more')}
-                    onClick={() => setSheetOpen((v) => !v)}
+                    onClick={() => {
+                        // Open once the surface is loaded, so the focus trap sees the sheet.
+                        if (sheetOpen) setSheetOpen(false);
+                        else openWhenLoaded(OverlaySurface, () => setSheetOpen(true));
+                    }}
                 >
                     <span className={styles.tabIcon} aria-hidden="true">
                         <Icon.MenuIcon />
@@ -243,7 +250,7 @@ export function BottomTabBar({
                             <span className={styles.tabDot} aria-hidden="true" />
                         ) : null}
                     </span>
-                    <span className={styles.tabLabel}>More</span>
+                    <span className={styles.tabLabel}>{t('history.detail.more')}</span>
                 </button>
             </nav>
 
@@ -252,10 +259,10 @@ export function BottomTabBar({
                     variant="sheet"
                     surfaceRef={sheetRef}
                     id="xc-bottom-sheet"
-                    title={<h2 className={styles.sheetTitle}>More</h2>}
+                    title={<h2 className={styles.sheetTitle}>{t('history.detail.more')}</h2>}
                     titleId="xc-bottom-sheet-dialog-title"
                     aria-labelledby="xc-bottom-sheet-dialog-title"
-                    closeLabel="Close more navigation"
+                    closeLabel={t('components.bottomTabBar.closeMoreNavigation')}
                     onClose={() => setSheetOpen(false)}
                     onBackdrop={() => setSheetOpen(false)}
                     onKeyDown={onSheetKeyDown}
@@ -282,7 +289,7 @@ export function BottomTabBar({
                                                 </span>
                                                 <span className={styles.sheetLabel}>{row.label}</span>
                                                 {badges[row.id] > 0 ? (
-                                                    <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
+                                                    <span className={styles.sheetBadge} aria-label={t('components.leftNav.unread', { value: badges[row.id] })}>
                                                         {formatBadgeCount(badges[row.id])}
                                                     </span>
                                                 ) : null}
@@ -308,7 +315,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.SearchIcon />
                                             </span>
-                                            <span>Search</span>
+                                            <span>{t('routes.addressList.search')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -326,7 +333,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.MoreIcon />
                                             </span>
-                                            <span>Switch wallet</span>
+                                            <span>{t('components.bottomTabBar.switchWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -347,7 +354,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.GearIcon />
                                             </span>
-                                            <span>Settings</span>
+                                            <span>{t('home.settings')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -366,7 +373,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.LockIcon />
                                             </span>
-                                            <span>Lock wallet</span>
+                                            <span>{t('home.lockWallet')}</span>
                                         </button>
                                     </li>
                                 ) : null}
@@ -386,7 +393,7 @@ export function BottomTabBar({
                                                 <span className={styles.sheetIcon} aria-hidden="true">
                                                     <Icon.ExternalLinkIcon />
                                                 </span>
-                                                <span>{site.label}</span>
+                                                <span>{platformLinkLabel(site)}</span>
                                             </a>
                                         </li>
                                     )) : null}

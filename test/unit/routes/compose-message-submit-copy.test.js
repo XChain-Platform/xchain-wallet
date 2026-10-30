@@ -30,13 +30,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = readFileSync(
+const SRC = withEnglishCopy(readFileSync(
     join(HERE, '..', '..', '..', 'packages', 'core', 'src', 'shared', 'routes', 'ComposeMessage.jsx'),
     'utf8',
-);
+));
 
 /** An SDK encoder refusal as it arrives after the messaging boundary. */
 function encoderError(message, code) {

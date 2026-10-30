@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { parse } from '@babel/parser';
 import { describe, expect, it } from 'vitest';
 import webAppSource from '../../packages/web/src/App.jsx?raw';
 import webDexSource from '../../packages/web/src/surfaces/dex.jsx?raw';
@@ -51,6 +52,368 @@ const SHELL_ONLY = {
             reason: 'Desktop and extension keys outlive their renderers, while closing the plain web tab already clears its in-memory key.',
         },
     },
+    props: {
+        'CreateWallet.staleGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup shares one vault across live windows, so only it can find that another window created the wallet.',
+        },
+        'CreateWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own create caused it.',
+        },
+        'AddressList.networkFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell owns the address-list network filter in route state.',
+        },
+        'AddressList.tokenQuery': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell owns the address-list token query in route state.',
+        },
+        'AccountPicker.backLabel': {
+            shells: ['web'],
+            kind: 'known-gap',
+            reason: 'Only the web shell labels the account picker back button when it was opened from Settings.',
+        },
+        'AdvancedActionsForm.hasDexSurface': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the web shell currently exposes the DEX surface to advanced actions.',
+        },
+        'AppHeader.accountNonDefault': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header presents account context that other shells place in their native layout.',
+        },
+        'AppHeader.activeAccount': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header presents account context that other shells place in their native layout.',
+        },
+        'AppHeader.chainRegistry': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header builds its network selector from the chain registry.',
+        },
+        'AppHeader.coinFamilies': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header builds its network selector from coin-family metadata.',
+        },
+        'AppHeader.developerMode': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header adapts its network selector for developer mode.',
+        },
+        'AppHeader.networkFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header owns its network filter.',
+        },
+        'AppHeader.onActiveNetworkChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header owns its network selector.',
+        },
+        'AppHeader.onManageAddresses': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes compact-layout address management.',
+        },
+        'AppHeader.onMenuOpen': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the compact web layout uses the overflow menu.',
+        },
+        'AppHeader.onNetworkFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header owns its network filter.',
+        },
+        'AppHeader.onOpenAccountPicker': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes the compact-layout account picker.',
+        },
+        'AppHeader.onOpenSettings': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes settings in its compact layout.',
+        },
+        'AppHeader.onOpenWalletPicker': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes the compact-layout wallet picker.',
+        },
+        'AppHeader.onScan': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes scanning in its compact layout.',
+        },
+        'AppHeader.onViewAddress': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header exposes the active address in its compact layout.',
+        },
+        'AppHeader.platformCurrent': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header marks the current platform network.',
+        },
+        'AppHeader.walletNonDefault': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell header presents wallet context that other shells place in their native layout.',
+        },
+        'BatchComposerForm.hasDexSurface': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the web shell currently exposes the DEX surface to batch composition.',
+        },
+        'BottomTabBar.badges': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'The popup tab bar omits badges to fit its constrained layout.',
+        },
+        'ContactsList.onScanPrefillConsumed': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell owns scan-prefill lifecycle state for contacts.',
+        },
+        'ContactsList.scanPrefill': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell can route scanned contact data into the contacts screen.',
+        },
+        'FullLayoutWithNav.nav': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'The extension popup uses its compact tab bar instead of the full navigation layout.',
+        },
+        'Home.networkFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web home route owns its asset network filter.',
+        },
+        'Home.onNetworkFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web home route owns its asset network filter.',
+        },
+        'Home.onTokenQueryChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web home route owns its token search state.',
+        },
+        'Home.resumeKey': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web shell coordinates home remounts with browser route restoration.',
+        },
+        'Home.tokenQuery': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web home route owns its token search state.',
+        },
+        'ParallelComposer.hasDexSurface': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'Only the web shell currently exposes the DEX surface to parallel composition.',
+        },
+        'ReceivePicker.kindFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web receive picker shares the compact-layout asset filters.',
+        },
+        'ReceivePicker.networkFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web receive picker shares the compact-layout asset filters.',
+        },
+        'ReceivePicker.onKindFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web receive picker shares the compact-layout asset filters.',
+        },
+        'ReceivePicker.onNetworkFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web receive picker shares the compact-layout asset filters.',
+        },
+        'RenameAccountForm.refreshKey': {
+            shells: ['desktop', 'extension'],
+            kind: 'intended',
+            reason: 'The extension and the desktop app hear record changes from another surface or window, so they read the names again on an open rename screen; a web tab holds the only unlocked session.',
+        },
+        'RenameWalletForm.refreshKey': {
+            shells: ['desktop', 'extension'],
+            kind: 'intended',
+            reason: 'The extension and the desktop app hear record changes from another surface or window, so they read the names again on an open rename screen; a web tab holds the only unlocked session.',
+        },
+        'ScanRoute.embedded': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web scanner can render inside the compact shell route outlet.',
+        },
+        'ScanRoute.titleId': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The embedded web scanner supplies an accessible route title identifier.',
+        },
+        'Send.onHoldLinks': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Only the desktop and web or native shells take payment links while running; the extension popup reads a link from its launch query alone, so none can land over an open Send.',
+        },
+        'Send.linkWaiting': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Shows the waiting link on the Send result; only the shells that hold payment links while Send is open pass it.',
+        },
+        'SendPicker.hideOwnFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web send picker can suppress its own filter when the shell provides one.',
+        },
+        'SendPicker.kindFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web send picker shares the compact-layout asset filters.',
+        },
+        'SendPicker.networkFilter': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web send picker shares the compact-layout asset filters.',
+        },
+        'SendPicker.onKindFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web send picker shares the compact-layout asset filters.',
+        },
+        'SendPicker.onNetworkFilterChange': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web send picker shares the compact-layout asset filters.',
+        },
+        'ShellRouteOutlet.fallback': {
+            shells: ['web'],
+            kind: 'intended',
+            reason: 'The web route outlet supplies its compact-layout fallback directly.',
+        },
+        'Loading.onRetry': {
+            shells: ['desktop', 'extension'],
+            kind: 'known-gap',
+            reason: 'The web loading screen does not yet expose the recovery action that desktop and extension show.',
+        },
+        'Locked.lockReason': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension service worker locks the wallet when storage refuses its auto-lock record, so only its Locked screen says why.',
+        },
+        'VaultUnavailable.onRetry': {
+            shells: ['desktop'],
+            kind: 'known-gap',
+            reason: 'Web and extension vault errors do not yet expose the desktop recovery action.',
+        },
+        'AppInner.canOpenInTab': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup can hand work off to a full browser tab.',
+        },
+        'AppInner.titleEnabled': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup controls whether its constrained layout shows the title.',
+        },
+        'BottomTabBar.currentView': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup tab bar performs its own route selection.',
+        },
+        'BottomTabBar.hasDexSurface': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup tailors its tab destinations to available surfaces.',
+        },
+        'BottomTabBar.hasVmAddress': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup tailors its tab destinations to the active address capabilities.',
+        },
+        'BottomTabBar.isSignerMode': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup tailors its tab destinations for signer mode.',
+        },
+        'BottomTabBar.onLock': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup puts its lock action in the compact tab bar.',
+        },
+        'BottomTabBar.onOpenSettings': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup puts settings in the compact tab bar.',
+        },
+        'BottomTabBar.onOpenWalletPicker': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup puts wallet selection in the compact tab bar.',
+        },
+        'BottomTabBar.onSelect': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup tab bar performs its own route selection.',
+        },
+        'Home.onCommandPalette': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension home screen exposes popup-specific command-palette navigation.',
+        },
+        'Home.onLockWallet': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension home screen exposes locking inside the popup layout.',
+        },
+        'Home.onOpenSettings': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension home screen exposes settings inside the popup layout.',
+        },
+        'ImportWallet.initialLane': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'The extension popup can initialize import in its full-tab handoff lane.',
+        },
+        'ImportWallet.onOpenInTab': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup can move wallet import into a full browser tab.',
+        },
+        'ImportWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own import caused it.',
+        },
+        'PairPartnerWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own import caused it.',
+        },
+        'PairSignerForm.onOpenInTab': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup can move signer pairing into a full browser tab.',
+        },
+        'Settings.onOpenBackupInTab': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup can move backup into a full browser tab.',
+        },
+    },
 };
 
 function routeViews(source) {
@@ -68,6 +431,65 @@ function messagingHelpers(source) {
         }
     }
     return [...helpers].sort();
+}
+
+function jsxPropsByComponent(source) {
+    const props = new Map();
+    const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
+
+    function visit(node) {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'JSXOpeningElement'
+            && node.name.type === 'JSXIdentifier'
+            && /^[A-Z]/.test(node.name.name)) {
+            const componentProps = props.get(node.name.name) ?? new Set();
+            for (const attribute of node.attributes) {
+                if (attribute.type === 'JSXAttribute' && attribute.name.type === 'JSXIdentifier') {
+                    componentProps.add(attribute.name.name);
+                }
+            }
+            props.set(node.name.name, componentProps);
+        }
+        for (const value of Object.values(node)) {
+            if (Array.isArray(value)) {
+                for (const child of value) visit(child);
+            } else if (value?.type) {
+                visit(value);
+            }
+        }
+    }
+
+    visit(ast);
+    return props;
+}
+
+function mergeComponentProps(sources) {
+    const merged = new Map();
+    for (const source of sources) {
+        for (const [component, props] of jsxPropsByComponent(source)) {
+            const componentProps = merged.get(component) ?? new Set();
+            for (const prop of props) componentProps.add(prop);
+            merged.set(component, componentProps);
+        }
+    }
+    return merged;
+}
+
+function sharedComponentProps(sourcesByShell) {
+    const propsByShell = Object.fromEntries(Object.entries(sourcesByShell).map(([name, sources]) => [
+        name,
+        mergeComponentProps(sources),
+    ]));
+    const shellNames = Object.keys(propsByShell);
+    const sharedComponents = [...propsByShell[shellNames[0]].keys()]
+        .filter((component) => shellNames.every((shell) => propsByShell[shell].has(component)))
+        .sort();
+    const flattened = Object.fromEntries(shellNames.map((shell) => [
+        shell,
+        sharedComponents.flatMap((component) => [...propsByShell[shell].get(component)]
+            .map((prop) => `${component}.${prop}`)).sort(),
+    ]));
+    return { flattened, propsByShell, sharedComponents };
 }
 
 function parityFailures(byShell, allowlist) {
@@ -154,6 +576,35 @@ describe('shell route parity', () => {
         ]));
         expect(helpers.web.length).toBeGreaterThan(300);
         expect(parityFailures(helpers, SHELL_ONLY.messaging)).toEqual([]);
+    });
+
+    it('collects named props from capitalized JSX components and ignores spreads', () => {
+        const props = jsxPropsByComponent('const view = <Widget alpha {...shared} beta="value" />;');
+        expect(props).toEqual(new Map([['Widget', new Set(['alpha', 'beta'])]]));
+    });
+
+    it('keeps shared component props aligned or explicitly shell-only', () => {
+        const { flattened, sharedComponents } = sharedComponentProps(
+            Object.fromEntries(Object.entries(SHELLS).map(([name, shell]) => [name, shell.routeSources])),
+        );
+        expect(sharedComponents.length).toBeGreaterThan(50);
+        expect(Object.values(SHELL_ONLY.props).every(
+            ({ kind }) => kind === 'intended' || kind === 'known-gap',
+        )).toBe(true);
+        expect(parityFailures(flattened, SHELL_ONLY.props)).toEqual([]);
+    });
+
+    it('reports a prop removed from one shell', () => {
+        const mutatedDesktopSource = desktopAppSource.replace(/\n\s+onAddAccount=\{[^\n]*\n/, '\n');
+        expect(mutatedDesktopSource).not.toBe(desktopAppSource);
+        const { flattened } = sharedComponentProps({
+            web: SHELLS.web.routeSources,
+            desktop: [mutatedDesktopSource],
+            extension: SHELLS.extension.routeSources,
+        });
+        expect(parityFailures(flattened, SHELL_ONLY.props)).toContain(
+            'AccountPicker.onAddAccount: present in extension, web without a reasoned allowlist entry',
+        );
     });
 
     it('rejects unallowlisted drift and exceptions without reasons', () => {

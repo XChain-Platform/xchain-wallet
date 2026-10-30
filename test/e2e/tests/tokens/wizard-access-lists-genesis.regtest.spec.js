@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -24,15 +24,6 @@ const TICK = `WLS${STAMP}`;
 const SUPPLY = 1000;
 const XCHAIN_MINT = 50;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('combobox').first().fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
     const password = page.getByLabel('Password', { exact: true });
@@ -51,7 +42,7 @@ async function approveAndReadTxid(page, what) {
 }
 
 async function publishAddressList(page, member) {
-    await gotoPalette(page, 'Create a list');
+    await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
     await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -107,7 +98,7 @@ test.describe(`wizard access-list fields on ${REGTEST_CHAIN_LABEL}`, () => {
         const blockList = await publishAddressList(page, REGTEST_DESTINATION);
         expect(blockList).not.toBe(allowList);
 
-        await gotoPalette(page, 'Create a token');
+        await openPaletteCommand(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Custom/ }).click();
         await selectVenueChain(main);
@@ -118,8 +109,7 @@ test.describe(`wizard access-list fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await main.getByRole('button', { name: 'Advanced settings (optional)' }).click();
         await chooseList(page, 'allow', allowList);
         await chooseList(page, 'block', blockList);
-        await main.getByRole('button', { name: 'Review token', exact: true }).click();
-        await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+        await submitTokenWizard(page);
 
         const txid = await approveAndReadTxid(page, 'the token creation');
         const genesis = await waitForValidAction(txid);

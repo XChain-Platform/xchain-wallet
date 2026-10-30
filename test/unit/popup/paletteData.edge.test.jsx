@@ -77,4 +77,37 @@ describe('popup palette data edge cases', () => {
         expect(result.current.sites).toEqual([]);
         expect(result.current.tokenRows).toEqual([]);
     });
+
+    it('retries each refused read once when connectivity returns while open', async () => {
+        const listContacts = vi.fn()
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockResolvedValueOnce([{ id: 'contact-1', name: 'Recovery contact' }]);
+        const getWalletBalances = vi.fn()
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockResolvedValueOnce({});
+        const loadSites = vi.fn()
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockResolvedValueOnce([]);
+        const testProps = props({
+            messaging: { listContacts, getWalletBalances },
+            loadSites,
+        });
+        const { result } = renderHook(() => usePopupPaletteData(testProps));
+
+        await waitFor(() => {
+            expect(listContacts).toHaveBeenCalledOnce();
+            expect(getWalletBalances).toHaveBeenCalledOnce();
+            expect(loadSites).toHaveBeenCalledOnce();
+        });
+        act(() => window.dispatchEvent(new Event('online')));
+
+        await waitFor(() => {
+            expect(listContacts).toHaveBeenCalledTimes(2);
+            expect(getWalletBalances).toHaveBeenCalledTimes(2);
+            expect(loadSites).toHaveBeenCalledTimes(2);
+        });
+        expect(result.current.contacts).toEqual([
+            { id: 'contact-1', name: 'Recovery contact' },
+        ]);
+    });
 });

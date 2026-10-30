@@ -80,8 +80,8 @@ const DRILLDOWN_SECTIONS = [
     ['fees', 'Fees', () => screen.getByRole('combobox', { name: 'Bitcoin fee strategy' })],
     ['network-endpoints', 'Network & endpoints', () => screen.getAllByRole('textbox', { name: 'Explorer URL' })[0]],
     ['connected-sites', 'Connected sites', () => screen.findByRole('button', { name: 'Disconnect' })],
-    ['ads', 'Automatic donation system', () => screen.getByRole('switch', { name: 'Automatic Donation System' })],
-    ['developer', 'Developer mode', () => screen.getByRole('switch', { name: 'Developer Mode' })],
+    ['ads', 'Automatic donation system', () => screen.getByRole('switch', { name: 'Turn on Automatic Donation System' })],
+    ['developer', 'Developer mode', () => screen.getByRole('switch', { name: 'Turn on developer mode' })],
     ['about', 'About', () => screen.getByRole('button', { name: 'Copy diagnostics' })],
 ];
 
@@ -213,17 +213,15 @@ describe('Settings at a 320px viewport', () => {
         expectNoFixedWidthOverflow(container);
     });
 
-    it('keeps placeholder prose and onboarding choices readable without forced word breaks', () => {
+    it('keeps the donation address and onboarding choices readable without forced word breaks', () => {
         settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
         const { container } = renderSettings('ads');
-        // The visible placeholder is short; the full explanation stays in its accessible description.
-        const placeholder = screen.getByText('Not available yet.');
-        expect(placeholder).toHaveAttribute('aria-description', expect.stringMatching(/A donation address for Bitcoin arrives/));
-
-        expect(placeholder.style.fontFamily).toBe('inherit');
-        expect(placeholder.style.wordBreak).toBe('normal');
-        expect(placeholder.style.overflowWrap).toBe('break-word');
-        expect(container).toContainElement(placeholder);
+        // Shipped chains carry their real DONATE1 address, so the field shows it
+        // read-only instead of the not-yet-available placeholder.
+        const address = screen.getByDisplayValue('1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp');
+        expect(address).toHaveAttribute('readonly');
+        expect(container).toContainElement(address);
+        expect(screen.queryByDisplayValue('Not available yet.')).toBeNull();
         // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
         expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
@@ -273,7 +271,7 @@ describe('Settings at a 320px viewport', () => {
         cleanup();
 
         renderSettings('developer');
-        expect(await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' })).toBeVisible();
+        expect(await screen.findByRole('button', { name: 'Remove custom network fork-regtest' })).toBeVisible();
     });
 
     it('keeps equal contact actions together in a wrapping row at 360px', async () => {

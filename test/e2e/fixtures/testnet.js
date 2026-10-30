@@ -634,12 +634,15 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
 
 /**
  * Flips the wallet onto testnet and waits for it to come back up. Testnet is
- * listed without Developer Mode (only regtest is hidden), so this is one
- * select on the Settings index; the switch reloads and re-locks the vault.
+ * listed without Developer Mode (only Regtest is held behind it), so this is
+ * one select on the Settings index; the switch then asks for confirmation,
+ * reloads and re-locks the vault.
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
     await activeNetworkControl(page).selectOption('testnet');
+    const confirm = page.getByRole('dialog', { name: 'Switch to Testnet?' });
+    await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
     await unlockAfterReload(page, password);
 }
 
@@ -651,10 +654,7 @@ export async function switchToTestnet(page, password) {
  */
 export async function readTestnetReceiveAddress(page) {
     await gotoSection(page, 'Receive');
-    const field = page.getByRole('textbox', {
-        name: 'Copy payment link for receive address',
-        exact: true,
-    });
+    const field = page.getByTestId('receive-address');
     await expect(field).toBeVisible({ timeout: 30_000 });
     await expect(field, 'Receive never showed a Bitcoin testnet address')
         .toHaveValue(TESTNET_ADDRESS_RE, { timeout: 30_000 });

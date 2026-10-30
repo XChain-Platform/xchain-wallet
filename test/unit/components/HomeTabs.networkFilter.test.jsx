@@ -76,7 +76,10 @@ describe('HomeTabs network filtering', () => {
             />,
         );
 
-        expect(screen.getByText('BTC · Custom Bitcoin')).toBeInTheDocument();
+        // A native row's title is its chain's name, so the chain is named
+        // once there and the subtitle does not repeat it.
+        expect(screen.getByText('Custom Bitcoin', { selector: '[title="Custom Bitcoin"]' })).toBeInTheDocument();
+        expect(screen.queryByText('BTC · Custom Bitcoin')).toBeNull();
     });
 
     it('uses the shared compact row without textual chain badges on Home activity', () => {

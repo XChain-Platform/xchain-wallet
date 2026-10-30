@@ -21,28 +21,28 @@
 // useCommandPalette / ShortcutHelp). Context shortcuts (§34.2) render
 // read-only: they dispatch inside their route, not from the settings table.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Button, SectionHeader } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useBackHandler } from '../../../ui/backStack.js';
 import {
     SHORTCUTS,
     SHORTCUT_GROUPS,
+    bindingFamily,
     findBindingConflict,
     formatBinding,
     isRebindable,
     isValidBinding,
-    parseBinding,
+    reservedChordLabel,
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
-import { ROW, ROW_LABEL, STACK, Status, settingsLoadErrorText } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
-const GROUP_HEADER = {
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 600,
-    color: 'var(--xc-text)',
-    marginTop: 'var(--xc-space-3)',
-    marginBottom: 'var(--xc-space-1)',
-};
+// Each group is a region named by its SectionHeader. The space above a group
+// sits on the section, so the title and the rows under it keep their places.
+const GROUP = { ...STACK, marginTop: 'var(--xc-space-3)' };
 const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const SHORTCUT_ROW = {
     ...ROW,
@@ -106,7 +106,7 @@ function bindingFromEvent(e, kind) {
 }
 
 export function KeyboardSection() {
-    const { settings, update, loading, error } = useSettings();
+    const { settings, update, loading, error } = useSettings({ reportsOwnError: true });
     const overrides = settings?.keyboard?.bindings || {};
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     const mac = isMac();
@@ -117,14 +117,19 @@ export function KeyboardSection() {
     const [leaderLead, setLeaderLead] = useState(/** @type {string | null} */ (null));
     const [status, setStatus] = useState(/** @type {{ kind: 'ok' | 'error', text: string } | null} */ (null));
 
+    const labelPrefix = useId();
+    // Escape cancels a capture in progress before it can close the sub-page.
+    useBackHandler(capturingId ? () => { setCapturingId(null); setLeaderLead(null); } : undefined);
+
     useEffect(() => {
         if (!capturingId || typeof window === 'undefined') return undefined;
         const target = shortcuts.find((s) => s.id === capturingId);
         if (!target) { setCapturingId(null); return undefined; }
         // Rebinding keeps the DEFAULT binding's family even when an override
         // is active, so a combo can't drift into a leader sequence.
-        const defaultBinding = SHORTCUTS.find((s) => s.id === capturingId)?.binding || target.binding;
-        const kind = parseBinding(defaultBinding).kind;
+        const defaultEntry = SHORTCUTS.find((s) => s.id === capturingId);
+        const defaultBinding = defaultEntry?.binding || target.binding;
+        const kind = bindingFamily(defaultEntry || target);
 
         const commit = (binding) => {
             setCapturingId(null);
@@ -151,6 +156,15 @@ export function KeyboardSection() {
             e.preventDefault();
             e.stopPropagation();
             if (e.key === 'Escape' && kind !== 'combo') { setCapturingId(null); setLeaderLead(null); return; }
+            // The browser or desktop keeps these chords, so a binding on one
+            // would never fire.
+            const reserved = reservedChordLabel(e, mac);
+            if (reserved) {
+                setCapturingId(null);
+                setLeaderLead(null);
+                setStatus({ kind: 'error', text: t('settings.keyboard.reservedChord', { chord: reserved }) });
+                return;
+            }
             const frag = bindingFromEvent(e, kind);
             if (frag === null) return;
             if (kind === 'leader') {
@@ -179,19 +193,18 @@ export function KeyboardSection() {
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset shortcuts.' }));
     };
 
-    if (loading) return <p style={ROW_LABEL}>Loading…</p>;
-    if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
+    if (loading) return <p style={ROW_LABEL}>{t('common.loading')}</p>;
+    if (error) return <SettingsLoadError error={error} />;
 
     return (
         <div style={STACK}>
             <p style={INTRO}>
-                Select Rebind, then press the new key combination. Screen-specific
-                shortcuts are fixed and only work on their screen.
+                {t('settings.keyboard.selectRebindThenPressThe')}
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
-            {SHORTCUT_GROUPS.map((group) => (
-                <section key={group}>
-                    <h2 style={GROUP_HEADER}>{group}</h2>
+            {SHORTCUT_GROUPS.map((group, index) => (
+                <section key={group} style={GROUP} aria-labelledby={`${labelPrefix}-group-${index}`}>
+                    <SectionHeader id={`${labelPrefix}-group-${index}`} title={group} />
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
                         const availability = s.id === 'balances-pin' && settings.showPinAffordance !== true
@@ -202,18 +215,18 @@ export function KeyboardSection() {
                         return (
                             <div key={s.id} style={SHORTCUT_ROW}>
                                 <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                    <span style={ROW_LABEL}>{s.label}</span>
+                                    <span id={`${labelPrefix}-${s.id}`} style={ROW_LABEL}>{s.label}</span>
                                     {availability ? <span style={{ ...ROW_LABEL, fontSize: 'var(--xc-text-xs)' }}>{availability}</span> : null}
                                 </span>
                                 <span style={ACTIONS}>
                                     {s.overridden ? (
-                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
-                                            Reset
+                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
+                                            {t('settings.keyboard.reset')}
                                         </Button>
                                     ) : null}
                                     <kbd style={capturing ? CAPTURING : KBD} aria-live={capturing ? 'polite' : undefined}>
                                         {capturing
-                                            ? (leaderLead ? `${leaderLead.toUpperCase()} then …` : 'Press keys…')
+                                            ? (leaderLead ? t('settings.keyboard.then', { value: leaderLead.toUpperCase() }) : t('settings.keyboard.pressKeys'))
                                             : [s.binding, s.altBinding]
                                                 .filter(Boolean)
                                                 .map((binding) => formatBinding(binding, mac))
@@ -224,13 +237,14 @@ export function KeyboardSection() {
                                             <Button
                                                 size="sm"
                                                 variant="secondary"
+                                                aria-describedby={`${labelPrefix}-${s.id}`}
                                                 onClick={() => {
                                                     setStatus(null);
                                                     setLeaderLead(null);
                                                     setCapturingId(capturing ? null : s.id);
                                                 }}
                                             >
-                                                {capturing ? 'Cancel' : 'Rebind'}
+                                                {capturing ? t('common.cancel') : t('settings.keyboard.rebind')}
                                             </Button>
                                         </>
                                     ) : null}
@@ -240,17 +254,17 @@ export function KeyboardSection() {
                     })}
                 </section>
             ))}
-            <section>
-                <h3 style={GROUP_HEADER}>Defaults</h3>
+            <section style={GROUP} aria-labelledby={`${labelPrefix}-group-defaults`}>
+                <SectionHeader as="h3" id={`${labelPrefix}-group-defaults`} title={t('settings.display.defaults')} />
                 <div style={ROW}>
-                    <span style={ROW_LABEL}>Restore every custom shortcut to its built-in binding.</span>
+                    <span style={ROW_LABEL}>{t('settings.keyboard.restoreEveryCustomShortcutTo')}</span>
                     <Button
                         size="sm"
                         variant="secondary"
                         onClick={resetAll}
                         disabled={Object.keys(overrides).length === 0}
                     >
-                        Reset all shortcuts
+                        {t('settings.keyboard.resetAllShortcuts')}
                     </Button>
                 </div>
             </section>

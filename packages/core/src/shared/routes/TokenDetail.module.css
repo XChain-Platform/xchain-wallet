@@ -1,12 +1,3 @@
-.headerIcon {
-    display: block;
-    width: var(--xc-avatar-size-header);
-    height: var(--xc-avatar-size-header);
-    border-radius: var(--xc-avatar-shape);
-    object-fit: contain;
-    flex: 0 0 auto;
-}
-
 .headerTitle {
     display: block;
     max-width: 100%;
@@ -14,20 +5,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.2;
-}
-
-.headerIconFallback {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-avatar-size-header);
-    height: var(--xc-avatar-size-header);
-    border-radius: var(--xc-avatar-shape);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    font-size: var(--xc-avatar-initials-header);
-    font-weight: 700;
-    flex: 0 0 auto;
 }
 
 /* ───── Asset balance hero - matches TotalBalanceHero ───── */
@@ -188,6 +165,9 @@
     display: inline-block;
     white-space: nowrap;
     transform-origin: left center;
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Unit code (BTC / USD / JPY / …) suffix next to the primary big
@@ -231,6 +211,14 @@
     font-weight: 500;
 }
 
+/* The age of a kept price sits on the accent hero, so it takes the hero's
+   own text color rather than the muted one. */
+.balanceHeroNote .balanceHeroStaleness {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: inherit;
+}
+
 .balanceHeroNoteLeft {
     flex: 1 1 auto;
     min-width: 0;
@@ -268,10 +256,7 @@
    structure as they scroll. */
 
 .infoCard {
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
 }
 
 .priceAlertCard {
@@ -289,20 +274,13 @@
 
 /* Pulls the market card up under the balance hero's box-shadow halo so
    the visible gap above the chart matches the gap to the quick-action
-   row below it. Mirrors the same offset PortfolioChart uses on Home.
-   Also tightens the card's padding + internal gap to mirror Home's
-   PortfolioChart.module.css `.wrap` exactly so the two chart cards
-   render at the same vertical size. */
+   row below it. Mirrors the same offset PortfolioChart uses on Home, and
+   keeps the shared card border and padding like that chart card does. */
 .marketCardOffset {
     margin-top: -6px;
-    padding: var(--xc-space-2) var(--xc-space-3);
     display: flex;
     flex-direction: column;
     gap: 2px;
-    /* Blue accent border to match the Home PortfolioChart and the
-       quick-action buttons immediately below - same accent cue tying
-       the chart card into the page's blue-highlighted controls. */
-    border-color: var(--xc-accent-primary);
 }
 
 .marketHistorySlot {
@@ -333,10 +311,14 @@
 
 /* ───── Per-tab content ───── */
 
+/* Cells size to their values and wrap to a new line when a phone row
+   cannot hold all three, so a long price or market cap is shown whole
+   instead of being cut to an ellipsis in a third of the width. */
 .stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--xc-space-3);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--xc-space-2) var(--xc-space-3);
 }
 
 /* The third stats cell (24h change) is right-aligned so the +/- pct
@@ -345,13 +327,16 @@
 .stats > .statCell:last-child {
     text-align: end;
     align-items: flex-end;
+    margin-inline-start: auto;
 }
 
 .statCell {
     display: flex;
     flex-direction: column;
+    flex: 0 1 auto;
     gap: 2px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .statLabel {
@@ -384,6 +369,7 @@
 
 .metaTable {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: var(--xc-text-sm);
 }
@@ -400,8 +386,13 @@
 .metaRow th,
 .metaRow td {
     padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    padding-inline: 0;
     vertical-align: top;
     line-height: 1.4;
+}
+
+.detailRow {
+    padding-inline: 0;
 }
 
 .metaRow + .metaRow th,
@@ -410,6 +401,7 @@
 }
 
 .metaRow th {
+    overflow-wrap: anywhere;
     text-align: start;
     width: var(--xc-table-label-width);
     font-weight: 500;
@@ -422,6 +414,7 @@
 .metaRow td {
     text-align: end;
     color: var(--xc-text);
+    overflow-wrap: anywhere;
     word-break: break-word;
     font-variant-numeric: tabular-nums;
 }
@@ -495,6 +488,9 @@
 .pgpsigBlock {
     margin: 0;
     padding: var(--xc-space-2);
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     background: var(--xc-bg-muted);
     border-radius: var(--xc-radius-sm);
     font-family: var(--xc-font-mono, monospace);
@@ -628,7 +624,7 @@
     justify-content: center;
     padding: var(--xc-space-4);
     box-sizing: border-box;
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
@@ -683,8 +679,13 @@
 }
 
 .socialChip {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: inline-flex;
     align-items: center;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
     gap: 6px;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: 999px;
@@ -839,6 +840,18 @@
     unicode-bidi: isolate;
 }
 
+/* The balance keeps its full width and drops under the address when the
+   two do not fit side by side, so large text never overlaps them. */
+.holdersRow {
+    flex-wrap: wrap;
+}
+
+.holdersTrailing {
+    flex-shrink: 0;
+    max-width: none;
+    margin-inline-start: auto;
+}
+
 .holdersQty {
     color: var(--xc-text-muted);
     direction: ltr;
@@ -857,19 +870,9 @@
     font-size: var(--xc-text-sm);
 }
 
-/* ───── "Official token" banner - shown when the token is on a project
-   registry's current roster (assetInfo.projects). Green = attested. ───── */
+/* Project names inside the "Official token" success message, shown when the
+   token is on a project registry's current roster (assetInfo.projects). */
 
-.officialBanner {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-success-bg);
-    border: 1px solid var(--xc-success);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
 .officialBannerProject {
     font-weight: 600;
 }

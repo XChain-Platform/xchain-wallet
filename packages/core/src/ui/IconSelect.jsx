@@ -12,6 +12,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
 import styles from './IconSelect.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Single-select dropdown that can render an icon per option. A native
@@ -34,7 +36,7 @@ export function IconSelect({
     value,
     onChange,
     options = [],
-    placeholder = 'Select…',
+    placeholder = t('ui.iconSelect.select'),
     disabled,
     size = 'md',
 }) {
@@ -149,7 +151,7 @@ export function IconSelect({
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || 'Options'}
+                    aria-label={label || t('ui.iconSelect.options')}
                     onKeyDown={onListboxKeyDown}
                 >
                     <ul className={styles.list}>

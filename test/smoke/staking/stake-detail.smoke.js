@@ -67,8 +67,11 @@ for (const action of ['Add stake', 'View contract']) {
 for (const tab of ["id: 'positions'", "id: 'slashes'"]) {
     assert.ok(src.includes(tab), `StakeDetail has contract tab ${tab}`);
 }
-assert.ok(/Slash destination/.test(src),
-    'StakeDetail surfaces the slash destination');
+assert.ok(/Penalty destination/.test(src),
+    'StakeDetail surfaces the penalty (slash) destination');
+// Holder-facing copy names a contract slash a penalty; ids and fields keep "slash".
+assert.ok(!/label: 'Slashes'|No slash events|Slash events|slashable|>Slash destination</.test(src),
+    'StakeDetail user-facing copy says penalty, not slash');
 assert.ok(/cooldown_end_block/.test(src),
     'StakeDetail shows cooldown release blocks');
 

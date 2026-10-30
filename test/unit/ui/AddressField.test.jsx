@@ -32,7 +32,7 @@ function ControlledField(props) {
 }
 
 describe('<AddressField>', () => {
-    it.each([320, 360])('keeps the destination Paste action on one line at %ipx', (width) => {
+    it.each([320, 360])('keeps the destination icon action clear of text at %ipx', (width) => {
         render(
             <div style={{ width }}>
                 <AddressCombobox
@@ -46,16 +46,10 @@ describe('<AddressField>', () => {
         );
 
         const input = screen.getByRole('combobox', { name: 'To' });
-        const paste = screen.getByRole('button', { name: 'Paste from clipboard' });
-        expect(input.style.paddingInlineEnd).toContain('--address-control-height');
-        expect(paste.textContent).toBe('Paste');
-        expect(addressComboboxStyles).toMatch(
-            /--address-paste-width:\s*calc\(var\(--address-control-height\) \+ var\(--xc-space-8\)\)/,
-        );
+        expect(input.style.getPropertyValue('--address-end-room'))
+            .toBe('calc(var(--address-control-height) + var(--xc-space-2))');
+        expect(screen.getByRole('button', { name: 'Open address book' })).toBeInTheDocument();
         expect(addressComboboxStyles).toMatch(/\.wrap input\s*\{[^}]*min-width:\s*0/s);
-        expect(addressComboboxStyles).toMatch(
-            /\.pasteAction button > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
-        );
     });
 
     it.each(['md', 'lg'])('gives the input and inline actions the same %s size class', (size) => {

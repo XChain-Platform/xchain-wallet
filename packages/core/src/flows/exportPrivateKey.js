@@ -34,6 +34,7 @@ import {
     deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
+import { assertWalletUnlockedForReveal } from './revealAccess.js';
 
 export class AddressNotFoundError extends Error {
     constructor(addressId) {
@@ -82,6 +83,21 @@ export class WrongPasswordError extends Error {
     }
 }
 
+// Signal an imported key seal that will not open under a password the seed
+// accepted (matched by name: errors cross the shell messaging boundary as plain objects).
+export class ImportedKeyDamagedError extends Error {
+    /**
+     * @param {string} addressId
+     * @param {unknown} [cause]
+     */
+    constructor(addressId, cause) {
+        super(`exportPrivateKey: the stored key for address "${addressId}" is damaged and cannot be opened`);
+        this.name = 'ImportedKeyDamagedError';
+        this.addressId = addressId;
+        this.cause = cause;
+    }
+}
+
 /**
  * @typedef {Object} ExportPrivateKeyOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -119,6 +135,7 @@ export async function exportPrivateKey({
 }) {
     const hasPassword = typeof password === 'string' && password.length > 0;
     if (!vault) throw new Error('exportPrivateKey: vault is required');
+    assertWalletUnlockedForReveal(vault, 'exportPrivateKey');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportPrivateKey: walletId is required');
     }
@@ -207,7 +224,8 @@ export async function exportPrivateKey({
             // target importedKey itself. If it decrypts cleanly, the
             // password is correct, and we reuse the decrypted bytes
             // below. Either way a wrong password surfaces as a typed
-            // WrongPasswordError instead of a bare AEAD failure.
+            // WrongPasswordError instead of a bare AEAD failure; a damaged
+            // seal propagates as itself, since no password could open it.
             let wifBytes;
             if (wallet.format === 'wif-only') {
                 try {
@@ -215,22 +233,28 @@ export async function exportPrivateKey({
                         masterKey,
                         base64ToBytes(importedKeyEntry.encryptedWif),
                     );
-                } catch {
-                    throw new WrongPasswordError();
+                } catch (err) {
+                    throw passwordProbeError(err);
                 }
             } else {
                 let seedBytes;
                 try {
                     seedBytes = await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
-                } catch {
-                    throw new WrongPasswordError();
+                } catch (err) {
+                    throw passwordProbeError(err);
                 } finally {
                     if (seedBytes) seedBytes.fill(0);
                 }
-                wifBytes = await decrypt(
-                    masterKey,
-                    base64ToBytes(importedKeyEntry.encryptedWif),
-                );
+                // Report a key seal that still fails as damaged, tag mismatch
+                // included: the seed opened, so the password is right.
+                try {
+                    wifBytes = await decrypt(
+                        masterKey,
+                        base64ToBytes(importedKeyEntry.encryptedWif),
+                    );
+                } catch (err) {
+                    throw new ImportedKeyDamagedError(addressId, err);
+                }
             }
             try {
                 const wif = new TextDecoder().decode(wifBytes);
@@ -278,6 +302,13 @@ export async function exportPrivateKey({
     } finally {
         signer.lock();
     }
+}
+
+// Map a failed password-probe decrypt: only a GCM tag mismatch means a wrong
+// password (crypto/aead.js AeadAuthError); a malformed blob or key is a format fault.
+function passwordProbeError(err) {
+    if (/** @type {any} */ (err)?.name === 'AeadAuthError') return new WrongPasswordError();
+    return err;
 }
 
 async function addressBelongsToWallet(vault, address, wallet) {

@@ -122,7 +122,7 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
             target: { value: '100' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
 
         const params = await composedParams();
         expect(params).toMatchObject({

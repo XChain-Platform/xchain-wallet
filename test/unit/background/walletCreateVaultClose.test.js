@@ -59,16 +59,23 @@ const {
     handleWalletCreateWithMnemonic,
     handleWalletImport,
     handleWalletImportBackup,
+    assertFreshVault,
 } = await import('../../../packages/extension/src/background/walletCreate.js');
 
 function makeDeps(over = {}) {
     let blob = null;
+    let meta = null;
     return {
         storageBackend: {
             async load() { return blob; },
             async save(next) { blob = next; },
+            async clear() { blob = null; },
         },
-        metaBackend: { load: async () => null, save: vi.fn(async () => {}) },
+        metaBackend: {
+            load: async () => meta,
+            save: vi.fn(async (next) => { meta = next; }),
+            clear: async () => { meta = null; },
+        },
         sessionBackend: { save: vi.fn(async () => {}) },
         signingSecretBackend: { save: vi.fn(async () => {}) },
         chainRegistry: {},
@@ -140,6 +147,67 @@ describe('pre-host onboarding closes its Vault on every exit', () => {
     }
 });
 
+describe('pre-host onboarding leaves no half-written wallet behind', () => {
+    for (const lane of LANES) {
+        it(`${lane.name}: a refused kdfParams save discards the blob so the install is fresh again`, async () => {
+            const deps = makeDeps();
+            deps.metaBackend.save.mockRejectedValue(new Error('metadata could not be persisted'));
+            await expect(lane.call(deps)).rejects.toThrow('metadata could not be persisted');
+            expect(await deps.storageBackend.load()).toBeNull();
+            await expect(assertFreshVault(deps)).resolves.toBeUndefined();
+        });
+
+        it(`${lane.name}: a refused session save discards the blob and the kdfParams`, async () => {
+            const deps = makeDeps();
+            deps.sessionBackend.save.mockRejectedValue(new Error('session store refused'));
+            await expect(lane.call(deps)).rejects.toThrow('session store refused');
+            expect(await deps.storageBackend.load()).toBeNull();
+            expect(await deps.metaBackend.load()).toBeNull();
+        });
+
+        it(`${lane.name}: a flow that throws after its first write discards the blob`, async () => {
+            flowBehaviour[lane.flow] = async () => { throw new Error('storage is full'); };
+            const deps = makeDeps();
+            await deps.storageBackend.save(new Uint8Array(0));
+            deps.storageBackend.load = async () => null;
+            const clear = vi.spyOn(deps.storageBackend, 'clear');
+            await expect(lane.call(deps)).rejects.toThrow('storage is full');
+            expect(clear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a clear that also fails still reports the original error`, async () => {
+            const deps = makeDeps();
+            deps.metaBackend.save.mockRejectedValue(new Error('metadata could not be persisted'));
+            deps.storageBackend.clear = async () => { throw new Error('clear refused'); };
+            await expect(lane.call(deps)).rejects.toThrow('metadata could not be persisted');
+        });
+    }
+
+    it('a wallet that already exists is never discarded by the refusal', async () => {
+        const deps = makeDeps();
+        await deps.metaBackend.save({ kdfParams: {} });
+        const clear = vi.spyOn(deps.storageBackend, 'clear');
+        await expect(LANES[0].call(deps)).rejects.toThrow('A wallet already exists');
+        expect(clear).not.toHaveBeenCalled();
+    });
+});
+
+describe('pre-host mnemonic import honours a pinned format', () => {
+    it('hands the caller\'s format to the flow', async () => {
+        const seen = [];
+        flowBehaviour.importMnemonic = async (opts) => {
+            seen.push(opts.format);
+            return { format: opts.format, wallet: { id: 'w1', name: 'FreeWallet' } };
+        };
+        const result = await handleWalletImport(
+            { password: 'pw', mnemonic: 'abandon about', format: 'counterwallet-legacy' },
+            makeDeps(),
+        );
+        expect(seen).toEqual(['counterwallet-legacy']);
+        expect(result.format).toBe('counterwallet-legacy');
+    });
+});
+
 describe('pre-host mnemonic import hands label restore to the unlocked host', () => {
     it('returns before restore finishes and keeps the result available', async () => {
         let finishRestore;
@@ -182,5 +250,29 @@ describe('pre-host mnemonic import hands label restore to the unlocked host', ()
 
         const imported = await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, deps);
         await expect(waitForLabelSyncRestoreTask(imported.labelSyncToken)).resolves.toBeNull();
+    });
+});
+
+describe('pre-host mnemonic import lands on the network the caller asked for', () => {
+    // Demo mode asks for mainnet. Without `activeNetwork` the import flow
+    // infers the network from the first chain id, so the field must reach it.
+    it('forwards activeNetwork to the import flow', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Demo Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await handleWalletImport({
+            password: 'pw',
+            mnemonic: 'abandon about',
+            origin: 'demo',
+            activeChainIds: ['bitcoin-mainnet', 'bitcoin-regtest'],
+            activeNetwork: 'mainnet',
+        }, makeDeps());
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ activeNetwork: 'mainnet' }));
+    });
+
+    it('leaves activeNetwork unset when the caller names none', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Imported Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, makeDeps());
+        expect(importMnemonic.mock.calls[0][0].activeNetwork).toBeUndefined();
     });
 });

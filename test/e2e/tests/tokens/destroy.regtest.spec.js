@@ -33,20 +33,20 @@
 // 2. THE BALANCE ACTUALLY DROPS BY THE DESTROYED AMOUNT, ONCE, on the chain's
 //    own read of it - not a balance the wallet only claims to have burned.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
-    REGTEST_CHAIN_ID,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -58,19 +58,6 @@ const DESTROY_AMOUNT = 250;
 /** Pays the ISSUE and DESTROY protocol fees, with room to spare. */
 const MINT_XCHAIN = 10;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Picks `tick` on the venue chain out of DestroyForm's TokenField, which
  * opens the same TokenPicker (`purpose="send"`) the Send form uses, keyed the
@@ -81,14 +68,7 @@ async function selectDestroyToken(page, tick) {
     const trigger = main.getByRole('button', { name: /^Token: / }).first();
     await expect(trigger, 'no Token field on the Destroy form').toBeVisible({ timeout: 30_000 });
     await trigger.click();
-
-    const search = page.getByLabel('Search coins or tokens');
-    await expect(search, 'the Token field did not open the asset picker').toBeVisible({ timeout: 30_000 });
-    await search.fill(tick);
-
-    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
-    await expect(row, `the asset picker lists no ${tick} on this chain`).toBeVisible({ timeout: 30_000 });
-    await row.click();
+    await selectPickerAsset(page, tick);
 
     await expect(main.getByRole('button', { name: /^Token: / }).first())
         .toHaveAttribute('aria-label', new RegExp(`^Token: ${tick} on `), { timeout: 15_000 });
@@ -142,7 +122,7 @@ test.describe('DESTROY on regtest', () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -174,7 +154,7 @@ test.describe('DESTROY on regtest', () => {
         });
 
         await test.step('fill the Destroy form and reach the confirm screen', async () => {
-            await gotoPalette(page, 'Destroy');
+            await openPaletteCommand(page, 'Destroy');
             const main = page.getByRole('main');
             // Scoped by role (the warning sits in a raw role="alert" div)
             // rather than bare text, matching the rest of this suite's

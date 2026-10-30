@@ -9,6 +9,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
+import { clearBackupReminderState, getBackupVerifiedAt } from '../../../packages/core/src/flows/backupReminder.js';
 
 vi.mock('qrcode', () => ({
     default: { toDataURL: vi.fn(async () => 'data:image/png;base64,cXI=') },
@@ -41,6 +42,7 @@ let originalRevokeObjectURL;
 let originalAnchorClick;
 
 beforeEach(() => {
+    clearBackupReminderState();
     clickedDownload = '';
     downloadedBlob = null;
     originalCreateObjectURL = URL.createObjectURL;
@@ -62,14 +64,16 @@ afterEach(() => {
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     HTMLAnchorElement.prototype.click = originalAnchorClick;
+    delete window.showSaveFilePicker;
+    delete window.xchainWalletBridge;
     vi.restoreAllMocks();
 });
 
-function mount(exportBackupFile = vi.fn(async () => ({ fileContent: CONTENT }))) {
+function mount(exportBackupFile = vi.fn(async () => ({ fileContent: CONTENT })), props = {}) {
     const messaging = { exportBackupFile };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <BackupSection activeWallet={{ id: 'wallet-1', name: 'Stale name' }} />
+            <BackupSection activeWallet={{ id: 'wallet-1', name: 'Stale name' }} {...props} />
         </MessagingProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
@@ -93,7 +97,7 @@ describe('BackupSection encrypted export', () => {
         expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
 
         fillPasswords('long-enough', 'long-enougH');
-        expect(screen.getByText('Backup passwords do not match.')).toBeTruthy();
+        expect(screen.getByText('Backup passwords don\'t match.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
         expect(messaging.exportBackupFile).not.toHaveBeenCalled();
 
@@ -116,8 +120,10 @@ describe('BackupSection encrypted export', () => {
         expect(exportBackupFile).toHaveBeenCalledTimes(1);
 
         finish({ fileContent: CONTENT });
-        expect(await screen.findByText('Backup file saved')).toBeTruthy();
+        expect(await screen.findByText('Confirm the backup file')).toBeTruthy();
         expect(clickedDownload).toBe('Cold-Vault-backup-2026-10-13.xchain-wallet');
+        fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
+        expect(await screen.findByText('Backup file saved')).toBeTruthy();
         expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         expect(downloadedBlob).toBeInstanceOf(Blob);
         expect(downloadedBlob.type).toBe('application/json');
@@ -146,6 +152,7 @@ describe('BackupSection encrypted export', () => {
         mount();
         fillPasswords('backup-secret');
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'I saved the file' }));
         await screen.findByText('Optional backup pointer QR');
 
         fireEvent.change(screen.getByLabelText('Backup file HTTPS address'), {
@@ -175,5 +182,128 @@ describe('BackupSection encrypted export', () => {
         expect(await screen.findByText('Backup export returned an invalid file.')).toBeTruthy();
         expect(URL.createObjectURL).not.toHaveBeenCalled();
         await waitFor(() => expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled());
+    });
+});
+
+function exportWithPassword() {
+    fillPasswords('backup-secret');
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+}
+
+function abortError() {
+    return Object.assign(new Error('The user aborted a request.'), { name: 'AbortError' });
+}
+
+function fakeHandle(name = 'chosen.xchain-wallet') {
+    const written = [];
+    const writable = {
+        write: vi.fn(async (blob) => { written.push(blob); }),
+        close: vi.fn(async () => {}),
+        abort: vi.fn(async () => {}),
+    };
+    return { name, written, writable, createWritable: vi.fn(async () => writable) };
+}
+
+describe('BackupSection marks a backup done only on a real save signal', () => {
+    it('download: says nothing is saved and keeps the reminder until the user confirms the file', async () => {
+        mount();
+        exportWithPassword();
+
+        expect(await screen.findByText('Confirm the backup file')).toBeTruthy();
+        expect(screen.getByText('Check that the file is in your downloads, then confirm.')).toBeTruthy();
+        expect(screen.queryByText('Backup file saved')).toBeNull();
+        expect(getBackupVerifiedAt('wallet-1')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
+        expect(await screen.findByText('Backup file saved')).toBeTruthy();
+        expect(getBackupVerifiedAt('wallet-1')).toBeTypeOf('string');
+    });
+
+    it('download: cancelling the confirm step marks nothing', async () => {
+        mount();
+        exportWithPassword();
+        await screen.findByText('Confirm the backup file');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByRole('button', { name: 'Export…' })).toBeTruthy();
+        expect(getBackupVerifiedAt('wallet-1')).toBeNull();
+    });
+
+    it('picker: opens before encryption, and a cancelled picker exports nothing and marks nothing', async () => {
+        window.showSaveFilePicker = vi.fn(async () => { throw abortError(); });
+        const messaging = mount();
+        exportWithPassword();
+
+        expect(await screen.findByText(/The backup file wasn't saved/)).toBeTruthy();
+        expect(window.showSaveFilePicker).toHaveBeenCalledWith(expect.objectContaining({
+            suggestedName: expect.stringMatching(/^Stale-name-backup-\d{4}-\d{2}-\d{2}\.xchain-wallet$/),
+        }));
+        expect(messaging.exportBackupFile).not.toHaveBeenCalled();
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        expect(getBackupVerifiedAt('wallet-1')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
+    });
+
+    it('picker: marks the backup done once the file write completes', async () => {
+        const handle = fakeHandle('cold.xchain-wallet');
+        window.showSaveFilePicker = vi.fn(async () => handle);
+        mount();
+        exportWithPassword();
+
+        expect(await screen.findByText('Backup file saved')).toBeTruthy();
+        expect(screen.getByText('cold.xchain-wallet')).toBeTruthy();
+        expect(handle.writable.close).toHaveBeenCalledOnce();
+        expect(handle.written).toEqual([CONTENT]);
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        expect(getBackupVerifiedAt('wallet-1')).toBeTypeOf('string');
+    });
+
+    it('picker: a failed write marks nothing and says the file was not saved', async () => {
+        const handle = fakeHandle();
+        handle.writable.write = vi.fn(async () => { throw new Error('disk full'); });
+        window.showSaveFilePicker = vi.fn(async () => handle);
+        mount();
+        exportWithPassword();
+
+        expect(await screen.findByText(/Couldn't save the backup file/)).toBeTruthy();
+        expect(screen.queryByText('Backup file saved')).toBeNull();
+        expect(getBackupVerifiedAt('wallet-1')).toBeNull();
+    });
+
+    it('desktop: a cancelled save dialog marks nothing and leaves no saved title', async () => {
+        window.xchainWalletBridge = { saveBackupFile: vi.fn(async () => ({ ok: true, saved: false })) };
+        mount();
+        exportWithPassword();
+
+        expect(await screen.findByText(/The backup file wasn't saved/)).toBeTruthy();
+        expect(window.xchainWalletBridge.saveBackupFile).toHaveBeenCalledWith({
+            fileName: 'Cold-Vault-backup-2026-10-13.xchain-wallet',
+            content: CONTENT,
+        });
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        expect(screen.queryByText('Backup file saved')).toBeNull();
+        expect(getBackupVerifiedAt('wallet-1')).toBeNull();
+    });
+
+    it('desktop: a written file marks the backup done and shows where it went', async () => {
+        window.xchainWalletBridge = {
+            saveBackupFile: vi.fn(async () => ({ ok: true, saved: true, path: '/Users/me/Backups/cold.xchain-wallet' })),
+        };
+        mount();
+        exportWithPassword();
+
+        expect(await screen.findByText('Backup file saved')).toBeTruthy();
+        expect(screen.getByText('/Users/me/Backups/cold.xchain-wallet')).toBeTruthy();
+        expect(screen.getByText(/The file is where you chose to save it/)).toBeTruthy();
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        expect(getBackupVerifiedAt('wallet-1')).toBeTypeOf('string');
+    });
+
+    it('extension popup: Export opens the full tab instead of exporting in the popup', () => {
+        const onExportInTab = vi.fn();
+        mount(undefined, { onExportInTab });
+
+        expect(onExportInTab).toHaveBeenCalledOnce();
+        expect(screen.queryByLabelText('Backup password')).toBeNull();
     });
 });

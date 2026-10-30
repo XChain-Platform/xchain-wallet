@@ -359,13 +359,13 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             // The pending send is eligible for replacement, but the shell has
             // no callable replacement transport, so neither dead control may
             // be offered.
-            const options = page.getByRole('group', { name: 'Action options' });
+            const options = page.getByRole('group', { name: 'Transaction actions' });
             await expect(options, 'the pending entry has no action options from which to verify the shell gate')
                 .toBeVisible({ timeout: 30_000 });
 
             await options.getByRole('button', { name: 'More' }).click();
             const menu = options.getByRole('menu');
-            await expect(menu.getByRole('menuitem', { name: 'Speed up' }),
+            await expect(menu.getByRole('menuitem', { name: 'Speed up transaction' }),
                 'Speed up is offered even though the web shell cannot replace a transaction')
                 .toHaveCount(0);
             await expect(menu.getByRole('menuitem', { name: 'Cancel transaction' }),

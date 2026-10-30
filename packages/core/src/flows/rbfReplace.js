@@ -29,6 +29,8 @@
 // this contract today won't change when the engine ships.
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
+import '../i18n/locales/en/send.js';
 
 const activeBroadcasts = new WeakMap();
 
@@ -93,7 +95,8 @@ export function isReplaceCallAvailable(messaging) {
  *     the transaction could signal replaceability
  *   - the pending record says the signed transaction enabled RBF; a missing
  *     flag refuses because the wallet cannot prove the transaction signalled
- *   - the local record is neither failed nor already replaced
+ *   - the local record is neither failed nor already replaced, by this wallet
+ *     or by another transaction that spent its coins
  *
  * @param {{ action?: string, blockIndex?: number, txHash?: string, chainId?: string }} entry
  * @param {{ descriptor?: { displayName?: string, feeStrategy?: { rbfSupported?: boolean } } | null }} [opts]
@@ -127,7 +130,8 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
     if ((entry.pending?.rbf ?? entry.rbf) !== true) {
         return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
-    if (entry.pending?.failed === true || entry.pending?.replaced === true) {
+    if (entry.pending?.failed === true || entry.pending?.replaced === true
+        || entry.pending?.replacedElsewhere === true) {
         return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
     return { ok: true };

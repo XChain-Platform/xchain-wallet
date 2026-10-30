@@ -55,9 +55,10 @@ vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 // test/unit/crypto/kdf.test.js, so only the no-argument DEFAULT is cheapened.
 // An explicit override still wins, which keeps the one caller that passes them
 // on its production path: `rekeyWalletRecord` re-seals at the cost it INHERITS
-// from the backed-up wallet, asserted in
-// test/integration/flows/backup-restore-seed-password.test.js. The salt still
-// comes from the real helper, so it stays fresh per call.
+// from the backed-up wallet, raised to the KDF_MIN_* floor, asserted in
+// test/integration/flows/backup-restore-seed-password.test.js. That floor is
+// cheapened here too, or every re-seal would pay the production cost again.
+// The salt still comes from the real helper, so it stays fresh per call.
 //
 // The suite still bites: re-sealing under the wrong password reds four of the
 // thirteen cases with this mock in place.
@@ -65,6 +66,8 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importActual) => {
     const actual = await importActual();
     return {
         ...actual,
+        KDF_MIN_ITERATIONS: 1,
+        KDF_MIN_MEMORY_KIB: 8 * 1024,
         makeFreshKdfParams: (overrides = {}) =>
             actual.makeFreshKdfParams({ iterations: 1, memory: 8 * 1024, ...overrides }),
     };
@@ -266,6 +269,20 @@ describe('integration/shells/pre-host fresh-install backup restore', () => {
         expect((await vault.settings.get())?.fiatCurrency).toBe('EUR');
         const addresses = await vault.addresses.list();
         expect(addresses.map((a) => a.address)).toEqual(['bc1qexample']);
+    });
+
+    it('persists the vault in one blob write, before the kdf params', async () => {
+        // A service worker that dies between per-record writes would leave a blob
+        // with no kdf params: unopenable, and refused by every onboarding lane.
+        const writes = [];
+        const saveBlob = storageBackend.save;
+        const saveMeta = metaBackend.save;
+        storageBackend.save = async (blob) => { writes.push('blob'); return saveBlob(blob); };
+        metaBackend.save = async (m) => { writes.push('meta'); return saveMeta(m); };
+
+        await restore();
+
+        expect(writes).toEqual(['blob', 'meta']);
     });
 
     it('the restored seed opens under the NEW device password', async () => {

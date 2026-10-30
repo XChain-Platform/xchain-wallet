@@ -122,7 +122,9 @@ assert.equal(
 // property the demo gate pins: a profile of hosts the build stopped using
 // would size the limits for traffic that no longer exists.
 const shippedHosts = new Set(
-    BUNDLED_DESCRIPTORS.flatMap((d) => [d.explorer.defaultUrl, d.encoder.defaultUrl, d.hub.defaultUrl])
+    BUNDLED_DESCRIPTORS.flatMap((d) => [d.explorer, d.encoder, d.hub])
+        .filter(Boolean)
+        .map((endpoint) => endpoint.defaultUrl)
         .map((u) => new URL(u).host),
 );
 for (const r of oneAddress.requests) {

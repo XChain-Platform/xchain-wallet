@@ -12,15 +12,17 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import styles from './IssueTokenForm.module.css';
 import { AssetMark } from '../../ui/AssetMark.jsx';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
@@ -56,8 +58,7 @@ export function MarketsList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const { overall: reachabilityOverall } = useReachability({});
-    const networkOffline = reachabilityOverall === 'offline';
+    const { offline: networkOffline, recheck: recheckNetwork } = useNetworkOffline({ walletId });
     const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
@@ -99,8 +100,8 @@ export function MarketsList({
             if (requestId !== watchlistRequestId.current) return;
             setWatchlist(Array.isArray(rows) ? rows : []);
         } catch {
-            if (requestId !== watchlistRequestId.current) return;
-            setWatchlist([]);
+            // Keep the stars already shown: a failed read says nothing about
+            // what is stored, and a wallet switch clears the list on its own.
         }
     }, [walletId, messaging]);
 
@@ -150,7 +151,8 @@ export function MarketsList({
                 }
             });
         return () => { cancelled = true; };
-    }, [selectedAsset, messaging, walletId, marketsReload]);
+    // The connection coming back reads the markets again.
+    }, [selectedAsset, messaging, walletId, marketsReload, networkOffline]);
 
     const selectedAssetKey = selectedAsset
         ? `${selectedAsset.chainId}:${selectedAsset.tick}`
@@ -243,12 +245,14 @@ export function MarketsList({
         if (pendingWatchlistKeysRef.current.has(key)) return;
         pendingWatchlistKeysRef.current.add(key);
         setPendingWatchlistKeys((current) => new Set(current).add(key));
-        const existing = watchlist.find(
+        // Every row for the market: two windows starring it together can
+        // leave two, and clearing one would keep the star lit.
+        const existing = watchlist.filter(
             (e) => `${e.chainId}::${e.tick1}::${e.tick2}` === key,
         );
         try {
-            if (existing) {
-                await messaging.clearWatchlistEntry({ id: existing.id });
+            if (existing.length > 0) {
+                for (const e of existing) await messaging.clearWatchlistEntry({ id: e.id });
             } else {
                 await messaging.saveWatchlistEntry({ walletId, chainId, tick1, tick2 });
             }
@@ -266,7 +270,7 @@ export function MarketsList({
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
     const header = (
-        <PageHeader onBack={onBack} title="Decentralized exchange" titleIcon={<Icon.MarketIcon />} />
+        <PageHeader onBack={onBack} title="Decentralized exchange" />
     );
 
     const selectorDescriptor = selectedAsset ? chainRegistry.get(selectedAsset.chainId) : null;
@@ -280,9 +284,34 @@ export function MarketsList({
             ? (selectedAsset.displayName || selectorTickUpper)
             : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
         : 'Select coin or token';
+    // The load error is a page notice, shown first; the results region below
+    // renders nothing in its place.
+    // Offline, the results region's offline state is the page's one message.
+    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError
+        && !networkOffline;
+    const showOffline = !!selectedAsset && networkOffline
+        && ((marketsLoading && !hasCachedMarkets) || !!loadError);
+    const showLoading = !!selectedAsset && marketsLoading && !hasCachedMarkets && !showOffline;
     return (
         <Screen variant={variant} header={header}>
             <ListPage
+                notices={showLoadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setSettledAssetKey(null);
+                                setLoading(true);
+                                setMarketsReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                ) : showLoading ? (
+                    <StatusMessage variant="status" label={t('routes.marketsList.loading')} busy>{t('routes.marketsList.loading')}</StatusMessage>
+                ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>
                         <Button
@@ -354,7 +383,7 @@ export function MarketsList({
                                     }}
                                     panelId={`${tabsId}-panel`}
                                     aria-label="Markets view"
-                                    style={{ flexShrink: 0, width: 'auto' }}
+                                    className={marketsStyles.marketTabs}
                                 />
                             </div>
                         ) : null}
@@ -366,7 +395,7 @@ export function MarketsList({
                     role={selectedAsset ? 'tabpanel' : undefined}
                     aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
                 >
-                    <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                    <div role="region" aria-label="Markets results" aria-busy={(marketsLoading && !showOffline) || undefined}>
                         {!selectedAsset ? (
                             <EmptyState
                                 title="No asset selected"
@@ -375,26 +404,13 @@ export function MarketsList({
                                 onAction={onChangeAsset}
                                 actionIcon={<Icon.MarketIcon />}
                             />
-                        ) : marketsLoading && !hasCachedMarkets ? (
-                            <div role="status" aria-label="Loading markets">
+                        ) : showOffline ? (
+                            <OfflineEmptyState body="Markets load when the connection returns." onRetry={recheckNetwork} />
+                        ) : showLoading ? (
+                            <div aria-hidden="true">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
-                        ) : loadError ? (
-                            <StatusMessage
-                                variant="error"
-                                className={styles.hint}
-                                recovery={{
-                                    label: 'Try again',
-                                    onAction: () => {
-                                        setSettledAssetKey(null);
-                                        setLoading(true);
-                                        setMarketsReload((value) => value + 1);
-                                    },
-                                }}
-                            >
-                                {loadError}
-                            </StatusMessage>
-                        ) : displayMarkets.length === 0 ? (
+                        ) : loadError ? null : displayMarkets.length === 0 ? (
                             <EmptyState
                                 title={filtersHideAllMarkets
                                     ? 'No results for these filters'
@@ -409,7 +425,7 @@ export function MarketsList({
                                     ? 'Matching markets appear here after you reset or change the filters.'
                                     : tab === 'watchlist'
                                         ? `Starred markets for ${selectedAsset.tick} appear here after you star one.`
-                                        : 'Market pairs involving this asset appear here when they become available on its chain.'}
+                                        : 'Market pairs involving this asset appear here when they become available on its network.'}
                                 actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />
@@ -493,7 +509,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
     const changeDisplay = percentChangeDisplay(changeNum);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
@@ -535,15 +551,19 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 aria-label={`Open ${otherName || otherTick} market`}
                 tooltip={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 data-market-result="true"
+                trailingClassName={marketsStyles.marketTrailing}
                 leading={<TickerIcon chainId={chainId} tick={otherTick} />}
                 title={(
                     <span
-                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
+                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap', minWidth: 0 }}
                     >
-                        <Chip>
-                            <span>{tick1}</span>
+                        {/* A ticker may run to 250 characters; the pair chip
+                            shortens it with an ellipsis inside the row rather
+                            than pushing the 24h change off the screen. */}
+                        <Chip className={marketsStyles.pairChip} title={`${tick1} / ${tick2}`}>
+                            <span className={marketsStyles.pairTick}>{tick1}</span>
                             <span aria-hidden="true">{' / '}</span>
-                            <span>{tick2}</span>
+                            <span className={marketsStyles.pairTick}>{tick2}</span>
                         </Chip>
                         {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
                             <span>{otherName}</span>
@@ -574,6 +594,9 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                                     fontSize: 'var(--xc-text-sm)',
                                     fontWeight: 600,
                                     color: changeColor,
+                                    // A signed percent keeps its sign in front on a right-to-left page.
+                                    direction: 'ltr',
+                                    unicodeBidi: 'isolate',
                                 }}
                             >
                                 {changeDisplay?.text ?? change24h}
@@ -588,12 +611,14 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                             <span style={{
                                 display: 'inline-block',
                                 background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
-                                color: 'var(--xc-accent-text)',
+                                color: 'var(--xc-text)',
                                 fontWeight: 600,
                                 padding: '1px 8px',
                                 borderRadius: 999,
                                 fontSize: 11,
                                 lineHeight: 1.5,
+                                // A long pair name squeezed the pill into two lines.
+                                whiteSpace: 'nowrap',
                             }}>
                                 depth {depth}
                             </span>
@@ -643,6 +668,17 @@ function extractRows(resp) {
     return [];
 }
 
+// A price or change figure from the explorer, or null when it is not a finite
+// number. An object, NaN or an overflowing exponent has no honest rendering,
+// so the market shows no figure rather than "NaN" or "[object Object]".
+function finiteFigure(value, { percent = false } = {}) {
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const text = String(value).trim();
+    if (text === '') return null;
+    const numeric = percent ? text.replace(/%$/, '') : text;
+    return Number.isFinite(Number(numeric)) ? text : null;
+}
+
 /**
  * Normalize a market row. The explorer returns one of several shapes
  * depending on version; pick out the fields we render and fail closed
@@ -652,9 +688,15 @@ export function normalizeMarket(row) {
     if (!row || typeof row !== 'object') return null;
     const tick1 = row.tick1 || row.tickA || row.give_tick || row.base || null;
     const tick2 = row.tick2 || row.tickB || row.get_tick || row.quote || null;
-    if (!tick1 || !tick2) return null;
-    const lastPrice = row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last ?? null;
-    const change24h = row.tick1_24hr_change ?? row.change_24h ?? row.change24h ?? null;
+    if (typeof tick1 !== 'string' || typeof tick2 !== 'string') return null;
+    // A pair of one token with itself is no market; opening it would offer
+    // an order that gives and gets the same token.
+    if (tick1.trim().toUpperCase() === tick2.trim().toUpperCase()) return null;
+    const lastPrice = finiteFigure(row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last);
+    const change24h = finiteFigure(
+        row.tick1_24hr_change ?? row.change_24h ?? row.change24h,
+        { percent: true },
+    );
     const depthRaw = row.depth ?? row.open_orders ?? row.orderCount;
     const depth = typeof depthRaw === 'number' ? depthRaw : Number(depthRaw);
     const name1 = row.name1 ?? row.tick1_name ?? row.tick1Name ?? row.base_name ?? row.baseName;
@@ -664,8 +706,8 @@ export function normalizeMarket(row) {
         tick2: String(tick2),
         ...(name1 != null && String(name1).length > 0 ? { name1: String(name1) } : {}),
         ...(name2 != null && String(name2).length > 0 ? { name2: String(name2) } : {}),
-        lastPrice: lastPrice != null && String(lastPrice).length > 0 ? String(lastPrice) : undefined,
-        change24h: change24h != null && String(change24h).length > 0 ? String(change24h) : undefined,
-        depth: Number.isFinite(depth) ? depth : undefined,
+        lastPrice: lastPrice ?? undefined,
+        change24h: change24h ?? undefined,
+        depth: Number.isFinite(depth) && depth >= 0 ? depth : undefined,
     };
 }

@@ -12,6 +12,8 @@
 // store: rehydrate, merge, persist, settlement journal, vault rebuild and
 // reconcile, seal and prune. The host registers the routes and calls these.
 
+import { probeTxInclusion } from '@xchain-wallet/core/flows/txInclusionProbe.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import {
     OWED_SETTLEMENT_LIMIT,
     owedRecordKey,
@@ -30,6 +32,23 @@ function commitLandedFields(source) {
     return {
         commitLanded: true,
         ...(typeof source.commitTxid === 'string' && source.commitTxid ? { commitTxid: source.commitTxid } : {}),
+    };
+}
+
+/**
+ * Carry the signed reveal of a two-phase action onto a queue entry whose bytes are
+ * its commit, so every send of the entry sends the commit and then the reveal.
+ * An entry whose commit already landed carries the reveal as its own bytes instead.
+ *
+ * @param {{ revealTxHex?: unknown, revealTxid?: unknown, commitLanded?: unknown } | null | undefined} source
+ * @returns {{ revealTxHex?: string, revealTxid?: string }}
+ */
+function queuedRevealFields(source) {
+    if (source?.commitLanded === true) return {};
+    if (typeof source?.revealTxHex !== 'string' || !source.revealTxHex) return {};
+    return {
+        revealTxHex: source.revealTxHex,
+        ...(typeof source.revealTxid === 'string' && source.revealTxid ? { revealTxid: source.revealTxid } : {}),
     };
 }
 
@@ -109,11 +128,15 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             if (missing.length > 0) live.unshift(...missing);
         }
     }
-    // Copy the blob copy's ADS verdict onto a vault-rebuilt twin of the same
-    // bytes; a rebuild carries none, and booking nothing under-counts it.
+    // Copy the blob copy's ADS verdict and fee-bump link onto a vault-rebuilt
+    // twin of the same bytes; a rebuild carries neither, and losing the link
+    // leaves the evicted original live after the replacement lands.
     function adoptSnapshotVerdict(live, persisted) {
+        if (live.signedTxHex !== persisted.signedTxHex) return;
+        const link = persisted.rbfReplacesPendingTxId;
+        if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
         const verdict = persisted.adsCommit;
-        if (live.adsCommit || live.signedTxHex !== persisted.signedTxHex) return;
+        if (live.adsCommit) return;
         if (!verdict || typeof verdict !== 'object') return;
         if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return;
         live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
@@ -339,23 +362,17 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 if (verdict !== 'unreachable') settled.add(owed);
             }
             if (settled.size === 0) return;
-            // A retire has to be backed by a write that reached disk. Vault's
-            // collection put/delete mutate the in-memory document BEFORE the
-            // autosave and never restore it when that save rejects, so a
-            // refused write stays readable in this process: the patch lane
-            // re-reads its own unpersisted terminal status and reports
-            // 'closed', and the discard lane finds the record already spliced
-            // out and reports 'settled'. Both read as a settlement, and
-            // retiring on either drops the journal record while disk still
-            // holds the PendingTx as 'queued', so the landed transaction stays
-            // queued for good and keeps netting its spend out of the balance.
-            // One explicit save per draining pass decides it: either the
-            // phantom write becomes real, or nothing here is durable and the
-            // journal survives for the next pass. Keeping the records costs
-            // nothing, because replay is safe to repeat - the patch lane is
-            // idempotent and the discard lane no-ops on a record that is
-            // already gone or terminal. A vault that exposes no save() keeps the old
-            // behaviour rather than holding its journal forever.
+            // A retire has to be backed by a write that reached disk: dropping a
+            // journal record while disk still holds the PendingTx as 'queued'
+            // leaves the landed transaction queued for good, netting its spend.
+            // Vault rolls a refused autosave back and rethrows, so a refused
+            // replay already reads as 'unreachable' above. This explicit save is
+            // the gate for a vault opened with autoSave off, whose put and delete
+            // change only memory, and a second check otherwise. If it fails,
+            // nothing is retired and the journal survives for the next pass,
+            // which is safe because replay repeats cleanly: the patch lane is
+            // idempotent and the discard lane no-ops on a gone or terminal record.
+            // A vault that exposes no save() retires on the replay verdict alone.
             if (typeof vault?.save === 'function') {
                 try {
                     await vault.save();
@@ -417,13 +434,19 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         // The read is still failing, or the store is dormant, so neither
         // persist below can write and the blob keeps this wallet; the
         // recovering load or the lease reload drops it instead.
-        if ((!queueStore.loaded || queueStore.dormant) && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
+        const unwritable = !queueStore.loaded || queueStore.dormant;
+        // A loaded store records the removal too, before its save: a refused
+        // save leaves the wallet in the blob, and only the ledger drops it on the next boot.
+        const heldOnDisk = queueStore.storage && queuedBroadcasts.has(walletId);
+        if ((unwritable || heldOnDisk) && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
         const hadEntries = queuedBroadcasts.delete(walletId);
         recoveredWallets.delete(walletId);
         reconciledWallets.delete(walletId);
         const owedBefore = queueStore.owed.length;
         queueStore.owed = queueStore.owed.filter((s) => s.walletId !== walletId);
-        if (hadEntries) await persistQueue();
+        // A save that landed dropped the wallet and retired its ledger key, so the
+        // live set forgets it too (a plain Set delete; the ledger is already clear).
+        if (hadEntries && await persistQueue()) queueStore.prunedWallets?.delete(walletId);
         if (queueStore.owed.length !== owedBefore) await persistOwedSettlements();
     }
     function getQueue(walletId) {
@@ -509,7 +532,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * judgement: it rides the same `xchain.broadcastQueue` key the queue
      * snapshot does, so it is gone in exactly the failure this read serves.
      *
-     * Three conditions bound what comes back, and each is a refusal:
+     * Four conditions bound what comes back, and each is a refusal:
      *   - the record's `fromAddress` belongs to THIS wallet. An unreadable
      *     table or an empty address set restores nothing rather than guessing,
      *     because a wrong join would list one wallet's signed bytes under
@@ -520,7 +543,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *     can reach are exactly the ones no live call owns.
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
-     * The last two are sampled before the vault reads as well as after, and an
+     *   - a 'broadcasting' record was created before this store was built.
+     *     submitAction holds its record at 'broadcasting' across the commit
+     *     broadcast and the broadcast of its already-signed reveal or P2SH
+     *     phase 2, and tx.replace and broadcast.signedTx hold theirs
+     *     across the network call, with no queue entry naming any of them. A
+     *     record this process created is therefore a live call's, or one the
+     *     map or journal already holds; one a dead process left behind predates
+     *     the next store and comes back on that boot. An unparseable createdAt
+     *     keeps the record restorable.
+     * The second and third are sampled before the vault reads as well as after, and an
      * id held at either moment is skipped. A route drops its entry only after
      * the record is terminal or journaled, and the journal drops a record only
      * once its write lands, so a record read stale mid-scan is still named by
@@ -562,10 +594,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const held = heldPendingTxIds(walletId);
         for (const id of heldBeforeReads) held.add(id);
         const restorable = candidates
-            .filter(({ record: r }) => r
+            .filter(({ record: r, resumedClaim }) => r
                 && typeof r.txHex === 'string' && r.txHex
                 && typeof r.id === 'string' && !held.has(r.id)
-                && owned.has(r.fromAddress))
+                && owned.has(r.fromAddress)
+                && !(resumedClaim && createdInThisProcess(r)))
             .sort((a, b) => String(a.record.createdAt || '').localeCompare(String(b.record.createdAt || '')));
         for (const { record, resumedClaim } of restorable) {
             // Entries name a registry chain id; records name coin plus network.
@@ -584,6 +617,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 pendingTxId: record.id,
                 ...(resumedClaim ? { resumedClaim: true } : {}),
                 ...commitLandedFields(record),
+                // A two-phase record checkpointed before its commit went out
+                // comes back with its reveal, so the resume sends both.
+                ...queuedRevealFields(record),
                 // No ADS verdict: it rode the entry, never the record, so the
                 // donation this transaction may carry is not re-derivable here.
                 // Booking nothing under-counts the accumulator; booking a guess
@@ -592,12 +628,57 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             });
         }
     }
+    // Whether a record was created after this store was built (a store with no boot stamp claims none).
+    function createdInThisProcess(record) {
+        const created = Date.parse(record.createdAt);
+        return Number.isFinite(queueStore.bootedAt) && Number.isFinite(created)
+            && created > queueStore.bootedAt;
+    }
     // PendingTx ids a live queue entry or an owed settlement names right now.
     function heldPendingTxIds(walletId) {
         const live = queuedBroadcasts.get(walletId) ?? [];
         const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
         for (const owed of queueStore.owed) held.add(owed.pendingTxId);
         return held;
+    }
+    /**
+     * Ids of the entries whose transaction a block already carries. Only a
+     * positive answer counts: a lookup that fails or finds nothing keeps the
+     * entry. A two-phase entry is never judged, since its txid is the commit
+     * and the reveal it carries may still be unsent.
+     *
+     * @param {any[]} entries
+     * @param {{ get: (chainId: string) => any } | undefined} sdkRegistry
+     * @returns {Promise<Set<string>>}
+     */
+    async function entriesOnChain(entries, sdkRegistry) {
+        /** @type {Set<string>} */
+        const known = new Set();
+        if (entries.length === 0 || typeof sdkRegistry?.get !== 'function') return known;
+        /** @type {Map<string, Array<{ id: string, txid: string }>>} */
+        const byChain = new Map();
+        for (const entry of entries) {
+            if (!entry || typeof entry.id !== 'string' || typeof entry.chainId !== 'string') continue;
+            if (typeof entry.revealTxHex === 'string' && entry.revealTxHex) continue;
+            let txid = typeof entry.txid === 'string' ? entry.txid.trim().toLowerCase() : '';
+            if (!txid && typeof entry.signedTxHex === 'string' && entry.signedTxHex) {
+                try { txid = rawTxid(entry.signedTxHex); } catch { txid = ''; }
+            }
+            if (!/^[0-9a-f]{64}$/.test(txid)) continue;
+            const list = byChain.get(entry.chainId) ?? [];
+            list.push({ id: entry.id, txid });
+            byChain.set(entry.chainId, list);
+        }
+        for (const [chainId, list] of byChain) {
+            let found;
+            try {
+                found = await probeTxInclusion({ sdk: sdkRegistry.get(chainId), txids: list.map((x) => x.txid) });
+            } catch {
+                continue;
+            }
+            for (const x of list) if (found.has(x.txid)) known.add(x.id);
+        }
+        return known;
     }
     // Wallets whose rehydrated entries this process has already judged against
     // the durable half. Left un-latched when the vault could not answer, so the
@@ -629,22 +710,36 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * is missing or terminal can no longer be sent by any route and listing it
      * only offers a button that throws.
      *
+     * A kept entry whose record reads 'broadcasting' gets `resumedClaim` when
+     * no live call holds its `${walletId}:${id}` claim. The broadcast route
+     * stamps that status before the network call and saves nothing to the
+     * blob in between, so a worker that dies inside the call reloads the entry
+     * unlabelled, and `restoreQueueFromVault` never reaches it because the
+     * entry already names the record. Without the label the banner offers a
+     * plain send and never warns that the bytes may have landed. The label is
+     * never cleared here: a record back at 'queued' after a resumed retry may
+     * still describe an attempt that landed.
+     *
+     * An entry that names no PendingTx (a raw signed transaction the renderer
+     * queued) has no durable half to judge it, so its own txid is asked of the
+     * chain instead: one a block already carries was sent, and its removal is
+     * what a refused save lost. It leaves the queue rather than coming back as
+     * unsent and offering a second send.
+     *
      * @param {any} vault
      * @param {string} walletId
+     * @param {{ get: (chainId: string) => any }} [sdkRegistry]
      */
-    async function reconcileRestoredEntries(vault, walletId) {
+    async function reconcileRestoredEntries(vault, walletId, sdkRegistry) {
         if (!queueStore.loaded || reconciledWallets.has(walletId)) return;
         // A vault with no pendingTxs collection cannot answer, and an absent
         // reader must read as "cannot judge", never as "no record exists".
         if (typeof vault?.pendingTxs?.get !== 'function') return;
         const live = getQueue(walletId);
         const owning = live.filter((e) => typeof e?.pendingTxId === 'string' && e.pendingTxId);
-        if (owning.length === 0) {
-            reconciledWallets.add(walletId);
-            return;
-        }
         /** @type {Set<string>} */
         const retired = new Set();
+        let relabelled = false;
         for (const entry of owning) {
             let record;
             try {
@@ -660,10 +755,19 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             }
             if (record.status !== 'queued' && record.status !== 'broadcasting') {
                 retired.add(entry.id);
+                continue;
+            }
+            // Sampled after the read: a broadcast that took the claim during it holds the record legitimately.
+            if (record.status === 'broadcasting' && entry.resumedClaim !== true
+                && !queueStore.inFlight?.has(`${walletId}:${entry.id}`)) {
+                entry.resumedClaim = true;
+                relabelled = true;
             }
         }
+        const unowned = live.filter((e) => !(typeof e?.pendingTxId === 'string' && e.pendingTxId));
+        for (const id of await entriesOnChain(unowned, sdkRegistry)) retired.add(id);
         reconciledWallets.add(walletId);
-        if (retired.size === 0) return;
+        if (retired.size === 0 && !relabelled) return;
         for (let i = live.length - 1; i >= 0; i -= 1) {
             if (retired.has(live[i].id)) live.splice(i, 1);
         }
@@ -704,6 +808,15 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const stored = twin ?? pushQueueEntry(walletId, entry);
         return { entry: stored, persisted: await persistQueue() };
     }
+    // The live entry that already holds this transaction: same chain and the
+    // same txid, or the same signed bytes where an entry names no txid.
+    function liveEntryForTx(walletId, entry) {
+        const txid = typeof entry?.txid === 'string' ? entry.txid : '';
+        const hex = typeof entry?.signedTxHex === 'string' ? entry.signedTxHex : '';
+        if (!txid && !hex) return null;
+        return getQueue(walletId).find((e) => e.chainId === entry.chainId
+            && ((txid && e.txid === txid) || (hex && e.signedTxHex === hex))) ?? null;
+    }
     // Find the live entry for the same PendingTx and the same signed bytes.
     function liveTwinOf(walletId, entry) {
         const pendingTxId = entry?.pendingTxId;
@@ -729,11 +842,24 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `resumedClaim` marks an entry rebuilt from a record the broadcast route
      * had already claimed, so the banner can say the attempt was interrupted
      * and the broadcast route can read an "already known" reply as delivery.
+     * `rbfReplacesPendingTxId` names the original a queued fee-bump replacement
+     * evicts, so the broadcast route retires it once the replacement lands.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * `revealTxHex` is the signed reveal of a two-phase action whose commit is
+     * `signedTxHex`: the broadcast route sends the commit and then the reveal.
+     *
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
+        // The same payment signed again after an ambiguous broadcast carries the
+        // same bytes, so the same txid, under a new PendingTx. One transaction
+        // is one row: the first entry keeps the slot and takes the verdict.
+        const sameTx = liveEntryForTx(walletId, entry);
+        if (sameTx) {
+            adoptSnapshotVerdict(sameTx, entry);
+            return sameTx;
+        }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const adsCommit = entry.adsCommit;
         const stored = {
@@ -749,7 +875,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 ? { pendingTxId: entry.pendingTxId }
                 : {}),
             ...(entry.resumedClaim === true ? { resumedClaim: true } : {}),
+            ...(typeof entry.rbfReplacesPendingTxId === 'string' && entry.rbfReplacesPendingTxId
+                ? { rbfReplacesPendingTxId: entry.rbfReplacesPendingTxId }
+                : {}),
             ...commitLandedFields(entry),
+            ...queuedRevealFields(entry),
             ...(adsCommit
                 && typeof adsCommit === 'object'
                 && typeof adsCommit.chainId === 'string'

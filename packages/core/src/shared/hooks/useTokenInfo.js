@@ -49,7 +49,17 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
     const { messaging } = useMessaging();
     const baseKey = tokenInfoCacheKey(chainId, tick);
     const key = demo && baseKey ? `demo|${baseKey}` : baseKey;
-    const [info, setInfo] = useState(/** @type {any} */ (readTokenInfoCache(key).value));
+    // The record is stored with the key it was read for, so a hook that moves to
+    // another tick never serves the previous tick's divisibility, bridge list or
+    // owner while the new one loads, or when its read fails.
+    const [held, setHeld] = useState(/** @type {{ key: string | null, value: any }} */ (
+        { key, value: readTokenInfoCache(key).value }
+    ));
+    const info = held.key === key ? held.value : null;
+    const setInfo = (/** @type {any} */ next) => setHeld((prev) => ({
+        key,
+        value: typeof next === 'function' ? next(prev.key === key ? prev.value : null) : next,
+    }));
     // Bumped when this tick is invalidated, purely to re-run the fetch effect
     // on a component that never unmounted (the Manage Token page driving its
     // own MINT / LOCK / TRANSFER is exactly that case).
@@ -80,6 +90,12 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
             .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
             .then((next) => {
                 if (cancelled) return;
+                // A failed read is never cached, so the next open asks again, and
+                // it never replaces an owner this hook already resolved.
+                if (next?.loadError) {
+                    setInfo((prev) => (prev?.creator && revision === 0 ? prev : next));
+                    return;
+                }
                 writeTokenInfoCache(key, next);
                 setInfo(next);
             })
@@ -113,7 +129,7 @@ export function fetchTokenInfo(messaging, chainId, tick, opts = {}) {
     return Promise.resolve()
         .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
         .then((next) => {
-            writeTokenInfoCache(key, next);
+            if (!next?.loadError) writeTokenInfoCache(key, next);
             return next;
         })
         .catch(() => null);

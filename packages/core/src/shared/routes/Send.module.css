@@ -5,13 +5,13 @@
     margin: 0;
 }
 
-.error {
+/* A line of fact under a field (the amount the Max button left for fees, the
+   memo's byte count): muted and small like the field's own hint, with no
+   default paragraph margin pushing the next control away. */
+.balanceHint {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
+    color: var(--xc-text-muted);
+    margin: 0;
 }
 
 .actions {
@@ -23,11 +23,8 @@
 }
 
 .saveRecipient {
+    composes: card from '../../ui/Card.module.css';
     margin-top: var(--xc-space-4);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
 }
 
 .saveRecipientActions {
@@ -63,6 +60,19 @@
        full-width already, so only the block axis needs the tap floor. */
     display: list-item;
     min-height: var(--xc-tap-min);
+    position: relative;
+}
+
+/* The Advanced disclosure keeps its compact look. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .detailsToggle::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .detailsToggle:hover {
@@ -70,14 +80,11 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
     gap: 0;
     margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-1);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .advancedReviewList {
@@ -143,43 +150,7 @@
     unicode-bidi: isolate;
 }
 
-.warnings {
-    border: 1px solid var(--xc-warning);
-    background: var(--xc-warning-bg);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-.warning + .warning {
-    margin-top: var(--xc-space-1);
-}
-
-.testSendGate {
-    border: 1px solid var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 8%, transparent);
-    padding: var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
-}
-
-.testSendTitle {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    margin: 0 0 var(--xc-space-1);
-}
-
 .testSendBody {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
     margin: 0 0 var(--xc-space-2);
 }
 
@@ -206,15 +177,12 @@
 }
 
 .pastedRecipient {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: var(--xc-space-1) var(--xc-space-2);
     margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
 }
 
 .pastedRecipientLabel {
@@ -234,14 +202,11 @@
     align-items: flex-start;
     gap: var(--xc-space-2);
     padding: var(--xc-space-2) 0;
-    cursor: pointer;
 }
 
 .coinControlList {
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-2) 0 var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     box-sizing: border-box;
     min-inline-size: 0;
     width: 100%;
@@ -371,14 +336,11 @@
  * "Sent" layout; the card adds the visual hierarchy spec'd in §29.5
  * (icon + summary + txid + explorer link + Send-another / Done CTAs). */
 .successCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
     align-items: stretch;
-    padding: var(--xc-space-4);
-    border: 1px solid var(--xc-success, #2c7a3d);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .successIcon {
@@ -403,14 +365,11 @@
 }
 
 .successSummary {
+    composes: card from '../../ui/Card.module.css';
     margin: 0;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     gap: var(--xc-space-2) var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
 }
 
 .successRow {
@@ -581,13 +540,10 @@
 }
 
 .recipientRow {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .recipientRowHead {

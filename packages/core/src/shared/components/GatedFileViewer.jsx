@@ -38,6 +38,8 @@ import styles from './GatedFileViewer.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_TEXT_CHARS = 200_000;
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -79,6 +81,19 @@ function declaredMatchesSniff(declared, sniffed) {
     }
     // binary: only an explicit opaque declaration matches.
     return declared === 'application/octet-stream';
+}
+
+// The file name is publisher text. A saved name carries no path separator,
+// control or bidi-override character, no reserved Windows character, no
+// leading dot and no trailing dot or space, and stays within 120 characters.
+export function safeDownloadName(name) {
+    const cleaned = String(name ?? '')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069/\\:*?"<>|]+/g, '_')
+        .replace(/^[.\s_]+/, '')
+        .replace(/[.\s]+$/, '')
+        .slice(0, 120);
+    return cleaned || 'unlocked-file';
 }
 
 function kindLabel(kind, mime) {
@@ -174,7 +189,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
             const a = document.createElement('a');
             a.href = url;
-            a.download = name || 'unlocked-file';
+            a.download = safeDownloadName(name);
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -204,20 +219,19 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     if (!bytes) {
         body = (
             <StatusMessage variant="error" className={styles.notice}>
-                Could not decode the unlocked file. Try unlocking it again.
+                {t('components.gatedFileViewer.couldNotDecodeTheUnlocked')}
             </StatusMessage>
         );
     } else if (previewTooLarge) {
         body = (
             <p className={styles.notice}>
-                This file is larger than 5 MB and can&apos;t be previewed safely.
-                Download it to view the full file.
+                {t('components.gatedFileViewer.thisFileIsLargerThan')}
             </p>
         );
     } else if (imageUrl && failedImageUrl === imageUrl) {
         body = (
             <StatusMessage variant="error" className={styles.notice}>
-                Image preview failed to load. Download the file to view it.
+                {t('components.gatedFileViewer.imagePreviewFailedToLoad')}
             </StatusMessage>
         );
     } else if (imageUrl) {
@@ -226,11 +240,11 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             <>
                 {imageLoading ? (
                     <StatusMessage variant="status" className={styles.notice}>
-                        Loading image preview…
+                        {t('components.gatedFileViewer.loadingImagePreview')}
                     </StatusMessage>
                 ) : null}
                 <img className={styles.image} src={imageUrl}
-                    alt={name || 'Unlocked gated image'}
+                    alt={name || t('components.gatedFileViewer.unlockedGatedImage')}
                     loading="lazy"
                     decoding="async"
                     style={{ aspectRatio: '1 / 1', objectFit: 'contain' }}
@@ -243,7 +257,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     } else if (sniffed.kind === 'image' || sniffed.kind === 'svg') {
         body = (
             <StatusMessage variant="error" className={styles.notice}>
-                Image preview is unavailable. Download the file to view it.
+                {t('components.gatedFileViewer.imagePreviewIsUnavailableDownload')}
             </StatusMessage>
         );
     } else if (text !== null) {
@@ -251,15 +265,13 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     } else if (sniffed.kind === 'pdf') {
         body = (
             <p className={styles.notice}>
-                PDF preview is disabled for security. Download the file and
-                open it in your PDF viewer.
+                {t('components.gatedFileViewer.pdfPreviewIsDisabledFor')}
             </p>
         );
     } else {
         body = (
             <p className={styles.notice}>
-                This file type can&apos;t be previewed. Download it to view
-                with a matching application.
+                {t('components.gatedFileViewer.thisFileTypeCanT')}
             </p>
         );
     }
@@ -276,26 +288,24 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p id="xc-gated-file-title" className={styles.title}>{name || 'Unlocked file'}</p>
+                <p id="xc-gated-file-title" className={styles.title}>{name || t('components.gatedFileViewer.unlockedFile')}</p>
                 <p id="xc-gated-file-meta" className={styles.meta}>
-                    {bytes ? `${formatDecimalAmount(bytes.length)} bytes · ` : ''}
-                    detected: {kindLabel(sniffed.kind, sniffed.mime)}
-                    {declared ? ` · published as: ${declared}` : ''}
+                    {bytes ? t('components.gatedFileViewer.bytes', { formatDecimalAmountValue: formatDecimalAmount(bytes.length) }) : ''}
+                    {t('components.gatedFileViewer.detected')} {kindLabel(sniffed.kind, sniffed.mime)}
+                    {declared ? t('components.gatedFileViewer.publishedAs', { declared }) : ''}
                 </p>
                 {mismatch ? (
                     <StatusMessage variant="error" className={styles.mismatch}>
-                        The published file type ({declared}) doesn&apos;t match the
-                        actual content ({kindLabel(sniffed.kind, sniffed.mime)}).
-                        Treat this file with caution.
+                        {t('components.gatedFileViewer.thePublishedFileType')}{declared}{t('components.gatedFileViewer.doesnTMatchTheActual')}{kindLabel(sniffed.kind, sniffed.mime)}{t('components.gatedFileViewer.treatThisFileWithCaution')}
                     </StatusMessage>
                 ) : null}
                 <div className={styles.body}>{body}</div>
                 <div className={styles.actions}>
                     <Button variant="secondary" block onClick={onClose} autoFocus>
-                        Close
+                        {t('components.gatedFileViewer.close')}
                     </Button>
                     <Button variant="primary" block onClick={handleDownload} disabled={!bytes}>
-                        Download
+                        {t('components.gatedFileViewer.download')}
                     </Button>
                 </div>
             </div>

@@ -11,6 +11,9 @@
 import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/transactionStatus.js';
+import '../../i18n/locales/en/txTimeline.js';
+import '../../i18n/locales/en/pending.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 
@@ -52,6 +55,12 @@ const MEMPOOL_STAGE_COPY = {
         label: 'Replaced',
         done: false,
         sub: 'You replaced this transaction with a higher-fee version',
+    },
+    'replaced-elsewhere': {
+        get label() { return t('pending.detail.replacedElsewhere'); },
+        done: false,
+        warn: true,
+        get sub() { return t('pending.detail.replacedElsewhereHelp'); },
     },
     // The wallet's own verdict, not the network's: it gave up before the
     // network took the send. The detail panel carries the recorded reason.
@@ -176,7 +185,7 @@ export function TxStatusTimeline({
             : 'The service is still catching up to this block')
         : indexed
             ? (watermark > 0
-                ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
+                ? t('txTimeline.fullyProcessedAtBlock', { block: watermark })
                 : 'Fully processed and searchable')
             : (confirmed
                 ? 'The service is still catching up to this block'
@@ -217,7 +226,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed && blockIndex > 0 ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
+            label: confirmed && blockIndex > 0 ? t('txTimeline.confirmedAtBlock', { block: blockIndex }) : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
         },
@@ -235,9 +244,9 @@ export function TxStatusTimeline({
     return (
         <>
             <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {confirmed ? 'Transaction confirmed.' : ''}
+                {confirmed ? t('txTimeline.transactionConfirmed') : ''}
             </span>
-            <ol className={styles.timeline} aria-label="Transaction status">
+            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
                 {stages.map((s, i) => {
                     const current = i === currentStageIndex;
                     const stateLabel = s.done

@@ -29,9 +29,13 @@ const K51_FONT_SCALE = 1.3;
 const K51_ROOT_FONT_PX = 16 * K51_FONT_SCALE;
 const K51_AVERAGE_GLYPH_EM = 0.535;
 
-const routeModules = import.meta.glob(
+const routeModules = import.meta.glob([
     '../../../packages/core/src/shared/routes/*.jsx',
-);
+    // Split-out pieces of History.jsx are not routes; History.jsx renders them.
+    '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
+    '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+]);
 
 const routeEntries = Object.keys(routeModules)
     .map((path) => [path, path.slice(path.lastIndexOf('/') + 1)])

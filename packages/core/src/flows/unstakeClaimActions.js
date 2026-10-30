@@ -99,7 +99,11 @@ export async function unstakeAction(opts) {
         if (opts.full !== true) {
             throw new Error('unstakeAction: AMOUNT is required unless full is true');
         }
-    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
+    } else if (typeof opts.params.AMOUNT === 'number'
+        && Number.isInteger(opts.params.AMOUNT)
+        && !Number.isSafeInteger(opts.params.AMOUNT)) {
+        throw new Error('unstakeAction: AMOUNT must be an exact decimal string');
+    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || compareAmounts(opts.params.AMOUNT, '0') !== 1) {
         throw new Error('unstakeAction: AMOUNT must be a positive decimal with at most 8 places when present');
     }
     // Refuse a chain whose indexer rejects this validator-lane action.
@@ -177,7 +181,11 @@ export async function collectAction(opts) {
         if (opts.full !== true) {
             throw new Error('collectAction: AMOUNT is required unless full is true');
         }
-    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
+    } else if (typeof opts.params.AMOUNT === 'number'
+        && Number.isInteger(opts.params.AMOUNT)
+        && !Number.isSafeInteger(opts.params.AMOUNT)) {
+        throw new Error('collectAction: AMOUNT must be an exact decimal string');
+    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || compareAmounts(opts.params.AMOUNT, '0') !== 1) {
         throw new Error('collectAction: AMOUNT must be a positive decimal with at most 8 places when present');
     }
     // Refuse a chain whose indexer rejects this validator-lane action.

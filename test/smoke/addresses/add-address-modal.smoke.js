@@ -27,9 +27,9 @@ const modal = readFileSync(modalPath, 'utf8');
 // of addresses.
 assert.ok(/<ChainPicker\b/.test(modal) && /label="Coin"/.test(modal),
     'modal has a Coin field rendered via ChainPicker (shows coin icons)');
-assert.ok(/>Type</.test(modal), 'modal has a Type field');
-assert.ok(/>Purpose</.test(modal), 'modal has a Purpose field');
-assert.ok(/>Number of addresses</.test(modal), 'modal has a count field');
+assert.ok(/label="Type"/.test(modal), 'modal has a Type field');
+assert.ok(/label="Purpose"/.test(modal), 'modal has a Purpose field');
+assert.ok(/label="Number of addresses"/.test(modal), 'modal has a count field');
 
 // Purpose offers receive (default) and dispenser, and only renders when
 // the shell's messaging exposes generateDispenserAddress.
@@ -44,8 +44,8 @@ assert.ok(/typeof messaging\.generateDispenserAddress === 'function'/.test(modal
 // selected chain's address types; changing the coin resets the type.
 assert.ok(/coinOptions/.test(modal) && /chainRegistry\.get\(cid\)/.test(modal),
     'coin options derive from the account chainIds via the registry');
-assert.ok(/selected\?\.addressTypes/.test(modal),
-    'type options follow the selected coin address types');
+assert.ok(/useSupportedAddressTypes\(selected/.test(modal) && /offeredTypes\.map/.test(modal),
+    'type options follow the selected coin address types the SDK can generate');
 assert.ok(/function changeCoin/.test(modal) && /defaultAddressType/.test(modal),
     'changing the coin resets the type to that chain default');
 

@@ -73,6 +73,7 @@ import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaul
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
+import { handlePanicStateMessage, PANIC_STATE_MESSAGE_TYPES } from './panicModeState.js';
 
 /**
  * Renderer-sent type that arms/disarms the auto-lock backstop. The SAME
@@ -91,6 +92,12 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *        §26: restart-surviving auto-lock record (main/autoLockState.js).
  *        Without it the launch gate is inert and a quit-then-relaunch
  *        auto-unlocks with no regard for `autolockMinutes`.
+ * @property {{ load: () => Promise<unknown | null>, save: (s: unknown) => Promise<void>, clear: () => Promise<void> }} [panicModeStore]
+ *        Panic-mode freeze record (main/panicModeState.js). Without it main
+ *        reads no freeze and signs while the renderer shows one.
+ * @property {import('@xchain-wallet/extension/src/background/broadcastQueueStorage.js').BroadcastQueueStorage | null} [broadcastQueueStorage]
+ *        Desktop supplies a file adapter under userData. Other callers retain
+ *        the shell default when this dependency is absent.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
@@ -115,6 +122,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   autoLockCleanupPending: boolean,
  *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
@@ -130,6 +138,9 @@ export function createRuntime(deps) {
     if (!deps?.metaBackend) throw new Error('createRuntime: metaBackend is required');
     if (!deps?.chainRegistry) throw new Error('createRuntime: chainRegistry is required');
     if (!deps?.sdkRegistry) throw new Error('createRuntime: sdkRegistry is required');
+    const broadcastQueueStorage = Object.prototype.hasOwnProperty.call(deps, 'broadcastQueueStorage')
+        ? deps.broadcastQueueStorage
+        : createBroadcastQueueStorage();
     return {
         storageBackend: deps.storageBackend,
         sessionBackend: deps.sessionBackend,
@@ -143,6 +154,11 @@ export function createRuntime(deps) {
         // runtimes without one); when absent, enforceLaunchAutoLock is a
         // no-op and the shell behaves exactly as it did before.
         autoLockStore: deps.autoLockStore || null,
+        // Panic-mode freeze record (main/panicModeState.js). Optional for the
+        // same reason as the two stores above; `installPanicModePersistence`
+        // wires it into core's freeze before the first window opens.
+        panicModeStore: deps.panicModeStore || null,
+        broadcastQueueStorage,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
@@ -165,19 +181,35 @@ export function createRuntime(deps) {
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
+        // Fail closed if an auto-lock cannot remove the persisted session key.
+        // The durable auto-lock record drives a later cleanup retry.
+        autoLockCleanupPending: false,
         // OS lock and suspend can arrive together, so they share one lock.
         systemLockInFlight: null,
         // One broadcast-queue store for every host this process builds, as the
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
         // and only a wipe seals and renews it.
-        broadcastQueueStore: newBroadcastQueueStore(),
+        broadcastQueueStore: newBroadcastQueueStore(broadcastQueueStorage),
     };
 }
 
-/** Build a queue store over the same default storage a host would pick itself. */
-function newBroadcastQueueStore() {
-    return createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
+/**
+ * Make main's freeze the file-backed one and load it. Await before the first
+ * window opens: until the load resolves, core refuses every signature, which
+ * is the safe answer while a freeze from the last run may still be unread.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<void>}
+ */
+export async function installPanicModePersistence(runtime) {
+    if (!runtime?.panicModeStore) return;
+    await flowsLib.configurePanicModePersistence(runtime.panicModeStore);
+}
+
+/** Build a queue store over the runtime's process-wide storage adapter. */
+function newBroadcastQueueStore(storage) {
+    return createBroadcastQueueStore({ storage });
 }
 
 /**
@@ -239,8 +271,18 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     // Drop the cached key AND the stale record together: leaving the
     // record would let the next launch read a stamp that no longer
     // describes any session.
-    try { await runtime.sessionBackend.clear(); } catch (err) {
+    runtime.autoLockCleanupPending = true;
+    try {
+        await runtime.sessionBackend.clear();
+        runtime.autoLockCleanupPending = false;
+    } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
+        // The keychain backend revokes its in-process copy before removing
+        // the file. Drop this launch's record so a relaunch fails closed on
+        // the missing record, while the pending flag protects this process
+        // if an injected backend rejects before revoking its copy.
+        try { await store.clear(); } catch { /* best-effort */ }
+        return { locked: true, reason };
     }
     try { await store.clear(); } catch { /* best-effort */ }
     return { locked: true, reason };
@@ -329,8 +371,15 @@ async function runSystemAutoLock(runtime) {
 async function lockRuntimeForAutoLock(runtime, store, reason) {
     // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
-    try { await runtime.sessionBackend.clear(); } catch (err) {
+    runtime.autoLockCleanupPending = true;
+    try {
+        await runtime.sessionBackend.clear();
+        runtime.autoLockCleanupPending = false;
+    } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
+        // Keep the expired record so the next windowless check retries the
+        // clear. Vault-backed IPC remains closed while this flag is set.
+        return { locked: true, reason: 'session-clear-failed' };
     }
     try { await store.clear(); } catch { /* best-effort */ }
     return { locked: true, reason };
@@ -344,6 +393,7 @@ async function lockRuntimeForAutoLock(runtime, store, reason) {
  * @param {DesktopRuntime} runtime
  */
 export async function ensureHost(runtime) {
+    if (runtime.autoLockCleanupPending) return null;
     if (runtime.host) return runtime.host;
 
     const masterKey = await runtime.sessionBackend.load();
@@ -460,7 +510,7 @@ export async function ensureHost(runtime) {
                 listArmedAlerts: () => vault.priceAlerts.list(),
                 getSettings: () => flowsLib.getSettings(vault),
                 notify: runtime.notify,
-                markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+                markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
                 logger: console,
             });
             runtime.priceAlertWatcher.start();
@@ -621,7 +671,9 @@ export function tearDownHost(runtime) {
  * IndexedDB, neither of which the desktop shell uses. Its stores are
  * files under `app.getPath('userData')`, reachable only from main, and
  * `targets` below is the list that decides what goes; a new per-wallet
- * store added to `createRuntime` goes there too:
+ * store added to `createRuntime` goes there too. The broadcast queue is
+ * sealed first to stop late writes, then cleared again in that list so a
+ * file refusal reaches the wipe result:
  *
  *   - storage        `vault.bin`            encrypted vault document
  *   - meta           `meta.json`            kdfParams: the "a wallet
@@ -636,6 +688,8 @@ export function tearDownHost(runtime) {
  *                                           that no longer exists, which
  *                                           would hand the next wallet
  *                                           somebody else's idle clock
+ *   - broadcastQueue `broadcast-queue.json` signed transactions waiting
+ *                                           for an explicit retry
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -646,7 +700,8 @@ export function tearDownHost(runtime) {
  * write a store back after it was unlinked.
  *
  * Per-store failures are collected rather than thrown so one unwritable
- * file cannot leave the others behind; the caller reports `ok`.
+ * file cannot leave the others behind; the caller reports `ok`. The meta is
+ * the exception: when it will not go, the wipe stops with the wallet whole.
  *
  * @param {DesktopRuntime} runtime
  * @returns {Promise<WipeResult>}
@@ -661,21 +716,29 @@ export async function wipeRuntimeStores(runtime) {
     } catch (err) {
         console.error('[xchain] broadcast-queue seal failed:', err);
     }
-    runtime.broadcastQueueStore = newBroadcastQueueStore();
+    runtime.broadcastQueueStore = newBroadcastQueueStore(runtime.broadcastQueueStorage);
 
     /** @type {string[]} */
     const cleared = [];
     /** @type {{ store: string, message: string }[]} */
     const errors = [];
+    // Meta before the blob. A quit between the two unlinks leaves one of
+    // them on disk: a blob alone reads as locked, and the lock screen's
+    // Forgot password runs the reset again; meta alone reads as no wallet
+    // while create, import and restore refuse over it, a dead end.
     const targets = [
-        ['storage', runtime.storageBackend],
         ['meta', runtime.metaBackend],
+        ['storage', runtime.storageBackend],
         ['session', runtime.sessionBackend],
+        ['broadcastQueue', runtime.broadcastQueueStorage],
         ['unlockThrottle', runtime.unlockThrottleStore],
         // The auto-lock stamp describes a session that no longer exists
         // after a wipe; carrying it into the next wallet would hand that
         // wallet somebody else's idle clock.
         ['autoLock', runtime.autoLockStore],
+        // The renderer's reset clears its view of the freeze; main's copy
+        // and its file go with it, as every other shell's reset does.
+        ['panicMode', runtime.panicModeStore],
     ];
     for (const [name, backend] of targets) {
         if (!backend || typeof backend.clear !== 'function') continue;
@@ -684,8 +747,15 @@ export async function wipeRuntimeStores(runtime) {
             cleared.push(name);
         } catch (err) {
             errors.push({ store: name, message: String(err?.message ?? err) });
+            // A meta file that will not go must keep its blob: unlinking the
+            // blob anyway leaves the meta-alone dead end the order above
+            // avoids, while stopping here leaves the wallet whole for a retry.
+            if (name === 'meta') break;
         }
     }
+    // Main's in-memory freeze follows its file: a wipe that stopped before the
+    // file went leaves the surviving wallet frozen, in memory as on disk.
+    if (cleared.includes('panicMode')) flowsLib.applyExternalPanicModeState(null);
     return { ok: errors.length === 0, cleared, errors };
 }
 
@@ -719,13 +789,33 @@ export async function handleIpcMessage(runtime, message) {
             await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
             return { ok: true, result: { armed: message.request?.armed === true } };
         }
+        // Panic-mode freeze, also ahead of both lanes: the duress passphrase
+        // arms it from the Locked screen, so it has to land while the vault
+        // is closed, and main is the process whose signers it must stop.
+        if (PANIC_STATE_MESSAGE_TYPES.has(message.type)) {
+            const result = await handlePanicStateMessage(
+                { flows: flowsLib, store: runtime.panicModeStore },
+                message.type,
+                message.request,
+            );
+            return { ok: true, result };
+        }
+        const preHostMessage = PRE_HOST_MESSAGE_TYPES.has(message.type);
+        if (!preHostMessage && runtime.autoLockCleanupPending) {
+            return errorEnvelope(Object.assign(
+                new Error('Wallet is locked. Unlock before calling vault-backed handlers.'),
+                { name: 'WalletLockedError' },
+            ));
+        }
         // Every other message is renderer activity, and the idle clock has
         // to advance from it or a user who is actively using the app would
         // come back to a locked wallet. Throttled inside the helper.
-        stampAutoLockActivity(runtime.autoLockStore, Date.now())
-            .catch(() => { /* best-effort; never blocks the message */ });
+        if (!runtime.autoLockCleanupPending) {
+            stampAutoLockActivity(runtime.autoLockStore, Date.now())
+                .catch(() => { /* best-effort; never blocks the message */ });
+        }
 
-        if (PRE_HOST_MESSAGE_TYPES.has(message.type)) {
+        if (preHostMessage) {
             const result = await dispatchPreHost(message.type, message.request, {
                 storageBackend: runtime.storageBackend,
                 sessionBackend: runtime.sessionBackend,
@@ -737,6 +827,10 @@ export async function handleIpcMessage(runtime, message) {
                 // password is in scope, arming auto-pay for the session.
                 signerPool: runtime.signerPool,
                 onUnlocked: async () => {
+                    // A fresh password-authenticated unlock supersedes a
+                    // failed cleanup attempt and starts a new idle window.
+                    runtime.autoLockCleanupPending = false;
+                    try { await runtime.autoLockStore?.clear(); } catch { /* best-effort */ }
                     try { await ensureHost(runtime); } catch (err) {
                         // Logged but not thrown: the unlock itself
                         // succeeded; the host-build failure will
@@ -748,12 +842,31 @@ export async function handleIpcMessage(runtime, message) {
                     walletId: opts.walletId,
                     run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
                 }),
-                onLocked: () => {
+                onLocked: (result) => {
+                    runtime.autoLockCleanupPending = result?.secretsCleared === false;
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.
-                    runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
+                    if (!runtime.autoLockCleanupPending) {
+                        runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
+                    }
                 },
             });
+            // A locked wallet whose KDF metadata cannot be read can never unlock:
+            // reading it here sends the renderer to the damaged-vault screen
+            // (VaultCorruptError) instead of a password prompt that always fails.
+            if (message.type === 'session.status' && result.hasWallet && !result.hasSession) {
+                await runtime.metaBackend.load();
+            }
+            if (message.type === 'session.status' && runtime.autoLockCleanupPending) {
+                return {
+                    ok: true,
+                    result: {
+                        ...result,
+                        hasSession: false,
+                        state: result.hasWallet ? 'locked' : 'no-wallet',
+                    },
+                };
+            }
             return { ok: true, result };
         }
 

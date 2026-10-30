@@ -29,12 +29,20 @@
 // The lanes come from the SIGNED header: `# rehearsal-os:` names the OSes a
 // rehearsal covers, `# lanes:` the lanes a partial covers, and no header
 // means every updater lane in shipped-lanes.txt. Every check fails shut.
+//
+// 4. The signed header records `# dev-mock-gate: enforced`. The client refuses
+// any other value, an absent header included, so a release signed with the
+// gate skipped would publish green and update nobody.
+//
+// 5. Every file a pointer names carries a sha512 that is the staged file's.
+// The client refuses a missing or different one, so a yml and an installer
+// from two builds of one version (a re-cut lane) would update nobody.
 
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { parseManifestText, parseUpdateInfo } from './feed-sweep.mjs';
+import { parseManifestText, parseUpdateInfo, sha512File } from './feed-sweep.mjs';
 import { classify, pointerNameFor } from './update-info.mjs';
 
 /**
@@ -56,6 +64,38 @@ const LANE_FEEDS = new Set(['updater', 'store-only']);
 /** A pointer url as the client compares it: no leading `./`. */
 function normalizeName(name) {
     return String(name).replace(/^\.\//, '').trim();
+}
+
+/** A pointer sha512 as hex, or '' when absent or malformed (port of updateVerify.js normalizeSha512). */
+function normalizeSha512(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^[0-9a-f]{128}$/.test(raw.toLowerCase())) return raw.toLowerCase();
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) return '';
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length !== 64) return '';
+    return decoded.toString('hex');
+}
+
+/**
+ * Hex sha512 of every file in the flat release directory that a pointer names,
+ * each hashed once.
+ *
+ * @param {string} dir
+ * @param {Array<{ name: string, text: string }>} pointers
+ * @returns {Map<string, string>}
+ */
+export function stagedSha512s(dir, pointers) {
+    const hashes = new Map();
+    for (const { text } of pointers) {
+        for (const file of parseUpdateInfo(String(text ?? '')).files) {
+            const key = basename(normalizeName(file.url));
+            const path = join(dir, key);
+            if (hashes.has(key) || !existsSync(path)) continue;
+            hashes.set(key, Buffer.from(sha512File(path), 'base64').toString('hex'));
+        }
+    }
+    return hashes;
 }
 
 /**
@@ -123,16 +163,19 @@ export function expectedPointers({ channel, lanes, laneFeeds }) {
  * Every reason the given channel pointers would be refused by the client,
  * or would leave a lane's fleet without this release.
  *
+ * `stagedSha512` maps each staged file's basename to its hex sha512; a file it
+ * lacks is refused, so omitting it fails shut.
+ *
  * @param {{ pointers: Array<{ name: string, text: string }>, manifestText: string, tag: string,
- *   channel: string, lanesText: string }} input
+ *   channel: string, lanesText: string, stagedSha512?: Map<string, string> }} input
  * @returns {string[]} one line per problem, empty when every pointer passes
  */
-export function checkPointers({ pointers, manifestText, tag, channel, lanesText }) {
+export function checkPointers({ pointers, manifestText, tag, channel, lanesText, stagedSha512 }) {
     const problems = [];
     const want = String(tag ?? '').trim().replace(/^v/, '');
     if (!want) return ['no tag to check the channel pointers against'];
     if (!channel) return ['no channel to name the expected pointers by'];
-    const { entries } = parseManifestText(String(manifestText ?? ''), 'RELEASE_HASHES.txt');
+    const { entries, gate } = parseManifestText(String(manifestText ?? ''), 'RELEASE_HASHES.txt');
     if (entries.size === 0) return ['the signed manifest lists no files, so no pointer can be covered'];
     let laneFeeds;
     try {
@@ -145,6 +188,12 @@ export function checkPointers({ pointers, manifestText, tag, channel, lanesText 
     if (scope.lanes.length === 0) return [`${scope.source} names no lane, so no pointer set can be expected`];
     const expected = expectedPointers({ channel, lanes: scope.lanes, laneFeeds });
     problems.push(...expected.problems);
+    // Refuse a release the client refuses by its gate before any pointer goes up.
+    if ((pointers.length > 0 || expected.names.size > 0) && gate !== 'enforced') {
+        problems.push(`the signed manifest records the dev-mock gate as '${gate || 'unrecorded'}', not 'enforced'; `
+            + 'every desktop client refuses this release. Re-sign with the gate running '
+            + '(SIGN_SKIP_DEV_MOCK_CHECK unset). There is no override flag.');
+    }
     const present = new Set(pointers.map(({ name }) => basename(name)));
     const scopeText = `lane(s) ${scope.lanes.join(' ')} (${scope.source})`;
     for (const name of [...expected.names].sort()) {
@@ -168,6 +217,16 @@ export function checkPointers({ pointers, manifestText, tag, channel, lanesText 
             if (!entries.has(basename(listed))) {
                 problems.push(`${name}: names ${listed}, which this release's signed manifest does not cover`);
             }
+            const claimed = normalizeSha512(file.sha512);
+            const staged = stagedSha512 instanceof Map ? stagedSha512.get(basename(listed)) : undefined;
+            if (!claimed) {
+                problems.push(`${name}: carries no sha512 for ${listed}, which the desktop client refuses`);
+            } else if (staged === undefined) {
+                problems.push(`${name}: names ${listed}, which is not in the release directory`);
+            } else if (staged !== claimed) {
+                problems.push(`${name}: sha512 for ${listed} is not the staged file's; the pointer and the `
+                    + 'artifact come from different builds, and every client would download, refuse and delete it');
+            }
         }
     }
     return problems;
@@ -178,8 +237,11 @@ const USAGE = `usage: pointer-gate.mjs <release dir> --tag <vX.Y.Z> --manifest <
 
 Checks every channel pointer (*.yml update-info) in <release dir> the way the
 desktop client will: its version must be the tag's, and every file it names
-must be in the signed manifest. Then checks the set: exactly the pointers the
+must be in the signed manifest and carry the staged file's sha512. Then
+checks the set: exactly the pointers the
 lanes in the manifest's signed header need, none missing and none extra.
+Refuses any pointer set whose manifest does not record the dev-mock gate as
+enforced, which the client refuses too.
 --lanes defaults to the shipped-lanes.txt beside this script.
 Exit 0 all pass, 1 any refused, 2 usage error.
 `;
@@ -211,7 +273,8 @@ function main(argv) {
     }
     const names = classify(dir).pointers;
     const pointers = names.map((name) => ({ name, text: readFileSync(join(dir, name), 'utf8') }));
-    const problems = checkPointers({ pointers, manifestText, tag, channel, lanesText });
+    const stagedSha512 = stagedSha512s(dir, pointers);
+    const problems = checkPointers({ pointers, manifestText, tag, channel, lanesText, stagedSha512 });
     for (const p of problems) process.stderr.write(`  POINTER-REFUSED  ${p}\n`);
     if (problems.length) return 1;
     process.stdout.write(`pointer-gate: ${pointers.length} channel pointer(s) name ${tag.replace(/^v/, '')}, `

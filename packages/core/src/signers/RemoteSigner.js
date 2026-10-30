@@ -55,6 +55,7 @@
 // device for a signature crosses the boundary.
 
 import { Signer, SignerStatusError, assertCannotSignEnvelopeReveal } from './Signer.js';
+import { SignatureMismatchError } from './verifyInputSignatures.js';
 
 /**
  * @typedef {'status'|'getAddresses'|'getPublicKey'|'signPsbt'|'signMessage'} RemoteSignerOp
@@ -166,6 +167,12 @@ export class RemoteSigner extends Signer {
                 payload: { ...payload, signerId: this._id },
             });
         } catch (err) {
+            // The renderer's device signer refused a reply whose signatures do
+            // not verify; the port carries only name and message, so rebuild the
+            // same error and keep its sentence as the whole message.
+            if (err?.name === 'SignatureMismatchError') {
+                throw new SignatureMismatchError(this._id, `${op}: ${String(err.message)}`);
+            }
             const msg = err && err.message ? String(err.message) : String(err);
             throw new SignerStatusError(this._id, 'error', `${op} failed: ${msg}`);
         }

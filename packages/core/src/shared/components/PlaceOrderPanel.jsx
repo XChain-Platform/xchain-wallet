@@ -30,6 +30,8 @@ import {
     Button,
     Checkbox,
     EmptyState,
+    FieldNote,
+    FormNotice,
     FormPage,
     Input,
     SegmentedControl,
@@ -38,6 +40,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
@@ -46,17 +49,21 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
-import { WatcherResultPanel } from './WatcherResultPanel.jsx';
+import { ResultScreen } from './ResultScreen.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
-import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { normalizeAmountFieldInput, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './MarketTrading.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -83,10 +90,12 @@ const EXPIRATION_PRESETS = [
  * @param {string} props.tick1
  * @param {string} props.tick2
  * @param {string | null} [props.prefillPrice]       from orderbook click
+ * @param {number} [props.prefillPick]               counts book picks, so the same price picked again refills
  * @param {() => void} [props.onOrderPlaced]         refresh parent after placement
  */
-export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, onOrderPlaced }) {
+export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, prefillPick, onOrderPlaced }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [side, setSide] = useState(/** @type {'buy' | 'sell'} */ ('buy'));
@@ -154,7 +163,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     useEffect(() => {
         if (prefillPrice) setPrice(prefillPrice);
-    }, [prefillPrice]);
+    }, [prefillPrice, prefillPick]);
 
     useEffect(() => {
         let cancelled = false;
@@ -210,9 +219,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
         const tickUpper = String(tick || '').toUpperCase();
         const hit = rows.find((r) => r.chainId === chainId && r.tick.toUpperCase() === tickUpper);
-        if (!hit) return { balance: '0', divisibility: null };
+        if (!hit) return { balance: '0', available: '0', divisibility: null };
         return {
             balance: formatQuantity(hit.quantity, hit.divisibility),
+            // The display balance carries thousands separators, which no exact
+            // comparison can parse; the guard compares against this plain form.
+            available: plainQuantity(hit.quantity, hit.divisibility),
             divisibility: Number.isInteger(Number(hit.divisibility)) ? Number(hit.divisibility) : null,
         };
     }, [balances, chainId, addressesByChain, fromAddressId]);
@@ -270,10 +282,20 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // positive plain-decimal number.
     const total = useMemo(() => multiplyAmounts(price, size), [price, size]);
 
+    // The size as the wire spells it. The indexer refuses an amount with an
+    // empty half (".5", "5."), which the entry filter allows; multiplying by
+    // one gives the same plain form the total already uses.
+    const sizeText = useMemo(() => multiplyAmounts(size, '1') ?? String(size).trim(), [size]);
+    // The price in the same plain spelling, so the review row reads like the
+    // give and get amounts beside it.
+    const priceText = useMemo(() => multiplyAmounts(price, '1') ?? String(price).trim(), [price]);
+
     // The chosen expiration as a Unix timestamp (seconds). `null` = the
     // default window (omit EXPIRATION); `undefined` = an invalid custom
     // entry (blocked in the guard); a number is emitted verbatim.
-    const expirationUnix = useMemo(() => {
+    // A preset is a duration from the moment of submit, so it resolves on every
+    // call: a panel left open for hours still places a full-length order.
+    const resolveExpirationUnix = () => {
         if (expirationId === 'custom') {
             const ms = Date.parse(customExpiration);
             if (!Number.isFinite(ms)) return undefined;
@@ -283,18 +305,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         if (!preset) return undefined;
         if (preset.days == null) return null;
         return Math.floor(Date.now() / 1000) + preset.days * 86400;
-    }, [expirationId, customExpiration]);
+    };
+    const expirationUnix = resolveExpirationUnix();
 
     const summary = useMemo(() => {
         if (!total) return null;
         if (side === 'buy') {
-            return `Give ${total} ${tick2}, get ${size} ${tick1}`;
+            return `Give ${total} ${tick2}, get ${sizeText} ${tick1}`;
         }
-        return `Give ${size} ${tick1}, get ${total} ${tick2}`;
-    }, [side, total, size, tick1, tick2]);
+        return `Give ${sizeText} ${tick1}, get ${total} ${tick2}`;
+    }, [side, total, sizeText, tick1, tick2]);
 
     function buildParams() {
-        const sizeStr = String(size).trim();
+        const sizeStr = sizeText;
         const totalStr = total == null ? '' : String(total);
         /** @type {Record<string, string>} */
         // GIVE_COIN / GET_COIN are required by the indexer (order.js
@@ -321,7 +344,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // the chain's own coin composes with that side blanked.
         if (coinTicker && p.GIVE_TICK.toUpperCase() === coinTicker) p.GIVE_TICK = '';
         if (coinTicker && p.GET_TICK.toUpperCase() === coinTicker) p.GET_TICK = '';
-        if (typeof expirationUnix === 'number') p.EXPIRATION = String(expirationUnix);
+        const submitExpiration = resolveExpirationUnix();
+        if (typeof submitExpiration === 'number') p.EXPIRATION = String(submitExpiration);
         return p;
     }
 
@@ -402,7 +426,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // An order is signed from an address on THIS chain; without one there is
         // nothing to spend from and nothing to receive into.
         if (!fromAddress) {
-            setFormError('No address to sign from on this chain. Use Receive first.');
+            setFormError('No address to sign from on this network. Use Receive first.');
+            return;
+        }
+        // One token on both sides composes give X for get X, which consensus
+        // accepts and whoever matches it profits from.
+        if (String(tick1).trim().toUpperCase() === String(tick2).trim().toUpperCase()) {
+            setFormError('This market has the same token on both sides, so it cannot take an order.');
             return;
         }
         // Both legs are required: an order with one side blank has no price.
@@ -447,18 +477,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const giveTick = side === 'buy' ? tick2 : tick1;
         const giveAmount = side === 'buy' ? total : size.trim();
         const giveAsset = side === 'buy' ? totalAsset : sizeAsset;
-        if (giveAsset && compareAmounts(giveAmount, giveAsset.balance) === 1) {
+        if (giveAsset && compareAmounts(giveAmount, giveAsset.available) === 1) {
             setFormError(`Give amount exceeds your available ${giveTick} balance of ${giveAsset.balance}.`);
             return;
         }
         // undefined means the custom date box holds something unparseable;
         // null is the legitimate "never expires" preset and passes.
-        if (expirationUnix === undefined) {
+        const reviewExpiration = resolveExpirationUnix();
+        if (reviewExpiration === undefined) {
             setFormError('Pick a valid expiration date and time.');
             return;
         }
         // An expiration already in the past is dead on arrival at the indexer.
-        if (typeof expirationUnix === 'number' && expirationUnix <= Math.floor(Date.now() / 1000)) {
+        if (typeof reviewExpiration === 'number' && reviewExpiration <= Math.floor(Date.now() / 1000)) {
             setFormError('Expiration must be in the future.');
             return;
         }
@@ -557,7 +588,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return (
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('form'); }}
                     onDone={() => { setResult(null); setStage('form'); }}
@@ -573,17 +605,17 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 <EmptyState
                     title={SIGNED_NOT_BROADCAST_TITLE}
                     titleAs="h3"
-                    body="It waits in the queued-transactions banner until you broadcast it from there, and the wallet reminds you when the network is back, so don't place it again."
+                    body={t('components.placeOrderPanel.itWaitsInTheQueued')}
                 />
             );
         }
         return (
             <>
                 <EmptyState
-                    title="Order placed"
+                    title={t('components.placeOrderPanel.orderPlaced')}
                     titleAs="h3"
                     body={txid ? <code>{txid}</code> : null}
-                    actionLabel="Place another"
+                    actionLabel={t('components.placeOrderPanel.placeAnother')}
                     onAction={() => {
                         setStage('form');
                         setPrice('');
@@ -592,14 +624,15 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     }}
                 />
                 {result?.autopayArmed === true ? (
-                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
-                        CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
-                    </p>
+                    <StatusMessage variant="success">
+                        {t('components.placeOrderPanel.coinpayAutoPayIsArmed')}
+                    </StatusMessage>
                 ) : result?.autopayArmed === false ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger-fg)' }}>
-                        The order was placed, but auto-pay could not be armed
-                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
-                    </p>
+                    <StatusMessage variant="error">
+                        {t('components.placeOrderPanel.theOrderWasPlacedBut')}
+                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}
+                        {t('components.placeOrderPanel.matchesWillNeedManualPayment')}
+                    </StatusMessage>
                 ) : null}
             </>
         );
@@ -615,9 +648,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 : (EXPIRATION_PRESETS.find((e) => e.id === expirationId)?.label ?? expirationId));
 
         const giveTick = side === 'buy' ? tick2 : tick1;
-        const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : size;
+        const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : sizeText;
         const getTick = side === 'buy' ? tick1 : tick2;
-        const getAmt = side === 'buy' ? size : (total != null ? String(total) : '');
+        const getAmt = side === 'buy' ? sizeText : (total != null ? String(total) : '');
 
         let feeDisplay = 'Estimate unavailable';
         if (feeEstimate) {
@@ -627,10 +660,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
         const dlStyle = {
             margin: '0 0 var(--xc-space-2)',
-            padding: 'var(--xc-space-2) var(--xc-space-3)',
-            background: 'var(--xc-bg-muted)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-sm)',
+            padding: 'var(--xc-card-pad)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
             display: 'grid',
             gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)',
             columnGap: 'var(--xc-space-3)',
@@ -649,7 +682,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
         return (
             <FormPage
-                label="Review order"
+                demoGuard={demoGuard}
+                label={t('components.placeOrderPanel.reviewOrder')}
                 intro={summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
                 onSubmit={handleSubmit}
                 noValidate
@@ -666,7 +700,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             }}
                             disabled={stage === 'submitting'}
                         >
-                            Edit order
+                            {t('components.placeOrderPanel.editOrder')}
                         </Button>
                         <Button
                             type="submit"
@@ -676,49 +710,44 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             disabled={!isWatcherMode && hw && hwStatus !== 'available'}
                         >
                             {isWatcherMode
-                                ? 'Create unsigned transaction'
+                                ? t('components.placeOrderPanel.createUnsignedTransaction')
                                 : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : `Place ${side} order`}
+                                ? t('components.placeOrderPanel.signOn', { value: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                : t('components.placeOrderPanel.placeOrder', { side })}
                         </Button>
                     </>
                 )}
             >
                 <dl style={dlStyle}>
-                    <dt style={dtStyle}>Market</dt>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.market')}</dt>
                     <dd style={ddStyle}>{tick1}/{tick2}</dd>
-                    <dt style={dtStyle}>Side</dt>
-                    <dd style={ddStyle}>{side === 'buy' ? 'Buy' : 'Sell'}</dd>
-                    <dt style={dtStyle}>Give</dt>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.side')}</dt>
+                    <dd style={ddStyle}>{side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}</dd>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.give')}</dt>
                     <dd style={ddStyle}>{giveAmt} {giveTick}</dd>
-                    <dt style={dtStyle}>Get</dt>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.get')}</dt>
                     <dd style={ddStyle}>{getAmt} {getTick}</dd>
-                    <dt style={dtStyle}>Price</dt>
-                    <dd style={ddStyle}>{price} {tick2}/{tick1}</dd>
-                    <dt style={dtStyle}>Expiration</dt>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.price')}</dt>
+                    <dd style={ddStyle}>{priceText} {tick2}/{tick1}</dd>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.expiration')}</dt>
                     <dd style={ddStyle}>{expirationLabel}</dd>
-                    <dt style={dtStyle}>From</dt>
+                    <dt style={dtStyle}>{t('send.fields.from')}</dt>
                     <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
                         {fromAddress?.address ?? '-'}
                     </dd>
-                    <dt style={dtStyle}>Settlement address</dt>
+                    <dt style={dtStyle}>{t('components.placeOrderPanel.settlementAddress')}</dt>
                     <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
                         {fromAddress?.address ?? '-'}
                     </dd>
-                    <dt style={dtStyle}>Network fee</dt>
+                    <dt style={dtStyle}>{t('send.networkFee')}</dt>
                     <dd style={ddStyle}>{feeDisplay}</dd>
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <p
-                        role="alert"
-                        style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
-                    >
-                        {NATIVE_FEE_WARNING}
-                    </p>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {isWatcherMode ? (
                     <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                        Watcher mode builds an unsigned transaction for your Signer-mode wallet.
+                        {t('components.placeOrderPanel.watcherModeBuildsAnUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -737,9 +766,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     />
                 )}
                 {submitError && (isWatcherMode || hw) ? (
-                    <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <FormNotice variant="error">{submitError}</FormNotice>
                 ) : null}
             </FormPage>
         );
@@ -755,7 +782,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    ? t('send.networkFeeValue', { amount: feeEstimate.coinAmount, ticker: coinTicker }).trim()
                     : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -773,7 +800,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     return (
         <FormPage
-            label="Place order"
+            demoGuard={demoGuard}
+            label={t('components.placeOrderPanel.placeOrder2')}
             onSubmit={handleReview}
             noValidate
             aria-busy={accountLoading || actionConfirm.composing || undefined}
@@ -786,47 +814,47 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     loading={accountLoading || actionConfirm.composing}
                     disabled={accountLoading || actionConfirm.composing}
                 >
-                    {singleEncode ? `Place ${side} order` : 'Review'}
+                    {singleEncode ? t('components.placeOrderPanel.placeOrder', { side }) : t('common.review')}
                 </Button>
             )}
         >
             {accountLoading ? (
-                <StatusMessage variant="status">Loading wallet balances…</StatusMessage>
+                <FormNotice variant="status">{t('components.placeOrderPanel.loadingWalletBalances')}</FormNotice>
             ) : null}
             <dl style={{
                 margin: '0 0 var(--xc-space-2)',
-                padding: 'var(--xc-space-2) var(--xc-space-3)',
-                background: 'var(--xc-bg-muted)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-sm)',
+                padding: 'var(--xc-card-pad)',
+                background: 'var(--xc-card-bg)',
+                border: 'var(--xc-card-border)',
+                borderRadius: 'var(--xc-card-radius)',
                 display: 'grid',
                 gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)',
                 columnGap: 'var(--xc-space-3)',
                 rowGap: 2,
                 fontSize: 'var(--xc-text-xs)',
             }}>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick1}</dt>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('routes.manageToken.balance')} {tick1}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {balanceFor(tick1) ?? '-'}
                 </dd>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick2}</dt>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('routes.manageToken.balance')} {tick2}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
             <SegmentedControl
                 className={styles.sideToggle}
-                aria-label="Order side"
+                aria-label={t('components.placeOrderPanel.orderSide')}
                 value={side}
                 onChange={setSide}
                 items={[
-                    { id: 'buy', label: <>Buy {tick1}</>, tone: 'success' },
-                    { id: 'sell', label: <>Sell {tick1}</>, tone: 'danger' },
+                    { id: 'buy', label: <>{t('components.placeOrderPanel.buy')} {tick1}</>, tone: 'success' },
+                    { id: 'sell', label: <>{t('components.placeOrderPanel.sell')} {tick1}</>, tone: 'danger' },
                 ]}
             />
-            <div className={styles.priceAmountFields} role="group" aria-label="Price and amount">
+            <div className={styles.priceAmountFields} role="group" aria-label={t('components.placeOrderPanel.priceAndAmount')}>
                 <Input
-                    label={`Price (${tick2})`}
+                    label={t('components.placeOrderPanel.price2', { tick2 })}
                     value={price}
                     onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
                     inputMode="decimal"
@@ -834,7 +862,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                 />
                 <Input
-                    label={`Size (${tick1})`}
+                    label={t('components.placeOrderPanel.size', { tick1 })}
                     value={size}
                     onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
                     inputMode="decimal"
@@ -844,7 +872,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             </div>
             <Select
                 id="place-order-expiration"
-                label="Expiration"
+                label={t('components.placeOrderPanel.expiration')}
                 value={expirationId}
                 onChange={(e) => setExpirationId(e.target.value)}
             >
@@ -853,11 +881,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
                 {/* Native options supply Select choices because the kit has no option primitive. */}
-                <option value="custom">Custom…</option>
+                <option value="custom">{t('components.placeOrderPanel.custom')}</option>
             </Select>
             {expirationId === 'custom' ? (
                 <Input
-                    label="Custom expiration"
+                    label={t('components.placeOrderPanel.customExpiration')}
                     type="datetime-local"
                     value={customExpiration}
                     onChange={(e) => setCustomExpiration(e.target.value)}
@@ -881,38 +909,31 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 mandatory={nativeFeeMandatory}
             />
             {payFeeInNativeCoin ? (
-                <p
-                    role="alert"
-                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
-                >
-                    {NATIVE_FEE_WARNING}
-                </p>
+                <FieldNote variant="warning" role="alert">{NATIVE_FEE_WARNING}</FieldNote>
             ) : null}
             {gatedGiveNotice.gated ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                <FormNotice variant="warning" role="alert">
                     {gatedTickWarningCopy(side === 'sell' ? tick1 : tick2, 'the order counterparty')}
-                </p>
+                </FormNotice>
             ) : null}
             {giveIsNative ? (
                 <div style={{
                     margin: '0.5rem 0 0',
-                    padding: 'var(--xc-space-2) var(--xc-space-3)',
-                    background: 'var(--xc-bg-muted)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
+                    padding: 'var(--xc-card-pad)',
+                    background: 'var(--xc-card-bg)',
+                    border: 'var(--xc-card-border)',
+                    borderRadius: 'var(--xc-card-radius)',
                     fontSize: '0.75rem',
                 }}>
                     <p style={{ margin: 0, color: 'var(--xc-text-muted)' }}>
-                        This order gives {coinTicker}, so each match settles via CoinPay:
-                        the {coinTicker} payment must be sent within the payment window
-                        (about 2 hours) or the match expires.
+                        {t('components.placeOrderPanel.thisOrderGives')} {coinTicker}{t('components.placeOrderPanel.soEachMatchSettlesVia')} {coinTicker} {t('components.placeOrderPanel.paymentMustBeSentWithin')}
                     </p>
                     {autopayEligible ? (
                         <>
                             <div style={{ marginTop: 'var(--xc-space-2)' }}>
                                 <Checkbox
-                                    label="Enable CoinPay auto-pay"
-                                    description="We monitor for matches on your orders and send payment for them automatically."
+                                    label={t('components.placeOrderPanel.enableCoinpayAutoPay')}
+                                    description={t('components.placeOrderPanel.weMonitorForMatchesOn')}
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
                                 />
@@ -923,21 +944,21 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                 // buying (giving tick2), size when selling tick1.
                                 const thisOrderGive = side === 'buy'
                                     ? (total != null ? String(total) : '')
-                                    : String(size).trim();
+                                    : sizeText;
                                 if (autopayArm && exposure && exposure[chainId]) {
                                     return (
                                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
-                                            Outstanding auto-pay exposure on this chain:{' '}
+                                            {t('components.placeOrderPanel.outstandingAutoPayExposureOn')}{' '}
                                             {baseUnitsToCoinText(exposure[chainId]) ?? exposure[chainId]} {coinTicker}
-                                            {thisOrderGive ? ` (+ ${thisOrderGive} ${coinTicker} from this order)` : ''}. Even if the
-                                            service that reports matches were fully compromised, auto-pay could send no more than this.
+                                            {thisOrderGive ? t('components.placeOrderPanel.fromThisOrder', { thisOrderGive, coinTicker }) : ''}
+                                            {t('components.placeOrderPanel.evenIfTheServiceThat')}
                                         </p>
                                     );
                                 }
                                 if (autopayArm && thisOrderGive) {
                                     return (
                                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
-                                            Auto-pay exposure from this order: up to {thisOrderGive} {coinTicker}.
+                                            {t('components.placeOrderPanel.autoPayExposureFromThis')} {thisOrderGive} {coinTicker}.
                                         </p>
                                     );
                                 }
@@ -946,7 +967,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             {ackRequired ? (
                                 <div style={{ marginTop: 'var(--xc-space-2)' }}>
                                     <Checkbox
-                                        label="I understand the wallet must stay open for auto-pay to work."
+                                        label={t('components.placeOrderPanel.iUnderstandTheWalletMust')}
                                         checked={keepOpenAck}
                                         onChange={(e) => setKeepOpenAck(e.target.checked)}
                                     />
@@ -956,8 +977,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     ) : (
                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
                             {isWatcherMode
-                                ? 'Auto-pay is unavailable in watch-only mode; you will be notified when a match needs payment.'
-                                : 'Auto-pay is unavailable for hardware signers (unattended signing needs a software key); you will be notified when a match needs payment.'}
+                                ? t('components.placeOrderPanel.autoPayIsUnavailableIn')
+                                : t('components.placeOrderPanel.autoPayIsUnavailableFor')}
                         </p>
                     )}
                 </div>
@@ -966,9 +987,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     );
 }
 
+// The shared locale reader, so "0,5" is 0.5 here as in every amount field.
+// Deleting the comma would make it 05.
 function normalizeDecimalEntry(value, previous) {
-    const stripped = String(value).replace(/,/g, '');
-    return stripped === '' || /^\d*\.?\d*$/.test(stripped) ? stripped : previous;
+    const normalized = normalizeAmountFieldInput(value);
+    return normalized === null ? previous : normalized;
 }
 
 // Render a balance value with thousand separators. `quantity` comes from
@@ -989,4 +1012,15 @@ function formatQuantity(quantity, divisibility) {
         str = str.replace(/0+$/, '').replace(/\.$/, '');
     }
     return str;
+}
+
+// The exact balance as a plain decimal string, for comparisons.
+function plainQuantity(quantity, divisibility) {
+    const raw = String(quantity ?? '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    const div = Number.isFinite(divisibility) && divisibility >= 0
+        ? Math.min(20, Math.floor(divisibility))
+        : 8;
+    const str = formatAmount(raw, div, 'plain');
+    return str.includes('.') ? str.replace(/0+$/, '').replace(/\.$/, '') : str;
 }

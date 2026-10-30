@@ -8,15 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { FormNotice } from '@xchain-wallet/core/ui';
 import { OWNER_WITHDRAW_WARNING } from '../routes/contractResponseShape.js';
-import styles from './OwnerWithdrawWarning.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * The owner-withdraw warning (OWNER_WITHDRAW_OPT_IN): shown on a contract's
  * details and on the forms that send tokens into it, when the explorer says
  * the deployer can still WITHDRAW the contract's custody. Renders nothing for
  * false (consensus refuses the withdrawal) and for null (an explorer that does
- * not serve the field), so an unknown answer never produces a warning.
+ * not serve the field), so an unknown answer never produces a warning. On a
+ * form it is one of the form's notices, above the form card.
  *
  * @param {object} props
  * @param {boolean | null} props.ownerWithdraw   contractOwnerWithdraw(row)
@@ -24,11 +27,13 @@ import styles from './OwnerWithdrawWarning.module.css';
 export function OwnerWithdrawWarning({ ownerWithdraw }) {
     if (ownerWithdraw !== true) return null;
     return (
-        <div role="note" className={styles.warningBanner} data-testid="owner-withdraw-warning">
-            <strong className={styles.headline}>Deployer can withdraw</strong>
-            <p className={styles.detail}>
-                {OWNER_WITHDRAW_WARNING} Only send tokens here if you trust the deployer.
-            </p>
-        </div>
+        <FormNotice
+            variant="warning"
+            role="note"
+            testId="owner-withdraw-warning"
+            lead={t('components.ownerWithdrawWarning.deployerCanWithdraw')}
+        >
+            {`${OWNER_WITHDRAW_WARNING} ${t('components.ownerWithdrawWarning.onlySendTokensHereIf')}`}
+        </FormNotice>
     );
 }

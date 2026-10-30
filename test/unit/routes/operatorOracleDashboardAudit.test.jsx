@@ -46,6 +46,7 @@ function operatorMessaging() {
             action_format: 2, block_index: 107, message: 'BTC/USD', value: '42000', status: 'valid',
         }] }),
         getValidatorsForChain: vi.fn().mockResolvedValue([{
+            source: ADDRESS.address,
             signing_pubkey: '02abcdefabcdefabcdefabcdefabcdef', score: 98, votes: 22, missed: 1,
         }]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 200 }),
@@ -85,18 +86,43 @@ describe('operator and oracle dashboard audit', () => {
         const messaging = operatorMessaging();
         mount(OperatorDashboard, messaging, { chainId: CHAIN, address: ADDRESS.address });
 
-        expect(await screen.findByText('Total amount staked: 12.5 XCP')).toBeTruthy();
+        expect(await screen.findByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
         expect(screen.getByText(/Validator score: 98/)).toBeTruthy();
         expect(screen.getByText(/Votes recorded: 22/)).toBeTruthy();
         expect(screen.getByText(/Missed validations: 1/)).toBeTruthy();
         expect(screen.getByText('Unclaimed rewards:').closest('p'))
-            .toHaveTextContent('Unclaimed rewards: 2 XCP; Total rewards earned: 3 XCP');
+            .toHaveTextContent('Unclaimed rewards: 2 XCHAIN; Total rewards earned: 3 XCHAIN');
         expect(screen.getByText(/Format version: 2/)).toHaveTextContent('published value: 42000; published at block: 107');
 
         fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }));
-        expect(await screen.findByText("Couldn't refresh this section: Please try again.")).toBeTruthy();
+        expect(await screen.findByText("Couldn't load staking status.")).toBeTruthy();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
-        expect(screen.getByText('Total amount staked: 12.5 XCP')).toBeTruthy();
+        expect(screen.getByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
+    });
+
+    it('shows one error naming every section that failed, and one Try again reloads them all', async () => {
+        const down = () => vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+        const messaging = proxy({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getStakesForAddress: down(),
+            getDelegationsForAddress: down(),
+            getRewardsForAddress: down(),
+            getRewardClaimsForAddress: down(),
+            getBroadcastsForAddress: down(),
+            getValidatorsForChain: down(),
+        });
+        const { container } = mount(OperatorDashboard, messaging, { chainId: CHAIN, address: ADDRESS.address });
+        const message = await screen.findByText(/^Couldn't load staking status/);
+        expect(message).toHaveTextContent(
+            "Couldn't load staking status, delegation chain, validator performance, rewards trajectory and publishing activity.",
+        );
+        expect(container.querySelectorAll('[data-variant="error"]')).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
+
+        const loaders = [messaging.getStakesForAddress, messaging.getValidatorsForChain, messaging.getBroadcastsForAddress];
+        const before = loaders.map((fn) => fn.mock.calls.length);
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => loaders.forEach((fn, i) => expect(fn.mock.calls.length).toBeGreaterThan(before[i])));
     });
 
     it('uses plain market labels and keeps the last market after a failed refresh', async () => {

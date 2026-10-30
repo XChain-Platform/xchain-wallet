@@ -285,11 +285,12 @@ assert.ok(
     /@xchain-wallet\/core\/signerFactories|\.\.\/\.\.\/\.\.\/core\/src\/signerFactories/.test(dTrezorSrc),
     'desktop trezorFactory imports core (workspace package or correct relative path)',
 );
-// T-RSL: desktop does NOT bundle @trezor/connect-web; it loads Trezor
-// Connect at runtime from the hosted global build instead.
+// T-RSL: desktop does NOT bundle @trezor/connect-web; the bridge window
+// main builds loads Trezor Connect at runtime from the hosted global build.
+const dBridgeDoc = readFileSync(join(desktop, 'main', 'trezorBridge', 'connect.html'), 'utf8');
 assert.ok(
-    /connect\.trezor\.io\/9\/trezor-connect\.js/.test(dTrezorSrc),
-    'desktop trezorFactory loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
+    /<script src="https:\/\/connect\.trezor\.io\/9\/trezor-connect\.js"><\/script>/.test(dBridgeDoc),
+    'the desktop Trezor bridge document loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
 );
 assert.ok(
     !/import\(\s*['"]@trezor\/connect-web['"]\s*\)/.test(dTrezorSrc)
@@ -351,11 +352,15 @@ for (const dep of [
 
 const appSrc = readFileSync(join(desktop, 'renderer', 'App.jsx'), 'utf8');
 assert.ok(
-    /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc),
+    // The import sits in the hardware-factory tracker, which resets it on lock.
+    /trezor:\s*\(\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc)
+        && /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('trezor'\)/.test(appSrc),
     'App.jsx lazy-loads pairTrezorSigner from desktop signerFactories',
 );
 assert.ok(
-    /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc),
+    // The import sits in the hardware-factory tracker, which resets it on lock.
+    /ledger:\s*\(\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc)
+        && /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('ledger'\)/.test(appSrc),
     'App.jsx lazy-loads pairLedgerSigner from desktop signerFactories',
 );
 assert.ok(
@@ -546,6 +551,14 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
             checkHandler(null, permission, 'file://', { isMainFrame: true, requestingUrl: appIndex }),
             true,
             `${permission} check is granted`,
+        );
+    }
+    // WebUSB and Web Serial are refused on the check path, as the bridge session refuses them.
+    for (const permission of ['usb', 'serial']) {
+        assert.equal(
+            checkHandler(null, permission, 'file://', { isMainFrame: true, requestingUrl: appIndex }),
+            false,
+            `${permission} check is refused even to the app's own frame`,
         );
     }
 

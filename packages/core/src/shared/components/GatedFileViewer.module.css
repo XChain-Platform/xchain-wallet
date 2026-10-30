@@ -105,13 +105,6 @@
 
 .mismatch {
     margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-bg-muted);
-    border: 1px dashed var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    line-height: 1.4;
 }
 
 .actions {

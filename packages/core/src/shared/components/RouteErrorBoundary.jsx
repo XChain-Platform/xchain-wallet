@@ -9,24 +9,28 @@
 // contact legal@dankest.llc.
 
 import { Component } from 'react';
-import { Button, FormPage, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { logConsole } from '../utils/logConsole.js';
+import { isChunkLoadError } from '../utils/chunkLoadError.js';
 import styles from './RouteErrorBoundary.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Keeps a failed route from replacing the application with a blank screen.
  * The Home action changes only shell navigation state, so providers and the
  * unlocked session stay mounted. A boundary without shell navigation falls
- * back to reloading the application entry point.
+ * back to reloading the application entry point. When the failing route is
+ * Home itself (atHome), the Home action has nowhere to go, so the screen
+ * offers only Try again, which remounts the route.
  */
 export class RouteErrorBoundary extends Component {
     constructor(props) {
         super(props);
-        this.state = { failed: false };
+        this.state = { failed: false, chunkFailed: false };
     }
 
-    static getDerivedStateFromError() {
-        return { failed: true };
+    static getDerivedStateFromError(error) {
+        return { failed: true, chunkFailed: isChunkLoadError(error) };
     }
 
     componentDidCatch(error, info) {
@@ -44,6 +48,14 @@ export class RouteErrorBoundary extends Component {
         }
     }
 
+    reload = () => {
+        if (this.props.onReload) {
+            this.props.onReload();
+            return;
+        }
+        if (typeof window !== 'undefined') window.location.reload();
+    };
+
     goHome = () => {
         if (this.props.onHome) {
             this.props.onHome();
@@ -57,6 +69,11 @@ export class RouteErrorBoundary extends Component {
     };
 
     retry = () => {
+        // The browser remembers the failed chunk fetch, so only a reload can load it.
+        if (this.state.chunkFailed) {
+            this.reload();
+            return;
+        }
         this.props.onRetry?.();
         this.setState({ failed: false });
     };
@@ -66,29 +83,31 @@ export class RouteErrorBoundary extends Component {
 
         if (this.props.variant === 'compact') {
             return (
-                <StatusMessage variant="error" recovery={{ label: 'Retry', onAction: this.retry }}>
-                    Could not load this section.
+                <StatusMessage variant="error" recovery={{ label: t('home.retryBalances'), onAction: this.retry }}>
+                    {t('components.routeErrorBoundary.couldNotLoadThisSection')}
                 </StatusMessage>
             );
         }
 
         const actions = (
             <>
-                <Button type="button" variant="secondary" onClick={this.goHome}>
-                    Go to Home
-                </Button>
+                {this.props.atHome ? null : (
+                    <Button type="button" variant="secondary" icon={<Icon.HomeIcon />} onClick={this.goHome}>
+                        {t('components.routeErrorBoundary.goToHome')}
+                    </Button>
+                )}
                 <Button type="button" variant="primary" onClick={this.retry}>
-                    Try again
+                    {t('common.tryAgain')}
                 </Button>
             </>
         );
 
         return (
             <div role="alert" className={styles.recovery}>
-                <FormPage label="This screen could not be shown" actions={actions}>
-                    <h1 className={styles.title}>This screen could not be shown</h1>
+                <FormPage label={t('components.routeErrorBoundary.thisScreenCouldNotBe')} actions={actions}>
+                    <h1 className={styles.title}>{t('components.routeErrorBoundary.thisScreenCouldNotBe')}</h1>
                     <p className={styles.body}>
-                        Something went wrong while showing this screen. Try again or go to Home.
+                        {t('components.routeErrorBoundary.somethingWentWrongWhileShowing')}
                     </p>
                 </FormPage>
             </div>

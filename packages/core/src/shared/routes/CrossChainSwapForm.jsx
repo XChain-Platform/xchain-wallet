@@ -9,16 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { formatLocalDateTime } from '../utils/dateTime.js';
+import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/crossChainSwap.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -29,10 +34,10 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -42,6 +47,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -98,7 +104,10 @@ function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() /
  */
 export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
-    const networkAvailable = useOnlineStatus();
+    const demoGuard = useDemoGuard(walletId, { onBack });
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -109,6 +118,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    // True when the load found too few networks, a requirement the page states
+    // only while online: offline, the offline note is the page's one message.
+    const [loadErrorIsRequirement, setLoadErrorIsRequirement] = useState(false);
 
     const [giveChainId, setGiveChainId] = useState(/** @type {string | null} */ (null));
     const [getChainId, setGetChainId] = useState(/** @type {string | null} */ (null));
@@ -136,6 +148,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const markReviewAttempt = useFocusNoticeOnAttempt();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -158,15 +171,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
+                if (chains.length < 2) setLoadErrorIsRequirement(true);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate addresses on at least two chains before composing a cross-chain swap.',
+                        'No addresses on any network yet. Use Receive to generate addresses on at least two networks before composing a cross-chain swap.',
                     );
                     return;
                 }
                 if (chains.length === 1) {
                     setLoadError(
-                        'A cross-chain swap needs addresses on two different chains. Use Receive on a second chain (e.g. DOGE or LTC) and try again.',
+                        'A cross-chain swap needs addresses on two different networks. Use Receive on a second network (e.g. DOGE or LTC) and try again.',
                     );
                     return;
                 }
@@ -265,7 +279,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const validationError = useMemo(() => {
         if (!giveCoinTicker || !getCoinTicker) return null;
         if (giveCoinTicker === getCoinTicker) {
-            return 'Give and get chains must differ. For same-chain swaps use Swap tokens.';
+            return 'Give and get networks must differ. For same-chain swaps use Swap tokens.';
         }
         if (giveTick.trim() && giveTick.trim().toUpperCase() === giveCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot give ${giveCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
@@ -311,6 +325,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             if (addressError) return addressError;
         }
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
+        if (memoError) return memoError;
         const expirationError = expirationValidationError(expMode, expInput);
         if (expirationError) return expirationError;
         return null;
@@ -358,10 +374,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
-        : null;
-    const feeError = feePick.mode === 'custom'
-        && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0 || !feeCustomEstimate)
-        ? 'Enter a valid custom network fee rate before reviewing.'
         : null;
     const giveTicker = giveDescriptor?.coin
         ? NATIVE_TICKER_BY_COIN[giveDescriptor.coin] || giveDescriptor.coin.toUpperCase()
@@ -475,7 +487,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // reachable only from the review screen.
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!networkAvailable) return;
+        markReviewAttempt();
         if (!fromAddress || !giveChainId || !getChainId) {
             setFormError('Pick a source address first.');
             return;
@@ -486,10 +501,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         if (!getAddress.trim()) {
-            setFormError('Enter a receive address on the get chain.');
+            setFormError('Enter a receive address on the get network.');
             return;
         }
-        if (validationError || feeError) return;
+        if (validationError) return;
+        // The memoized check keeps the clock of the last edit, so ask again now.
+        if (expirationValidationError(expMode, expInput)) {
+            setFormError('Expiration must be a future date and time.');
+            return;
+        }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -501,7 +521,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (stage === 'submitting') return;
         if (!fromAddress || !giveChainId || !getChainId) return;
         const freshExpirationError = expirationValidationError(expMode, expInput);
-        if (validationError || feeError) return;
+        if (validationError) return;
         if (freshExpirationError) {
             setFormError('Expiration must be a future date and time.');
             setSubmitError(null);
@@ -614,10 +634,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         </Screen>
     );
 
+    if (loadError && networkOffline && loadErrorIsRequirement) return wrap(null);
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -628,7 +649,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -639,22 +661,19 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the success
         // copy below would report an escrow that is not open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
         }
         return wrap(
             <>
                 <SectionHeader title="Cross-chain swap broadcast" />
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>Give-chain transaction</p>
+                        <p className={styles.successLabel}>{t('crossChainSwap.success.giveTxLabel')}</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : null}
-                <p className={styles.hint}>
-                    Your offer is open on the give chain. The swap settles atomically
-                    when a counterparty fills it on the get chain; until then no funds move.
-                </p>
+                <p className={styles.hint}>{t('crossChainSwap.success.hint')}</p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
@@ -678,10 +697,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK}`;
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review cross-chain swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -721,7 +741,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     {giveDescriptor ? (
                         <DetailRow
-                            label="Give chain"
+                            label="Give network"
                             value={<ChainBadge descriptor={giveDescriptor} size="sm" />}
                         />
                     ) : null}
@@ -735,7 +755,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                     {getDescriptor ? (
                         <DetailRow
-                            label="Get chain"
+                            label="Get network"
                             value={<ChainBadge descriptor={getDescriptor} size="sm" />}
                         />
                     ) : null}
@@ -753,7 +773,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <DetailRow
                         label="Expiration"
                         value={swapParams.EXPIRATION
-                            ? formatLocalDateTime(Number(swapParams.EXPIRATION))
+                            ? formatUnixSecondsLocal(swapParams.EXPIRATION)
                             : 'Default window'}
                     />
                     {giveOwnership || getOwnership ? (
@@ -883,19 +903,21 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Cross-chain swap"
             onSubmit={handleReview}
             sectioned
-            status={(validationError || feeError || formError) ? (
+            // The review composes the terms as they stand at Review, so the
+            // fields hold still until the confirm page opens.
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
+            status={(validationError || formError) ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
-                    ) : null}
-                    {feeError ? (
-                        <StatusMessage variant="error" className={styles.error}>{feeError}</StatusMessage>
+                        <StatusMessage variant="error">{validationError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -915,7 +937,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         >
             <FormSection title="You give">
                     <ChainPicker
-                        label="Give chain"
+                        label="Give network"
                         value={giveChainId || ''}
                         onChange={(cid) => {
                             if (cid === giveChainId) return;
@@ -972,7 +994,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
             <FormSection title="You get">
                     <ChainPicker
-                        label="Get chain"
+                        label="Get network"
                         value={getChainId || ''}
                         onChange={(cid) => {
                             if (cid === getChainId) return;
@@ -994,7 +1016,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             setGetAddress(e.target.value);
                             setGetAddressTouched(true);
                         }}
-                        placeholder="Automatically filled from your wallet on the get chain"
+                        placeholder="Automatically filled from your wallet on the get network"
                         autoComplete="off"
                     />
                     <TokenField
@@ -1068,6 +1090,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         value={feePick}
                         onChange={setFeePick}
                         customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                        // Offline already says swapping is blocked, so a fee-source
+                        // notice would be a second message for the same state.
+                        showEstimateNotice={networkAvailable}
                     />
                 ) : null}
                 {/* Off Bitcoin this is mandatory, so it renders as a

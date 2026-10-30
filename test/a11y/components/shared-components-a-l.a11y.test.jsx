@@ -12,6 +12,7 @@ import { MessagingContext } from '../../../packages/core/src/shared/MessagingCon
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
 import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
+import { AddressDiscoveryNotice } from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
@@ -19,6 +20,7 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
@@ -42,7 +44,9 @@ import { KeyQR } from '../../../packages/core/src/shared/components/KeyQR.jsx';
 import { LayoutModeToggle } from '../../../packages/core/src/shared/components/LayoutModeToggle.jsx';
 import { LearnNote } from '../../../packages/core/src/shared/components/LearnNote.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { ListToolbar } from '../../../packages/core/src/shared/components/ListToolbar.jsx';
 import { ListPickerScreen } from '../../../packages/core/src/shared/components/ListPickerScreen.jsx';
+import { LockedSendOutcomeNotice } from '../../../packages/core/src/shared/components/LockedSendOutcomeNotice.jsx';
 import { LockedTokenContext } from '../../../packages/core/src/shared/components/LockedTokenContext.jsx';
 import { LogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
@@ -130,7 +134,31 @@ const fixtures = [
             </li>
         </ul>
     )],
-    ['AdsNotice', () => <AdsNotice onContinue={noop} isFull />],
+    // A finished scan with an unread chain shows its warning line and the Try again control.
+    ['AddressDiscoveryNotice', () => (
+        <MessagingContext.Provider
+            value={{
+                shell: 'web',
+                messaging: {
+                    ...messaging,
+                    addressDiscoveryStatus: vi.fn().mockResolvedValue({
+                        id: 1,
+                        status: 'done',
+                        chainsDone: 2,
+                        chainsTotal: 3,
+                        found: 1,
+                        failedChains: ['bitcoin-mainnet'],
+                        walletIds: ['wallet-1'],
+                    }),
+                    addressDiscoveryDismiss: vi.fn().mockResolvedValue(undefined),
+                    discoverAddresses: vi.fn().mockResolvedValue(undefined),
+                },
+            }}
+        >
+            <AddressDiscoveryNotice />
+        </MessagingContext.Provider>
+    ), () => screen.findByTestId('address-discovery-status')],
+    ['AdsNotice', () => <AdsNotice onContinue={noop} />],
     ['AlertsOverlay', () => (
         <AlertsOverlay
             alerts={[{
@@ -176,6 +204,9 @@ const fixtures = [
             quantity: '100000000',
             divisibility: 8,
         }]} onSelectToken={noop} />
+    )],
+    ['BalancesUncheckedState', () => (
+        <BalancesUncheckedState onRetry={noop} onReceive={noop} />
     )],
     ['BottomTabBar', () => (
         <BottomTabBar currentView="home" onSelect={noop} onLock={noop} onOpenSettings={noop} />
@@ -330,6 +361,27 @@ const fixtures = [
             onBack={noop}
         />
     )],
+    ['ListToolbar', () => (
+        <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />
+    )],
+    // One send that went out and one that did not while the wallet was locked.
+    ['LockedSendOutcomeNotice', () => (
+        <MessagingContext.Provider
+            value={{
+                shell: 'web',
+                messaging: {
+                    ...messaging,
+                    listLockedSendOutcomes: vi.fn().mockResolvedValue([
+                        { id: 'p1', kind: 'sent', txid: 'ab'.repeat(32), amount: '0.0003', tick: 'BTC', summary: 'Send 0.0003 BTC' },
+                        { id: 'p2', kind: 'unsent', txid: null, amount: '0.0002', tick: 'BTC', summary: null },
+                    ]),
+                    clearLockedSendOutcomes: vi.fn().mockResolvedValue({ cleared: 2 }),
+                },
+            }}
+        >
+            <LockedSendOutcomeNotice walletId="wallet-1" routeKey="home" />
+        </MessagingContext.Provider>
+    ), () => screen.findByTestId('locked-send-outcome')],
     ['LockedTokenContext', () => <LockedTokenContext chainId="bitcoin-mainnet" tick="XCHAIN" />],
     ['LogConsole', () => <LogConsole />],
 ];

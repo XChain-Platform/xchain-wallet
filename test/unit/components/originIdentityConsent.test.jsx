@@ -8,7 +8,7 @@ import {
     registrableDomainForHostname,
 } from '../../../packages/core/src/shared/components/OriginIdentity.jsx';
 import { ContractConsentPanel } from '../../../packages/core/src/shared/components/ContractConsentPanel.jsx';
-import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 
 describe('<OriginIdentity>', () => {
     it('emphasizes the registrable domain instead of an attacker-controlled prefix', () => {
@@ -59,7 +59,7 @@ describe('grant wording', () => {
 
     it('states that watcher signing authorizes only the displayed transaction', () => {
         render(
-            <WatcherResultPanel result={{ psbtHex: 'deadbeef' }} onDone={() => {}} />,
+            <ResultScreen state="unsigned" result={{ psbtHex: 'deadbeef' }} onDone={() => {}} />,
         );
 
         expect(screen.getByText(/Signing authorizes this transaction only/)).toBeTruthy();

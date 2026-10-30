@@ -158,7 +158,15 @@ async function fillBatch(page) {
     const step = (number) => main.getByRole('region', { name: `Step ${number}`, exact: true });
 
     await expect(main.getByRole('form', { name: 'Batch composer' })).toBeVisible({ timeout: 30_000 });
-    await picker(main, 'Chain').selectOption('bitcoin-regtest');
+    // The Batch composer's Network field is a ChainPicker (a popover listbox),
+    // not a native select, so it is driven by its trigger and an option.
+    const network = main.getByRole('button', { name: /^Network:/ });
+    await expect(network).toBeVisible({ timeout: 30_000 });
+    if (!((await network.getAttribute('aria-label')) || '').includes('Bitcoin')) {
+        await network.click();
+        await main.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
+    }
+    await expect(network).toHaveAttribute('aria-label', /Bitcoin/);
 
     const first = step(1);
     await picker(first, 'Action').selectOption('SEND');

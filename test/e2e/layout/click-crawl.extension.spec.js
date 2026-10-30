@@ -21,8 +21,10 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, test } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import { createCrawl } from './crawl.js';
+import { measureRulings, recordMeasuredScreen } from './sweep.js';
+import { HOST_BLOCK_ARG } from '../host-block.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -54,13 +56,26 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
             channel: 'chromium',
             headless: true,
             viewport: { width: WIDTH, height: HEIGHT },
-            args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
+            args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, HOST_BLOCK_ARG],
         });
         try {
             let [worker] = context.serviceWorkers();
             if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
             const origin = `chrome-extension://${new URL(worker.url()).host}`;
             const page = await context.newPage();
+            // The side panel refuses to render unless its active tab runs the
+            // provider bridge, and here the active tab is the panel itself, so
+            // the content-script probe is answered the way a regular website's
+            // content script answers it.
+            if (SURFACE === 'sidepanel') {
+                await page.addInitScript(() => {
+                    const tabs = globalThis.chrome?.tabs;
+                    if (!tabs) return;
+                    tabs.sendMessage = (_id, _message, callback) => {
+                        if (typeof callback === 'function') callback({ available: true });
+                    };
+                });
+            }
             // The popup has no nav to go Home by, and it reopens on the last
             // view it showed, so every restart forgets that view first and
             // the reload lands on Home. The licence gate is taken the way a
@@ -86,10 +101,33 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                     await accept.click();
                 }
             };
-            const crawl = createCrawl(page, { venue, outDir: join(OUT_ROOT, venue, RUN), origin, start });
+            const outDir = join(OUT_ROOT, venue, RUN);
+            let measured = 0;
+            const recordScreen = async ({ label }) => {
+                const n = shard + 1 + measured * SHARDS;
+                measured += 1;
+                const slug = `${String(n).padStart(3, '0')}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`;
+                await recordMeasuredScreen(page, {
+                    venue,
+                    outDir,
+                    n,
+                    label,
+                    shot: `${slug}.png`,
+                    onScreen: async (p) => ({ rulings: await p.evaluate(measureRulings) }),
+                });
+            };
+            const crawl = createCrawl(page, {
+                venue,
+                outDir,
+                origin,
+                start,
+                onScreen: recordScreen,
+            });
             await crawl.enterDemo();
             let screens = await crawl.discover();
             if (ONLY) screens = screens.filter((s) => ONLY.test(s.label));
+            // Check harness coverage, not findings: the run must have at least one screen to crawl.
+            expect(screens.length, 'harness coverage: no screen to crawl (discovery found none, or CRAWL_ONLY matched none)').toBeGreaterThan(0);
             const mine = screens.filter((_, i) => i % SHARDS === shard);
             try {
                 for (const screen of mine) {

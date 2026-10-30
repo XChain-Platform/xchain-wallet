@@ -17,6 +17,7 @@ import { render, act as domAct, fireEvent, cleanup } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
+import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWN = 'bc1qexampleexampleexampleexampleexampleex';
@@ -152,6 +153,28 @@ describe('PSBT sign screen: a paste that cannot be read', () => {
         expect(text).not.toMatch(/Invalid Magic Number/);
     });
 
+    it('puts the error directly under the paste box with Clear as a link action inside it', async () => {
+        const utils = await mountAndPaste({
+            parsePsbtRequest: () => Promise.reject(new Error('Format Error: Invalid Magic Number')),
+        });
+        const textarea = utils.getByLabelText(/Unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.change(textarea, { target: { value: 'not a transaction' } });
+            await drainMicrotasks();
+        });
+        const note = utils.container.querySelector('[data-testid="psbt-sign-paste-error"]');
+        expect(note).toBeTruthy();
+        const clear = Array.from(note.querySelectorAll('button')).find((b) => /^Clear$/.test(b.textContent));
+        expect(clear).toBeTruthy();
+        const browse = findButton(utils, /Browse for \.psbt file/);
+        // Document order: textarea, then the error, then the Browse and Scan buttons.
+        expect(textarea.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(note.compareDocumentPosition(browse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        await domAct(async () => { fireEvent.click(clear); await drainMicrotasks(); });
+        expect(textarea.value).toBe('');
+        expect(utils.container.querySelector('[data-testid="psbt-sign-paste-error"]')).toBeNull();
+    });
+
     it('hides the SDK capability error', async () => {
         const utils = await mountAndPaste({
             parsePsbtRequest: () => Promise.reject(new Error('psbt.parse: SDK for "xcp-mainnet" lacks wallet.decomposePsbt')),
@@ -206,11 +229,72 @@ describe('PSBT sign screen: a broadcast that fails', () => {
         expect(text).not.toMatch(/queued-transactions banner/);
     });
 
+    it('sends the signed PSBT so the host verifies against its prevouts, and shows the refusal', async () => {
+        const err = new Error('The signer returned a signature that does not match this transaction. Nothing was broadcast.');
+        err.name = 'SignatureMismatchError';
+        const broadcast = vi.fn(() => Promise.reject(err));
+        const utils = await broadcastWith(broadcast);
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT_HEX }));
+        expect(alertsText(utils)).toMatch(/does not match this transaction\. Nothing was broadcast\./);
+    });
+
     it('names no shell API when this shell cannot broadcast', async () => {
         const utils = await broadcastWith(null);
         const text = alertsText(utils);
         expect(text).toMatch(/can't broadcast from here/i);
         expect(text).not.toMatch(/messaging\.|broadcastSignedTxRequest/);
+    });
+});
+
+// The host reports whether the queue save landed as `persisted`; the banner
+// promise is only true when it did.
+describe('PSBT sign screen: a broadcast the host queued', () => {
+    const queuedWith = (persisted) => broadcastWith(() => Promise.resolve({
+        queued: true, broadcast: 'queued', queueId: 'q1', pendingTxId: 'p1', persisted,
+    }));
+
+    it('warns instead of promising the banner when the queue save was refused', async () => {
+        const utils = await queuedWith(false);
+        expect(alertsText(utils)).toMatch(/could not be saved to the queue/);
+        expect(utils.container.textContent).not.toMatch(/saved in the\s+queued-transactions banner/);
+        // The warning tells the user to copy the bytes, so the copy control must still be there.
+        expect(utils.container.querySelector('[data-testid="signed-tx-hex"]')).toBeTruthy();
+    });
+
+    it('keeps the banner copy when the queue save landed', async () => {
+        const utils = await queuedWith(true);
+        expect(alertsText(utils)).not.toMatch(/could not be saved to the queue/);
+        expect(utils.container.textContent).toMatch(/saved in the\s+queued-transactions banner/);
+    });
+});
+
+describe('PSBT sign screen: auto-lock waits for the request in flight', () => {
+    it('holds auto-lock while the hardware device signs', async () => {
+        let finish;
+        const utils = await mountAndPaste({
+            signPsbtUserInitiatedHw: () => new Promise((resolve) => { finish = resolve; }),
+        });
+        await domAct(async () => {
+            fireEvent.click(findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i));
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(true);
+        await domAct(async () => {
+            finish({ signedPsbtHex: '', txHex: 'cc22', txid: 'dd33' });
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(false);
+    });
+
+    it('holds auto-lock while the signed transaction broadcasts', async () => {
+        let fail;
+        await broadcastWith(() => new Promise((_resolve, reject) => { fail = reject; }));
+        expect(isAutoLockHeld()).toBe(true);
+        await domAct(async () => {
+            fail(new Error('node unreachable'));
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(false);
     });
 });
 

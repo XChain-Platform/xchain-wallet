@@ -45,6 +45,15 @@ const queueRoute = sliceRouteBody(host, 'broadcast.queue.broadcast');
 assert.ok(queueRoute, 'broadcast.queue.broadcast route found');
 
 assert.ok(
+    /await assertBroadcastSignaturesVerify\(\{[\s\S]+?txHex: entry\.signedTxHex,[\s\S]+?signerId: 'broadcast\.queue\.broadcast'/.test(queueRoute),
+    'broadcast.queue.broadcast verifies the queued bytes against tracker-backed prevouts',
+);
+assert.ok(
+    queueRoute.indexOf('await assertBroadcastSignaturesVerify(')
+        < queueRoute.indexOf('await sdk.encoder.broadcastTx(entry.signedTxHex)'),
+    'broadcast.queue.broadcast verifies before its network call',
+);
+assert.ok(
     /await sdk\.encoder\.broadcastTx\(entry\.signedTxHex\)/.test(queueRoute),
     'broadcast.queue.broadcast broadcasts via sdk.encoder.broadcastTx',
 );
@@ -56,6 +65,18 @@ assert.ok(
 assert.ok(
     /typeof sdk\?\.encoder\?\.broadcastTx !== 'function'/.test(queueRoute),
     'the pre-flight guard checks the same method the route actually calls',
+);
+
+const enqueueRoute = sliceRouteBody(host, 'broadcast.queue.enqueue');
+assert.ok(enqueueRoute, 'broadcast.queue.enqueue route found');
+assert.ok(
+    /await assertBroadcastSignaturesVerify\(\{[\s\S]+?txHex: signedTxHex,[\s\S]+?signerId: 'broadcast\.queue\.enqueue'/.test(enqueueRoute),
+    'broadcast.queue.enqueue verifies externally supplied signed bytes',
+);
+assert.ok(
+    enqueueRoute.indexOf('await assertBroadcastSignaturesVerify(')
+        < enqueueRoute.indexOf('pushQueueEntry(walletId'),
+    'broadcast.queue.enqueue verifies before it creates queue state',
 );
 
 // --- 2. the sibling raw-broadcast route is on the same pattern ----------

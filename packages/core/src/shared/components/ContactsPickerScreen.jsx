@@ -9,11 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useState } from 'react';
-import { EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { EmptyState, Input, ListPage, ListRow, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './ContactsPickerScreen.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 
 export { styles as contactsPickerStyles };
 
@@ -44,8 +48,9 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
         const out = [];
         // Name order, matching the Contacts screen, so a person's addresses
         // sit together however the vault happened to store them.
-        for (const [contactIndex, c] of [...(contacts || [])].sort(compareContactsByName).entries()) {
-            for (const [entryIndex, e] of (c?.entries || []).entries()) {
+        for (const [contactIndex, c] of [...(Array.isArray(contacts) ? contacts : [])]
+            .sort(compareContactsByName).entries()) {
+            for (const [entryIndex, e] of (Array.isArray(c?.entries) ? c.entries : []).entries()) {
                 if (!e?.address) continue;
                 // Resolved, not read raw: an entry the old detector stored as
                 // 'unknown' (every Dogecoin testnet address) still has to
@@ -55,7 +60,11 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                     const hay = `${c?.name || ''} ${e.address} ${e.label || ''}`.toLowerCase();
                     if (!hay.includes(q)) continue;
                 }
-                out.push({ contact: c, entry: e, key: `${contactIndex}:${entryIndex}` });
+                out.push({
+                    displayName: neutralizeControlText(c?.name),
+                    entry: e,
+                    key: `${contactIndex}:${entryIndex}`,
+                });
             }
         }
         return out;
@@ -63,20 +72,21 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
-            title="Contacts"
-            titleIcon={<Icon.UsersIcon />}
+            title={t('components.contactsPickerScreen.contacts')}
         />
     );
 
-    const hasAnyAddress = (contacts || []).some((c) => (c?.entries || []).some((e) => e?.address));
+    const hasAnyAddress = (Array.isArray(contacts) ? contacts : [])
+        .some((c) => (Array.isArray(c?.entries) ? c.entries : []).some((e) => e?.address));
     if (!hasAnyAddress) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
                     <EmptyState
-                        title="No contacts yet"
-                        body="Saved contacts with addresses appear here."
+                        title={t('components.contactsPickerScreen.noContactsYet')}
+                        body={t('components.contactsPickerScreen.savedContactsWithAddressesAppear')}
                         titleAs="p"
                         role={null}
                     />
@@ -95,32 +105,32 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                         enterKeyHint="search"
                         autoCapitalize="off"
                         className={styles.abSearch}
-                        placeholder="Search"
+                        placeholder={t('routes.addressList.search')}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
-                        aria-label="Search contacts"
+                        aria-label={t('components.contactsPickerScreen.searchContacts')}
                     />
                     <NetworkFilterDropdown value={network} onChange={setNetwork} />
                 </>
             )}>
                 {rows.length === 0 ? (
                     <EmptyState
-                        title="No matching addresses"
-                        body="Try a different search or network filter."
+                        title={t('routes.addressList.noMatchingAddresses')}
+                        body={t('routes.addressList.tryADifferentSearchOr')}
                         titleAs="p"
                         role={null}
                     />
                 ) : (
                     <ul className={styles.abList}>
-                        {rows.map(({ contact, entry, key }) => (
+                        {rows.map(({ displayName, entry, key }) => (
                             <li key={key}>
                                 <ListRow
                                     className={styles.abRow}
                                     onClick={() => onPick(entry)}
-                                    title={<span className={styles.abName}>{contact.name}</span>}
+                                    title={<span className={styles.abName}>{displayName}</span>}
                                     subtitle={(
                                         <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
                                     )}

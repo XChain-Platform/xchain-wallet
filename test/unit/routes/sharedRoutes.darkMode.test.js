@@ -50,12 +50,21 @@ describe('shared route dark-mode colors', () => {
 
     it('keeps warning, send-gate, and official-region borders visible in dark mode', () => {
         const send = routeCss('Send');
-        const detail = routeCss('TokenDetail');
-        expect(send).toMatch(/\.warnings\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
-        expect(send).toMatch(/\.testSendGate\s*\{[^}]*border:\s*1px solid var\(--xc-accent-primary\)/s);
-        expect(detail).toMatch(/\.officialBanner\s*\{[^}]*border:\s*1px solid var\(--xc-success\)/s);
-        expect(detail).toMatch(/\.officialBanner\s*\{[^}]*background:\s*var\(--xc-success-bg\)/s);
-        for (const border of ['--xc-warning', '--xc-accent-primary', '--xc-success']) {
+        // The official-token notice is the shared success message, so its
+        // border is the success row's own; the send warnings are the shared
+        // warning message, so theirs is the warning row's.
+        const detail = readFileSync('packages/core/src/shared/routes/TokenDetail.jsx', 'utf8');
+        const message = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
+        expect(send).not.toMatch(/^\.warnings\s*\{/m);
+        expect(message).toMatch(/\.row\.warning\s*\{[^}]*border:\s*1px solid var\(--xc-warning\)/s);
+        // The small test send suggestion is the shared info message, so its
+        // border is the info row's own.
+        expect(send).not.toMatch(/\.testSendGate\s*\{/);
+        expect(message).toMatch(/\.row\.info\s*\{[^}]*border:\s*1px solid var\(--xc-info/s);
+        expect(detail).toMatch(/<StatusMessage variant="success">\s*This token is an official token/);
+        expect(message).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success/s);
+        expect(message).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg/s);
+        for (const border of ['--xc-warning', '--xc-info', '--xc-success']) {
             expect(contrast(dark[border], dark['--xc-surface-raised']), border).toBeGreaterThanOrEqual(3);
         }
     });

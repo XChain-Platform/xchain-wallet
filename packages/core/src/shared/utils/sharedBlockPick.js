@@ -10,7 +10,13 @@
 
 import { listLabel } from './listLabel.js';
 
-function validActionIndex(actionIndex) {
+/**
+ * True for a positive whole-number list action index, as a number or digits.
+ *
+ * @param {unknown} actionIndex
+ * @returns {boolean}
+ */
+export function validActionIndex(actionIndex) {
     if (typeof actionIndex === 'number') {
         return Number.isInteger(actionIndex) && actionIndex > 0;
     }

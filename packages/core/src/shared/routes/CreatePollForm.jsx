@@ -28,12 +28,13 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { TokenField } from '../components/TokenField.jsx';
@@ -47,13 +48,13 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import {
     isVoteBindingMinimumsActive,
     isVoteCallbackTimelockActive,
 } from '../../flows/protocolActivations.js';
 import { bindingPollErrors, CALLBACK_ON_VALUES } from '../../flows/bindingPoll.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
@@ -64,6 +65,7 @@ import {
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -119,6 +121,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -172,7 +175,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
-                if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
+                if (!sourceId) { setLoadError('No address on this network. Use Receive to generate one first.'); return; }
                 setFromAddressId(sourceId);
                 setLoadError(null);
             })
@@ -419,6 +422,8 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         const tickError = tickerReferenceError(tick, { noun: 'Governance token' });
@@ -431,6 +436,9 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
         if (!/^[1-9]\d*$/.test(endBlock.trim())) { setFormError('End block must be a positive whole block height.'); return; }
         if (currentHeight != null && Number(endBlock) <= currentHeight) { setFormError(`End block must be above the current indexed block (${currentHeight}).`); return; }
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
+        const pollTextError = actionTextSafetyError(question, 'Question')
+            || cleanOptions.map((option) => actionTextSafetyError(option, 'Option')).find(Boolean);
+        if (pollTextError) { setFormError(pollTextError); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
         const selectionCount = Number(maxSelections);
         if (!/^\d+$/.test(maxSelections.trim()) || !Number.isInteger(selectionCount) || selectionCount < 1 || selectionCount > cleanOptions.length) {
@@ -562,7 +570,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -573,9 +581,9 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         return wrap(
             <ListPage>
@@ -597,10 +605,11 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review poll"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -616,7 +625,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -748,10 +757,11 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create poll"
             onSubmit={handleReview}
             sectioned
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -789,7 +799,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             </FormSection>
             <FormSection title="Options and rules">
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                 <span className={styles.fromLabel}>Options</span>
                 {options.map((opt, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>

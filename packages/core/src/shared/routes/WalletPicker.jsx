@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/walletDetails.js';
+import '../../i18n/locales/en/walletPicker.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
@@ -129,7 +131,7 @@ export function WalletPicker({
                         <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
                             <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
-                                style={{ width: '100%', paddingRight: '56px' }}
+                                style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
@@ -163,7 +165,7 @@ export function WalletPicker({
                             {onShowDetails ? (
                                 <Button
                                     type="button"
-                                    icon={null}
+                                    icon={<Icon.InfoIcon />}
                                     variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
@@ -173,9 +175,7 @@ export function WalletPicker({
                                         e.stopPropagation();
                                         onShowDetails(w.id);
                                     }}
-                                >
-                                    <Icon.InfoIcon />
-                                </Button>
+                                />
                             ) : null}
                         </div>
                     );

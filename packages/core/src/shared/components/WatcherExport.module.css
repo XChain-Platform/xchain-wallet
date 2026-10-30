@@ -1,0 +1,83 @@
+/* The unsigned PSBT export body shared by watcher-mode action surfaces. */
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.successLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 var(--xc-space-1);
+}
+
+.successSummary {
+    composes: card from '../../ui/Card.module.css';
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--xc-space-2) var(--xc-space-3);
+}
+
+.successRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+.successRow dt {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.successRow dd {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    word-break: break-word;
+}
+
+.successMono {
+    font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.machineText {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.successTxidBlock {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--xc-space-1);
+}
+
+.successTxidBlock textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.successTxidRow {
+    display: flex;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+}
+
+.hint {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    text-align: center;
+    margin: 0;
+}
+

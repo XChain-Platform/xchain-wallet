@@ -216,7 +216,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             // A new wallet has no contacts; save one so the recipient field
             // has a suggestion to offer.
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Add contact' }).click();
+            await page.getByRole('button', { name: 'Create first contact' }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
             await page.getByRole('textbox', { name: 'Address', exact: true })
                 .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
@@ -279,7 +279,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(custom).toBeVisible();
             await custom.click();
 
-            const chainForm = page.getByRole('form', { name: 'Choose token chain' });
+            const chainForm = page.getByRole('form', { name: 'Choose token network' });
             await expect(chainForm).toBeVisible();
             const network = chainForm.getByRole('button', { name: /^Network:/ });
             await expect(network).toBeVisible();

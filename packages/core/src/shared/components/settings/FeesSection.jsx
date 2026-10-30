@@ -23,11 +23,14 @@
 //   - RBF-by-default toggle.
 
 import { useState } from 'react';
+import { Input, Select } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { EmptyState } from '@xchain-wallet/core/ui';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
     defaultCustomSettingsRate,
     displayRateToSettingsCustom,
+    estimateNativeSendFeeTiers,
     resolveFeeUnit,
     settingsCustomToDisplayRate,
 } from '../../../flows/feeEstimate.js';
@@ -37,15 +40,14 @@ import {
     normalizeLocalizedDecimal,
 } from '../../utils/amountFormat.js';
 import {
-    INPUT,
-    ROW_HINT,
-    SELECT,
     STACK,
     SettingsFieldRow,
     SettingsLoadError,
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -60,10 +62,10 @@ const CHAIN_BLOCK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-1)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 const CHAIN_HEADER = {
     fontWeight: 600,
@@ -71,13 +73,13 @@ const CHAIN_HEADER = {
     fontSize: 'var(--xc-text-sm)',
 };
 export function FeesSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
     const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     // Chains are named without their network kind, so only the active
     // network's chains are listed and each chain appears once.
@@ -88,8 +90,10 @@ export function FeesSection() {
     ).sort();
     if (chainIds.length === 0) {
         return (
-            <Status
-                text="No chain fee profiles yet. They're seeded automatically when a chain is activated."
+            <EmptyState
+                title={t('settings.fees.noChainFeeProfilesYet')}
+                titleAs="p"
+                body={t('settings.fees.noChainFeeProfilesYetBody')}
             />
         );
     }
@@ -115,7 +119,7 @@ export function FeesSection() {
 
     return (
         <div style={STACK}>
-            {chainIds.map((chainId) => {
+            {chainIds.map((chainId, index) => {
                 // §35.10: stored null = follow the release default; render
                 // the resolved preference. Writes may carry concrete
                 // values - updateSettings normalizes a value equal to the
@@ -126,6 +130,7 @@ export function FeesSection() {
                 // Derive the unit and seed from the descriptor (a fixed 1000 is 1 sat/vB but 0.00001 DOGE/kB).
                 const unit = resolveFeeUnit(descriptor);
                 const seedRate = defaultCustomSettingsRate(unit);
+                const rateBounds = estimateNativeSendFeeTiers({ chainId, chainRegistry });
                 const headingId = `fee-settings-${chainId}`;
                 const rateErrorId = `fee-rate-${chainId}-error`;
                 return (
@@ -133,33 +138,31 @@ export function FeesSection() {
                         <div id={headingId} style={CHAIN_HEADER}>{displayName}</div>
 
                         <SettingsFieldRow
-                            label="Fee strategy"
-                            hint="Choose the balance between confirmation speed and network cost."
+                            label={t('settings.fees.feeStrategy')}
+                            hint={index === 0 ? t('settings.fees.chooseTheBalanceBetweenConfirmation') : undefined}
                             embedded
                         >
-                            <select
+                            <Select
                                 value={fees.strategy}
                                 onChange={(e) => onPatch(chainId, {
                                     strategy: e.target.value,
                                     customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
-                                    rbfByDefault: fees.rbfByDefault,
                                 })}
-                                aria-label={`${displayName} fee strategy`}
-                                style={SELECT}
+                                aria-label={t('settings.fees.feeStrategy2', { displayName })}
                             >
                                 {STRATEGIES.map((s) => (
                                     <option key={s.value} value={s.value}>{s.label}</option>
                                 ))}
-                            </select>
+                            </Select>
                         </SettingsFieldRow>
 
                         {fees.strategy === 'custom' ? (
                             <SettingsFieldRow
-                                label="Custom fee rate"
-                                hint={`Enter the rate in ${unit}.`}
+                                label={t('settings.fees.customFeeRate')}
+                                hint={t('settings.fees.enterTheRateIn', { unit })}
                                 embedded
                             >
-                                <input
+                                <Input
                                     id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
@@ -180,53 +183,77 @@ export function FeesSection() {
                                             }));
                                             return;
                                         }
+                                        if (displayRate === 0) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateGreaterThanZero'),
+                                            }));
+                                            return;
+                                        }
+                                        if (Number.isFinite(rateBounds?.minimumRate)
+                                            && displayRate < rateBounds.minimumRate) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateAtLeast', {
+                                                    rate: formatWithThousands(rateBounds.minimumRate),
+                                                    unit,
+                                                }),
+                                            }));
+                                            return;
+                                        }
+                                        if (Number.isFinite(rateBounds?.maximumRate)
+                                            && displayRate > rateBounds.maximumRate) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateNoHigherThan', {
+                                                    rate: formatWithThousands(rateBounds.maximumRate),
+                                                    unit,
+                                                }),
+                                            }));
+                                            return;
+                                        }
+                                        const n = displayRateToSettingsCustom(unit, displayRate);
+                                        if (!Number.isSafeInteger(n) || n <= 0) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateWithinSupportedRange'),
+                                            }));
+                                            return;
+                                        }
                                         setRateErrors((current) => {
                                             const next = { ...current };
                                             delete next[chainId];
                                             return next;
                                         });
-                                        const n = displayRateToSettingsCustom(unit, displayRate);
                                         const input = e.currentTarget;
                                         const previous = formatWithThousands(settingsCustomToDisplayRate(
                                             unit,
                                             fees.customSatsPerKb ?? seedRate,
                                         ));
                                         onPatch(chainId, {
-                                            strategy: 'custom',
                                             customSatsPerKb: n,
-                                            rbfByDefault: fees.rbfByDefault,
                                         }, () => { input.value = previous; });
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                                    aria-label={`${displayName} custom fee rate`}
+                                    aria-label={t('settings.fees.customFeeRate2', { displayName })}
                                     aria-invalid={rateErrors[chainId] ? 'true' : undefined}
                                     aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
                                     aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
-                                    style={{ ...INPUT, width: 120, textAlign: 'right' }}
+                                    style={{ width: 120, textAlign: 'right' }}
                                 />
                             </SettingsFieldRow>
                         ) : null}
-                        {rateErrors[chainId] ? (
-                            <div id={rateErrorId} role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                                {rateErrors[chainId]}
-                            </div>
-                        ) : null}
-                        {saveErrors[chainId] ? (
-                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                                {saveErrors[chainId]}
-                            </div>
-                        ) : null}
+                        {rateErrors[chainId] ? <Status id={rateErrorId} text={rateErrors[chainId]} tone="error" /> : null}
+                        {saveErrors[chainId] ? <Status text={saveErrors[chainId]} tone="error" /> : null}
 
                         <ToggleRow
-                            label="Allow fee bump (Replace-by-Fee)"
-                            accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
+                            label={t('settings.fees.allowFeeBumpReplaceBy')}
+                            accessibleLabel={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
                             hint={descriptor?.feeStrategy?.rbfSupported
-                                ? 'Keep this on so you can raise the fee later to speed up a stuck send on this chain.'
-                                : `Fee bumping is not supported on ${displayName}.`}
+                                ? t('settings.fees.keepThisOnSoYou')
+                                : t('settings.fees.feeBumpingIsNotSupported', { displayName })}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
-                                strategy: fees.strategy,
-                                customSatsPerKb: fees.customSatsPerKb,
                                 rbfByDefault: v,
                             })}
                             disabled={!descriptor?.feeStrategy?.rbfSupported}

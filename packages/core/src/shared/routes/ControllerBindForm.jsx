@@ -12,12 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useContractManifest } from '../hooks/useContractManifest.js';
@@ -28,12 +29,19 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
+import {
+    externalIndexOf,
+    hasAnyAddress,
+    preferredSourceId,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { controllerBindValidationError } from '../../flows/controllerBind.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -49,9 +57,31 @@ const PROTOCOL_COIN_TICKER = {
 // gates a token's ownership deed-over rather than its balances.
 const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
 
-function decimalPlaces(value) {
-    const [mantissa, exponentText] = String(value ?? '').toLowerCase().split('e');
-    return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
+// Sources the form can author a bind from: an HD external address signs with
+// the password, a Trezor or Ledger address signs on its device, and a
+// watch-only address reaches the form so a full-mode wallet can explain why it
+// cannot sign, while watcher mode can build the unsigned transaction.
+function isFormSource(address) {
+    switch (address?.source) {
+        case 'hd': return externalIndexOf(address.derivationPath) !== null;
+        case 'trezor':
+        case 'ledger':
+        case 'watch-only':
+            return true;
+        default: return false;
+    }
+}
+
+const NO_SOURCE_MESSAGE = 'No address on this network to sign from. Use Receive to generate one first.';
+
+// Which input a controllerBindValidationError message is about, by the field name
+// the message leads with; null when it concerns the form as a whole.
+function controllerBindErrorField(message) {
+    if (/^Guard contract/.test(message)) return 'controller';
+    if (/^Cooldown blocks/.test(message)) return 'cooldown';
+    if (/^Memo|memo/.test(message)) return 'memo';
+    if (/action class/i.test(message)) return 'actionClass';
+    return null;
 }
 
 /**
@@ -86,6 +116,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const { isWatcherMode } = useWalletMode();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -93,6 +125,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    // The Network field keeps every chain returned by the wallet, including a
+    // chain whose only records are not eligible sources.
+    const [walletChainIds, setWalletChainIds] = useState(/** @type {string[] | null} */ (null));
+    // A chosen chain with no address to sign from is an inline, recoverable
+    // error: the Network field stays on the page so the user can switch away.
+    const [sourceError, setSourceError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     // 'token' → ISSUE v6 (gate a TICK); 'address' → ADDRESS v1 (gate the signer).
@@ -111,9 +149,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [fieldError, setFieldError] = useState(/** @type {{ field: string, message: string } | null} */ (null));
+    const errorFor = (field) => (fieldError && fieldError.field === field ? fieldError.message : undefined);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Set from the press until the confirm page settles, so a second press in
+    // that gap does not start a second compose.
+    const composingRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -129,6 +172,21 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                const allByChain = byChain || {};
+                setLoadError(null);
+                setWalletChainIds(Object.keys(allByChain));
+                // Keep admitted but currently unable sources in the form. The
+                // submit gate below gives hardware and watch-only records their
+                // specific reason instead of misreporting that no address exists.
+                const sourceByChain = Object.fromEntries(
+                    Object.entries(allByChain)
+                        .map(([id, list]) => [id, (Array.isArray(list) ? list : []).filter(isFormSource)])
+                        .filter(([, list]) => list.length > 0),
+                );
+                if (!hasAnyAddress(allByChain)) {
+                    setLoadError('No addresses on any network yet. Use Receive to generate one first.');
+                    return;
+                }
                 // D-153: opened WITHOUT a token (the address-controller lane),
                 // there is no chain to inherit, so default to the last-used
                 // chain, else the first chain the wallet has an address on -
@@ -138,30 +196,33 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 // lane on the wallet's OLDEST chain forever. Without a chain
                 // at all here the form renders its "no address on this
                 // chain" error over a wallet that has plenty, because
-                // `chainId` is simply undefined.
+                // `chainId` is simply undefined. The default comes from the
+                // chains this form can author from, so an ineligible first
+                // chain never becomes the opening chain.
                 let cid = chainId;
                 if (!cid) {
-                    cid = pickDefaultChainId(byChain, { settings });
-                    if (!cid) {
-                        setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
-                        return;
-                    }
+                    cid = pickDefaultChainId(
+                        Object.keys(sourceByChain).length > 0 ? sourceByChain : allByChain,
+                        { settings },
+                    );
                     setChainId(cid);
                 }
-                const addrs = (byChain?.[cid] || []).filter(
-                    (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-                );
+                const addrs = sourceByChain[cid] || [];
                 if (addrs.length === 0) {
-                    setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
+                    setFromAddressId(null);
+                    setSourceError(NO_SOURCE_MESSAGE);
                     return;
                 }
-                setFromAddressId(preferredSourceId(addrs, active?.[cid]));
+                setSourceError(null);
+                // preferredSourceId falls back to the newest HD address, which a
+                // hardware-only or watch-only wallet does not hold.
+                setFromAddressId(preferredSourceId(addrs, active?.[cid]) || addrs[0].id);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, chainId, messaging]);
+    }, [walletId, chainId, messaging, isWatcherMode]);
 
     // Action-class list from the SDK (degrades to the locked-fact list).
     useEffect(() => {
@@ -200,8 +261,17 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const tokenInfo = useTokenInfo({ chainId, tick, skip: target !== 'token' || !tick });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: target === 'token' ? tokenInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isBlockedWatchOnlySource = fromAddress?.source === 'watch-only' && !isWatcherMode;
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -230,8 +300,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-
-    const { isWatcherMode } = useWalletMode();
 
     // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
@@ -271,6 +339,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     async function openConfirmScreen() {
+        if (composingRef.current) return;
+        composingRef.current = true;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -306,13 +376,26 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
             }));
+        } finally {
+            composingRef.current = false;
         }
     }
 
     function handleReview(event) {
         event.preventDefault();
+        if (isBlockedWatchOnlySource || (isHwSource && hwStatus !== 'available')) return;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
+            return;
+        }
+        if (target === 'token' && issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (target === 'token' && issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
@@ -329,20 +412,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         }
         const validationError = controllerBindValidationError(bindRequest());
         if (validationError) {
-            setFormError(validationError);
+            // An error that belongs to one field shows on that field, tied to it for
+            // assistive tech; the rest stay in the status line.
+            const field = controllerBindErrorField(validationError);
+            setFieldError(field ? { field, message: validationError } : null);
+            setFormError(field ? null : validationError);
             return;
         }
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            if (!Number.isFinite(rate) || rate <= 0) {
-                setFormError('Custom network fee rate must be greater than zero.');
-            } else if (decimalPlaces(feePick.customRate) > 8) {
-                setFormError('Custom network fee rate can have at most 8 decimal places.');
-            } else {
-                setFormError('Custom network fee rate is outside the supported range.');
-            }
-            return;
-        }
+        setFieldError(null);
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -427,6 +504,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     const verb = unbind ? 'Unbind' : 'Bind';
+    // Keep the current chain listed so the field always shows its value.
+    const networkChainIds = walletChainIds
+        ? (chainId && !walletChainIds.includes(chainId) ? [...walletChainIds, chainId] : walletChainIds)
+        : [chainId];
     const subjectLabel = target === 'token'
         ? `token ${tick || ''}`.trim()
         : 'this address';
@@ -449,7 +530,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -463,11 +544,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result?.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result?.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -493,10 +575,11 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()} controller`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -526,7 +609,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>
@@ -640,19 +723,56 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         );
     }
 
+    const networkField = (
+        <NetworkField
+            value={chainId}
+            onChange={(cid) => { setChainId(cid); setFromAddressId(null); setSourceError(null); }}
+            chainIds={networkChainIds}
+            chainRegistry={chainRegistry}
+        />
+    );
+
+    // A network with nothing to sign from offers only the switch away and the
+    // one error, so issuer and fee notices for a bind that cannot happen do
+    // not stack beside it.
+    if (sourceError) {
+        return wrap(
+            <FormPage
+                demoGuard={demoGuard}
+                label={`${verb} controller`}
+                onSubmit={(event) => event.preventDefault()}
+                actions={(
+                    <Button type="submit" variant="primary" disabled>
+                        {singleEncode ? verb : 'Preview'}
+                    </Button>
+                )}
+            >
+                {networkField}
+                <StatusMessage variant="error">{sourceError}</StatusMessage>
+            </FormPage>,
+        );
+    }
+
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} controller`}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || (target === 'token' && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            ) : isBlockedWatchOnlySource ? (
+                <StatusMessage variant="error">{WATCH_ONLY_SIGNING_MESSAGE}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
+                    disabled={!fromAddress
+                        || isBlockedWatchOnlySource
+                        || (isHwSource && hwStatus !== 'available')
+                        || (target === 'token' && (issuerEligibility.pending || !!issuerEligibility.error))
+                        || actionConfirm.composing}
                 >
                     {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
                 </Button>
@@ -666,7 +786,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
                 </p>
             </details>
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            {networkField}
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -676,6 +796,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
                     iconLabel="Choose source address"
+                />
+            ) : null}
+            {isHwSource ? (
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    onStatusChange={onHwStatusChange}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
             ) : null}
 
@@ -702,6 +830,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     hint="The action number of the deployed contract that will gate the selected actions."
                     inputMode="numeric"
                     value={controller}
+                    error={errorFor('controller')}
                     onChange={(e) => setController(e.target.value)}
                     autoComplete="off"
                     autoCapitalize="off"
@@ -713,6 +842,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             <Select
                 label="Action class"
                 value={actionClass}
+                error={errorFor('actionClass')}
                 onChange={(e) => setActionClass(e.target.value)}
             >
                 {actionClasses.map((ac) => (
@@ -748,6 +878,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     hint="Blocks a later unbind must wait before it takes effect. Leave blank for none."
                     inputMode="numeric"
                     value={cooldownBlocks}
+                    error={errorFor('cooldown')}
                     onChange={(e) => setCooldownBlocks(e.target.value)}
                     autoComplete="off"
                 />
@@ -757,6 +888,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 label="Memo (optional)"
                 hint="Free-text note recorded with the bind/unbind event."
                 value={memo}
+                error={errorFor('memo')}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
                 autoCapitalize="off"

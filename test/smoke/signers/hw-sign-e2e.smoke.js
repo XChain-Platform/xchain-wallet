@@ -38,6 +38,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
+import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -119,7 +120,9 @@ function makeMockConnect({ serializedTx }) {
 // input (ab…ab:0, sequence fdffffff) paying the same 90,000 sats to
 // 0014cc…cc. TrezorSigner.signPsbt compares the device reply back to the
 // approved PSBT, so a placeholder would never reach the transport at all.
-const DEVICE_TX = '0200000001abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+// Signed with a real key: a reply whose signatures do not verify is refused
+// before it reaches a caller, so the input belongs to a real test key.
+const KEY_P2WPKH = scriptsFor('p2wpkh', TEST_KEYS[0]).scriptPubKeyHex;
 
 const decomposedFixture = {
     txVersion: 2,
@@ -130,11 +133,11 @@ const decomposedFixture = {
         prevTxIndex: 0,
         sequence: 0xfffffffd,
         value: 100_000,
-        scriptPubKeyHex: '0014' + 'bb'.repeat(20),
+        scriptPubKeyHex: KEY_P2WPKH,
         scriptType: 'p2wpkh',
         sighashType: null,
         nonWitnessUtxoHex: null,
-        witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+        witnessUtxoScriptHex: KEY_P2WPKH,
         redeemScriptHex: null,
         witnessScriptHex: null,
         address: 'bc1qmockinput',
@@ -147,6 +150,8 @@ const decomposedFixture = {
         value: 90_000,
     }],
 };
+
+const DEVICE_TX = signedReplyFor(decomposedFixture);
 
 // Build a real TrezorSigner (the renderer-side signer) wired to a
 // mock Connect + mock sdkRegistry. RemoteSigner on the background

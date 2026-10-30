@@ -26,8 +26,6 @@ const headingStyles = [
     ['shared/components/BackupReminderCard.module.css', '.headline', 'card-title'],
     ['shared/components/BalanceChanges.module.css', '.heading', 'card-title'],
     ['shared/components/EmptyStateNudge.module.css', '.title', 'card-title'],
-    ['shared/components/HomeTabs.module.css', '.placeholderTitle', 'card-title'],
-    ['shared/components/QueuedResultPanel.module.css', '.queuedTitle', 'card-title'],
     ['shared/components/RouteErrorBoundary.module.css', '.title', 'page-title'],
 ];
 
@@ -36,8 +34,6 @@ const bodyStyles = [
     ['ui/EmptyState.module.css', '.body'],
     ['shared/components/BackupReminderCard.module.css', '.copy'],
     ['shared/components/EmptyStateNudge.module.css', '.body'],
-    ['shared/components/HomeTabs.module.css', '.placeholderBody'],
-    ['shared/components/QueuedResultPanel.module.css', '.queuedHint'],
     ['shared/components/RouteErrorBoundary.module.css', '.body'],
 ];
 

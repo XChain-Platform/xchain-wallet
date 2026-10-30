@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -23,9 +24,10 @@ import {
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { revealHiddenText } from '../utils/textHardening.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -35,6 +37,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { extractSingle, sanitizeAbi, contractOwnerWithdraw } from './contractResponseShape.js';
 import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
@@ -42,7 +45,6 @@ import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 import contractStyles from './ContractScreens.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -50,8 +52,12 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/send.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -81,6 +87,13 @@ function abiArgumentError(param, value, descriptor) {
     if (type === 'address' && (!descriptor?.coin || !descriptor?.networkKind
         || !isValidAddressForChain(text, descriptor.coin, descriptor.networkKind))) {
         return `${name} must be a valid address for ${descriptor?.displayName || 'this network'}.`;
+    }
+    if (type === 'tick') {
+        // A ticker a call names must be one the chain could have coined; a
+        // stray space or comma would be sent as typed and the paid call would
+        // fail at runtime.
+        const tickError = tickerReferenceError(text, { noun: name, allowRef: true });
+        if (tickError) return tickError;
     }
     if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
         return `${name} must be a decimal number.`;
@@ -141,6 +154,7 @@ function abiArgumentError(param, value, descriptor) {
  */
 export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -179,6 +193,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
     const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
+    // What the user has typed or reviewed by the time the abi answers. The abi
+    // reply is asynchronous, so it reads the latest values through this ref.
+    const typedCallRef = useRef({ method: '', paramsText: '', stage: 'form' });
+    typedCallRef.current = { method, paramsText, stage };
 
     useEffect(() => {
         let cancelled = false;
@@ -199,7 +217,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 // operating address.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain can call the contract. Use Receive to generate one first.');
+                    setLoadError('No address on this network can call the contract. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -253,9 +271,25 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 const names = Object.keys(abi.methods);
                 if (initialMethod && names.includes(initialMethod)) {
                     const declared = abi.methods[initialMethod].params || [];
-                    const given = (initialParamsText || '').split('|');
-                    setAbiParamValues(declared.map((p, i) => (given[i] !== undefined ? given[i] : '')));
+                    const givenText = initialParamsText || '';
+                    const given = givenText === '' ? [] : givenText.split('|');
+                    if (given.length > declared.length) {
+                        // The manual lane exposes every supplied value instead
+                        // of hiding arguments that the ABI does not declare.
+                        setManualMode(true);
+                        return;
+                    }
+                    const declaredValues = declared.map((p, i) => (given[i] !== undefined ? given[i] : ''));
+                    setAbiParamValues(declaredValues);
+                    setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
+                    setManualMode(true);
+                } else if (typedCallRef.current.method.trim() !== ''
+                    || typedCallRef.current.paramsText.trim() !== ''
+                    || typedCallRef.current.stage !== 'form') {
+                    // A call the user already typed or is reviewing stays exactly
+                    // as it is; the declared methods wait behind the toggle
+                    // instead of replacing the method and arguments under them.
                     setManualMode(true);
                 } else {
                     const first = names[0];
@@ -530,6 +564,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         // EXECUTE is signed from an address on this chain; without one there is
         // nothing to pay the call's fee from.
         if (!fromAddress) {
@@ -547,6 +583,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         }
         if (method.includes('|') || method.includes(';')) {
             setFormError('Method name cannot contain "|" or ";".');
+            return;
+        }
+        const methodSafetyError = actionTextSafetyError(method, 'Method');
+        if (methodSafetyError) {
+            setFormError(methodSafetyError);
             return;
         }
         if (abiActive) {
@@ -567,6 +608,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // boundaries. Nothing we can do about those except surface
         // clearly below.
         for (const p of paramsArray) {
+            const parameterSafetyError = actionTextSafetyError(p, 'Parameter');
+            if (parameterSafetyError) {
+                setFormError(parameterSafetyError);
+                return;
+            }
             if (p.includes(';')) {
                 setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
                 return;
@@ -719,7 +765,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -733,11 +779,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -761,11 +808,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('execute.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -826,7 +874,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             <dd className={styles.detailsValue}>
                                 <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                     {paramsArray.map((p, i) => (
-                                        <li key={i} className={contractStyles.monospaceValue}>{p}</li>
+                                        <li key={i} className={contractStyles.monospaceValue}>{revealHiddenText(p)}</li>
                                     ))}
                                 </ol>
                             </dd>
@@ -854,10 +902,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        <p className={styles.warning}>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={[NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -948,11 +993,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('execute.callContract')}
             onSubmit={handleReview}
             noValidate
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

@@ -25,12 +25,13 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import {
@@ -39,15 +40,21 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import detailStyles from './PollDetail.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
-import { latestBallotRows, pollResultPercentages } from './pollDisplay.js';
+import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
+import {
+    latestBallotRows,
+    pollResultPercentages,
+    pollRowForDisplay,
+    samePollIndex,
+} from './pollDisplay.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -106,6 +113,7 @@ function ballotRowText(row, options, isSplit) {
  */
 export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -153,9 +161,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         : Promise.resolve(null),
                 ]);
                 if (cancelled) return;
-                const loadedPoll = extractPoll(p);
-                if (!loadedPoll) {
-                    if (firstLoad) setLoadError('Poll not found.');
+                const loadedPoll = pollRowForDisplay(extractPoll(p));
+                if (!loadedPoll || !samePollIndex(loadedPoll.action_index, pollIndex)) {
+                    setPoll(null);
+                    setResults(null);
+                    setCurrentHeight(null);
+                    setLoadError('Poll not found.');
                     return;
                 }
                 const height = heightResponse?.watermark == null || heightResponse.watermark === ''
@@ -173,7 +184,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 const closeReached = Number.isFinite(endBlock) && usableHeight !== null && usableHeight > endBlock;
                 if (terminal || closeReached) {
                     const r = await messaging.governancePollResults({ chainId, pollIndex }).catch(() => null);
-                    if (!cancelled) setResults(extractRows(r));
+                    if (!cancelled) {
+                        setResults(extractRows(r).filter((row) => (
+                            row && typeof row === 'object' && !Array.isArray(row)
+                        )));
+                    }
                 } else {
                     setResults(null);
                 }
@@ -371,6 +386,42 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         };
     }
 
+    // The page judges "open" from its last read, and a poll can close while the
+    // review sits open: its end block passes or it is finalized. A ballot signed
+    // then pays the miner fee and the protocol fee and counts for nothing, and
+    // with pre-flight off or local nothing warns. So Approve reads the poll and
+    // the height fresh, past read reuse and the HTTP cache, and refuses one that
+    // no longer takes votes. A failed read is unknown, never a refusal.
+    async function closedPollRefusal() {
+        let fresh;
+        let heightResponse = null;
+        try {
+            [fresh, heightResponse] = await Promise.all([
+                messaging.governancePoll({ chainId, pollIndex, fresh: true }),
+                typeof messaging.getIndexerWatermark === 'function'
+                    ? messaging.getIndexerWatermark({ chainId, fresh: true }).catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+        } catch {
+            return null;
+        }
+        const row = pollRowForDisplay(extractPoll(fresh));
+        if (!row || !samePollIndex(row.action_index, pollIndex)) return null;
+        const height = heightResponse?.watermark == null || heightResponse.watermark === ''
+            ? null
+            : Number(heightResponse.watermark);
+        const usableHeight = Number.isFinite(height) ? height : null;
+        const lastBlock = row.end_block == null || row.end_block === '' ? Number.NaN : Number(row.end_block);
+        const terminal = Boolean(row.poll_status) && row.poll_status !== 'open';
+        const endPassed = Number.isFinite(lastBlock) && usableHeight !== null && usableHeight > lastBlock;
+        if (!terminal && !endPassed) return null;
+        setPoll(row);
+        if (usableHeight !== null) setCurrentHeight(usableHeight);
+        const err = new Error('This poll closed while the review was open. Nothing was sent.');
+        err.name = OFFER_LIFECYCLE_REFUSAL;
+        return err;
+    }
+
     // The wire params come from sdk.voting.castBallotParams, which lives
     // host-side, so compose goes through the VOTE-specific route rather than
     // re-implementing the ballot encoding here. A client-side mirror that
@@ -391,14 +442,18 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     params: ballotParams(),
                     ...(feePerKb != null ? { feePerKb } : {}),
                 }),
-                onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId,
-                    chainId,
-                    from,
-                    params: ballotParams(),
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
+                onApprove: async (prebuiltPsbt) => {
+                    const closed = await closedPollRefusal();
+                    if (closed) throw closed;
+                    return submitConfirmed({
+                        walletId,
+                        chainId,
+                        from,
+                        params: ballotParams(),
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    });
+                },
             });
             setResult(res);
             setPassword('');
@@ -413,7 +468,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (!fromAddress) { setFormError('No address on this network to vote from.'); return; }
         const voteBalanceComparison = compareDecimalStrings(voteBalance, '0');
         if (voteBalanceComparison !== null && voteBalanceComparison !== 1) {
             setFormError(`This address must hold some ${poll.tick || 'governance token'} to vote.`);
@@ -456,6 +513,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 source: fromAddress.source,
                 signerId: fromAddress.signerId,
             };
+            // The air-gapped signer signs and broadcasts what is built here, so
+            // the watcher build takes the same fresh read as Approve.
+            const closed = await closedPollRefusal();
+            if (closed) throw closed;
             let res;
             if (isWatcherMode) {
                 const wireBallot = isSplit
@@ -486,6 +547,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         }
     }
 
+    // The ballot error leads the page, above the poll's terms, so a phone that
+    // tapped Vote from the bottom of the form is taken to it.
+    useEffect(() => {
+        if (!formError) return;
+        document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
+    }, [formError]);
+
     const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
     const wrap = (children) => (
         <Screen
@@ -500,7 +568,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -516,10 +584,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
         }
         return wrap(
             <ListPage>
@@ -539,7 +607,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         <dl className={styles.detailsList}>
             {descriptor ? (
                 <>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                 </>
             ) : null}
@@ -676,10 +744,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review vote"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -724,17 +793,28 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
 
+    // The ballot form sits below the poll's terms and results. Its demo note and
+    // its error lead the page content instead of the form.
+    // The form stays blocked and keeps its dialog, but the page draws the note.
+    const ballotFormGuard = { ...demoGuard, note: null };
+    const pageNotices = (isOpen && demoGuard.blocked) || formError ? (
+        <>
+            {isOpen ? demoGuard.note : null}
+            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+        </>
+    ) : null;
+
     return wrap(
-        <ListPage>
+        <ListPage notices={pageNotices}>
             {pollInfo}
             {voteReceipt}
             {resultsBlock}
             {isOpen ? (
                 <FormPage
+                    demoGuard={ballotFormGuard}
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
                     actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
@@ -772,7 +852,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {!fromAddress ? <p className={styles.hint}>No address on this chain. Use Receive to generate one, then vote.</p> : null}
+                    {!fromAddress ? <p className={styles.hint}>No address on this network. Use Receive to generate one, then vote.</p> : null}
                 </FormPage>
             ) : (
                 <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>

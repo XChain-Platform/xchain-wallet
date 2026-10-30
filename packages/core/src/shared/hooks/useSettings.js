@@ -19,6 +19,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { useToast } from '../components/ToastHost.jsx';
+import { isVaultConflictError, userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
 import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
 import { normalizeDisplayCurrency } from '../utils/displayCurrency.js';
 
@@ -39,6 +42,41 @@ const SETTINGS_CHANGED_EVENT = 'xc:settings-changed';
 // every instance listens and re-reads so gated UI reappears post-unlock.
 const SESSION_CHANGED_EVENT = 'xc:session-changed';
 
+// The host applies writes in the order they are issued but can answer them
+// out of order. Each answer carries the whole record as of that write, so the
+// newest successful answer wins. A completed answer waits while a newer write
+// is pending because that write can still succeed and supersede it. If the
+// newer write fails, the completed answer remains the saved record and must
+// still reach every section. The coordinator is shared because writes can
+// originate from different useSettings instances.
+let latestWriteTicket = 0;
+let latestAppliedWriteTicket = 0;
+const pendingWriteTickets = new Set();
+const completedWriteAnswers = new Map();
+
+function flushWriteAnswers() {
+    let candidate = 0;
+    for (const ticket of completedWriteAnswers.keys()) {
+        if (ticket > candidate) candidate = ticket;
+    }
+    if (candidate === 0) return;
+    if (candidate <= latestAppliedWriteTicket) {
+        for (const ticket of completedWriteAnswers.keys()) {
+            if (ticket <= latestAppliedWriteTicket) completedWriteAnswers.delete(ticket);
+        }
+        return;
+    }
+    for (const ticket of pendingWriteTickets) {
+        if (ticket > candidate) return;
+    }
+    const publish = completedWriteAnswers.get(candidate);
+    latestAppliedWriteTicket = candidate;
+    for (const ticket of completedWriteAnswers.keys()) {
+        if (ticket <= candidate) completedWriteAnswers.delete(ticket);
+    }
+    publish();
+}
+
 /**
  * @returns {{
  *   settings: import('../../schemas/settings.js').Settings | null,
@@ -49,8 +87,9 @@ const SESSION_CHANGED_EVENT = 'xc:session-changed';
  *   update: (patch: Record<string, unknown>) => Promise<import('../../schemas/settings.js').Settings>,
  * }}
  */
-export function useSettings() {
+export function useSettings({ reportsOwnError = false } = {}) {
     const { messaging } = useMessaging();
+    const { showToast } = useToast();
     const [settings, setSettings] = useState(/** @type {any} */ (null));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {Error | null} */ (null));
@@ -92,26 +131,56 @@ export function useSettings() {
         }
     }, [messaging]);
 
+    // A refused write (a full disk, a storage backend that went away) would
+    // otherwise leave the control snapping back with no word. A section that
+    // shows its own message mounts the hook with `reportsOwnError`, so the user
+    // sees one.
     const update = useCallback(async (patch) => {
         if (typeof messaging?.updateSettings !== 'function') {
             throw new Error('messaging.updateSettings is not available in this shell');
         }
-        const next = await messaging.updateSettings(patch);
+        latestWriteTicket += 1;
+        const ticket = latestWriteTicket;
+        pendingWriteTickets.add(ticket);
+        let next;
+        try {
+            next = await messaging.updateSettings(patch);
+        } catch (err) {
+            pendingWriteTickets.delete(ticket);
+            flushWriteAnswers();
+            const message = userFacingMessage(err, t('settings.saveFailed'));
+            const conflict = isVaultConflictError(err);
+            if (!reportsOwnError || conflict) {
+                showToast({
+                    id: 'settings-save-failed',
+                    variant: 'error',
+                    message,
+                });
+            }
+            if (conflict) {
+                throw Object.assign(new Error(message), err, { name: 'VaultConflictError' });
+            }
+            throw err;
+        }
         const effective = normalizeDisplayCurrency(next);
-        if (aliveRef.current) {
-            requestRef.current += 1;
-            setSettings(effective.settings);
-            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
-            setError(null);
-            setLoading(false);
-        }
-        if (typeof window !== 'undefined') {
-            try {
-                window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
-            } catch { /* CustomEvent unsupported: non-fatal */ }
-        }
+        completedWriteAnswers.set(ticket, () => {
+            if (aliveRef.current) {
+                requestRef.current += 1;
+                setSettings(effective.settings);
+                setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
+                setError(null);
+                setLoading(false);
+            }
+            if (typeof window !== 'undefined') {
+                try {
+                    window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
+                } catch { /* CustomEvent unsupported: non-fatal */ }
+            }
+        });
+        pendingWriteTickets.delete(ticket);
+        flushWriteAnswers();
         return effective.settings;
-    }, [messaging]);
+    }, [messaging, showToast, reportsOwnError]);
 
     useEffect(() => {
         aliveRef.current = true;

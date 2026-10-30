@@ -43,11 +43,13 @@
 // once), so the recipient here is its own wallet with its own funded, once-
 // spent address, not a second address inside the sender's wallet.
 
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     createWallet,
     expect,
     gotoSection,
     mainButton,
+    openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
@@ -100,19 +102,6 @@ async function newDevice(browser) {
     return context.newPage();
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Fills the confirm modal's password only if this session actually needs one. */
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
@@ -127,12 +116,12 @@ async function approveConfirm(page) {
 
 /** The txid off whatever success screen the confirm flow lands on. */
 async function readBroadcastTxid(page) {
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
-    return txid;
+    // The success screen draws the id truncated; waitForShownTxid reads the
+    // full id from its accessible name.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -197,7 +186,7 @@ test.describe('the PC-26 gated SEND guard', () => {
         });
 
         await test.step('the issuer issues the tick that will be gated', async () => {
-            await gotoPalette(issuer, 'Issue token');
+            await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -221,7 +210,7 @@ test.describe('the PC-26 gated SEND guard', () => {
         });
 
         await test.step('the issuer publishes a gated file against the tick', async () => {
-            await gotoPalette(issuer, 'Publish file');
+            await openPaletteCommand(issuer, 'Publish file');
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
@@ -279,7 +268,7 @@ test.describe('the PC-26 gated SEND guard', () => {
             // by role rather than bare text since a role query only ever
             // considers the div that carries the role, never an unrelated
             // element that happens to share a substring.
-            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be securely attached/ }))
+            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be attached securely/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(issuer, 'Send').click();
@@ -312,7 +301,7 @@ test.describe('the PC-26 gated SEND guard', () => {
             // scoped by role and narrowed by `filter`, so a second alert
             // present at the same time (there is none here, but the pattern
             // must hold regardless) cannot make this locator ambiguous.
-            await expect(holder.getByRole('alert').filter({ hasText: /this wallet holds none of its unlock keys/ }))
+            await expect(holder.getByRole('alert').filter({ hasText: /this wallet has none of its unlock keys/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(holder, 'Send').click();
@@ -326,9 +315,9 @@ test.describe('the PC-26 gated SEND guard', () => {
         await test.step('bypassed through Advanced action, the SAME send meets the chain\'s own refusal', async () => {
             const holderTickBefore = await tokenBalance(holderAddr, TICK);
 
-            await gotoPalette(holder, 'Advanced action');
+            await openPaletteCommand(holder, 'Advanced action');
             await selectVenueChain(holder);
-            await holder.getByLabel('Action').selectOption('SEND');
+            await holder.getByLabel('Action', { exact: true }).selectOption('SEND');
 
             // The tick-specific "HAS active gated content" line only renders
             // once `useGatedTickNotice` has a TICK to check (it is debounced

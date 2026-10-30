@@ -14,6 +14,10 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
 import styles from './ChainPicker.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/components.js';
+import '../i18n/locales/en/extension.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Single-select chain picker. Replaces native `<select>` in any
@@ -42,7 +46,7 @@ export function ChainPicker({
     chainIds,
     chainRegistry,
     label,
-    placeholder = 'Select a network',
+    placeholder = t('ui.chainPicker.selectANetwork'),
     disabled,
     size = 'md',
 }) {
@@ -194,7 +198,7 @@ export function ChainPicker({
                     id={listboxId}
                     className={styles.popover}
                     role="listbox"
-                    aria-label={label || 'Networks'}
+                    aria-label={label || t('extension.connect.chains')}
                     onKeyDown={onPopoverKeyDown}
                 >
                     {entries.length > 6 ? (
@@ -203,8 +207,8 @@ export function ChainPicker({
                                 ref={searchRef}
                                 type="text"
                                 className={styles.search}
-                                placeholder="Search networks…"
-                                aria-label="Search networks"
+                                placeholder={t('components.networkFilter.searchNetworks')}
+                                aria-label={t('components.networkFilter.searchNetworks2')}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
@@ -218,6 +222,7 @@ export function ChainPicker({
                                     role="option"
                                     tabIndex={-1}
                                     aria-selected={value === e.id ? 'true' : 'false'}
+                                    aria-label={optionAccessibleName(e)}
                                     className={`${styles.item} ${value === e.id ? styles.itemActive : ''}`}
                                     onClick={() => { onChange(e.id); closePicker(true); }}
                                 >
@@ -232,13 +237,22 @@ export function ChainPicker({
                             </li>
                         ))}
                         {filtered.length === 0 ? (
-                            <li className={styles.empty}>No matching networks.</li>
+                            <li className={styles.empty}>{t('components.networkFilter.noMatchingNetworks')}</li>
                         ) : null}
                     </ul>
                 </div>
             ) : null}
         </div>
     );
+}
+
+// Every network of a coin shows the same name and ticker, so a list that
+// offers more than one network reads as identical rows to a screen reader.
+// A non-mainnet option keeps its visible text plain and says its network in
+// its accessible name; a mainnet option names itself from its visible text.
+function optionAccessibleName(entry) {
+    if (entry.networkKind === 'mainnet') return undefined;
+    return `${entry.label} ${entry.networkKind} ${entry.ticker}`;
 }
 
 function listboxOptions(popover) {

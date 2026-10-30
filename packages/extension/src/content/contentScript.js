@@ -68,6 +68,12 @@
         'bridge.parallel',
     ]);
 
+    // The page reads these, so they never carry Chrome's own runtime text
+    // ("message channel closed", "context invalidated"), which names browser
+    // internals and tells a site nothing it can act on.
+    const RESTARTED_MESSAGE = 'The wallet restarted before it answered. Try the request again.';
+    const RELOADED_MESSAGE = 'The wallet was updated or reloaded. Reload this page and try again.';
+
     function isRecord(value) {
         if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
         const prototype = Object.getPrototypeOf(value);
@@ -185,7 +191,11 @@
                 // page always gets a response.
                 const err = chrome.runtime.lastError;
                 if (err) {
-                    refuse(`RUNTIME_UNAVAILABLE: ${err.message}`);
+                    // A worker that stopped while holding the request closes
+                    // its channel; anything else here is an invalidated context.
+                    refuse(/context invalidated/i.test(String(err.message || ''))
+                        ? RELOADED_MESSAGE
+                        : RESTARTED_MESSAGE);
                     return;
                 }
                 if (
@@ -210,7 +220,7 @@
             // Answer the invalidation the callback above cannot see: an
             // update, reload or disable makes sendMessage throw out of the
             // call itself, so no callback runs and lastError is never read.
-            refuse(`RUNTIME_UNAVAILABLE: ${(e && e.message) || String(e)}`);
+            refuse(RELOADED_MESSAGE);
         }
     });
 

@@ -20,10 +20,13 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
+// The runner reads wallet source with t('key') calls swapped for their English text;
+// applying the same swap here gives the same text when this file runs alone.
+const read = (...p) => withEnglishCopy(readFileSync(join(wsRoot, ...p), 'utf8'));
 
 // ---- Vault: both PC-16 collections registered + codec slots -------------
 const vaultSrc = read('packages', 'core', 'src', 'storage', 'Vault.js');
@@ -101,6 +104,18 @@ assert.match(panel, /I understand the wallet must stay open for auto-pay to work
 assert.match(panel, /autopay: autopayArm \? \{ enabled: true \} : undefined/,
     'consent flag threads through the submit paths');
 assert.match(panel, /Outstanding auto-pay exposure/, 'aggregate exposure shown when armed');
+
+// ---- CreateOrderForm: the create-order route's own consent UI --------------
+const createOrder = read('packages', 'core', 'src', 'shared', 'routes', 'CreateOrderForm.jsx');
+assert.match(createOrder, /Enable CoinPay auto-pay/, 'create-order consent switch present');
+assert.match(createOrder, /const \[autopayEnabled, setAutopayEnabled\] = useState\(true\)/, 'create-order switch defaults ON');
+assert.match(createOrder, /const autopayEligible = giveIsNative && !isWatcherMode && !isHwSource;/,
+    'create-order switch only for software signers on a native-GIVE order');
+assert.match(createOrder, /I understand this web wallet only auto-pays while it is open and unlocked\./,
+    'create-order web keep-open acknowledgment copy');
+assert.match(createOrder, /if \(ackRequired && !keepOpenAck\) \{/, 'create-order refuses an unacknowledged web arm');
+assert.match(createOrder, /\.\.\.\(autopayArm \? \{ autopay: \{ enabled: true \} \} : \{\}\)/,
+    'create-order consent flag threads through the submit path');
 
 // ---- Revocation + status surfaces ---------------------------------------
 const openOrders = read('packages', 'core', 'src', 'shared', 'components', 'OpenOrdersPanel.jsx');

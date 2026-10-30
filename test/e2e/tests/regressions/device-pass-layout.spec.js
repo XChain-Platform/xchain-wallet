@@ -105,6 +105,10 @@ test.describe('real wallet', () => {
         // appears once its startup grace ends.
         const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
         await expect(message).toBeVisible({ timeout: 90_000 });
+        // Notices are page content, never toolbar content: the notice is in
+        // the route's main region.
+        await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Some balances may be out of date' }))
+            .toBeVisible();
         const notice = message.locator('xpath=../..');
         await notice.getByRole('button', { name: 'Details' }).click();
         const panelId = await notice.getByRole('button', { name: 'Details' }).getAttribute('aria-controls');
@@ -149,7 +153,32 @@ test.describe('real wallet', () => {
         const toggle = message.locator('xpath=..').getByRole('button', { name: 'Details' });
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await gotoSection(page, 'History');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        // Receive, not History or Settings: an empty History in a wallet whose
+        // balances could not be checked says so itself, and Settings holds only
+        // device data, so the shell notice steps aside on both (one message per
+        // state).
+        await gotoSection(page, 'Receive');
+        // Receive holds no balance, so the same notice drops the word
+        // balances.
+        const settingsMessage = page.getByRole('status').filter({ hasText: 'Some information may be out of date' });
+        await expect(settingsMessage).toBeVisible();
+        await expect(settingsMessage.locator('xpath=..').getByRole('button', { name: 'Details' }))
+            .toHaveAttribute('aria-expanded', 'false');
+        // On a route with a page header the notice opens the scrolling
+        // content below that header, never between the two toolbars.
+        // Receive loads lazily; until its Screen mounts, the notice waits in
+        // the route area's fallback slot, so poll for the settled placement.
+        const placement = () => settingsMessage.evaluate((node) => {
+            const main = node.closest('main');
+            const pageHeader = main?.previousElementSibling;
+            return {
+                inMain: Boolean(main),
+                firstInMain: Boolean(main?.firstElementChild?.contains(node)),
+                belowPageHeader: pageHeader?.tagName === 'HEADER'
+                    && pageHeader.getBoundingClientRect().bottom <= node.getBoundingClientRect().top + 1,
+            };
+        });
+        await expect.poll(placement, { timeout: 15_000 })
+            .toEqual({ inMain: true, firstInMain: true, belowPageHeader: true });
     });
 });

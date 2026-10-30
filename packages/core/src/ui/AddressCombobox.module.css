@@ -1,6 +1,5 @@
 .wrap {
     --address-control-height: var(--xc-control-h-md);
-    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
     min-width: 0;
@@ -29,13 +28,28 @@
     line-height: 20px;
 }
 
+/* The input is forced left to right so an address always reads in order, which
+   makes its logical sides run opposite to the wrapper's in an RTL app. The
+   actions sit at the wrapper's end edge (the physical left in RTL), so the room
+   for them is reserved on whichever side of the input that is. */
+.wrap input {
+    min-width: 0;
+    padding-inline-end: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
+}
+
+:global([dir='rtl']) .wrap input {
+    padding-inline-start: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
+    padding-inline-end: var(--xc-control-pad-x-md, 12px);
+    text-align: end;
+}
+
 .iconButton {
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: var(--address-paste-width);
+    inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
     width: var(--address-control-height);
     height: var(--address-control-height);
@@ -50,49 +64,8 @@
     cursor: pointer;
 }
 
-.pasteAction,
-.pasteAction > span {
-    display: contents !important;
-}
-
-/* Paste sits inside the field box: inset from the field's end edge and
-   vertically, at the field's inner height, so it never meets the border. */
-.pasteAction button {
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: var(--xc-space-1);
-    top: calc(20px + var(--xc-space-2));
-    flex: none;
-    width: auto;
-    min-width: max-content;
-    max-width: none;
-    height: calc(var(--address-control-height) - var(--xc-space-2));
-    min-height: calc(var(--address-control-height) - var(--xc-space-2));
-    gap: var(--xc-space-1);
-    padding-inline: calc(var(--xc-space-1) / 2);
-    white-space: nowrap;
-}
-
-.pasteAction button > span {
-    min-width: max-content;
-    white-space: nowrap;
-}
-
-.pasteAction [role='alert'] {
-    display: block;
-    margin-block-start: var(--xc-help-gap);
-}
-
-.wrap input {
-    min-width: 0;
-}
-
 .noLabel .iconButton {
     top: 0;
-}
-
-.noLabel .pasteAction button {
-    top: var(--xc-space-1);
 }
 
 .iconButton:hover:not(:disabled) {

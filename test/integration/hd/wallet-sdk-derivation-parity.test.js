@@ -38,7 +38,7 @@
 // across both repos locally keeps behaving as before. Finding NEITHER is
 // gated on XCHAIN_REQUIRE_SIBLINGS, the house convention: the suite throws
 // when that variable is 1 and calls ctx.skip() otherwise. Only the
-// drift-guards job in .github/workflows/ci.yml and bin/ci-full.sh set it,
+// drift-guards job in .github/workflows/ci.yml and tools/ci-full.sh set it,
 // and both make the SDK available, so the failure mode the guard exists to
 // catch (uuid 9737f60d) - a routine xchain-sdk wif bump passing CI
 // unnoticed - is still caught where it counts, while an ordinary

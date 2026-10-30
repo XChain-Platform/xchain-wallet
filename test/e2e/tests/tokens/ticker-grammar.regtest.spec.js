@@ -77,11 +77,13 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/ticker-grammar.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
+    payProtocolFeeInCoin,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -252,19 +254,6 @@ async function chainVerdict(tick, source) {
     return quote.status;
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Closes an open confirm screen, if one is open, without signing anything.
  *
@@ -302,7 +291,7 @@ async function dismissConfirmIfOpen(page) {
  */
 async function reloadToHome(page) {
     await dismissConfirmIfOpen(page);
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -322,7 +311,7 @@ async function reloadToHome(page) {
  */
 async function openWizardDetails(page) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Create a token');
+    await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Custom/ }).click();
     await selectVenueChain(main);
@@ -375,16 +364,9 @@ async function submitWizardName(page, tick) {
     await field.fill(tick);
     const held = await field.inputValue();
     await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-
     const grammar = page.getByRole('alert')
         .filter({ hasText: /Token name (?:cannot|can only use|is required)/ });
-    const continueButton = main.getByRole('button', {
-        name: 'Continue to confirmation',
-        exact: true,
-    });
-    await grammar.or(continueButton).first().waitFor({ state: 'visible', timeout: 30_000 });
-    if (await continueButton.isVisible().catch(() => false)) await continueButton.click();
+    await submitTokenWizard(page);
     const confirm = page.getByTestId('confirm-modal');
     // Raced rather than waited on in sequence: a refused submit never composes
     // and an accepted one never shows a grammar error, so whichever appears IS
@@ -450,7 +432,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // Read off the DIRECT Issue form, which is the surface with a
             // "From" field; the wizard auto-picks its signer and shows it only
             // on the subtoken template's chain step.
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -536,16 +518,23 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = await openWizardDetails(page);
             await main.getByLabel('Token name (ticker)').fill(ISSUED_TICK);
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            // The coin lane: FUNDING carries this leg's protocol fee, and the
+            // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
+            // refused for insufficient funds before the ticker is ever tested.
+            await payProtocolFeeInCoin(main);
+            await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');
             await expect(approve).toBeEnabled({ timeout: 120_000 });
             await approve.click();
-            const shell = page.getByRole('main');
-            await expect(shell, 'no transaction id ever appeared after Approve')
-                .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-            const txid = (await shell.innerText()).match(/[0-9a-f]{64}/)?.[0];
+            // Success screens may draw the id truncated; waitForShownTxid reads
+            // the full id from its accessible name, and from the text where it
+            // is whole.
+            const txid = await waitForShownTxid(page.getByRole('main'), {
+                timeout: 180_000,
+                message: 'no transaction id ever appeared after Approve',
+            });
 
             const action = await waitForValidAction(txid);
             // The chain's own record of the name, which is the half that proves
@@ -719,7 +708,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // other form.
             const { tick } = SYMBOL_CLASSES[0];
             await reloadToHome(page);
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -742,7 +731,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // And its caret refusal, named on this surface's own noun.
             await reloadToHome(page);
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const second = page.getByRole('main');
             await expect(second.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(second);
@@ -768,7 +757,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             if (NATIVE_FEE_MANDATORY) {
                 await expect(main.getByText(new RegExp(
-                    `${NATIVE_TICKER} is the only way to pay a protocol fee on this chain`)),
+                    `${NATIVE_TICKER} is the only way to pay a protocol fee on this network`)),
                     `the Create token form does not tell a ${REGTEST_CHAIN_LABEL} user that the `
                     + 'protocol fee can only be paid in coin here')
                     .toBeVisible({ timeout: 30_000 });
@@ -843,7 +832,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'XCHAIN Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -889,16 +878,19 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
             await main.getByLabel('Token name (ticker)').fill(TICK);
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');
             await expect(approve).toBeEnabled({ timeout: 120_000 });
             await approve.click();
-            const shell = page.getByRole('main');
-            await expect(shell, 'no transaction id ever appeared after Approve')
-                .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-            const txid = (await shell.innerText()).match(/[0-9a-f]{64}/)?.[0];
+            // Success screens may draw the id truncated; waitForShownTxid reads
+            // the full id from its accessible name, and from the text where it
+            // is whole.
+            const txid = await waitForShownTxid(page.getByRole('main'), {
+                timeout: 180_000,
+                message: 'no transaction id ever appeared after Approve',
+            });
 
             const action = await waitForValidAction(txid);
             // The chain's own fee record, which is the half that says WHICH

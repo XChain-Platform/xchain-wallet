@@ -36,6 +36,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -136,7 +137,7 @@ assert.doesNotMatch(SIGNED_NOT_BROADCAST_UNSAVED_WARNING, /automatically|retry/i
 // Each surface owns its own noun ("your bet", "your order"), so the sentences
 // differ; what may not differ is the promise inside them.
 const QUEUED_SURFACES = [
-    ['components/QueuedResultPanel.jsx', /don't submit this again/i],
+    ['components/ResultScreen.jsx', /don't submit this again/i],
     ['routes/Send.jsx', /don't send this payment again/i],
     ['components/PlaceOrderPanel.jsx', /don't place it again/i],
     ['routes/BetFeedDetail.jsx', /do not place it again/i],
@@ -147,11 +148,11 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
     // the DOM ends up showing it.
     const routeSrc = readFileSync(join(shared, rel), 'utf8');
     if (rel === 'routes/Send.jsx') {
-        assert.match(routeSrc, /t\('send\.queued\.body'\)/,
+        assert.match(routeSrc, /t\('send\.queued\.body'\)|body="/,
             'Send routes its queued result copy through i18n');
     }
     const localizedSrc = rel === 'routes/Send.jsx'
-        ? `${routeSrc} ${readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')}`
+        ? `${routeSrc} ${englishDictionarySource()}`
         : routeSrc;
     const src = localizedSrc
         .replace(/&apos;/g, "'")
@@ -175,14 +176,14 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
     );
 }
 
-const queuedResultPanel = readFileSync(join(shared, 'components', 'QueuedResultPanel.jsx'), 'utf8');
+const queuedResultPanel = readFileSync(join(shared, 'components', 'ResultScreen.jsx'), 'utf8');
 assert.ok(
     /readQueuedResultHandoff\(\)\?\.unsaved\s*===\s*true/.test(queuedResultPanel),
-    'QueuedResultPanel reads the hook result when its existing callers omit the optional prop',
+    'ResultScreen reads the hook result when its existing callers omit the optional prop',
 );
 assert.ok(
     /showUnsaved[\s\S]{0,180}?role="alert"/.test(queuedResultPanel),
-    'QueuedResultPanel renders the integrated unsaved verdict as an alert',
+    'ResultScreen renders the integrated unsaved verdict as an alert',
 );
 
 const confirmModal = readFileSync(join(shared, 'components', 'ConfirmActionModal.jsx'), 'utf8');

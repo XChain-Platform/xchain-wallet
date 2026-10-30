@@ -30,6 +30,20 @@ describe('useCommandPalette closes on navigation', () => {
         expect(result.current.open).toBe(true);
     });
 
+    it('keeps Cmd/Ctrl+K when the stored binding is one the rebinding rules refuse', () => {
+        const { result } = renderHook(() => useCommandPalette({ binding: 'mod+c' }));
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'c', ctrlKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(false);
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'k', ctrlKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(true);
+    });
+
     it('does not toggle while the user types in an input', () => {
         const { result } = renderHook(() => useCommandPalette());
         const input = document.createElement('input');
@@ -41,6 +55,23 @@ describe('useCommandPalette closes on navigation', () => {
 
         expect(result.current.open).toBe(false);
         input.remove();
+    });
+
+    it('opens while a radio or checkbox holds focus, since neither takes typing', () => {
+        for (const type of ['radio', 'checkbox']) {
+            const { result, unmount } = renderHook(() => useCommandPalette());
+            const input = Object.assign(document.createElement('input'), { type });
+            document.body.append(input);
+            input.focus();
+
+            act(() => input.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'k', ctrlKey: true, bubbles: true, cancelable: true,
+            })));
+
+            expect(result.current.open, type).toBe(true);
+            input.remove();
+            unmount();
+        }
     });
 
     it('closes when the shown view changes', () => {
@@ -60,5 +91,19 @@ describe('useCommandPalette closes on navigation', () => {
         act(() => result.current.openPalette());
         rerender({ view: 'home' });
         expect(result.current.open).toBe(true);
+    });
+
+    it('requests one in-place data retry when connectivity returns', () => {
+        const { result } = renderHook(() => useCommandPalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(0);
+
+        act(() => result.current.openPalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(1);
+
+        act(() => result.current.closePalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(1);
     });
 });

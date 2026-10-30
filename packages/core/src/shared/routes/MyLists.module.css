@@ -2,47 +2,11 @@
    DispensersList (48px round icon + chain overlay, search + network
    filter toolbar, status chip on the trailing edge). */
 
-/* Secondary list actions, under the header rather than in it. */
-.actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
-.searchField {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-.searchField > * {
-    margin-bottom: 0;
-}
-
-.search {
-    flex: 1 1 0;
-    min-width: 0;
-    height: var(--xc-control-h-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-control-font-md, var(--xc-control-font));
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
-}
-
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     width: 100%;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -108,13 +72,22 @@
     display: block;
 }
 
+/* Block so the ellipsis applies: on an inline span a long list name ran under
+   the status chip and off the row instead of truncating. */
 .name {
+    display: block;
     font-weight: 600;
     color: var(--xc-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+}
+
+/* The status chip keeps its width; a long name truncates instead. Doubled
+   class to outrank ListRow's own trailing slot, which may shrink to zero. */
+.statusSlot.statusSlot {
+    flex-shrink: 0;
 }
 
 .status {
@@ -137,26 +110,4 @@
 .status_invalid {
     background: var(--xc-danger-bg);
     color: var(--xc-danger-text);
-}
-
-/* Circular header "+" button that opens the Create list form (same
-   affordance as My dispensers / the messaging inbox). */
-.addBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addBtn:hover {
-    background: var(--xc-bg-muted);
 }

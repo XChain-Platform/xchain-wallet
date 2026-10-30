@@ -25,7 +25,9 @@ const root = join(here, '..', '..', '..');
 const historyPath = join(root, 'packages', 'core', 'src', 'shared', 'routes', 'History.jsx');
 const schemaPath = join(root, 'packages', 'core', 'src', 'schemas', 'settings.js');
 
-const src = readFileSync(historyPath, 'utf8');
+const src = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => readFileSync(join(root, 'packages', 'core', 'src', 'shared', 'routes', `${n}.jsx`), 'utf8'))
+    .join('\n');
 const schemaSrc = readFileSync(schemaPath, 'utf8');
 
 // Settings schema carries the persisted flag.

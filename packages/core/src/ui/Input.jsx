@@ -9,9 +9,12 @@
 // contact legal@dankest.llc.
 
 import { forwardRef, useEffect, useId, useState } from 'react';
+import { EyeIcon, EyeOffIcon } from './icons/index.jsx';
 import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
+import { t } from '../i18n/index.js';
+import { useProtectedScreen } from '../shared/utils/screenGuard.js';
 
 const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
 const LONG_PLACEHOLDER_LENGTH = 30;
@@ -64,7 +67,10 @@ export function inspectFieldPaste(value) {
  * `onChange`, `autoFocus`, `autoComplete`, etc. directly.
  *
  * Password fields render an inline Caps-Lock warning when the modifier
- * is on (§26 / G067). Detection runs only for `type="password"`; other
+ * is on (§26 / G067). A password field marked `revealable` also carries a
+ * show and hide button inside its border; the value is only ever held by the
+ * input itself, so revealing it writes nothing anywhere. A password field also holds
+ * the screen guard while it is mounted. Detection runs only for `type="password"`; other
  * inputs see no behavior change. Caller-provided `onKeyDown` / `onKeyUp`
  * / `onFocus` / `onBlur` handlers are chained, never replaced.
  *
@@ -85,6 +91,7 @@ export function inspectFieldPaste(value) {
  * @property {boolean} [pasteGuard] guards address-style text fields; decimal and number fields are guarded automatically.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'sm' | 'md' | 'lg'} [size] field size; defaults to 'md'.
+ * @property {boolean} [revealable] password fields only: a show and hide button sits inside the field.
  */
 export const Input = forwardRef(function Input(
     {
@@ -96,6 +103,7 @@ export const Input = forwardRef(function Input(
         compactPlaceholder,
         optional = false,
         size = 'md',
+        revealable = false,
         type = 'text',
         value,
         defaultValue,
@@ -183,6 +191,21 @@ export const Input = forwardRef(function Input(
         || /address/i.test(String(externalLabel || ''));
 
     const isPassword = type === 'password';
+    // A password or passphrase on screen is key material under the screen
+    // guard policy: no screenshot and no recents thumbnail while the field is
+    // mounted. Keyed on the type the caller asked for, so showing the value
+    // through the reveal button keeps the screen protected.
+    useProtectedScreen(isPassword);
+    const canReveal = isPassword && revealable;
+    const [revealed, setRevealed] = useState(false);
+    const renderedType = canReveal && revealed ? 'text' : type;
+    // The button is tied to its field by aria-controls, so its own name stays
+    // short: repeating the field label would make a lookup by that label find
+    // the button as well as the field.
+    const revealsPassphrase = /passphrase/i.test(fieldName || '');
+    const revealLabel = revealsPassphrase
+        ? (revealed ? t('common.hidePassphrase') : t('common.showPassphrase'))
+        : (revealed ? t('common.hidePassword') : t('common.showPassword'));
     const [capsLockOn, setCapsLockOn] = useState(false);
     const [focused, setFocused] = useState(false);
     const showCapsLock = isPassword && focused && capsLockOn;
@@ -196,7 +219,12 @@ export const Input = forwardRef(function Input(
         showCapsLock ? capsLockId : undefined,
         placeholderDescriptionId,
     ].filter(Boolean).join(' ') || undefined;
-    const inputClass = [styles.input, visibleError ? styles.invalid : '', className]
+    const inputClass = [
+        styles.input,
+        visibleError ? styles.invalid : '',
+        canReveal ? styles.revealableInput : '',
+        className,
+    ]
         .filter(Boolean).join(' ');
 
     useEffect(() => {
@@ -297,7 +325,7 @@ export const Input = forwardRef(function Input(
                 <input
                     ref={ref}
                     id={inputId}
-                    type={type}
+                    type={renderedType}
                     autoCapitalize={autoCapitalize}
                     autoCorrect={autoCorrect}
                     spellCheck={spellCheck}
@@ -323,6 +351,19 @@ export const Input = forwardRef(function Input(
                     onInvalid={handleInvalid}
                     {...rest}
                 />
+                {canReveal ? (
+                    <button
+                        type="button"
+                        className={styles.revealToggle}
+                        onClick={() => setRevealed((shown) => !shown)}
+                        aria-label={revealLabel}
+                        aria-pressed={revealed}
+                        aria-controls={inputId}
+                        title={revealLabel}
+                    >
+                        {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                ) : null}
             </div>
             {placeholderDescriptionId ? (
                 <span id={placeholderDescriptionId} className="sr-only">{fullPlaceholder}</span>
@@ -348,7 +389,7 @@ export const Input = forwardRef(function Input(
                     role="status"
                     aria-live="polite"
                 >
-                    Caps Lock is on
+                    {t('ui.input.capsLockIsOn')}
                 </div>
             ) : null}
         </div>

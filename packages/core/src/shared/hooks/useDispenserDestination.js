@@ -21,7 +21,7 @@ import {
     listMembers,
     ownerOffAllowList,
 } from '../../flows/allowListSelfCheck.js';
-import { multiplyAmounts } from '../../market/orderMath.js';
+import { multiplyAmounts, subtractAmounts } from '../../market/orderMath.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import {
     DISPENSER_PRICE_STALE_MESSAGE,
@@ -34,11 +34,12 @@ import {
  * is silent so it never blocks or clutters an ordinary send.
  *
  * @param {{ messaging: any, chainId: string | null | undefined, to: string, paymentTick: string,
- *   isNativePayment: boolean, enabled: boolean }} params
+ *   isNativePayment: boolean, enabled: boolean, refreshKey?: number }} params
+ *   `refreshKey` reads the destination again whenever it changes.
  * @returns {DispenserAtDestination[]}
  */
 export function useDispenserDestination({
-    messaging, chainId, to, paymentTick, isNativePayment, enabled,
+    messaging, chainId, to, paymentTick, isNativePayment, enabled, refreshKey = 0,
 }) {
     const [found, setFound] = useState(/** @type {DispenserAtDestination[]} */ ([]));
     const seqRef = useRef(0);
@@ -64,7 +65,60 @@ export function useDispenserDestination({
             clearTimeout(timer);
             if (seqRef.current === seq) seqRef.current += 1;
         };
-    }, [messaging, chainId, to, paymentTick, isNativePayment, enabled]);
+    }, [messaging, chainId, to, paymentTick, isNativePayment, enabled, refreshKey]);
+    return found;
+}
+
+/**
+ * useDispenserDestination for every recipient of a multi-recipient Send. Each
+ * send in the action triggers the open dispensers at its own destination, so
+ * every recipient gets the same lookup. Answers by recipient position; a
+ * recipient with no open dispenser, or a failed lookup, answers an empty list.
+ *
+ * @param {{ messaging: any, chainId: string | null | undefined,
+ *   payments: Array<{ to: string, paymentTick: string, isNativePayment: boolean }>,
+ *   enabled: boolean }} params
+ * @returns {DispenserAtDestination[][]}
+ */
+export function useDispenserDestinations({ messaging, chainId, payments, enabled }) {
+    const [found, setFound] = useState(/** @type {DispenserAtDestination[][]} */ ([]));
+    const seqRef = useRef(0);
+    const wanted = (Array.isArray(payments) ? payments : []).map((p) => ({
+        dest: typeof p?.to === 'string' ? p.to.trim() : '',
+        sentTick: String(p?.paymentTick || '').trim().toUpperCase(),
+        isNativePayment: Boolean(p?.isNativePayment),
+    }));
+    const signature = JSON.stringify(wanted);
+    useEffect(() => {
+        const seq = seqRef.current + 1;
+        seqRef.current = seq;
+        setFound([]);
+        const list = /** @type {typeof wanted} */ (JSON.parse(signature));
+        if (!enabled || !chainId || list.length === 0) return undefined;
+        if (typeof messaging?.getDispensersForAddress !== 'function') return undefined;
+        let active = true;
+        const timer = setTimeout(() => {
+            // Recipients that share a destination and payment asset share one read.
+            const reads = new Map();
+            const readFor = ({ dest, sentTick, isNativePayment }) => {
+                if (!dest || !sentTick) return Promise.resolve([]);
+                const key = `${dest}\u0000${sentTick}\u0000${isNativePayment}`;
+                if (!reads.has(key)) {
+                    reads.set(key, loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, () => active)
+                        .catch(() => []));
+                }
+                return reads.get(key);
+            };
+            Promise.all(list.map(readFor))
+                .then((rows) => { if (seqRef.current === seq) setFound(rows); })
+                .catch(() => { /* best-effort, as for one destination */ });
+        }, 400);
+        return () => {
+            active = false;
+            clearTimeout(timer);
+            if (seqRef.current === seq) seqRef.current += 1;
+        };
+    }, [messaging, chainId, signature, enabled]);
     return found;
 }
 
@@ -76,20 +130,33 @@ export function useDispenserDestination({
  * @property {'live' | 'dark' | null} oracle  null when not oracle-priced or unreadable
  */
 
-async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, isActive) {
-    const resp = await messaging.getDispensersForAddress({ chainId, address: dest });
-    if (!isActive()) return [];
+/**
+ * The open dispensers in a getDispensersForAddress answer that a payment of
+ * `sentTick` (or of the native coin) to `dest` triggers, in action order.
+ *
+ * @param {any} resp
+ * @param {{ dest: string, sentTick: string, isNativePayment: boolean }} payment
+ * @returns {any[]}
+ */
+export function openDispensersPaidBy(resp, { dest, sentTick, isNativePayment }) {
     const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
+    const tick = String(sentTick || '').trim().toUpperCase();
     // Pay-to is GET_ADDRESS when set, otherwise SOURCE (the rule the detail
     // page uses). GET_TICK selects one payment token; an empty GET_TICK selects
     // the chain's native coin.
     const open = rows.filter((r) => {
         const priceTick = String(r?.get_tick || '').trim().toUpperCase();
-        const assetMatches = isNativePayment ? !priceTick : priceTick === sentTick;
+        const assetMatches = isNativePayment ? !priceTick : priceTick === tick;
         return r && assetMatches && String(r.address || r.source || '').trim() === dest
             && dispenserLiveState(r).status === 'open';
     });
-    open.sort((a, b) => Number(a.action_index || 0) - Number(b.action_index || 0));
+    return open.sort((a, b) => Number(a.action_index || 0) - Number(b.action_index || 0));
+}
+
+async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, isActive) {
+    const resp = await messaging.getDispensersForAddress({ chainId, address: dest });
+    if (!isActive()) return [];
+    const open = openDispensersPaidBy(resp, { dest, sentTick, isNativePayment });
     return Promise.all(open.map((r) => assessDispenser(messaging, chainId, r)));
 }
 
@@ -168,20 +235,33 @@ function receiveText(d, amount) {
         return `it is priced in ${fiat}, so what you would receive is fixed only when the payment lands`;
     }
     const byPayment = floorDivide(amount, row.get_amount);
+    const priceTick = safeText(row.get_tick || row.get_coin);
     if (byPayment == null) return 'enter an amount to see what it would buy';
     if (byPayment <= 0n) {
-        const priceTick = safeText(row.get_tick || row.get_coin);
         return `this amount is below its price of ${safeText(row.get_amount)} ${priceTick} a fill `
             + 'and would buy nothing';
     }
-    if (row.give_ownership) return `you would receive ownership of ${tick}`;
+    // The indexer fills floor(payment / GET_AMOUNT) times and keeps the rest.
+    const keptPast = (fills) => subtractAmounts(
+        String(amount).trim(),
+        multiplyAmounts(String(row.get_amount), fills.toString()) ?? String(amount).trim(),
+    );
+    if (row.give_ownership) {
+        // An ownership dispenser fills once, whatever the payment covers.
+        const kept = keptPast(1n);
+        return `you would receive ownership of ${tick}`
+            + (kept ? `; the other ${safeText(kept)} ${priceTick} buys nothing and is not refunded` : '');
+    }
     const remaining = dispenserLiveState(row).giveRemaining;
     const byEscrow = remaining != null ? floorDivide(remaining, row.give_amount) : null;
     const fills = byEscrow != null && byEscrow < byPayment ? byEscrow : byPayment;
     const qty = multiplyAmounts(String(row.give_amount || ''), fills.toString()) ?? '?';
-    return fills < byPayment
-        ? `you would receive ${qty} ${tick}, all it has left; the rest of this payment is not refunded`
-        : `you would receive ${qty} ${tick}`;
+    if (fills < byPayment) {
+        return `you would receive ${qty} ${tick}, all it has left; the rest of this payment is not refunded`;
+    }
+    const kept = keptPast(fills);
+    return `you would receive ${qty} ${tick}`
+        + (kept ? `; the other ${safeText(kept)} ${priceTick} buys no whole fill and is not refunded` : '');
 }
 
 function refusalWarnings(d, payer) {
@@ -229,4 +309,27 @@ export function dispenserDestinationNotice({ dispensers, payer, amount }) {
             + 'One payment can fill more than one of them, so the wallet does not estimate what you would receive.',
         warnings: dispensers.flatMap((d, i) => refusalWarnings(d, payer).map((w) => `Dispenser ${ids[i]}: ${w}`)),
     };
+}
+
+/**
+ * The review-screen copy for a multi-recipient Send, one summary line per
+ * recipient whose destination runs open dispensers, each named by its row
+ * number; null when none does.
+ *
+ * @param {{ dispensersByRecipient: DispenserAtDestination[][], payer?: string | null,
+ *   amounts: string[] }} params
+ * @returns {{ summary: string, summaries: string[], warnings: string[] } | null}
+ */
+export function multiDispenserDestinationNotice({ dispensersByRecipient, payer, amounts }) {
+    const summaries = [];
+    const warnings = [];
+    (Array.isArray(dispensersByRecipient) ? dispensersByRecipient : []).forEach((dispensers, i) => {
+        const notice = dispenserDestinationNotice({ dispensers, payer, amount: String(amounts?.[i] ?? '') });
+        if (!notice) return;
+        const label = `Recipient ${i + 1}`;
+        summaries.push(`${label}: ${notice.summary}`);
+        warnings.push(...notice.warnings.map((w) => `${label}: ${w}`));
+    });
+    if (summaries.length === 0) return null;
+    return { summary: summaries.join(' '), summaries, warnings };
 }

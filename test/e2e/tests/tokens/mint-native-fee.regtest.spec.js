@@ -1,4 +1,4 @@
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -13,6 +13,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -21,19 +22,6 @@ const STAMP = Date.now().toString().slice(-7);
 const TICK = `MNF${STAMP}`;
 const INITIAL_MINT = 100;
 const MINT_AMOUNT = 25;
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 async function approveAndReadTxid(page) {
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -74,7 +62,7 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
         });
 
         await test.step('issue a mintable token through the real form', async () => {
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -93,14 +81,13 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
         });
 
         await test.step('enable native-fee payment and approve the composed MINT', async () => {
-            await gotoPalette(page, 'Mint supply');
+            await openPaletteCommand(page, 'Mint supply');
             const main = page.getByRole('main');
             await expect(main.getByRole('textbox', { name: /^Amount/ }))
                 .toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token:/ }).click();
-            await page.getByLabel('Search coins or tokens').fill(TICK);
-            await page.getByLabel(new RegExp(`Open ${TICK} details`, 'i')).first().click();
+            await selectPickerAsset(page, TICK);
             await main.getByRole('textbox', { name: /^Amount/ }).fill(String(MINT_AMOUNT));
 
             if (REGTEST_COIN === 'RBTC') {

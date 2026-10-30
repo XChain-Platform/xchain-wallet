@@ -153,7 +153,7 @@ async function advanceFeeQuote() {
 }
 
 describe('BridgeMoveForm: the destination is resolved from the user\'s own account', () => {
-    it('fills the receiving address from the wallet\'s own address on the destination chain', async () => {
+    it('fills the receiving address from the wallet\'s own address on the destination network', async () => {
         const messaging = mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
@@ -162,7 +162,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(messaging.getNewestAddress).toHaveBeenCalledWith('w', DOGE, undefined);
     });
 
-    it('clears source-scoped input and ignores an old fee quote after the chain pair changes', async () => {
+    it('clears source-scoped input and ignores an old fee quote after the network pair changes', async () => {
         let resolveQuote;
         const quote = new Promise((resolve) => { resolveQuote = resolve; });
         const requoteNativeFee = vi.fn(() => quote);
@@ -236,7 +236,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
     it('states the direction and that the credit cannot be undone or redirected', async () => {
         mount();
         await waitFor(
-            () => expect(screen.getByText(/This locks XCHAIN on the source chain and credits it on the destination chain/i))
+            () => expect(screen.getByText(/This locks XCHAIN on the source network and credits it on the destination network/i))
                 .toBeInTheDocument(),
             WAIT,
         );
@@ -310,7 +310,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
 describe('BridgeMoveForm: unhappy path - no destination account', () => {
     it('refuses to offer a destination and says how to create one', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS] } });
-        const msg = await screen.findByText(/You have no address on another chain yet/i, {}, WAIT);
+        const msg = await screen.findByText(/You have no address on another network yet/i, {}, WAIT);
         expect(msg.textContent).toContain('Use Receive to create one first');
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
@@ -319,7 +319,7 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 
     it('does not treat an empty address group as a usable destination', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
-        expect(await screen.findByText(/You have no address on another chain yet/i, {}, WAIT))
+        expect(await screen.findByText(/You have no address on another network yet/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton()).toBeDisabled();
@@ -327,19 +327,19 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
 });
 
 describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', () => {
-    it('refuses a destination the issuer never opted in to without repeating chain names', async () => {
+    it('refuses a destination the issuer never opted in to without repeating network names', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
             initialTick: 'FUFU',
             balances: { FUFU: '100' },
             tokenInfo: { chainId: DOGE, tick: 'FUFU', bridgeChains: 'LTC' },
         });
-        const msg = await screen.findByText(/cannot move to the selected destination chain/i, {}, WAIT);
+        const msg = await screen.findByText(/cannot move to the selected destination network/i, {}, WAIT);
         expect(msg.textContent).not.toMatch(/Bitcoin|Litecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(moveButton()).toBeDisabled();
     });
 
-    it('offers only the origin chain for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
+    it('offers only the origin network for a bridged copy, so a burn cannot be aimed anywhere else', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
@@ -361,7 +361,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(moveButton('Review move back')).toBeInTheDocument();
     });
 
-    it('explains when the wallet has another chain but no address on the only supported destination', async () => {
+    it('explains when the wallet has another network but no address on the only supported destination', async () => {
         mount({
             byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
             initialTick: 'BTC.PEPECASH',
@@ -568,7 +568,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
     it('blocks malformed source and destination addresses before compose', async () => {
         const badSource = { ...BTC_ADDRESS, address: 'not-a-bitcoin-address' };
         const messaging = mount({ byChain: { [BTC]: [badSource], [DOGE]: [DOGE_ADDRESS] } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+        expect(await screen.findByText('This is not a valid address.', {}, WAIT))
             .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -576,7 +576,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         cleanup();
         const badDestination = { ...DOGE_ADDRESS, address: 'not-a-dogecoin-address' };
         const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+        expect(await screen.findByText('This is not a valid address.', {}, WAIT))
             .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
         expect(second.composeForConfirm).not.toHaveBeenCalled();
@@ -608,24 +608,27 @@ describe('BridgeMoveForm: invalid action fields', () => {
         expect(moveButton()).toBeDisabled();
 
         cleanup();
-        mount();
+        const messaging = mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0.123456789' } });
-        expect(await screen.findByText(/Custom fee rate can have at most 8 decimal places/i))
-            .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '50000' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses review when fresh bridge settings differ from the displayed route', async () => {
+        // Only the depth moves, so the route stays open and the refresh notice is the one message.
         const getTokenInfo = vi.fn()
             .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
-            .mockResolvedValueOnce({ bridgeChains: 'LTC', minDepth: '12' })
-            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+            .mockResolvedValue({ bridgeChains: 'DOGE', minDepth: '12' });
         const messaging = mount({
             initialTick: 'FUFU',
             balances: { FUFU: '10' },
@@ -653,5 +656,67 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const alert = await screen.findByRole('alert', {}, WAIT);
         expect(alert).toHaveTextContent("Couldn't complete this; something went wrong. Try again.");
         expect(alert).not.toHaveTextContent(/composer\.internal/);
+    });
+});
+
+// One message per state: a refusal from an earlier Review press describes a
+// form that no longer exists once a field changes, and the live refusal for
+// the current values is the one the page states.
+describe('BridgeMoveForm: one message for the current state', () => {
+    it('drops the empty-amount refusal once an amount is typed', async () => {
+        mount({ balances: { XCHAIN: '10' } });
+        await waitFor(
+            () => expect(screen.getByText(/10 XCHAIN available/i)).toBeInTheDocument(),
+            WAIT,
+        );
+        fireEvent.click(moveButton());
+        expect(await screen.findByText('Enter an amount to move.', {}, WAIT)).toBeInTheDocument();
+
+        fireEvent.change(amountInput(), { target: { value: '11' } });
+        await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
+        expect(screen.queryByText('Enter an amount to move.')).toBeNull();
+    });
+
+    it('states only the refreshed route refusal after the bridge settings change under the form', async () => {
+        const getTokenInfo = vi.fn()
+            .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
+            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+        mount({ initialTick: 'FUFU', balances: { FUFU: '10' }, getTokenInfo });
+        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+
+        await screen.findByText('This token cannot move to the selected destination network.', {}, WAIT);
+        expect(screen.queryByText(/bridge settings changed/i)).toBeNull();
+    });
+});
+
+// The refusal leads the page, far above the Review button on a phone, so the
+// press that raised it moves focus there and the user sees why nothing opened.
+describe('BridgeMoveForm: a Review refusal takes focus', () => {
+    it('focuses the empty-amount refusal raised by the Review press', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        moveButton().focus();
+        fireEvent.click(moveButton());
+        const refusal = await screen.findByText('Enter an amount to move.', {}, WAIT);
+        await waitFor(() => expect(document.activeElement?.contains(refusal)).toBe(true), WAIT);
+    });
+
+    it('focuses a compose failure that arrives after the press', async () => {
+        const composeForConfirm = vi.fn().mockRejectedValue(new Error('Insufficient funds for fee'));
+        mount({ composeForConfirm });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        moveButton().focus();
+        fireEvent.click(moveButton());
+        const alert = await screen.findByRole('alert', {}, WAIT);
+        await waitFor(() => expect(document.activeElement).toBe(alert), WAIT);
     });
 });

@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { t } from '../../core/src/i18n/index.js';
+import '@xchain-wallet/core/i18n/locales/en/desktopUpdate.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 

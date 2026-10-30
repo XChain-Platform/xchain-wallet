@@ -37,7 +37,11 @@ assert.match(form, /key: 'ownerships', label: [^,]+, defaultOn: true/, 'ownershi
 assert.match(form, /key: 'orders', label: [^,]+, defaultOn: false/, 'orders default OFF');
 assert.match(form, /key: 'swaps', label: [^,]+, defaultOn: false/, 'swaps default OFF');
 assert.match(form, /key: 'dispensers', label: [^,]+, defaultOn: false/, 'dispensers default OFF');
-assert.match(form, /toUpperCase\(\) === 'SWEEP'/, 'typed-SWEEP confirm gates signing');
+assert.match(
+    form,
+    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'SWEEP'\)/,
+    'typed-SWEEP confirm uses the shared exact-match gate',
+);
 assert.match(form, /sweepPreview\(\{ chainId, address \}\)/, 'API-derived preview wired');
 assert.match(form, /including anything the preview did not list|including anything not listed/,
     'typed-confirm copy covers unlisted holdings (preview is indicative)');
@@ -53,7 +57,7 @@ assert.match(form, /listGatedKeys/, 'gate checks vault custody before prompting'
 assert.match(form, /cannot run the key recovery scan/,
     'HW / watch-only degrade to a per-tick warning (§5 signer note)');
 assert.match(form, /ackMissingKeys/, 'missing keys need an explicit acknowledgment');
-assert.match(form, /WatcherResultPanel/, 'watcher (encode-only) result surface');
+assert.match(form, /ResultScreen/, 'watcher (encode-only) result surface');
 assert.match(form, /SignCredentials/, 'standard signing surface used');
 assert.match(form, /prebuiltPsbt/, 'single-encode confirm path forwards the composed PSBT');
 assert.match(form, /1-hour (close )?window/, 'dispenser close-window delay stated');

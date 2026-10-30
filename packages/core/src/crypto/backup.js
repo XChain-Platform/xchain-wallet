@@ -44,13 +44,18 @@
 // (`flows/backupFile.js`). A reader who takes "the envelope decrypted" for
 // "the secrets are in the clear" is wrong about every one of them.
 
-import { decrypt as aeadDecrypt, encrypt as aeadEncrypt } from './aead.js';
+import {
+    decrypt as aeadDecrypt,
+    encrypt as aeadEncrypt,
+    IV_LENGTH,
+    TAG_LENGTH_BYTES,
+} from './aead.js';
 import { base64ToBytes, bytesToBase64, deriveMasterKeyAsync, makeFreshKdfParams } from './kdf.js';
 
 export const BACKUP_MAGIC = 'XCHAIN-WALLET-BACKUP';
+// Format 1 stores a 12-byte iv and a 16-byte tag (aead.js's IV_LENGTH and
+// TAG_LENGTH_BYTES). A change to either is a new format version, never an edit to v1.
 export const BACKUP_FORMAT_VERSION = 1;
-
-const AEAD_TAG_LENGTH = 16;  // AES-256-GCM standard
 
 export class BackupFormatError extends Error {
     constructor(reason) {
@@ -126,11 +131,11 @@ export async function encodeBackupEnvelope({ password, payload, walletName, kdfP
             plaintext.fill(0);
         }
         // aead.js returns iv || ct || tag. Split into separate fields
-        // so the envelope matches the spec layout exactly.
-        const iv = packed.subarray(0, 12);
-        const ctPlusTag = packed.subarray(12);
-        const ct = ctPlusTag.subarray(0, ctPlusTag.length - AEAD_TAG_LENGTH);
-        const tag = ctPlusTag.subarray(ctPlusTag.length - AEAD_TAG_LENGTH);
+        // so the envelope matches the spec layout exactly, on aead.js's own lengths.
+        const iv = packed.subarray(0, IV_LENGTH);
+        const ctPlusTag = packed.subarray(IV_LENGTH);
+        const ct = ctPlusTag.subarray(0, ctPlusTag.length - TAG_LENGTH_BYTES);
+        const tag = ctPlusTag.subarray(ctPlusTag.length - TAG_LENGTH_BYTES);
         return {
             magic: BACKUP_MAGIC,
             formatVersion: BACKUP_FORMAT_VERSION,
@@ -163,9 +168,9 @@ export async function decodeBackupEnvelope({ password, envelope }) {
     const iv = base64ToBytes(ivB64);
     const tag = base64ToBytes(tagB64);
     const ct = base64ToBytes(envelope.payload);
-    if (iv.length !== 12) throw new BackupFormatError('iv must be 12 bytes');
-    if (tag.length !== AEAD_TAG_LENGTH) {
-        throw new BackupFormatError('tag must be 16 bytes');
+    if (iv.length !== IV_LENGTH) throw new BackupFormatError(`iv must be ${IV_LENGTH} bytes`);
+    if (tag.length !== TAG_LENGTH_BYTES) {
+        throw new BackupFormatError(`tag must be ${TAG_LENGTH_BYTES} bytes`);
     }
     const blob = new Uint8Array(iv.length + ct.length + tag.length);
     blob.set(iv, 0);
@@ -177,8 +182,10 @@ export async function decodeBackupEnvelope({ password, envelope }) {
     try {
         try {
             plaintext = await aeadDecrypt(masterKey, blob);
-        } catch {
-            throw new BackupPasswordError();
+        } catch (err) {
+            // Only a tag mismatch means a wrong password; a key or format fault surfaces as itself.
+            if (/** @type {any} */ (err)?.name === 'AeadAuthError') throw new BackupPasswordError();
+            throw err;
         }
     } finally {
         masterKey.fill(0);

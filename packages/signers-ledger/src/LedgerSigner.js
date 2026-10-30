@@ -57,6 +57,7 @@ import {
     hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
+import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
@@ -186,6 +187,11 @@ export class LedgerSigner extends Signer {
         this._getApp = getApp || null;
         this._transport = transport;
         this._sdkRegistry = sdkRegistry;
+        // The transport carries one exchange at a time and rejects a second
+        // one that arrives while a signing prompt is open, so every read the
+        // signer makes of its own is ordered around the device operations.
+        this._deviceOps = 0;
+        this._probeTail = Promise.resolve();
     }
 
     get id() { return this._id; }
@@ -214,9 +220,14 @@ export class LedgerSigner extends Signer {
      * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
     async getStatus(opts = {}) {
+        // A prompt is open on the device. Probing now would collide with it
+        // (the transport refuses a second exchange) and would report a device
+        // that is busy answering the user as one that is gone. The app was
+        // verified when the operation began, so the last answer still holds.
+        if (this._deviceOps !== 0) return 'available';
         let info;
         try {
-            info = await readLedgerAppInfo(this._transport);
+            info = await this._probeApp();
         } catch (err) {
             if (hardwareSigningError(this._id, 'ledger', err).status === 'locked') {
                 return 'locked';
@@ -372,17 +383,19 @@ export class LedgerSigner extends Signer {
             return entry;
         });
 
-        await this._assertAppOpenFor(chainId);
-        const txHex = await runLedger(this._id, 'createPaymentTransaction', () =>
-            app.createPaymentTransaction({
-                inputs: splitInputs,
-                associatedKeysets: payload.associatedKeysets,
-                outputScriptHex: payload.outputScriptHex,
-                lockTime: payload.lockTime,
-                segwit: payload.segwit,
-                additionals: payload.additionals,
-            }),
-        );
+        const txHex = await this._deviceOperation(async () => {
+            await this._assertAppOpenFor(chainId);
+            return runLedger(this._id, 'createPaymentTransaction', () =>
+                app.createPaymentTransaction({
+                    inputs: splitInputs,
+                    associatedKeysets: payload.associatedKeysets,
+                    outputScriptHex: payload.outputScriptHex,
+                    lockTime: payload.lockTime,
+                    segwit: payload.segwit,
+                    additionals: payload.additionals,
+                }),
+            );
+        });
         if (typeof txHex !== 'string' || txHex.length === 0) {
             throw new SignerStatusError(
                 this._id, 'error', 'createPaymentTransaction: Ledger returned no signed tx',
@@ -394,6 +407,9 @@ export class LedgerSigner extends Signer {
         // reply back to the PSBT before its txid escapes this method, because
         // every caller downstream treats txHex as the approved transaction.
         assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
+        // Matching fields prove where the money goes, not that the signatures
+        // spend it: verify each one against the prevout and amount the user approved.
+        assertInputSignaturesVerify({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }
@@ -419,14 +435,14 @@ export class LedgerSigner extends Signer {
         // Bind the request to the named chain's app, since the app decides the
         // message prefix; a caller that omits chainId keeps the unchecked path.
         const currency = chainId === undefined ? 'bitcoin' : chainIdToLedgerCurrency(chainId);
-        if (chainId !== undefined) await this._assertAppOpenFor(chainId);
         const app = this._appFor(currency);
         const messageHex = messageToHex(message);
         // `signMessage`, not `signMessageNew`: hw-app-btc v10 renamed it, and
         // the old name is absent from the shipped class.
-        const sig = await runLedger(this._id, 'signMessage', () =>
-            app.signMessage(path, messageHex),
-        );
+        const sig = await this._deviceOperation(async () => {
+            if (chainId !== undefined) await this._assertAppOpenFor(chainId);
+            return runLedger(this._id, 'signMessage', () => app.signMessage(path, messageHex));
+        });
         const signature = composeBitcoinCompactSignature(sig, path);
         return { signature };
     }
@@ -451,12 +467,31 @@ export class LedgerSigner extends Signer {
         return app;
     }
 
+    // Marks a span in which the device may hold a prompt for the user, so
+    // getStatus leaves the transport alone until it ends.
+    async _deviceOperation(fn) {
+        this._deviceOps += 1;
+        try {
+            return await fn();
+        } finally {
+            this._deviceOps -= 1;
+        }
+    }
+
+    // Reads the open app one read at a time, so a status poll still in flight
+    // when a signing begins finishes before the signing's own read.
+    _probeApp() {
+        const run = this._probeTail.then(() => readLedgerAppInfo(this._transport));
+        this._probeTail = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
     // Refuse to sign unless the app for this chain is open, the same check
     // getStatus makes, so a request is never sent to another coin's app.
     async _assertAppOpenFor(chainId) {
         let info;
         try {
-            info = await readLedgerAppInfo(this._transport);
+            info = await this._probeApp();
         } catch (err) {
             const failure = hardwareSigningError(this._id, 'ledger', err);
             if (failure.status !== 'error') throw failure;

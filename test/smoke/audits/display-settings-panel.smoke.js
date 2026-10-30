@@ -55,11 +55,11 @@ assert.ok(/writePinned\(next\)/.test(sectionSrc),
     'movePin writes the reordered array via writePinned');
 assert.ok(/update\(\{ pinnedTokens: next \}\)/.test(sectionSrc),
     'pinned writes go through update({ pinnedTokens })');
-assert.ok(/aria-label=\{`Move \$\{key\} up`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.moveUp', \{ key \}\)\}/.test(sectionSrc),
     'each ↑ row carries an aria-label naming the key it moves');
-assert.ok(/aria-label=\{`Move \$\{key\} down`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.moveDown', \{ key \}\)\}/.test(sectionSrc),
     'each ↓ row carries an aria-label naming the key it moves');
-assert.ok(/aria-label=\{`Unpin \$\{key\}`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.unpin', \{ key \}\)\}/.test(sectionSrc),
     'each unpin row carries an aria-label naming the key it removes');
 assert.ok(/disabled=\{idx === 0\}/.test(sectionSrc),
     '↑ button disables for the first row');
@@ -76,7 +76,7 @@ assert.ok(/const unhideAll = useCallback/.test(sectionSrc),
     'unhideAll handler exists');
 assert.ok(/writeHidden\(\[\]\)/.test(sectionSrc),
     'unhideAll writes the empty array');
-assert.ok(/aria-label=\{`Unhide \$\{key\}`\}/.test(sectionSrc),
+assert.ok(/aria-label=\{t\('settings\.display\.unhide', \{ key \}\)\}/.test(sectionSrc),
     'each per-row unhide carries an aria-label naming the key');
 assert.ok(/Unhide all/.test(sectionSrc),
     'bulk Unhide-all action labelled in the UI');

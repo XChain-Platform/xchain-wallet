@@ -17,6 +17,7 @@ import {
     userFacingMessage,
     isDeveloperMessage,
     protocolRefusalReason,
+    unsupportedAddressTypeMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
 const FALLBACK = 'Could not import that private key.';
@@ -29,6 +30,14 @@ function protocolRefusal(reason) {
 }
 
 describe('userFacingMessage', () => {
+    it('recognizes a vault conflict by name after a message boundary', () => {
+        const err = { name: 'VaultConflictError', message: 'stale write' };
+        expect(userFacingMessage(err, FALLBACK)).toBe(
+            'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
+        );
+        expect(userFacingMessage(new Error('stale write'), FALLBACK)).toBe('stale write');
+    });
+
     it('replaces a flow precondition string', () => {
         expect(userFacingMessage(new Error('importWif: walletId is required'), FALLBACK))
             .toBe(FALLBACK);
@@ -103,11 +112,31 @@ describe('userFacingMessage', () => {
     });
 
     it.each([
+        'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+        'The message port closed before a response was received.',
+    ])('keeps Chrome runtime failures out of display copy: %s', (raw) => {
+        expect(userFacingMessage(new Error(raw), FALLBACK)).toBe(FALLBACK);
+        expect(isDeveloperMessage(raw)).toBe(true);
+    });
+
+    it.each([
         ['InvalidPasswordError', 'Incorrect password.'],
         ['HardwareSigningRetryError', 'Your hardware wallet is locked. Unlock it, then select Approve again.'],
         ['RbfPlanError', 'Already confirmed.'],
     ])('keeps the copy an app-defined %s carries', (name, message) => {
         expect(userFacingMessage(Object.assign(new Error(message), { name }), FALLBACK)).toBe(message);
+    });
+
+    it.each(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT'])('keeps the sentence a wallet refusal carries under code %s', (code) => {
+        const message = 'The protocol fee changed while this was on screen. Nothing was signed or sent.';
+        expect(userFacingMessage(Object.assign(new Error(message), { code }), FALLBACK)).toBe(message);
+    });
+
+    it('keeps the sentence a rejected private key carries beside the SDK machine code', () => {
+        const message = 'That private key is for a different network. Pick the chain the key belongs to, or paste a key for this chain.';
+        const err = Object.assign(new Error(message), { name: 'InvalidWifError', code: 'NETWORK_MISMATCH' });
+        expect(userFacingMessage(err, FALLBACK)).toBe(message);
+        expect(isDeveloperMessage(err)).toBe(false);
     });
 
     it('hides platform storage exceptions, with or without their class', () => {
@@ -131,6 +160,11 @@ describe('userFacingMessage', () => {
         expect(isDeveloperMessage(err)).toBe(false);
     });
 
+    it('leaves an encoder coin-selection shortfall to the build-failure copy', () => {
+        const reason = 'insufficient funds: selected inputs total 1000 but 3206 is required (outputs 2000 + fee 1206)';
+        expect(protocolRefusalReason(protocolRefusal(reason))).toBeNull();
+    });
+
     it('caps a protocol refusal reason', () => {
         const reason = 'A'.repeat(700);
         const shown = userFacingMessage(protocolRefusal(reason), FALLBACK);
@@ -146,5 +180,30 @@ describe('userFacingMessage', () => {
         expect(protocolRefusalReason(err)).toBeNull();
         expect(userFacingMessage(err, FALLBACK)).toBe(FALLBACK);
         expect(isDeveloperMessage(err)).toBe(true);
+    });
+});
+
+describe('userFacingMessage for an address type the SDK does not know', () => {
+    const FALLBACK_UNLOCK = 'Could not generate addresses. Make sure the wallet is unlocked or your hardware device is connected.';
+
+    it('names the address type instead of the generic fallback', () => {
+        const err = Object.assign(
+            new Error('Unknown address type: "p2tr". Supported: p2pkh, p2wpkh, p2sh-p2wpkh'),
+            { name: 'SDKWalletError', code: 'INVALID_ADDRESS_TYPE' },
+        );
+        const message = userFacingMessage(err, FALLBACK_UNLOCK);
+        expect(message).toBe('This address type is not available yet. Choose another address type.');
+        expect(message).not.toMatch(/unlocked/i);
+    });
+
+    it('recognises the refusal after a messaging hop strips the code', () => {
+        expect(userFacingMessage(new Error('Unknown address type: "p2tr".'), FALLBACK_UNLOCK))
+            .toMatch(/not available yet/);
+    });
+
+    it('leaves other errors on their own fallback', () => {
+        expect(userFacingMessage(new Error('device disconnected'), FALLBACK_UNLOCK))
+            .toBe('device disconnected');
+        expect(unsupportedAddressTypeMessage(new Error('wallet.unlock: bad password'))).toBeNull();
     });
 });

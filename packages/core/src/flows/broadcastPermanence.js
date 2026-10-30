@@ -13,8 +13,9 @@
 // A post-sign broadcast failure splits two ways:
 //
 //   PERMANENT - the signed tx can NEVER confirm as-is: its inputs are
-//     gone (spent/missing), or a conflicting tx has already confirmed.
-//     Re-signing is pointless; the modal must offer a fresh re-compose,
+//     gone (spent/missing), another transaction in the mempool spends
+//     them and this one cannot replace it, or a conflicting tx has already
+//     confirmed. Re-signing is pointless; the modal must offer a fresh re-compose,
 //     and the PendingTx is marked `failed` (never queued).
 //
 //   TRANSIENT - the node/connection is momentarily unavailable
@@ -61,27 +62,47 @@ function orderedSubstringMatcher(first, second, { secondStartsWord = false } = {
     };
 }
 
-// Inputs spent or missing, or a confirmed conflicting tx: the signed tx
-// is dead and only a re-compose (new inputs) can succeed.
-const PERMANENT_PATTERNS = [
+// The node refused the transaction because a coin it spends is already spent,
+// missing, or spent by another transaction in its mempool (with no replacement
+// allowed or too low a fee to replace it). These bytes can never be sent as
+// they are; the remedy is a new transaction over coins that are still free.
+const SPEND_CONFLICT_PATTERNS = [
     /missing\s*or\s*spent/i,
     /missingorspent/i,
     /bad-txns-inputs-missingorspent/i,
     /bad-txns-inputs-spent/i,
+    /bad-txns-spends-conflicting-tx/i,
     /missing\s+inputs/i,
+    /already\s+spent/i,
+    /txn-mempool-conflict/i,
+    /rejecting\s+replacement/i,
+    orderedSubstringMatcher('insufficient fee', 'replacement'),
+    /replacement-adds-unconfirmed/i,
+    /too\s+many\s+potential\s+replacements/i,
+];
+
+// Inputs spent or missing, a conflict in the mempool, or a confirmed
+// conflicting tx: the signed tx is dead and only a re-compose (new inputs)
+// can succeed.
+const PERMANENT_PATTERNS = [
+    ...SPEND_CONFLICT_PATTERNS,
     // These two mean THIS txid reached a node (outputs already in the UTXO set, or
     // in its mempool); submitWithSigner and the queue lanes check isAlreadyOnNetworkRejection first.
     /txn-already-known/i,
     /txn-already-in-mempool/i,
     /already\s+in\s+(?:the\s+)?block\s*chain/i,
-    // A conflict with an UNconfirmed tx may still clear, so it stays transient.
     orderedSubstringMatcher('conflict', 'confirmed', { secondStartsWord: true }),
-    /already\s+spent/i,
     // A dust output is a property of the signed BYTES, not of the node's mood: every node
     // on every relay policy rejects the same transaction, so re-queuing it retries forever.
     // Seen live on a DIVIDEND whose 2-sat protocol-fee output was below Bitcoin's dust limit,
     // where the transient default left the wallet claiming the dividend had been sent.
     /\bdust\b/i,
+    // A script-check refusal is a property of the signed bytes too: the signature or
+    // witness does not satisfy the script it spends, which no retry can change. Covers
+    // every naming Bitcoin Core has used (mandatory-, non-mandatory-, mempool- and
+    // block-script-verify-flag), seen when a device or its relay returns a malformed
+    // or foreign signature that the reply check cannot see.
+    /script-verify-flag/i,
 ];
 
 // Node/connection is momentarily unavailable but the SAME signed tx can
@@ -92,7 +113,6 @@ const TRANSIENT_PATTERNS = [
     /too-long-mempool-chain/i, orderedSubstringMatcher('mempool', 'full'), /mempool min fee/i,
     /min relay fee/i, /insufficient priority/i, /rate.?limit/i,
     /502|503|504/,
-    /txn-mempool-conflict/i,        // a competing UNconfirmed tx; may clear
 ];
 
 // Permanence has to survive the messaging boundary, and that envelope
@@ -104,6 +124,8 @@ const TRANSIENT_PATTERNS = [
 export const BROADCAST_FAILED_PERMANENT_NAME = 'BroadcastFailedPermanentError';
 export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
 export const BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME = 'BroadcastFailedTransientUnsavedError';
+// A queued entry another window is sending right now: nothing failed, so no retry is due.
+export const QUEUED_BROADCAST_IN_FLIGHT_NAME = 'QueuedBroadcastInFlightError';
 
 /**
  * Recover the broadcast-failure permanence from an error that may have
@@ -133,6 +155,20 @@ export function classifyBroadcastFailure(err) {
 }
 
 /**
+ * Report whether the node refused a transaction because a coin it spends was
+ * already spent, or is spent by another transaction it holds. Reads the reject
+ * text, so it holds for an error that crossed the messaging boundary with only
+ * its message.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isSpendConflictRejection(err) {
+    const reason = extractReason(err);
+    return SPEND_CONFLICT_PATTERNS.some((re) => re.test(reason));
+}
+
+/**
  * Report whether a re-send of the SAME signed bytes was refused because the node
  * already holds this txid, which means the transaction was delivered.
  *
@@ -142,8 +178,47 @@ export function classifyBroadcastFailure(err) {
  * @returns {boolean}
  */
 export function isAlreadyOnNetworkRejection(err) {
-    return /txn-already-known|txn-already-in-mempool|already\s+in\s+(?:the\s+)?block\s*chain/i
-        .test(extractReason(err));
+    return hasAlreadyOnNetworkDetails(err)
+        || /txn-already-known|txn-already-in-mempool|already\s+in\s+(?:the\s+)?block\s*chain/i
+            .test(extractReason(err));
+}
+
+function hasAlreadyOnNetworkDetails(err) {
+    if (err == null) return false;
+    const pending = [err];
+    const seen = new Set();
+    while (pending.length > 0 && seen.size < 16) {
+        const value = pending.shift();
+        if (value == null || typeof value !== 'object' || seen.has(value)) continue;
+        seen.add(value);
+
+        try { if (isAlreadyOnNetworkPayload(value.data)) return true; } catch { /* ignore unreadable fields */ }
+
+        let details;
+        try { details = value.details; } catch { /* ignore unreadable fields */ }
+        if (details != null && typeof details === 'object') {
+            try { if (isAlreadyOnNetworkPayload(details.context)) return true; } catch { /* ignore unreadable fields */ }
+            let rpcError;
+            try { rpcError = details.rpcError; } catch { /* ignore unreadable fields */ }
+            if (rpcError != null && typeof rpcError === 'object') {
+                try { if (isAlreadyOnNetworkPayload(rpcError.data)) return true; } catch { /* ignore unreadable fields */ }
+            }
+        }
+
+        try { if (value.cause != null) pending.push(value.cause); } catch { /* ignore unreadable causes */ }
+        try {
+            const nested = value.response?.data?.error;
+            if (nested != null) pending.push(nested);
+        } catch { /* ignore unreadable responses */ }
+    }
+    return false;
+}
+
+function isAlreadyOnNetworkPayload(payload) {
+    if (payload == null || typeof payload !== 'object') return false;
+    try { if (payload.reason === 'TX_ALREADY_IN_CHAIN') return true; } catch { /* ignore unreadable fields */ }
+    try { if (payload.node_code === -27) return true; } catch { /* ignore unreadable fields */ }
+    return false;
 }
 
 // Pull the most specific reject string out of the error shape. A

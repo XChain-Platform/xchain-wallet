@@ -41,7 +41,7 @@ describe('HwSignBlock device instructions', () => {
         render(<HwSignBlock {...baseProps} getStatus={transport} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('status')).toHaveAttribute('data-status', 'cancelled');
+            expect(screen.getByRole('status').closest('[data-status]')).toHaveAttribute('data-status', 'cancelled');
         });
         expect(screen.getByRole('status')).toHaveTextContent(
             'Signing was cancelled on your device. Nothing was signed.',
@@ -68,6 +68,23 @@ describe('HwSignBlock device instructions', () => {
             expect(container.querySelector('[data-status="available"]')).toBeTruthy();
         });
         expect(transport).toHaveBeenCalledTimes(2);
+    });
+
+    it('tells the reader a paired device has no live connection this session, with a retry', async () => {
+        const transport = vi.fn().mockResolvedValue({
+            status: 'idle',
+            detail: 'signer bridge not connected',
+        });
+        const { container } = render(<HwSignBlock {...baseProps} getStatus={transport} />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-status="disconnected"]')).toBeTruthy();
+        });
+        expect(screen.getByRole('status')).toHaveTextContent(
+            'This Ledger is not connected in this session. Connect it again with Pair hardware signer, then try again.',
+        );
+        expect(screen.getByRole('status')).not.toHaveTextContent('signer bridge');
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     });
 
     it('keeps the async status area empty when no status reader is available', () => {

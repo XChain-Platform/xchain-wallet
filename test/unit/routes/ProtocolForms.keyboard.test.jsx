@@ -173,10 +173,9 @@ describe('protocol form keyboard operation', () => {
         const newStake = utils.getByRole('radio', { name: /New stake/ });
         const topUp = utils.getByRole('radio', { name: /Top up an existing stake/ });
         const amount = utils.getByLabelText('Amount (XCHAIN)');
-        const paste = utils.getByRole('button', { name: 'Paste from clipboard' });
         const pubkey = utils.getByLabelText('Signing public key');
 
-        await expectTabSequence(user, [network, from, chooseSource, newStake, topUp, amount, paste, pubkey]);
+        await expectTabSequence(user, [network, from, chooseSource, newStake, topUp, amount, pubkey]);
 
         pubkey.focus();
         await user.keyboard('{Enter}');

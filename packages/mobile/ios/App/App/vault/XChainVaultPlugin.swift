@@ -171,10 +171,12 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func biometricEnroll(_ call: CAPPluginCall) {
         guard let secret = decodeArg(call, "secret") else { return }
-        if let refusal = sidecar.enroll(secret: secret) {
-            call.resolve(["status": "LOCKED", "detail": refusal])
-        } else {
-            call.resolve(["status": "OK"])
+        sidecar.enroll(secret: secret, reason: "Turn on biometric unlock for your XChain Wallet") { refusal in
+            if let refusal = refusal {
+                call.resolve(["status": "LOCKED", "detail": refusal])
+            } else {
+                call.resolve(["status": "OK"])
+            }
         }
     }
 

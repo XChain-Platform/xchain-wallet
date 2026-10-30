@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -20,6 +20,8 @@ import {
     splitTickCoinItem,
 } from '../utils/listTickCoin.js';
 import styles from '../routes/IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -212,26 +214,25 @@ export function TickItemsEditor({
 
     return (
         <>
-            <label className={styles.pickerLabel} htmlFor={controlId}>Tokens (one per line)</label>
-            <textarea
+            <Textarea
                 id={controlId}
-                className={styles.picker}
+                label={t('components.tickItemsEditor.tokensOnePerLine')}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 rows={6}
                 spellCheck={false}
                 autoCapitalize="off"
-                placeholder="TICK1&#10;TICK2"
+                placeholder={t('components.tickItemsEditor.tick1Tick2')}
                 aria-invalid={invalidTicks.length > 0 || hasMissing ? 'true' : undefined}
                 aria-describedby={describedBy}
             />
             <div className={styles.fromLine}>
                 <Button type="button" variant="ghost" onClick={onOpenPicker}>
-                    Add from token picker
+                    {t('components.tickItemsEditor.addFromTokenPicker')}
                 </Button>
             </div>
             {memberTicks.length > 0 ? (
-                <ul className={styles.tickItems} aria-label="Token order">
+                <ul className={styles.tickItems} aria-label={t('components.tickItemsEditor.tokenOrder')}>
                     {memberTicks.map((item, index) => {
                         const split = coinQualified ? splitTickCoinItem(item) : null;
                         const coin = split?.coin || items.coinOf?.[index] || listCoin;
@@ -251,22 +252,23 @@ export function TickItemsEditor({
                                 }}
                                 className={styles.tickItem}
                                 tabIndex={0}
-                                aria-label={`${accessibleItem}, position ${index + 1} of ${memberTicks.length}`}
+                                aria-label={t('components.tickItemsEditor.positionOf', { accessibleItem, value: index + 1, length: memberTicks.length })}
                                 aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                                 onKeyDown={(event) => onItemKeyDown(event, index)}
                             >
                                 <code className={styles.tickItemName}>{rest}</code>
                                 {coinQualified ? (
-                                    <select
+                                    <Select
+                                        size="sm"
                                         className={styles.tickItemCoin}
-                                        aria-label={`Coin for ${accessibleItem}`}
+                                        aria-label={t('components.tickItemsEditor.coinFor', { accessibleItem })}
                                         value={coin}
                                         onChange={(event) => setItemCoin(item, event.target.value)}
                                     >
                                         {LIST_TICK_COINS.map((option) => (
                                             <option key={option} value={option}>{option}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                 ) : null}
                                 <div className={styles.tickItemActions}>
                                     <Button
@@ -274,7 +276,7 @@ export function TickItemsEditor({
                                         size="sm"
                                         variant="ghost"
                                         disabled={index === 0}
-                                        aria-label={`Move ${accessibleItem} up`}
+                                        aria-label={t('components.tickItemsEditor.moveUp', { accessibleItem })}
                                         onClick={() => moveItem(index, -1)}
                                     >
                                         ↑
@@ -284,7 +286,7 @@ export function TickItemsEditor({
                                         size="sm"
                                         variant="ghost"
                                         disabled={index === memberTicks.length - 1}
-                                        aria-label={`Move ${accessibleItem} down`}
+                                        aria-label={t('components.tickItemsEditor.moveDown', { accessibleItem })}
                                         onClick={() => moveItem(index, 1)}
                                     >
                                         ↓
@@ -293,7 +295,7 @@ export function TickItemsEditor({
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        aria-label={`Remove ${accessibleItem}`}
+                                        aria-label={t('components.tickItemsEditor.remove', { accessibleItem })}
                                         onClick={() => removeItem(index)}
                                     >
                                         ×
@@ -307,45 +309,41 @@ export function TickItemsEditor({
             <span className={styles.visuallyHidden} role="status" aria-live="polite">{announcement}</span>
             {value.trim() ? (
                 <p id={`${controlId}-summary`} className={styles.hint}>
-                    {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
-                    {items.duplicates > 0 ? ` · ${items.duplicates} duplicate${items.duplicates === 1 ? '' : 's'} ignored` : ''}
-                    {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
-                    {checking ? ' · checking…' : ''}
-                    {!checking && foundTicks.length > 0 ? ` · ${foundTicks.length} found` : ''}
-                    {!checking && missingTicks.length > 0 ? ` · ${missingTicks.length} not found` : ''}
-                    {!checking && uncheckedTicks > 0 && (foundTicks.length + missingTicks.length) > 0 ? ` · ${uncheckedTicks} not checked` : ''}
+                    {t('components.tickItemsEditor.validCount', { count: memberTicks.length })}
+                    {items.duplicates > 0 ? t('components.tickItemsEditor.duplicatesIgnored', { count: items.duplicates }) : ''}
+                    {invalidTicks.length > 0 ? t('components.tickItemsEditor.invalid', { length: invalidTicks.length }) : ''}
+                    {checking ? t('components.tickItemsEditor.checking') : ''}
+                    {!checking && foundTicks.length > 0 ? t('components.tickItemsEditor.found', { length: foundTicks.length }) : ''}
+                    {!checking && missingTicks.length > 0 ? t('components.tickItemsEditor.notFound', { length: missingTicks.length }) : ''}
+                    {!checking && uncheckedTicks > 0 && (foundTicks.length + missingTicks.length) > 0 ? t('components.tickItemsEditor.notChecked', { uncheckedTicks }) : ''}
                 </p>
             ) : null}
             {invalidTicks.length > 0 ? (
                 <p id={`${controlId}-invalid`} className={styles.hint}>
-                    Not a token name: {invalidTicks.join(', ')}
+                    {t('components.tickItemsEditor.notATokenName')} {invalidTicks.join(', ')}
                 </p>
             ) : null}
             {/* The protocol records an unknown TICK as invalid and
                 leaves it out of the list without failing the LIST. */}
             {!coinQualified && !checking && missingTicks.length > 0 ? (
-                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        Not found on {chainLabel}: {missingTicks.join(', ')}.
-                        The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
-                        not be a member.
+                <StatusMessage id={`${controlId}-missing`} variant="warning" role="alert">
+                    <p>
+                        {t('components.tickItemsEditor.notFoundOn')} {chainLabel}: {missingTicks.join(', ')}{t('components.tickItemsEditor.theNetworkLeavesAnUnknown')} {missingTicks.length === 1 ? t('components.tickItemsEditor.it') : t('components.tickItemsEditor.they')} {t('components.tickItemsEditor.willNotBeAMember')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {coinQualified && !checking && missingByChain.length > 0 ? (
-                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
+                <StatusMessage id={`${controlId}-missing`} variant="warning" role="alert">
                     {missingByChain.map((entry) => (
-                        <p key={entry.chainId} className={styles.warning}>
-                            Not found on {entry.label}: {entry.ticks.join(', ')}.
-                            The network leaves an unknown token out of the list, so {entry.ticks.length === 1 ? 'it' : 'they'} will
-                            not be a member.
+                        <p key={entry.chainId}>
+                            {t('components.tickItemsEditor.notFoundOn')} {entry.label}: {entry.ticks.join(', ')}{t('components.tickItemsEditor.theNetworkLeavesAnUnknown')} {entry.ticks.length === 1 ? t('components.tickItemsEditor.it') : t('components.tickItemsEditor.they')} {t('components.tickItemsEditor.willNotBeAMember')}
                         </p>
                     ))}
-                </div>
+                </StatusMessage>
             ) : null}
             {!checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
                 <p id={`${controlId}-unchecked`} className={styles.hint}>
-                    Not checked: {uncheckedTickItems.join(', ')}.
+                    {t('components.tickItemsEditor.notChecked2')} {uncheckedTickItems.join(', ')}.
                 </p>
             ) : null}
         </>

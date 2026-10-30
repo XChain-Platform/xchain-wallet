@@ -28,6 +28,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
 import { uniqueRows } from '../utils/pagedRows.js';
+import { listItemStatusText, listStatusText, listStatusTitle } from '../utils/listItemStatusText.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -143,6 +144,11 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
     // Items the network recorded invalid and left out (an unknown TICK, a
     // malformed or wrong-network ADDRESS); the LIST itself stays valid.
     const rejected = useMemo(() => edits.filter((e) => e?.status && e.status !== 'valid'), [edits]);
+    const statusWhy = listStatusText(data?.status);
+    let statusLabel = 'Unavailable';
+    if (statusWhy === 'pending') statusLabel = 'Pending';
+    else if (statusWhy) statusLabel = `Rejected: ${statusWhy}`;
+    else if (data?.status) statusLabel = 'Valid';
     // true / false from the explorer, null when it does not report the flag.
     const state = data?.state && typeof data.state === 'object' ? data.state : null;
     const resolution = state && typeof state.edit_resolution_active === 'boolean'
@@ -181,7 +187,6 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
         return wrap(
             <StatusMessage
                 variant="error"
-                className={styles.error}
                 recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
             >
                 {loadError}
@@ -201,9 +206,11 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
 
     return wrap(
         <>
+            {/* The ownership warning is the page notice, the first item of the content. */}
+            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Chain</dt>
-                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                <dt className={styles.detailsLabel}>Network</dt>
+                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
                 {name !== null ? (
@@ -229,7 +236,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                     </>
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
-                <dd className={styles.detailsValue}>{data.status === 'valid' ? 'Valid' : String(data.status || '?')}</dd>
+                <dd className={styles.detailsValue} title={statusWhy ? listStatusTitle(data.status) : undefined}>{statusLabel}</dd>
                 {data.block_index != null ? (
                     <>
                         <dt className={styles.detailsLabel}>Block</dt>
@@ -294,10 +301,11 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                         title={`Left out by the network (${rejected.length})`}
                         description="These items were sent but are not on the list: the network checks each item on its own."
                     />
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                        {/* Say why in plain words; the raw verdict stays in the tooltip. */}
                         {rejected.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
-                                <code>{e.tick ?? e.address}</code>{` (${e.status})`}
+                            <li key={i} title={listStatusTitle(e.status)} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
+                                <code>{e.tick ?? e.address}</code>{` (${listItemStatusText(e.status)})`}
                             </li>
                         ))}
                     </ul>
@@ -307,13 +315,16 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             {isFork && edits.length > 0 ? (
                 <>
                     <SectionHeader title="This fork's edit" />
-                    <ul className={styles.detailsList} style={{ display: 'block' }}>
-                        {edits.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
-                                <code>{e.tick ?? e.address}</code>
-                                {e.status && e.status !== 'valid' ? ` (${e.status})` : ''}
-                            </li>
-                        ))}
+                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                        {edits.map((e, i) => {
+                            const why = listItemStatusText(e.status);
+                            return (
+                                <li key={i} title={why ? listStatusTitle(e.status) : undefined} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
+                                    <code>{e.tick ?? e.address}</code>
+                                    {why ? ` (${why})` : ''}
+                                </li>
+                            );
+                        })}
                     </ul>
                 </>
             ) : null}
@@ -324,7 +335,6 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             />
 
             <SectionHeader title="Actions" />
-            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
             {canManage ? (
                 <div className={styles.actions}>
                     {onShare ? (
@@ -373,12 +383,17 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
 function MemberList({ items, isTick, messaging, chainId }) {
     const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
+        // A plain line, not a page message: the page's notice is the ownership warning.
+        return (
+            <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                No list members. Addresses added to this list appear here.
+            </p>
+        );
     }
     const visibleItems = items.slice(0, visibleLimit);
     return (
         <>
-            <ul className={styles.detailsList} style={{ display: 'block' }}>
+            <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
                 {visibleItems.map((item) => (
                     <li key={String(item)} style={{ padding: '2px 0' }}>
                         {isTick

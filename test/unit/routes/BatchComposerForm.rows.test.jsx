@@ -70,12 +70,45 @@ describe('BatchComposerForm rows', () => {
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
+    it('stops offering Add action once the batch holds the maximum number of actions', async () => {
+        const { flows } = await import('../../../packages/core/src/index.js');
+        expect(typeof flows.BATCH_MAX_COMMANDS).toBe('number');
+
+        mount();
+        const add = await screen.findByRole('button', { name: /Add action/ });
+        for (let i = 1; i < flows.BATCH_MAX_COMMANDS; i += 1) fireEvent.click(add);
+
+        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
+        expect(add).toBeDisabled();
+        expect(screen.getByText(new RegExp(`${flows.BATCH_MAX_COMMANDS} actions is the most one batch carries`))).toBeTruthy();
+    }, 60000);
+
+    it('waits to ask for an action until the user touches the row or presses Review', async () => {
+        mount();
+        const review = await screen.findByRole('button', { name: 'Review' });
+        expect(screen.queryByText(/pick an action/)).toBeNull();
+        expect(review).not.toBeDisabled();
+
+        fireEvent.click(review);
+        expect(screen.getByText('Step 1: pick an action.')).toBeInTheDocument();
+        expect(review).toBeDisabled();
+
+        fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
+        const rows = screen.getAllByRole('region', { name: /Step \d/ });
+        expect(within(rows[1]).queryByText(/pick an action/)).toBeNull();
+        fireEvent.change(within(rows[1]).getByRole('textbox', { name: 'Params (JSON object)' }), {
+            target: { value: '{"VERSION":"0","TEXT":"hi"}' },
+        });
+        expect(within(rows[1]).getByText('Step 2: pick an action.')).toBeInTheDocument();
+    });
+
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: /Add action/ }));
         const rows = screen.getAllByRole('region', { name: /Step \d/ });
         const second = within(rows[1]);
 
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(second.getByText('Step 2: pick an action.')).toBeInTheDocument();
         fireEvent.change(second.getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
         expect(second.queryByText('Step 2: pick an action.')).toBeNull();

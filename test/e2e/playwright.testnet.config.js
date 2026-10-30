@@ -24,10 +24,12 @@
 // spec sets an explicit budget for its full chain sequence.
 
 import { defineConfig, devices } from '@playwright/test';
+import { XCHAIN_SERVICE_HOSTS } from './fixtures/outboundGuard.js';
+import { suiteOrigin, suitePort } from './fixtures/testnet_origin.js';
 
 // Distinct from the regtest venue's 4183 and vite preview's 4173, so a testnet
 // pass can run beside either without either being mistaken for it.
-const PREVIEW_PORT = Number(process.env.XC_PREVIEW_PORT) || 4193;
+const PREVIEW_PORT = suitePort();
 
 export default defineConfig({
     testDir: './tests',
@@ -44,21 +46,26 @@ export default defineConfig({
     timeout: 8 * 60 * 60_000,
     expect: { timeout: 120_000 },
     globalSetup: './global-setup.testnet.js',
-    reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+    reporter: process.env.CI
+        ? [['github'], ['html', { open: 'never' }], ['json', { outputFile: './test-results-testnet/results.json' }]]
+        : [['list'], ['json', { outputFile: './test-results-testnet/results.json' }]],
     use: {
-        baseURL: `http://localhost:${PREVIEW_PORT}`,
+        baseURL: suiteOrigin(),
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
+        // The live testnet services are the venue; the guard still fails a
+        // spec that reaches any other host.
+        outboundLiveHosts: XCHAIN_SERVICE_HOSTS,
     },
     projects: [
         {
             name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
+            use: { ...devices['Desktop Chrome'], channel: 'chromium' },
         },
     ],
     webServer: {
-        command: `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
+        command: `node fixtures/testnet_origin.js && pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PREVIEW_PORT}`,
         // Never reuse: a preview already running serves whatever build it
         // started with, which is the stale-dist trap the build step closes.

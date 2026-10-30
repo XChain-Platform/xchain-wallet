@@ -9,17 +9,24 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const OWNED_LIST_REVALIDATE_MS = 16_000;
 
 /**
  * PC-10 "My Lists": owner-facing list view over every LIST action this
@@ -54,6 +61,7 @@ export function MyLists(props) {
 function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { offline, recheck } = useNetworkOffline({ walletId });
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -66,6 +74,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     );
     const [addressesReload, setAddressesReload] = useState(0);
     const [listsReload, setListsReload] = useState(0);
+    const [listsRevalidated, setListsRevalidated] = useState(false);
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
@@ -87,6 +96,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         if (!addressesByChain) return;
         const chains = Object.keys(addressesByChain);
         if (chains.length === 0) return;
+        // Offline the reads cannot finish; rows already shown stay, and the
+        // lists load again when the connection returns.
+        if (offline) return;
 
         const initial = {};
         for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
@@ -135,7 +147,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, listsReload]);
+    }, [addressesByChain, messaging, listsReload, offline]);
 
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -153,6 +165,15 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return states.some((s) => s.loading);
     }, [listsByChain]);
 
+    useEffect(() => {
+        if (!addressesByChain || offline || anyLoading || listsRevalidated) return undefined;
+        const timer = setTimeout(() => {
+            setListsRevalidated(true);
+            setListsReload((value) => value + 1);
+        }, OWNED_LIST_REVALIDATE_MS);
+        return () => clearTimeout(timer);
+    }, [addressesByChain, offline, anyLoading, listsRevalidated]);
+
     const loadErrors = useMemo(() => (
         Object.entries(listsByChain)
             .filter(([, s]) => s.error)
@@ -164,9 +185,13 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return allRows.filter((row) => {
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
+            // The row's own title (name and index) and kind are searchable, so what
+            // the list shows is what the search finds.
+            const kind = String(row.type) === '1' ? 'Token list' : 'Address list';
             return [
                 row.source, row.status, String(row.action_index ?? ''),
                 row.list_action_index != null ? String(row.list_action_index) : '',
+                row.name, listLabel(row.action_index ?? '?', row.name, kind), kind,
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
     }, [allRows, query, network]);
@@ -175,129 +200,116 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.TokenListIcon />}
             title="My lists"
-            // Only the round + belongs in the header: PageHeader styles every
-            // trailing button as a 38px circle, and the two text actions
-            // squeezed into circles spilled across the title at phone width.
-            // They live in the body's action row instead.
-            trailing={onCreateList ? (
-                <>
-                    {onCreateList ? (
-                        <Button
-                            type="button"
-                            className={local.addBtn}
-                            onClick={() => onCreateList()}
-                            aria-label="Create list"
-                            title="Create list"
-                        >
-                            <Icon.PlusIcon />
-                        </Button>
-                    ) : null}
-                </>
-            ) : undefined}
         />
     );
-    const secondaryActions = (onOpenSharedLists || onCreateUnionList) ? (
-        <div className={local.actions}>
-            {onOpenSharedLists ? (
-                <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-            ) : null}
-            {onCreateUnionList ? (
-                <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
-            ) : null}
-        </div>
-    ) : null;
+    // The page header holds only the title and Back, so every action of the
+    // screen sits in the content's actions row, in every state. An empty
+    // list offers Create list from its EmptyState instead, so the screen
+    // never shows it twice.
+    const actionsFor = (emptyOffersCreate) => (
+        (onCreateList && !emptyOffersCreate) || onOpenSharedLists || onCreateUnionList ? (
+            <>
+                {onCreateList && !emptyOffersCreate ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<Icon.PlusIcon />}
+                        onClick={() => onCreateList()}
+                    >
+                        Create list
+                    </Button>
+                ) : null}
+                {onOpenSharedLists ? (
+                    <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                ) : null}
+                {onCreateUnionList ? (
+                    <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
+                ) : null}
+            </>
+        ) : null
+    );
 
-    // Every state of the screen carries the secondary actions, as the
-    // header did before they moved out of it.
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, { notices = null, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
-                {secondaryActions}
+            <ListPage notices={notices} actions={actionsFor(emptyOffersCreate)} toolbar={toolbar}>
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
-    }
-    if (!addressesByChain) {
-        return wrap(
-            <div role="status" aria-label="Loading lists">
-                <Skeleton.List rows={5} />
-            </div>,
-        );
-    }
-    if (Object.keys(addressesByChain).length === 0) {
-        return wrap(
-            <EmptyState
-                title="No supported address"
-                body="Publishing a list requires an address on a supported chain."
-                titleAs="p"
-            />,
-        );
-    }
-
-    const toolbar = (
-        <>
-            <div className={local.searchField}>
-                <Input
-                    type="search"
-                    size="md"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search lists"
-                />
-            </div>
-            <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
-    );
-
-    return wrap(
-        <>
-            {loadErrors.length > 0 ? (
+        return wrap(null, undefined, {
+            notices: (
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
                     recovery={{
                         label: 'Try again',
                         onAction: () => {
-                            setListsByChain({});
-                            setListsReload((value) => value + 1);
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
                         },
                     }}
                 >
-                    {/* Names the chains only: the raw fetch error carries API paths and
-                        HTTP codes that mean nothing to the user. */}
-                    Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
+                    {addressesError}
                 </StatusMessage>
-            ) : null}
-            {anyLoading && visibleRows.length === 0 ? (
-                <div role="status" aria-label="Loading lists">
+            ),
+        });
+    }
+    if (!addressesByChain) {
+        return wrap(
+            <div aria-hidden="true"><Skeleton.List rows={5} /></div>,
+            undefined,
+            { notices: <StatusMessage variant="status" label={t('routes.myLists.loading')} busy>{t('routes.myLists.loading')}</StatusMessage> },
+        );
+    }
+    if (Object.keys(addressesByChain).length === 0) {
+        return wrap(
+            <EmptyState
+                title="No supported address"
+                body="Publishing a list requires an address on a supported network."
+                titleAs="p"
+            />,
+        );
+    }
+
+    const toolbar = (
+        <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search lists">
+            <NetworkFilterDropdown value={network} onChange={setNetwork} />
+        </ListToolbar>
+    );
+
+    // Offline, the screen's one message is its offline state below.
+    const loadingNotice = anyLoading && visibleRows.length === 0 && !offline;
+    const notices = loadErrors.length > 0 && !offline ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setListsByChain({});
+                    setListsReload((value) => value + 1);
+                },
+            }}
+        >
+            {/* Names the chains only: the raw fetch error carries API paths and
+                HTTP codes that mean nothing to the user. */}
+            Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
+        </StatusMessage>
+    ) : loadingNotice ? (
+        <StatusMessage variant="status" label={t('routes.myLists.loading')} busy>{t('routes.myLists.loading')}</StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
+
+    return wrap(
+        <>
+            {offline && allRows.length === 0 ? (
+                <OfflineEmptyState body="Your lists load when the connection returns." onRetry={recheck} />
+            ) : loadingNotice ? (
+                <div aria-hidden="true">
                     <Skeleton.List rows={5} />
                 </div>
             ) : loadErrors.length > 0 && allRows.length === 0 ? (
@@ -330,6 +342,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             )}
         </>,
         toolbar,
+        { notices, emptyOffersCreate },
     );
 }
 
@@ -337,8 +350,18 @@ function MyListRow({ row, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const isTick = String(row.type) === '1';
     const isFork = row.list_action_index != null && row.list_action_index !== '';
-    const status = String(row.status || '?');
-    const valid = status === 'valid';
+    // Show one word in the badge (a short uppercase pill) and put the plain
+    // reason for a refused list in its tooltip; never the indexer's code.
+    const statusWhy = listStatusText(row.status);
+    const valid = String(row.status ?? '').trim().toLowerCase() === 'valid';
+    let statusLabel = 'Unavailable';
+    let statusTitle;
+    if (valid) statusLabel = 'Valid';
+    else if (statusWhy === 'pending') statusLabel = 'Pending';
+    else if (statusWhy) {
+        statusLabel = 'Rejected';
+        statusTitle = `Rejected: ${statusWhy}`;
+    }
     const index = row.action_index ?? '?';
     const kind = isTick ? 'Token list' : 'Address list';
     const label = listLabel(index, row.name, kind);
@@ -369,9 +392,13 @@ function MyListRow({ row, onSelect }) {
             subtitle={isFork
                 ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
                 : 'Created list'}
+            trailingClassName={local.statusSlot}
             trailing={(
-                <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
-                    {valid ? 'Valid' : status}
+                <span
+                    className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}
+                    title={statusTitle}
+                >
+                    {statusLabel}
                 </span>
             )}
         />

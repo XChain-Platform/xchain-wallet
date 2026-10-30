@@ -1,81 +1,30 @@
-/* Countdown toast card for a held send. It stays above compact navigation
- * and the device safe area so its cancel action remains reachable.
+/* Countdown toast for a held send. It stays in the send confirmation's DOM
+ * (so the dialog's focus trap still reaches Cancel), but it is the same toast
+ * as every other one: the host stack's resting corner, safe-area insets,
+ * keyboard offset and motion rules, and the host card, message and action
+ * styles, composed from ToastHost.module.css (the stack) and
+ * ToastStack.module.css (the card).
  */
+.stack {
+    composes: viewport from './ToastHost.module.css';
+}
+
 .toast {
-    position: fixed;
-    inset-inline-start: calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
-    inset-inline-end: calc(var(--xc-space-4) + env(safe-area-inset-right, 0px));
-    max-width: 28rem;
-    margin-inline: auto;
-    bottom: calc(
-        var(--xc-space-4)
-        + var(--xc-bottom-bar-h, 0px)
-        + env(safe-area-inset-bottom, 0px)
-    );
-    z-index: var(--xc-z-toast);
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-card-pad);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-card-radius);
-    background: var(--xc-surface-raised);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-    box-shadow: var(--xc-shadow-toast);
-    animation: undo-toast-in var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
+    composes: toast variant_info from './ToastStack.module.css';
 }
 
-:global(html[data-xc-keyboard='open']) .toast {
-    bottom: calc(
-        100vh - var(--xc-viewport-h, 100vh)
-        - env(safe-area-inset-top, 0px)
-        + var(--xc-space-4)
-    );
-}
-
-@media (prefers-reduced-motion: reduce) {
-    :global(:root:not([data-xc-reduced-motion='no-preference'])) .toast { animation: none; }
-}
-
-:global(:root[data-xc-reduced-motion='reduce']) .toast { animation: none; }
-
-@keyframes undo-toast-in {
-    from { opacity: 0; transform: translateY(var(--xc-space-2)); }
-    to   { opacity: 1; transform: translateY(0); }
+.icon {
+    composes: icon from './ToastStack.module.css';
 }
 
 .message {
-    flex: 1 1 auto;
-    min-width: 0;
-    word-break: break-word;
+    composes: message from './ToastStack.module.css';
+}
+
+.controls {
+    composes: controls from './ToastStack.module.css';
 }
 
 .cancelBtn {
-    flex: 0 0 auto;
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-text);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-size: var(--xc-text-xs);
-    cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    font-family: inherit;
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.cancelBtn:hover {
-    background: var(--xc-bg-muted);
-}
-.cancelBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    composes: actionBtn from './ToastStack.module.css';
 }

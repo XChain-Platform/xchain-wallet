@@ -5,10 +5,17 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { Profiler } from 'react';
+import { Profiler, useContext, useState } from 'react';
 import { readFileSync } from 'node:fs';
 
-import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
+import {
+    frameScrollbarWidth,
+    Screen,
+    ScrollRestoration,
+    WalletRouteScope,
+} from '../../../packages/core/src/ui/Screen.jsx';
+import { ShellRouteOutlet } from '../../../packages/core/src/shared/components/ShellRouteOutlet.jsx';
+import { CurrentRouteContext } from '../../../packages/core/src/shared/components/navSurface.js';
 import styles from '../../../packages/core/src/ui/Screen.module.css';
 
 const REVIEW_SCROLL_FORMS = [
@@ -43,6 +50,7 @@ const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualVi
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     if (originalVisualViewport) {
         Object.defineProperty(window, 'visualViewport', originalVisualViewport);
     } else {
@@ -81,6 +89,29 @@ describe('<Screen>', () => {
         expect(main).toHaveAttribute('tabindex', '-1');
         expect(screen.queryByRole('banner')).not.toBeInTheDocument();
         expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    });
+
+    it('keeps header padding aligned with a changing classic scrollbar lane', () => {
+        let resize;
+        const disconnect = vi.fn();
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(callback) { resize = callback; }
+            observe() {}
+            disconnect() { disconnect(); }
+        });
+        const view = render(<Screen header={<span>Settings</span>}>Content</Screen>);
+        const root = view.container.firstChild;
+        const main = screen.getByRole('main');
+        expect(root.style.getPropertyValue('--xc-frame-scrollbar')).toBe('0px');
+        Object.defineProperty(main, 'offsetWidth', { configurable: true, value: 320 });
+        Object.defineProperty(main, 'clientWidth', { configurable: true, value: 310 });
+
+        act(() => resize());
+
+        expect(frameScrollbarWidth(main)).toBe(10);
+        expect(root.style.getPropertyValue('--xc-frame-scrollbar')).toBe('10px');
+        view.unmount();
+        expect(disconnect).toHaveBeenCalledOnce();
     });
 
     it('fits above a resized visual viewport and reveals the focused field', () => {
@@ -210,5 +241,95 @@ describe('<ScrollRestoration>', () => {
             </ScrollRestoration>,
         );
         expect(body.scrollTop).toBe(325);
+    });
+});
+
+describe('<WalletRouteScope>', () => {
+    const walletData = {
+        'wallet-a': {
+            home: ['A balance', 'A token filter', 'A pinned token'],
+            history: ['A history row', 'A history filter'],
+            send: ['A transaction draft'],
+            receive: ['A selected address'],
+        },
+        'wallet-b': {
+            home: ['B balance', 'B token filter', 'B pinned token'],
+            history: ['B history row', 'B history filter'],
+            send: ['B transaction draft'],
+            receive: ['B selected address'],
+        },
+    };
+
+    function MainScreen({ name, walletId }) {
+        const [data] = useState(() => walletData[walletId][name]);
+        return (
+            <Screen>
+                <h1>{name}</h1>
+                {data.map((value) => <div key={value}>{value}</div>)}
+            </Screen>
+        );
+    }
+
+    it.each([
+        ['home'],
+        ['history'],
+        ['send'],
+        ['receive'],
+    ])('shows only the selected wallet data and scroll on the %s screen', (routeKey) => {
+        const tree = (walletId) => (
+            <WalletRouteScope walletId={walletId} routeKey={routeKey}>
+                <MainScreen name={routeKey} walletId={walletId} />
+            </WalletRouteScope>
+        );
+        const view = render(
+            tree('wallet-a'),
+        );
+        for (const value of walletData['wallet-a'][routeKey]) {
+            expect(screen.getByText(value)).toBeInTheDocument();
+        }
+        screen.getByRole('main').scrollTop = 240;
+
+        view.rerender(tree('wallet-b'));
+
+        for (const value of walletData['wallet-a'][routeKey]) {
+            expect(screen.queryByText(value)).not.toBeInTheDocument();
+        }
+        for (const value of walletData['wallet-b'][routeKey]) {
+            expect(screen.getByText(value)).toBeInTheDocument();
+        }
+        expect(screen.getByRole('main').scrollTop).toBe(0);
+        screen.getByRole('main').scrollTop = 80;
+
+        view.rerender(tree('wallet-a'));
+
+        expect(screen.getByRole('main').scrollTop).toBe(240);
+        for (const value of walletData['wallet-b'][routeKey]) {
+            expect(screen.queryByText(value)).not.toBeInTheDocument();
+        }
+    });
+});
+
+describe('<ShellRouteOutlet> wallet scope', () => {
+    function RouteProbe() {
+        const routeId = useContext(CurrentRouteContext);
+        return <Screen><span data-testid="route-id">{routeId}</span></Screen>;
+    }
+
+    it('keeps the bare route id and starts another wallet at the top', () => {
+        const tree = (walletId) => (
+            <ShellRouteOutlet routeKey="history" walletId={walletId} onHome={() => {}}>
+                <RouteProbe />
+            </ShellRouteOutlet>
+        );
+        const view = render(tree('wallet-a'));
+        expect(screen.getByTestId('route-id').textContent).toBe('history');
+        screen.getByRole('main').scrollTop = 200;
+
+        view.rerender(tree('wallet-b'));
+        expect(screen.getByTestId('route-id').textContent).toBe('history');
+        expect(screen.getByRole('main').scrollTop).toBe(0);
+
+        view.rerender(tree('wallet-a'));
+        expect(screen.getByRole('main').scrollTop).toBe(200);
     });
 });

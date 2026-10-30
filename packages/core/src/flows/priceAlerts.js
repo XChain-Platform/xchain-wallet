@@ -23,6 +23,21 @@ import {
 const alertOperationTails = new WeakMap();
 
 /**
+ * Fired on the window once the watcher disarms an alert, so an open alerts list
+ * re-reads the store instead of showing a fired alert as armed until reopened.
+ * Hosts without a window (a background worker, Electron main) dispatch nothing.
+ */
+export const PRICE_ALERTS_CHANGED_EVENT = 'xchain:price-alerts-changed';
+
+function announcePriceAlertsChanged() {
+    try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent(PRICE_ALERTS_CHANGED_EVENT));
+        }
+    } catch { /* a listener must never fail the write that announced it */ }
+}
+
+/**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} params
  */
 export async function listAlertsForWallet({ vault, walletId }) {
@@ -103,18 +118,24 @@ export async function clearAlert({ vault, id, walletId }) {
  * Disarm an alert after it fires (one-shot). Records when it triggered.
  * Called by the PriceAlertWatcher; a no-op if the id no longer exists.
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, id: string, at?: string }} params
+ * A `terms` key (priceAlertKey of the alert as it fired) leaves an alert that was
+ * edited or re-armed under other terms since then untouched.
+ *
+ * @param {{ vault: import('../storage/Vault.js').Vault, id: string, at?: string, terms?: string }} params
  */
-export async function markAlertTriggered({ vault, id, at }) {
+export async function markAlertTriggered({ vault, id, at, terms }) {
     if (!vault) throw new Error('markAlertTriggered: vault is required');
     if (!id) throw new Error('markAlertTriggered: id is required');
-    return withAlertOperation(vault, id, async () => {
+    const result = await withAlertOperation(vault, id, async () => {
         const alert = await vault.priceAlerts.get(id);
         if (!alert) return null;
+        if (terms !== undefined && priceAlertKey(alert) !== terms) return null;
         const updated = { ...alert, status: 'triggered', triggeredAt: at || new Date().toISOString() };
         await vault.priceAlerts.put(updated);
         return updated;
     });
+    if (result) announcePriceAlertsChanged();
+    return result;
 }
 
 /**

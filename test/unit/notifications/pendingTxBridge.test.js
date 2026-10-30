@@ -67,3 +67,40 @@ describe('markPendingTxIndexed', () => {
         expect(await markPendingTxIndexed(vault, 'nope')).toBe(false);
     });
 });
+
+describe('markPendingTxIndexed with a fee-bumped original', () => {
+    const sent = { chain: 'BTC', network: 'mainnet', fromAddress: 'A', status: 'broadcast' };
+
+    it('retires the replacement that can no longer confirm', async () => {
+        const vault = makeVault([
+            { ...sent, id: 'orig', txid: 'AA', status: 'rbf-replaced', rbfReplacement: 'bb' },
+            { ...sent, id: 'bump', txid: 'bb' },
+        ]);
+        await markPendingTxIndexed(vault, 'AA');
+        const byId = Object.fromEntries(vault._store.map((r) => [r.id, r]));
+        expect(byId.orig.status).toBe('indexed');
+        expect(byId.bump.status).toBe('failed');
+        expect(byId.bump.error).toMatch(/original transaction confirmed/);
+    });
+
+    it('retires a whole chain of bumps and leaves unrelated sends alone', async () => {
+        const vault = makeVault([
+            { ...sent, id: 'o', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' },
+            { ...sent, id: 'b1', txid: 'bb', status: 'rbf-replaced', rbfReplacement: 'cc' },
+            { ...sent, id: 'b2', txid: 'cc' },
+            { ...sent, id: 'other', txid: 'dd' },
+        ]);
+        await markPendingTxIndexed(vault, 'aa');
+        const status = Object.fromEntries(vault._store.map((r) => [r.id, r.status]));
+        expect(status).toEqual({ o: 'indexed', b1: 'failed', b2: 'failed', other: 'broadcast' });
+    });
+
+    it('does not touch a replacement that confirmed itself', async () => {
+        const vault = makeVault([
+            { ...sent, id: 'orig', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' },
+            { ...sent, id: 'bump', txid: 'bb', status: 'indexed' },
+        ]);
+        await markPendingTxIndexed(vault, 'aa');
+        expect(vault._store.find((r) => r.id === 'bump').status).toBe('indexed');
+    });
+});

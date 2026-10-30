@@ -135,7 +135,7 @@ describe('T through Z route keyboard flows', () => {
         }));
     });
 
-    it('operates VerifySignatureForm in field order and dismisses its chain overlay with Escape', async () => {
+    it('operates VerifySignatureForm in field order and dismisses its network overlay with Escape', async () => {
         const onBack = vi.fn();
         const verifyMessageRequest = vi.fn().mockResolvedValue({ valid: true });
         const view = renderRoute(
@@ -146,8 +146,9 @@ describe('T through Z route keyboard flows', () => {
             },
         );
 
+        // The picker fills once settings name the active network.
+        const chain = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        const chain = screen.getByRole('button', { name: /Chain: Bitcoin/ });
         const address = screen.getByLabelText('Address');
         const message = screen.getByLabelText('Message');
         const signature = screen.getByLabelText('Signature');
@@ -159,10 +160,10 @@ describe('T through Z route keyboard flows', () => {
 
         chain.focus();
         fireEvent.keyDown(chain, { key: 'ArrowDown' });
-        const chainList = await screen.findByRole('listbox', { name: 'Chain' });
+        const chainList = await screen.findByRole('listbox', { name: 'Network' });
         await waitFor(() => expect(chainList.contains(document.activeElement)).toBe(true));
         fireEvent.keyDown(document.activeElement, { key: 'Escape' });
-        expect(screen.queryByRole('listbox', { name: 'Chain' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('listbox', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(chain);
 
         fireEvent.change(address, { target: { value: 'bc1qcounterparty' } });

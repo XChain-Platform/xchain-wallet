@@ -49,7 +49,7 @@
 // was still editing for while this was written; asserting on
 //     half-written copy would report on their draft rather than on the product.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -140,19 +140,6 @@ async function projectedProtocolFeeSats(page) {
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
@@ -187,7 +174,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Mandatory Lane Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             // Every form has its OWN chain picker and they all default to
@@ -217,7 +204,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('LEG 1: the priced action, screen against chain', async () => {
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -291,7 +278,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 'BROADCAST is priced on this venue, so it cannot serve as the zero-fee case')
                 .toBe(0);
 
-            await gotoPalette(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Broadcast a message');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);

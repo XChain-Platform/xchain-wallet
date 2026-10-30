@@ -8,12 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 3: extracted shared
-// WatcherResultPanel component. Renders the unsigned PSBT hex +
-// animated QR (XCW or BBQr) for cross-device transport when a
-// watcher-mode wallet builds a PSBT. Originally a private component
-// inside Send.jsx; lifted out so the rest of the action authoring
-// surface (FOLLOWUP 5 sweep) can render the same panel.
+// Smoke for the shared WatcherExport body, shown by ResultScreen
+// state="unsigned". It renders the unsigned PSBT hex and an animated QR (XCW
+// or BBQr) for cross-device transport when a watcher-mode wallet builds a
+// PSBT, so every action authoring surface renders the same panel.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -23,8 +21,11 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-const panelPath = 'packages/core/src/shared/components/WatcherResultPanel.jsx';
-const cssPath = 'packages/core/src/shared/components/WatcherResultPanel.module.css';
+const panelPath = 'packages/core/src/shared/components/WatcherExport.jsx';
+const cssPath = 'packages/core/src/shared/components/WatcherExport.module.css';
+const screenPath = 'packages/core/src/shared/components/ResultScreen.jsx';
+assert.ok(existsSync(join(wsRoot, screenPath)), `${screenPath} exists`);
+const screenSrc = readFileSync(join(wsRoot, screenPath), 'utf8');
 assert.ok(existsSync(join(wsRoot, panelPath)), `${panelPath} exists`);
 assert.ok(existsSync(join(wsRoot, cssPath)), `${cssPath} exists`);
 
@@ -34,12 +35,12 @@ const panelSrc = readFileSync(join(wsRoot, panelPath), 'utf8');
 
 assert.match(
     panelSrc,
-    /import \{ AnimatedQrFrames, Button, RadioGroup, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    /import \{ AnimatedQrFrames, RadioGroup, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
     'panel imports UI primitives from core/ui',
 );
 assert.match(
     panelSrc,
-    /import \{ CopyButton, FormSection, Textarea \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    /import \{ CopyButton, Textarea \} from '\.\.\/\.\.\/ui\/index\.js';/,
     'panel uses the shared section, copy, and textarea primitives',
 );
 assert.match(
@@ -57,16 +58,21 @@ assert.match(
 
 assert.match(
     panelSrc,
-    /export function WatcherResultPanel\(\{[\s\S]+?\}\)/,
-    'WatcherResultPanel is a named export',
+    /export function WatcherExport\(\{ result \}\)/,
+    'WatcherExport is a named export',
 );
-assert.match(panelSrc, /onBuildAnother/, 'accepts onBuildAnother prop');
-assert.match(panelSrc, /onSendAnother/, 'accepts onSendAnother prop (Send.jsx legacy alias)');
-assert.match(panelSrc, /onDone/, 'accepts onDone prop');
 assert.match(
-    panelSrc,
-    /title = 'Unsigned transaction, ready for signing'/,
-    'title prop has a default heading',
+    screenSrc,
+    /export function ResultScreen\(\{[\s\S]+?\}\)/,
+    'ResultScreen is a named export',
+);
+assert.match(screenSrc, /onBuildAnother/, 'accepts onBuildAnother prop');
+assert.match(screenSrc, /onSendAnother/, 'accepts onSendAnother prop (Send.jsx legacy alias)');
+assert.match(screenSrc, /onDone/, 'accepts onDone prop');
+assert.match(
+    screenSrc,
+    /Unsigned transaction, ready for signing|unsignedTransactionReadyForSigning/,
+    'the unsigned state has a default heading',
 );
 
 // ─── 3. Render shape ---------------------------------------------
@@ -80,8 +86,8 @@ assert.match(
 assert.match(panelSrc, /qrFormat === 'bbqr'/, 'panel branches export format on qrFormat');
 assert.match(panelSrc, /<AnimatedQrFrames\b/, 'panel renders AnimatedQrFrames');
 assert.match(panelSrc, /readOnly[\s\S]+?value=\{psbtHex\}/, 'panel exposes the hex in a read-only textarea');
-assert.match(panelSrc, /Copy hex/, 'panel exposes a Copy hex affordance');
-assert.match(panelSrc, /Plain-text chunks/, 'panel exposes the plain-text chunks fallback');
+assert.match(panelSrc, /Copy code|watcherResultPanel\.copyHex/, 'panel exposes a Copy code affordance');
+assert.match(panelSrc, /Plain-text chunks|watcherResultPanel\.plainTextChunks/, 'panel exposes the plain-text chunks fallback');
 assert.match(
     panelSrc,
     /BBQr \(Sparrow \/ Coldcard \/ SeedSigner\)/,
@@ -95,14 +101,13 @@ assert.doesNotMatch(panelSrc, /<input\b/, 'panel has no route-local radio inputs
 
 const cssSrc = readFileSync(join(wsRoot, cssPath), 'utf8');
 for (const cls of [
-    'successHint',
     'successSummary', 'successRow', 'successMono',
     'successTxidBlock', 'successTxidRow',
-    'successLabel', 'hint', 'actions',
+    'successLabel', 'hint', 'body',
 ]) {
     assert.ok(
         new RegExp(`\\.${cls}\\b`).test(cssSrc),
-        `WatcherResultPanel.module.css defines .${cls}`,
+        `WatcherExport.module.css defines .${cls}`,
     );
 }
 

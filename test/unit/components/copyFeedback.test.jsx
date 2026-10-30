@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RawPsbtViewer } from '../../../packages/core/src/shared/components/RawPsbtViewer.jsx';
-import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 import * as clipboard from '../../../packages/core/src/shared/clipboard.js';
 
 let writeText;
@@ -28,22 +28,22 @@ describe('clipboard control feedback', () => {
     it('confirms a successful watcher transaction copy inline', async () => {
         writeText.mockResolvedValueOnce(undefined);
         render(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'deadbeef' }}
                 onDone={() => {}}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
 
-        expect((await screen.findAllByText('Copied: unsigned transaction hex')).length).toBeGreaterThan(0);
+        expect((await screen.findAllByText('Copied: unsigned transaction code')).length).toBeGreaterThan(0);
         expect(writeText).toHaveBeenCalledWith('deadbeef');
     });
 
     it('reports a plain failure when raw transaction copying is unavailable', async () => {
         render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
 
         expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith('deadbeef');
@@ -51,13 +51,13 @@ describe('clipboard control feedback', () => {
 
     it('reports a plain failure when watcher transaction copying is unavailable', async () => {
         render(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'deadbeef' }}
                 onDone={() => {}}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
 
         expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith('deadbeef');
@@ -65,15 +65,15 @@ describe('clipboard control feedback', () => {
 
     it('renders watcher copy and transaction fields with style-guide controls', () => {
         render(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'deadbeef' }}
                 onDone={() => {}}
             />,
         );
 
-        expect(screen.getByRole('textbox', { name: 'Unsigned transaction hex' }).className)
+        expect(screen.getByRole('textbox', { name: 'Unsigned transaction code' }).className)
             .toMatch(/input/);
-        expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }).className)
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }).className)
             .toMatch(/btn/);
         expect(screen.getByRole('radiogroup', { name: 'Animated QR format' }))
             .toBeInTheDocument();
@@ -92,43 +92,43 @@ describe('clipboard control feedback', () => {
             resolveCopy = resolve;
         }));
         const { rerender } = render(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'deadbeef' }}
                 onDone={() => {}}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
 
         rerender(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'cafebabe' }}
                 onDone={() => {}}
             />,
         );
         await act(async () => resolveCopy({ ok: true }));
 
-        expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }))
-            .toHaveTextContent('Copy hex');
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
+            .toHaveTextContent('Copy code');
     });
 
     it('resets shared copy feedback when the transaction payload changes', async () => {
         writeText.mockResolvedValue(undefined);
         const { rerender } = render(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'deadbeef' }}
                 onDone={() => {}}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-        expect((await screen.findAllByText('Copied: unsigned transaction hex')).length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        expect((await screen.findAllByText('Copied: unsigned transaction code')).length).toBeGreaterThan(0);
 
         rerender(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{ psbtHex: 'cafebabe' }}
                 onDone={() => {}}
             />,
         );
-        expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }))
-            .toHaveTextContent('Copy hex');
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
+            .toHaveTextContent('Copy code');
     });
 });

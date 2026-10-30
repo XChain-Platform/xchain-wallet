@@ -40,6 +40,7 @@
 //     fee the confirm screen itself quoted. That equality is the whole test:
 //     it ties the number Max computed to the number the transaction paid.
 
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
@@ -301,8 +302,12 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
 
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await page.getByTestId('confirm-approve').click();
-            await expect(page.getByRole('main'), 'no transaction id appeared after Approve')
-                .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
+            // The success screen draws the id truncated; wait on the full id
+            // in its accessible name.
+            await waitForShownTxid(page.getByRole('main'), {
+                timeout: 180_000,
+                message: 'no transaction id appeared after Approve',
+            });
 
             // And the chain's own answer to the same question. The arithmetic
             // above is the confirm screen agreeing with itself; this is the utxo

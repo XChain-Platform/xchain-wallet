@@ -38,8 +38,21 @@ describe('GovernancePolls states', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
         expect(screen.getByRole('heading', { name: 'Governance' })).toBeInTheDocument();
-        expect(screen.getByText(/Loading/)).toBeInTheDocument();
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent(/Loading/);
+        expect(notice.parentElement.firstElementChild).toBe(notice);
         expect(screen.queryByText('No governance address')).toBeNull();
+    });
+
+    it('renders poll loading through StatusMessage before the toolbar', async () => {
+        mount({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            governancePolls: vi.fn(() => pending()),
+        });
+
+        const notice = await screen.findByRole('status');
+        expect(notice).toHaveTextContent('Loading governance polls');
+        expect(notice.parentElement.firstElementChild).toBe(notice);
     });
 
     it('shows the empty-wallet state when no governance address exists', async () => {

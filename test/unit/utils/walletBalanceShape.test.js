@@ -8,7 +8,7 @@
 // walletBalances output shape (see flows/balances.js AddressBalancesEntry).
 
 import { describe, it, expect } from 'vitest';
-import { sumTickOnChain } from '../../../packages/core/src/shared/utils/walletBalanceShape.js';
+import { chainReadFailed, sumTickOnChain } from '../../../packages/core/src/shared/utils/walletBalanceShape.js';
 
 const CHAIN = 'bitcoin-regtest';
 
@@ -100,5 +100,28 @@ describe('sumTickOnChain', () => {
         const failed = { address: 'addrFail', balances: null, error: 'boom' };
         const byChain = { [CHAIN]: [failed, entry('addrB', [['S18PROBE', '600']])] };
         expect(sumTickOnChain(byChain, CHAIN, 'S18PROBE')).toBe('600');
+    });
+});
+
+describe('chainReadFailed', () => {
+    it('flags a chain where one address failed to read', () => {
+        const failed = { address: 'addrFail', balances: null, error: 'boom' };
+        const byChain = { [CHAIN]: [failed, entry('addrB', [['S18PROBE', '600']])] };
+        expect(chainReadFailed(byChain, CHAIN)).toBe(true);
+    });
+
+    it('passes a chain whose every address answered, and other chains', () => {
+        const byChain = {
+            [CHAIN]: [entry('addrA', [['S18PROBE', '1']])],
+            'litecoin-regtest': [{ address: 'addrL', balances: null, error: 'boom' }],
+        };
+        expect(chainReadFailed(byChain, CHAIN)).toBe(false);
+        expect(chainReadFailed(null, CHAIN)).toBe(false);
+    });
+
+    it('can be scoped to one address', () => {
+        const byChain = { [CHAIN]: [{ address: 'addrFail', balances: null, error: 'boom' }, entry('addrB', [])] };
+        expect(chainReadFailed(byChain, CHAIN, { address: 'addrB' })).toBe(false);
+        expect(chainReadFailed(byChain, CHAIN, { address: 'addrFail' })).toBe(true);
     });
 });

@@ -33,7 +33,8 @@ function mountAdmin(tokenInfo) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [DOGE]: [DOGE_ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getTokenInfo: vi.fn().mockResolvedValue(tokenInfo),
+        // Token settings are owner-only; the DOGE source issued the token.
+        getTokenInfo: vi.fn().mockResolvedValue({ creator: DOGE_ADDRESS.address, ...tokenInfo }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
@@ -66,15 +67,15 @@ const applyButton = () => screen.getByRole('button', { name: /Bridge settings|Si
 afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
 
 describe('TokenAdminForm bridge settings: the opt-in', () => {
-    it('offers every chain but the one the token is native to, unchecked by default', async () => {
+    it('offers every network but the one the token is native to, unchecked by default', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
-        await waitFor(() => expect(screen.getByText('Destination chains')).toBeInTheDocument(), WAIT);
+        await waitFor(() => expect(screen.getByText('Destination networks')).toBeInTheDocument(), WAIT);
         expect(screen.getByLabelText('Bitcoin')).not.toBeChecked();
         expect(screen.getByLabelText('Litecoin')).not.toBeChecked();
         expect(screen.queryByLabelText('Dogecoin')).toBeNull();
     });
 
-    it('pre-fills the chains the issuer already opted in to', async () => {
+    it('pre-fills the networks the issuer already opted in to', async () => {
         mountAdmin({
             chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'BTC',
         });
@@ -96,7 +97,20 @@ describe('TokenAdminForm bridge settings: the opt-in', () => {
         await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
     });
 
-    it('says plainly that closing a chain never strands existing holders', async () => {
+    // The boxes emit the networks in the form's own order, so a stored list in
+    // another order, or with a repeat, names the same networks and is no change.
+    it.each(['LTC,BTC', 'BTC,LTC,BTC'])('treats the untouched form over a stored %s as unchanged', async (bridgeChains) => {
+        mountAdmin({
+            chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains,
+        });
+        await waitFor(() => expect(screen.getByLabelText('Litecoin')).toBeChecked(), WAIT);
+        expect(screen.getByLabelText('Bitcoin')).toBeChecked();
+        expect(applyButton()).toBeDisabled();
+        fireEvent.click(screen.getByLabelText('Litecoin'));
+        await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
+    });
+
+    it('says plainly that closing a network never strands existing holders', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
         const note = await screen.findByText(/closes the door to NEW transfers/i, {}, WAIT);
         expect(note.textContent).toContain('holders can still bring those');
@@ -109,7 +123,7 @@ describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
             chainId: DOGE, tick: 'FUFU', locks: {}, allowList: '1234',
         });
         const msg = await screen.findByText(/bound to an address list/i, {}, WAIT);
-        expect(msg.textContent).toContain('would carry none of that policy on the other chain');
+        expect(msg.textContent).toContain('would carry none of that policy on the other network');
         expect(msg.textContent).toContain('Detach the policy list first');
         expect(screen.getByLabelText('Bitcoin')).toBeDisabled();
     });
@@ -170,5 +184,20 @@ describe('IssueTokenForm: the bridgeability disclosure', () => {
         expect(note.textContent).toContain('Manage Token');
         const listNote = screen.getByText(/can't be bridged, and a bound list can never be cleared/i);
         expect(listNote).toBeInTheDocument();
+    });
+});
+
+// The refusal leads the page, above the network boxes, the depth field and the
+// credentials, so the Review press that raised it moves focus there.
+describe('TokenAdminForm bridge settings: a Review refusal takes focus', () => {
+    it('focuses the depth refusal raised by the Review press', async () => {
+        mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'BTC' });
+        const depth = await screen.findByLabelText(/Minimum confirmations/i, {}, WAIT);
+        fireEvent.change(depth, { target: { value: 'six' } });
+        await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
+        applyButton().focus();
+        fireEvent.click(applyButton());
+        const refusal = await screen.findByText('Minimum confirmations must be a whole number of blocks.', {}, WAIT);
+        await waitFor(() => expect(document.activeElement?.contains(refusal)).toBe(true), WAIT);
     });
 });

@@ -124,13 +124,34 @@ describe('useActionProofVerification', () => {
         await new Promise((resolve) => { setTimeout(resolve, 0); });
         expect(verifyAction).toHaveBeenCalledTimes(2);
 
+        // The key set changed: only the new item is checked, since the verdict
+        // for `first` already settled.
         rerender({ items: [first, third] });
         await waitFor(() => expect(result.current.third?.status).toBe('verified'));
-        expect(verifyAction).toHaveBeenCalledTimes(4);
-        expect(verifyAction).toHaveBeenCalledWith({
+        expect(verifyAction).toHaveBeenCalledTimes(3);
+        expect(verifyAction).toHaveBeenLastCalledWith({
             chainId: 'litecoin-regtest',
             actionIndex: 3,
         });
+        expect(result.current.first?.status).toBe('verified');
+    });
+
+    it('checks an unavailable item again when the key set changes', async () => {
+        const verifyAction = vi.fn(async () => ({
+            status: 'unavailable',
+            reason: 'NOT_YET_CHECKPOINTED',
+        }));
+        const messaging = { verifyAction };
+        const { result, rerender } = renderHook(
+            ({ items }) => useActionProofVerification({ messaging, items, enabled: true }),
+            { initialProps: { items: [first] } },
+        );
+        await waitFor(() => expect(result.current.first?.status).toBe('unavailable'));
+        expect(verifyAction).toHaveBeenCalledTimes(1);
+
+        rerender({ items: [first, second] });
+        await waitFor(() => expect(result.current.second?.status).toBe('unavailable'));
+        expect(verifyAction).toHaveBeenCalledTimes(3);
     });
 
     it('stops workers before queued items start after unmount', async () => {

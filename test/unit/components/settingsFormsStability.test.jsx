@@ -18,12 +18,13 @@ let messaging;
 let nativeBack;
 let capacitorApp;
 let unsupportedFiatCurrency;
+let shell;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, unsupportedFiatCurrency, update }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ shell: 'web', messaging }),
+    useMessaging: () => ({ shell, messaging }),
 }));
 vi.mock('../../../packages/core/src/shared/components/settings/BiometricRow.jsx', () => ({ BiometricRow: () => null }));
 vi.mock('../../../packages/core/src/shared/components/settings/PanicModeRow.jsx', () => ({ PanicModeRow: () => null }));
@@ -67,6 +68,7 @@ beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
     unsupportedFiatCurrency = null;
+    shell = 'web';
     messaging = {
         sendHoldCancel: vi.fn(),
         listContacts: vi.fn(async () => []),
@@ -82,6 +84,17 @@ afterEach(async () => {
 });
 
 describe('settings form validation', () => {
+    it('uses app-close wording for auto-lock Never on desktop', () => {
+        shell = 'desktop';
+        settings = { ...settings, autolockMinutes: 0 };
+        render(<SafetySection />);
+
+        const select = screen.getByLabelText('Auto-lock timeout');
+        const never = Array.from(select.options).find((option) => option.value === '0');
+        expect(never).toHaveTextContent('Never (until the app closes)');
+        expect(never.textContent).not.toMatch(/tab/i);
+    });
+
     it('closes the fiat currency dropdown on Android Back instead of minimizing the app', () => {
         render(<LanguageRegionSection />);
         const picker = screen.getByLabelText('Fiat currency');
@@ -97,13 +110,39 @@ describe('settings form validation', () => {
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
+    it('closes the fiat currency list when focus leaves an option for another control', () => {
+        render(<><LanguageRegionSection /><button type="button">After</button></>);
+        const picker = screen.getByLabelText('Fiat currency');
+        act(() => picker.focus());
+        const listbox = screen.getByRole('listbox', { name: 'Supported fiat currencies' });
+        act(() => within(listbox).getAllByRole('option')[0].focus());
+        expect(screen.getByRole('listbox', { name: 'Supported fiat currencies' })).toBeInTheDocument();
+
+        act(() => screen.getByRole('button', { name: 'After' }).focus());
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+    });
+
+    it('returns focus to the fiat currency search when Back closes the list from an option', () => {
+        render(<LanguageRegionSection />);
+        const picker = screen.getByLabelText('Fiat currency');
+        act(() => picker.focus());
+        act(() => within(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .getAllByRole('option')[2].focus());
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+        expect(picker).toHaveFocus();
+    });
+
     it('explains the USD fallback for an unsupported saved currency', () => {
         settings = { ...settings, fiatCurrency: 'USD' };
         unsupportedFiatCurrency = 'XYZ';
         render(<LanguageRegionSection />);
 
         expect(screen.getByRole('status')).toHaveTextContent(
-            'XYZ is not supported. Values are shown in USD.',
+            'XYZ isn\'t supported. Values are shown in USD.',
         );
         expect(screen.getByLabelText('Fiat currency').value).toContain('USD');
     });
@@ -145,10 +184,10 @@ describe('settings form validation', () => {
     it('uses shared wrapping rows and describes language and currency effects', () => {
         render(<LanguageRegionSection />);
 
-        const languageRow = screen.getByLabelText('Language').parentElement;
+        const languageRow = screen.getByLabelText('Language').closest('[data-settings-control]').parentElement;
         expect(languageRow.style.flexWrap).toBe('wrap');
-        expect(screen.getByText(/language used for wallet navigation/)).toBeTruthy();
-        expect(screen.getByText(/Asset balances are unchanged/)).toBeTruthy();
+        expect(screen.queryByText(/language used for wallet navigation/)).toBeNull();
+        expect(screen.getByText('Changes estimates, not asset balances.')).toBeTruthy();
     });
 
     it('offers pseudo-RTL only while developer mode is enabled', () => {
@@ -211,6 +250,27 @@ describe('settings form validation', () => {
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
             record: { id: 'contact-1', name: 'Alice' },
         }));
+    });
+
+    it('imports every contact in one batch save when the shell offers one', async () => {
+        messaging.saveContacts = vi.fn(async () => ({
+            saved: [{ id: 'contact-1', name: 'Alice' }],
+            failures: [{ index: 1, message: 'This address is already saved for Carol: bc1qcarol' }],
+        }));
+        render(<ContactsSection />);
+        await screen.findByText('0 contacts stored');
+
+        const records = [{ id: 'contact-1', name: 'Alice' }, { id: 'contact-2', name: 'Bob' }];
+        fireEvent.change(screen.getByLabelText('Import contacts JSON'), {
+            target: { files: [{ name: 'contacts.json', text: vi.fn(async () => JSON.stringify(records)) }] },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
+
+        expect(await screen.findByText('Imported 1 contact; 1 skipped; 1 duplicate.')).toBeInTheDocument();
+        expect(messaging.saveContacts).toHaveBeenCalledTimes(1);
+        expect(messaging.saveContacts).toHaveBeenCalledWith({ records });
+        expect(messaging.saveContact).not.toHaveBeenCalled();
+        expect(screen.getByText(/already saved for Carol: bc1qcarol/)).toBeInTheDocument();
     });
 
     it('does not turn an empty test-send threshold into zero', () => {
@@ -302,6 +362,71 @@ describe('settings form validation', () => {
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
+    it.each([
+        ['0', /greater than zero/],
+        ['0.5', /at least 1 sat\/vB/],
+        ['1001', /no higher than 1,000 sat\/vB/],
+    ])('does not save an out-of-bounds Bitcoin custom fee rate %s', (value, message) => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+
+        fireEvent.change(input, { target: { value } });
+        fireEvent.blur(input);
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('sends field-only fee patches so two in-flight saves cannot restore stale values', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'normal',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        update = vi.fn(() => new Promise(() => {}));
+        render(<FeesSection />);
+
+        fireEvent.change(screen.getByLabelText('Bitcoin fee strategy'), {
+            target: { value: 'fast' },
+        });
+        fireEvent.click(screen.getByRole('switch', { name: /Bitcoin allow fee bump/ }));
+
+        expect(update).toHaveBeenNthCalledWith(1, {
+            fees: { 'bitcoin-mainnet': { strategy: 'fast', customSatsPerKb: null } },
+        });
+        expect(update).toHaveBeenNthCalledWith(2, {
+            fees: { 'bitcoin-mainnet': { rbfByDefault: false } },
+        });
+    });
+
+    it('shows the fee strategy help once across the coin cards', () => {
+        const profile = { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true };
+        settings = {
+            ...createDefaultSettings(),
+            fees: { 'bitcoin-mainnet': profile, 'litecoin-mainnet': profile },
+        };
+        render(<FeesSection />);
+
+        expect(screen.getAllByRole('group').length).toBeGreaterThan(1);
+        expect(screen.getAllByText('Choose the balance between confirmation speed and network cost.')).toHaveLength(1);
+    });
+
     it('does not repeat the active network kind in fee headings', () => {
         settings = {
             ...createDefaultSettings(),
@@ -341,9 +466,7 @@ describe('settings form validation', () => {
         expect(update).toHaveBeenCalledWith({
             fees: {
                 'bitcoin-mainnet': {
-                    strategy: 'custom',
                     customSatsPerKb: 2750,
-                    rbfByDefault: true,
                 },
             },
         });

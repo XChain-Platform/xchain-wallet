@@ -69,7 +69,7 @@ export function controllerBindValidationError(opts = {}) {
         if (!controller) {
             return 'Guard contract is required. Enter the action number of a deployed contract.';
         }
-        if (!/^\d+$/.test(controller) || controller === '0') {
+        if (!/^\d+$/.test(controller) || /^0+$/.test(controller)) {
             return 'Guard contract must be a positive whole action number.';
         }
         if (BigInt(controller) > MAX_ACTION_INDEX) {

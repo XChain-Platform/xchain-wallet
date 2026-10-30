@@ -24,6 +24,7 @@ import {
     registerBiometricCredential,
     unlockWithBiometric,
     clearBiometricCredential,
+    retireBiometricAfterPasswordChange,
     setBiometricProvider,
     biometricProviderName,
     BiometricNotRegisteredError,
@@ -225,6 +226,41 @@ describe('unlock failures', () => {
         expect(isBiometricRegistered()).toBe(false);
     });
 
+    it('discards a wrap the native side reports invalidated', async () => {
+        // iOS answers ABSENT for a Keychain item a biometric re-enrolment
+        // invalidated, but the item stays stored with the enrolment-day
+        // password in it. Only an explicit clear removes it, and a later
+        // password change does not reach it because the cached flag is false.
+        const plugin = fakeVault({
+            biometricUnlock: vi.fn(async () => ({
+                status: 'ABSENT',
+                detail: 'no biometric wrap is stored, or it was invalidated',
+            })),
+        });
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+
+        await expect(unlockWithBiometric()).rejects.toThrow(BiometricNotRegisteredError);
+        expect(plugin.biometricClear).toHaveBeenCalledOnce();
+        expect(plugin.state.wrap).toBeNull();
+        expect(isBiometricRegistered()).toBe(false);
+    });
+
+    it('falls back to the password when discarding an invalidated wrap fails', async () => {
+        const plugin = fakeVault({
+            biometricUnlock: vi.fn(async () => ({ status: 'ABSENT', detail: 'invalidated' })),
+            biometricClear: vi.fn(async () => { throw new Error('keychain busy'); }),
+        });
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+
+        await expect(unlockWithBiometric()).rejects.toThrow(BiometricNotRegisteredError);
+        expect(plugin.biometricClear).toHaveBeenCalledOnce();
+        expect(isBiometricRegistered()).toBe(false);
+    });
+
     it('surfaces a failed prompt without reflecting native detail', async () => {
         const plugin = fakeVault({
             biometricUnlock: async () => ({ status: PASSWORD, detail: PASSWORD }),
@@ -287,5 +323,62 @@ describe('refreshBiometricEnrollment', () => {
         expect(await refreshBiometricEnrollment()).toBe(false);
         plugin.state.wrap = 'd2hhdGV2ZXI=';
         expect(await refreshBiometricEnrollment()).toBe(true);
+    });
+});
+
+describe('password change with an unknown enrolment state', () => {
+    // A wrap stored on the device while the startup status probe failed: the
+    // cached flag reads false, yet the wrap still holds the old password.
+    function wrapBehindAFailedProbe(failures) {
+        const plugin = fakeVault();
+        plugin.state.wrap = 'b2xkIHBhc3N3b3Jk';
+        let calls = 0;
+        plugin.biometricStatus = vi.fn(async () => {
+            calls += 1;
+            if (calls <= failures) throw new Error('bridge not ready');
+            return { status: 'OK', available: true, enrolled: plugin.state.wrap !== null };
+        });
+        return plugin;
+    }
+
+    it('clears a wrap the startup probe missed', async () => {
+        const plugin = wrapBehindAFailedProbe(1);
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        expect(isBiometricRegistered()).toBe(false);
+
+        await expect(retireBiometricAfterPasswordChange({ vaultRekeyed: true })).resolves.toBe(true);
+        expect(plugin.biometricClear).toHaveBeenCalledTimes(1);
+        expect(plugin.state.wrap).toBeNull();
+    });
+
+    it('clears when the device still cannot say whether a wrap exists', async () => {
+        const plugin = wrapBehindAFailedProbe(Infinity);
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+
+        await expect(retireBiometricAfterPasswordChange({ vaultRekeyed: true })).resolves.toBe(true);
+        expect(plugin.biometricClear).toHaveBeenCalledTimes(1);
+        expect(plugin.state.wrap).toBeNull();
+    });
+
+    it('clears when the status reply carries no enrolled flag', async () => {
+        const plugin = fakeVault({ biometricStatus: vi.fn(async () => ({ status: 'OK', available: true })) });
+        plugin.state.wrap = 'b2xkIHBhc3N3b3Jk';
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+
+        await expect(retireBiometricAfterPasswordChange({ vaultRekeyed: true })).resolves.toBe(true);
+        expect(plugin.biometricClear).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the clear once the device confirms there is no wrap', async () => {
+        const plugin = wrapBehindAFailedProbe(1);
+        plugin.state.wrap = null;
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+
+        await expect(retireBiometricAfterPasswordChange({ vaultRekeyed: true })).resolves.toBe(false);
+        expect(plugin.biometricClear).not.toHaveBeenCalled();
     });
 });

@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -22,15 +22,6 @@ const STAMP = Date.now().toString().slice(-6);
 const TICK = `MEM${STAMP}`;
 const SUPPLY = 21_000_000;
 const XCHAIN_MINT = 50;
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('combobox').first().fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 async function approveAndReadTxid(page) {
     await expectConfirmModal(page, 'the Meme token creation');
@@ -67,17 +58,19 @@ test.describe(`Meme token wizard template on ${REGTEST_CHAIN_LABEL}`, () => {
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
 
-        await gotoPalette(page, 'Create a token');
+        await openPaletteCommand(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Meme token/ }).click();
         await selectVenueChain(main);
         await main.getByRole('button', { name: 'Next', exact: true }).click();
 
-        await expect(main).toContainText('Template: meme');
+        await expect(main).toContainText('Step 3 of 4: Details');
         await main.getByLabel('Token name (ticker)').fill(TICK);
         await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-        await main.getByRole('button', { name: 'Review token', exact: true }).click();
-        await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+        await submitTokenWizard(page, {
+            // Only the review stage names the chosen template.
+            onReview: async (review) => expect(review).toContainText('Meme token'),
+        });
 
         const txid = await approveAndReadTxid(page);
         const genesis = await waitForValidAction(txid);

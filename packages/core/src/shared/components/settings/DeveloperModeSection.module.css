@@ -1,33 +1,24 @@
 .panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-}
-
-.form,
-.list {
+    composes: card from '../../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
 }
 
 .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
 .entry {
+    composes: card from '../../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
 }
 
 .actions {

@@ -42,6 +42,7 @@ export const useView = () => useContext(ViewContext);
 
 const FRAME_DOC = '<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body></body></html>';
 const CLONE_ATTR = 'data-sg-clone';
+const SUPPRESS_INITIAL_FOCUS_ATTR = 'data-xc-suppress-initial-focus';
 
 // Copies every stylesheet in the guide's <head> into the frame. Vite adds a
 // <style> per CSS module as modules load, and rewrites them on hot reload,
@@ -55,14 +56,31 @@ function syncStyles(doc) {
     }
 }
 
-// Focus moves in a frame scroll the guide to that frame (a dialog that
-// autofocuses its button would yank the page on load). Frames never do.
-function stopFocusScroll(win) {
+// An open dialog must not claim the guide's keyboard during initial render.
+// Once the reader interacts with a preview, it uses normal focus behavior.
+function containFrameFocus(win) {
+    const root = win.document.documentElement;
+    root.setAttribute(SUPPRESS_INITIAL_FOCUS_ATTR, '');
+    const enableFocus = () => root.removeAttribute(SUPPRESS_INITIAL_FOCUS_ATTR);
+    win.addEventListener('pointerdown', enableFocus, { capture: true, once: true });
+    win.addEventListener('keydown', enableFocus, { capture: true, once: true });
+
     const proto = win.HTMLElement.prototype;
     const focus = proto.focus;
     proto.focus = function focusWithoutScroll(options) {
+        if (root.hasAttribute(SUPPRESS_INITIAL_FOCUS_ATTR)) return undefined;
         return focus.call(this, { ...(options || {}), preventScroll: true });
     };
+}
+
+// The shared compact-landscape rules (orientation: landscape, max-height: 480px,
+// min-aspect-ratio: 3/2) strip padding from headers and screens. A narrow frame
+// whose content is short enough to cross that aspect ratio shrinks, which keeps
+// the rules on, or grows, which turns them off, and so flips between the two
+// forever. A phone-width frame is a portrait preview, so it never gets a
+// viewport shorter than the height where the aspect ratio drops below 3/2.
+function portraitFloor(width) {
+    return width <= 480 ? Math.floor(width / 1.5) + 1 : 0;
 }
 
 /**
@@ -78,9 +96,10 @@ function stopFocusScroll(win) {
  * @param {'light' | 'dark'} [props.theme]       fixed theme for side-by-side theme comparisons
  * @param {import('react').ReactNode} props.children
  */
-export function ViewportFrame({ width, minHeight = 0, padded = true, title, theme, children }) {
+export function ViewportFrame({ width, minHeight: requestedMinHeight = 0, padded = true, title, theme, children }) {
     const ref = useRef(/** @type {HTMLIFrameElement | null} */ (null));
     const [body, setBody] = useState(/** @type {HTMLElement | null} */ (null));
+    const minHeight = Math.max(requestedMinHeight, portraitFloor(width));
     const [height, setHeight] = useState(Math.max(minHeight, 120));
 
     useEffect(() => {
@@ -94,7 +113,7 @@ export function ViewportFrame({ width, minHeight = 0, padded = true, title, them
             if (!doc || doc.URL !== 'about:srcdoc' || !doc.body || doc.body.dataset.sgReady) return;
             doc.body.dataset.sgReady = '1';
             if (theme) doc.documentElement.dataset.xcTheme = theme;
-            stopFocusScroll(iframe.contentWindow);
+            containFrameFocus(iframe.contentWindow);
             syncStyles(doc);
             // A Screen sizes itself to the viewport; in a frame it sizes to
             // its content instead, or the frame and the Screen chase each other.

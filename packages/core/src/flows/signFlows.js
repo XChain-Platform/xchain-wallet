@@ -22,9 +22,9 @@
 
 import { unlockWallet } from './unlockWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
-import { assertNoDeceptiveCharacters } from './signRiskClassifier.js';
+import { assertNoDeceptiveCharacters, assertNoHiddenControls } from './signRiskClassifier.js';
 
-const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
+export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
 
 /**
  * @typedef {Object} SignMessageFlowOpts
@@ -77,6 +77,7 @@ export async function signMessageFlow({
     }
     // Refuse text whose visual form can conceal the bytes the signer receives.
     assertNoDeceptiveCharacters({ chainId, path, addressId, message }, 'signMessageFlow');
+    assertNoHiddenControls(message, 'signMessageFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('signMessageFlow: either `password` or `signer` is required');
     }

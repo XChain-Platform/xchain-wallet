@@ -39,6 +39,8 @@ const LONG_NAME = `Protocol${'Name'.repeat(14)}`;
 const LONG_TICK = `GIVE${'X'.repeat(48)}`;
 const LONG_GET_TICK = `GET${'Y'.repeat(48)}`;
 const LARGE_AMOUNT = '1234567890123456789012345678901234567890';
+// Poll indexes are uint64; LONG_INDEX is wider and is refused by design.
+const POLL_INDEX = '18446744073709551615';
 
 function pending() {
     return new Promise(() => {});
@@ -89,6 +91,7 @@ function expectCompactCanvas(container) {
     expect(viewport.style.width).toBe('412px');
     expect(main).toHaveClass(screenStyles.body);
     expect(main.firstElementChild.classList.contains(listPageStyles.page)
+        || main.firstElementChild.classList.contains(formPageStyles.page)
         || main.firstElementChild.classList.contains(formPageStyles.form)).toBe(true);
 }
 
@@ -194,6 +197,31 @@ describe('detail page loading and empty states', () => {
         const lifecycleLoading = await screen.findByText('Loading lifecycle…');
         expect(lifecycleLoading.closest('[role="status"]')).toBeTruthy();
         expect(screen.queryByText('No lifecycle events yet.')).toBeNull();
+    });
+
+    it('shows empty dispenser activity as a bare empty state, not inside the list card', async () => {
+        const messaging = messagingWith({
+            getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                action_index: '7',
+                source: LONG_ADDRESS,
+                give_tick: 'WRAP',
+                give_amount: '1',
+                get_tick: 'PAY',
+                get_amount: '2',
+                status: 'open',
+                current_status: 'open',
+            }),
+            getDispenses: vi.fn().mockResolvedValue([]),
+            getDispenserLifecycle: vi.fn().mockResolvedValue([]),
+        });
+        mount(<DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />, messaging);
+
+        const dispenses = await screen.findByText('No dispenses yet');
+        expect(dispenses.closest('ul')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Dispenses' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Lifecycle' }));
+        const lifecycle = await screen.findByText('No lifecycle events yet');
+        expect(lifecycle.closest('ul')).toBeNull();
     });
 
     it.each([
@@ -396,7 +424,7 @@ describe('412px protocol detail layouts', () => {
         const option = `Option${'Choice'.repeat(16)}`;
         const messaging = messagingWith({
             governancePoll: vi.fn().mockResolvedValue({
-                action_index: LONG_INDEX,
+                action_index: POLL_INDEX,
                 tick: LONG_TICK,
                 question: LONG_NAME.repeat(2),
                 options: [option, 'Other'],
@@ -410,7 +438,7 @@ describe('412px protocol detail layouts', () => {
             governanceVotes: vi.fn().mockResolvedValue({ data: [] }),
         });
         const view = mountCompact(
-            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={LONG_INDEX} onBack={() => {}} />,
+            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={POLL_INDEX} onBack={() => {}} />,
             messaging,
         );
 
@@ -426,7 +454,7 @@ describe('412px protocol detail layouts', () => {
         const option = `Final${'Outcome'.repeat(16)}`;
         const messaging = messagingWith({
             governancePoll: vi.fn().mockResolvedValue({
-                action_index: LONG_INDEX,
+                action_index: POLL_INDEX,
                 tick: LONG_TICK,
                 options: [option],
                 poll_status: 'finalized',
@@ -437,7 +465,7 @@ describe('412px protocol detail layouts', () => {
             }),
         });
         const view = mountCompact(
-            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={LONG_INDEX} onBack={() => {}} />,
+            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={POLL_INDEX} onBack={() => {}} />,
             messaging,
         );
 
@@ -452,7 +480,8 @@ describe('412px protocol detail layouts', () => {
     });
 
     it('keeps a long bet feed name, split values, and review action visible', async () => {
-        const outcome = `Outcome${'Result'.repeat(16)}`;
+        // Outcome labels display at most 40 characters.
+        const outcome = `Outcome${'Result'.repeat(5)}`;
         const messaging = messagingWith({
             betFeed: vi.fn().mockResolvedValue({
                 action_index: LONG_INDEX,

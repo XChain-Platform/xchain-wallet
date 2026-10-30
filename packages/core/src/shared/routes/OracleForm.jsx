@@ -9,19 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -36,6 +38,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { memoLengthError } from '../utils/memoLimit.js';
@@ -117,6 +120,7 @@ function staleAgeText(seconds) {
  */
 export function OracleForm({ walletId, onBack, initialChainId, initialFromAddress, initialTick }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -142,7 +146,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         initialChainId,
         initialFromAddress,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -245,7 +249,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const deviationPct = quoteDeviationPct(priorQuote?.value, value.trim());
     const needsTypedConfirm = deviationPct != null
         && Math.abs(deviationPct) > DEVIATION_TYPED_CONFIRM_PCT;
-    const typedConfirmOk = !needsTypedConfirm || typedConfirm.trim().toUpperCase() === 'PUBLISH';
+    const typedConfirmOk = !needsTypedConfirm || isExactTypedConfirmation(typedConfirm, 'PUBLISH');
 
     // Consumers of the exact pair being republished, which is the set that
     // actually reprices. Dispensers on this address's other feeds are
@@ -368,6 +372,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!guardBeforeSign()) return;
         setFormError(null);
         setTypedConfirm('');
@@ -378,10 +384,14 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const hwSignerInfo = useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null });
 
     // Watcher lane only: encode an unsigned PRICE for a Signer-mode wallet.
+    // The stage updates a render late, so the ref stops a second submit in
+    // the same turn from building a second unsigned publish.
+    const watcherSubmitRef = useRef(false);
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || watcherSubmitRef.current) return;
         if (!typedConfirmOk) return;
+        watcherSubmitRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -406,6 +416,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
             }));
             setStage('review');
+        } finally {
+            watcherSubmitRef.current = false;
         }
     }
 
@@ -454,7 +466,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         />
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (actionConfirm.open) {
@@ -490,11 +502,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         // Signed but not broadcast yet: nothing is priced, so no success copy.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="price publish" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="price publish" unsaved={result.unsaved} />,
             );
         }
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         return wrap(
             <>
@@ -520,11 +532,12 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review price publish"
                 onSubmit={handleSubmit}
                 intro={decoded?.summary}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -540,7 +553,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -558,9 +571,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 {publishNotes}
 
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
 
                 <p className={styles.hint}>
@@ -594,11 +605,12 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Publish oracle price"
             onSubmit={handleReview}
             sectioned
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -612,9 +624,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             )}
         >
 
-            <InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />
-
-            <FormSection title="My published prices">
+            <FormSection
+                title="My published prices"
+                trailing={<InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />}
+            >
             {/*
               * Pick the PUBLISHING chain: it decides which address signs, pays
               * the fee and becomes the oracle's identity. The priced token's
@@ -641,13 +654,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
             ) : feedsError ? (
-                <StatusMessage variant="error" className={styles.error}>{feedsError}</StatusMessage>
+                <FieldNote variant="error">{feedsError}</FieldNote>
             ) : feeds.length === 0 ? (
                 <p className={styles.hint}>
                     This address has not published any prices yet. The first one you publish starts
@@ -685,10 +698,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
             <FormSection title="Publish a price">
             <Select
-                label="Token's chain"
+                label="Token's network"
                 hint={crossChain
                     ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
-                    : 'The chain the priced token lives on. It can differ from the publishing chain.'}
+                    : 'The network the priced token lives on. It can differ from the publishing network.'}
                 value={priceCoin}
                 onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
             >
@@ -795,8 +808,8 @@ function OraclePublishNotes({
                 </dl>
             ) : null}
 
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role="alert">
+                <p>
                     <strong>
                         {isFirstPublish
                             ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
@@ -810,26 +823,26 @@ function OraclePublishNotes({
                                 ? 'The previous effective price is stale, so nothing sells on this pair until a pending price matures. The only way to correct a mistake is another publish, which also takes 24 hours.'
                             : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
                 </p>
-            </div>
+            </StatusMessage>
 
             {needsTypedConfirm ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
                         price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
 
             {consumers && !consumers.supported ? (
                 <p className={styles.hint}>
                     Could not check which dispensers use this oracle, so this list may be
                     incomplete. Treat the publish as if buyers are watching.
-                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this chain.` : ''}
+                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this network.` : ''}
                 </p>
             ) : pairConsumers.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
                         {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
                         new price once it takes effect:
@@ -844,7 +857,7 @@ function OraclePublishNotes({
                             ))}
                         </ul>
                     </details>
-                </div>
+                </StatusMessage>
             ) : (
                 <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
             )}
@@ -852,7 +865,7 @@ function OraclePublishNotes({
             {needsTypedConfirm ? (
                 <Input
                     label="Type PUBLISH to confirm"
-                    hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours.`}
+                    hint={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
                     value={typedConfirm}
                     onChange={(e) => onTypedConfirmChange(e.target.value)}
                     autoComplete="off"

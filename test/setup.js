@@ -30,6 +30,7 @@ import { cleanup, configure } from '@testing-library/react';
 import { webcrypto } from 'node:crypto';
 
 import { slowTimeout } from './helpers/testEnvSpeed.js';
+import { approveSettle } from '../packages/core/src/shared/utils/approveSettle.js';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -47,6 +48,10 @@ if (!globalThis.crypto) {
 // Only failing assertions pay the ceiling, so raising it costs a green run
 // nothing. See test/helpers/testEnvSpeed.js.
 configure({ asyncUtilTimeout: slowTimeout(5000) });
+
+// Suites click Approve the instant a review renders; the settle window has its
+// own regression test (confirmApproveSettle) that restores the real value.
+approveSettle.ms = 0;
 
 afterEach(() => {
     cleanup();

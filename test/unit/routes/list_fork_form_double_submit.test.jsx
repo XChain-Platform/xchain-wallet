@@ -217,8 +217,11 @@ describe('list form submission locks', () => {
             submit.click();
         });
 
-        expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+        // The owner is re-read before the build, so the build follows a tick later.
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(messaging.getListByActionIndex.mock.calls.length).toBeGreaterThan(0);
         await act(async () => build.resolve({ psbtHex: '70736274ff' }));
+        expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -322,7 +325,7 @@ describe('existing list form identity', () => {
             target: { value: 'TRANSFER' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
-        expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
 
         view.switchTo({
             chainId: BTC,
@@ -334,7 +337,7 @@ describe('existing list form identity', () => {
 
         expect(screen.getByText('#2800')).toBeInTheDocument();
         expect(screen.getByLabelText('Destination')).toHaveValue('');
-        expect(screen.queryByLabelText('Unsigned transaction hex')).toBeNull();
+        expect(screen.queryByLabelText('Unsigned transaction code')).toBeNull();
     });
 });
 

@@ -16,13 +16,24 @@
 // in an SDKFactory; core just calls it.
 
 import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLimit.js';
+import { explorerPubkeyMatchesAddress } from './recipientPubkeyBinding.js';
+
+function bindMessagingPubkeyLookups(sdk, descriptor) {
+    if (!sdk?.messaging || typeof sdk.messaging.getPublicKey !== 'function') return sdk;
+    const original = sdk.messaging.getPublicKey.bind(sdk.messaging);
+    sdk.messaging.getPublicKey = async function getBoundPublicKey(address, ...args) {
+        const pubkey = await original(address, ...args);
+        return explorerPubkeyMatchesAddress(sdk, pubkey, address, descriptor) ? pubkey : null;
+    };
+    return sdk;
+}
 
 /**
  * @typedef {Object} SDKConstructorOpts
  * @property {string} network           chainId, e.g. 'bitcoin-mainnet'
  * @property {string} explorerUrl       fully-formed URL
  * @property {string} encoderUrl
- * @property {string} hubUrl
+ * @property {string} [hubUrl]
  * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
  * @property {{ maxRetries: number, baseDelay: number, maxDelay: number,
  *              retryAfterMaxDelay: number, maxRateLimitRetries: number }} [retry]
@@ -42,7 +53,7 @@ import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLi
  * @property {(txHex: string, encoder?: unknown) => Promise<{ txid: string }>} wallet.broadcastTx
  * @property {Object} auth
  * @property {(message: string, wif: string, opts?: { segwitNative?: boolean, segwitRedeemScript?: boolean }) => string} auth.signMessage
- * @property {(address: string, message: string, signature: string, network?: string) => boolean} auth.verifyMessage
+ * @property {(address: string, message: string, signature: string, network?: string) => { valid: boolean, error: string|null }} auth.verifyMessage
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]
  * @property {() => void} [close]
@@ -247,17 +258,19 @@ export class SDKRegistry {
         const d = this._chainRegistry.get(chainId);
         if (!d) throw new UnknownChainError(chainId);
         const over = this._endpointOverrides[chainId] ?? {};
+        const hubUrl = overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub);
         const sdk = this._sdkFactory({
             network: chainId,
             explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
             encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
-            hubUrl: overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub),
+            ...(hubUrl ? { hubUrl } : {}),
             // Bounded network patience: the real XChainSDK honors
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
             retry: this._networkOptions.retry,
             ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
+        bindMessagingPubkeyLookups(sdk, d);
         // Every chain's SDK traffic shares one per-host gate for retries and pacing.
         return this._rateLimiter ? installSdkNetworkPolicy(sdk, this._rateLimiter) : sdk;
     }
@@ -351,9 +364,10 @@ export function endpointOverridesFromSettings(settings, chainRegistry) {
             const value = overrideUrl(entry[field]);
             if (!value) continue;
             const endpoint = descriptor[key];
-            if (!endpoint) continue;
-            if (value === joinEndpoint(endpoint)) continue;
-            if (value === endpoint.defaultUrl) continue;
+            if (endpoint) {
+                if (value === joinEndpoint(endpoint)) continue;
+                if (value === endpoint.defaultUrl) continue;
+            }
             over[field] = value;
         }
         if (Object.keys(over).length > 0) out[chainId] = over;

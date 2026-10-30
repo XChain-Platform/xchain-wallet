@@ -286,7 +286,10 @@ export class SignerPool {
                 masterKey: signer.getMasterKey(),
                 passphrase: bip39Passphrase,
             });
-            record = { ...wallet, encryptedPassphrase };
+            // The record is read again: the unlock and ownership check above take
+            // seconds, and a rename that landed meanwhile must survive this write.
+            const current = (await vault.wallets.get(wallet.id)) ?? wallet;
+            record = { ...current, encryptedPassphrase };
             if (!this._isCurrent(wallet.id, token)) {
                 throw new Error('SignerPool.captureOne: signer unlock was cancelled');
             }

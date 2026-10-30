@@ -37,7 +37,7 @@
 // by name because the rule is about the difference between them - so it runs
 // under the default XC_REGTEST_COIN.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -57,20 +57,7 @@ const CHOICE_LABEL = /^Pay protocol fee in BTC instead of XCHAIN/;
  * render under a comment saying exactly why it must not be seeded. One wrong
  * article, and the failure named a product defect that does not exist.
  */
-const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this chain/;
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
+const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this network/;
 
 /**
  * Switches the FORM's own chain picker (labelled "Network") to `chainLabel`.
@@ -96,7 +83,7 @@ test.describe('the native-fee rule when the chain changes under an open form', (
         await createWallet(page, { password: PASSWORD, name: 'Fee Rule Wallet' });
         await switchToRegtest(page, PASSWORD);
 
-        await gotoPalette(page, 'Issue token');
+        await openPaletteCommand(page, 'Issue token');
         const main = page.getByRole('main');
         await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
 

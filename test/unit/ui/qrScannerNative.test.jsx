@@ -130,7 +130,7 @@ describe('QrScanner picks its camera path', () => {
     it('shows the paste advice when neither is available', () => {
         window.Capacitor = { isNativePlatform: () => true };
         render(<QrScanner onFrame={() => {}} />);
-        expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/not available on this device/);
+        expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/isn\x27t available on this device/);
         expect(screen.queryByRole('button', { name: /Scan with camera/ })).toBeNull();
     });
 });
@@ -237,7 +237,7 @@ describe('QrScanner with the native scanner', () => {
         await tapScan();
         await act(async () => { state.reject('denied'); });
 
-        expect(screen.getByRole('alert').textContent).toBe(
+        expect(screen.getByRole('alert').textContent).toContain(
             'Camera access is turned off for XChain Wallet. Allow it in Settings, or paste the code instead.',
         );
         expect(screen.getByRole('button', { name: /Scan with camera/ }).disabled).toBe(false);
@@ -250,7 +250,7 @@ describe('QrScanner with the native scanner', () => {
         await tapScan();
         await act(async () => { state.reject('unavailable'); });
 
-        expect(screen.getByRole('alert').textContent).toBe(
+        expect(screen.getByRole('alert').textContent).toContain(
             'There is no camera on this device. Paste the code instead.',
         );
     });

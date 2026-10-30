@@ -19,7 +19,8 @@
 //   6. Call-site parity, derived from source: every dictionary key a
 //      translated source file names exists in en.js, and every t() call
 //      supplies each placeholder its message requires.
-//   7. No key repeats in the en/index.js source (the engine hides a repeat).
+//   7. No key repeats across the en namespace sources (the engine hides a
+//      repeat).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -28,6 +29,7 @@ import { dirname, join, relative } from 'node:path';
 import { IntlMessageFormat } from 'intl-messageformat';
 
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
+import { englishNamespaceSources, messagesLiteral } from '../../helpers/englishNamespaces.js';
 import {
     availableLocales,
     format,
@@ -291,7 +293,8 @@ translatedRoots.push(join(packagesDir, 'desktop', 'renderer'));
 const translated = translatedRoots
     .flatMap((dir) => sourceFiles(dir))
     .map((f) => ({ rel: relative(wsRoot, f).split('\\').join('/'), src: readFileSync(f, 'utf8') }))
-    .filter(({ src }) => /(?<![\w$.])t\(/.test(src) && keyLiterals(src).length > 0);
+    // HistoryShared.jsx holds the pending copy tables (key literals, no t() call of its own).
+    .filter(({ rel, src }) => (/(?<![\w$.])t\(/.test(src) || rel === 'packages/core/src/shared/routes/HistoryShared.jsx') && keyLiterals(src).length > 0);
 
 const seenKeys = new Set();
 for (const { rel, src } of translated) {
@@ -336,21 +339,24 @@ for (const key of ['pending.detail.firstSeen', 'pending.detail.sendOutput', 'pen
     assert.ok(placeholderChecked.has(key), `placeholder sweep reaches "${key}"`);
 }
 
-// --- 7. No repeated key in the en source ------------------------------
+// --- 7. No repeated key in the en sources -----------------------------
 //
-// Scan the source, since the engine keeps the last of two identical keys and
-// Object.keys(en) never shows the repeat; the set-equality check fails a key
-// written in a style the regex cannot read, so the scan is never partial.
+// Scan the sources, since the engine keeps the last of two identical keys
+// (inside one file, or across two namespace files merged into one
+// dictionary) and Object.keys(en) never shows the repeat; the set-equality
+// check fails a key written in a style the regex cannot read, so the scan is
+// never partial.
 
-const enSource = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8');
-const enOpen = enSource.indexOf('export const en = {');
-const enClose = enSource.indexOf('\n};', enOpen);
-assert.ok(enOpen >= 0 && enClose > enOpen, 'en/index.js keeps its `export const en = { ... };` literal');
-const scannedKeys = [...enSource.slice(enOpen, enClose).matchAll(/^\s*'([^'\n]+)'\s*:/gm)].map((m) => m[1]);
+const scannedKeys = [];
+for (const { name, source } of englishNamespaceSources()) {
+    const literal = messagesLiteral(source);
+    assert.ok(literal, `en/${name}.js keeps its \`const messages = { ... };\` literal`);
+    scannedKeys.push(...[...literal.matchAll(/^\s*'([^'\n]+)'\s*:/gm)].map((m) => m[1]));
+}
 const repeatedKeys = [...new Set(scannedKeys.filter((k, i) => scannedKeys.indexOf(k) !== i))];
-assert.deepEqual(repeatedKeys, [], `en/index.js repeats keys: ${repeatedKeys.join(', ')}`);
+assert.deepEqual(repeatedKeys, [], `the en namespace files repeat keys: ${repeatedKeys.join(', ')}`);
 assert.deepEqual([...scannedKeys].sort(), Object.keys(en).sort(),
-    'the en/index.js source scan reads exactly the keys the dictionary exports');
+    'the en namespace source scan reads exactly the keys the dictionary exports');
 
 console.log(
     `OK: i18n smoke (${Object.keys(en).length} en keys, lookup/interpolate/fallback, ${availableLocales().length} locales registered, subscribe round-trip, `

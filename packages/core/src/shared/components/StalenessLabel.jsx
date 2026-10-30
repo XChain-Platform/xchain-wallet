@@ -23,6 +23,8 @@ import { useEffect, useState } from 'react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { formatElapsedTime, formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './StalenessLabel.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const TICK_MS = 30_000;
 
@@ -38,7 +40,7 @@ export function StalenessLabel({ lastSyncedAt, warnAfterMs, className }) {
 
     useEffect(() => {
         if (!online || lastSyncedAt === null || lastSyncedAt === undefined) return undefined;
-        const id = setInterval(() => setTick((t) => t + 1), TICK_MS);
+        const id = setInterval(() => setTick((n) => n + 1), TICK_MS);
         return () => clearInterval(id);
     }, [lastSyncedAt, online]);
 
@@ -46,7 +48,7 @@ export function StalenessLabel({ lastSyncedAt, warnAfterMs, className }) {
 
     const diffMs = Math.max(0, Date.now() - lastSyncedAt);
     const stale = !online || (typeof warnAfterMs === 'number' && diffMs >= warnAfterMs);
-    const text = online ? `Updated ${formatAgo(diffMs)}` : 'Offline, showing saved data';
+    const text = online ? t('components.stalenessLabel.updated', { when: formatAgo(diffMs) }) : t('components.stalenessLabel.offline');
 
     return (
         <span

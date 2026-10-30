@@ -217,7 +217,7 @@ describe('reconcileNativePendingTxs', () => {
             vault, chainRegistry: registry, chainId: CHAIN_ID, address: OURS,
             sdkRegistry: sdkOf({ [THEIRS]: new Error('utxo-tracker is not synced'), [OURS]: new Error('nope') }),
         });
-        expect(out).toEqual({ seenNow: new Set(), confirmed: new Set() });
+        expect(out).toEqual({ seenNow: new Set(), confirmed: new Set(), replaced: new Set() });
         expect(vault.rows[0].status).toBe('broadcast');
         expect(vault.rows[0].mempoolSeenAt).toBeNull();
 
@@ -265,7 +265,7 @@ describe('reconcileNativePendingTxs', () => {
     });
 
     it('is a no-op without a vault, a chain the registry knows, or an encoder', async () => {
-        const nothing = { seenNow: new Set(), confirmed: new Set() };
+        const nothing = { seenNow: new Set(), confirmed: new Set(), replaced: new Set() };
         expect(await reconcileNativePendingTxs({ vault: null, chainRegistry: registry, chainId: CHAIN_ID }))
             .toEqual(nothing);
         expect(await reconcileNativePendingTxs({
@@ -472,11 +472,11 @@ describe('reconcileNativePendingTxs past the pending window', () => {
         const out = await run(failing, sdkWith({
             tx: { [TXID.toLowerCase()]: new Error('ECONNRESET'), [COINPAY_TXID]: new Error('503') },
         }));
-        expect(out).toEqual({ seenNow: new Set(), confirmed: new Set() });
+        expect(out).toEqual({ seenNow: new Set(), confirmed: new Set(), replaced: new Set() });
         expect(failing.rows).toEqual(rows);
 
         const bare = vaultOf(rows);
-        await expect(run(bare, sdkWith({ explorer: false }))).resolves.toEqual({ seenNow: new Set(), confirmed: new Set() });
+        await expect(run(bare, sdkWith({ explorer: false }))).resolves.toEqual({ seenNow: new Set(), confirmed: new Set(), replaced: new Set() });
         expect(bare.rows).toEqual(rows);
     });
 
@@ -566,5 +566,54 @@ describe('reconcileNativePendingTxs past the pending window', () => {
         expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
         expect(vault.rows[0].chainConfirmed).toBe(true);
         expect(vault.rows[0].confirmedBlockIndex).toBe(7707);
+    });
+});
+
+describe('reconcileNativePendingTxs names a send another transaction spent around', () => {
+    // The coin our send spends, funded to our address.
+    const PARENT = 'ee'.repeat(32);
+    const aged = (over = {}) => record({
+        broadcastAt: iso(OLD), createdAt: iso(OLD + 1000), txHex: rawTxSpending(PARENT, 0), ...over,
+    });
+
+    it('names it replaced when its coin has left our outputs and nothing holds it', async () => {
+        const before = aged();
+        const vault = vaultOf([before]);
+        const out = await run(vault, sdkWith({
+            utxos: { [OURS]: { utxos: [{ txid: 'ff'.repeat(32), vout: 1, confirmations: 0 }] }, [THEIRS]: { utxos: [] } },
+        }));
+        expect(out.replaced).toEqual(new Set([TXID.toLowerCase()]));
+        expect(out.confirmed.size).toBe(0);
+        expect(vault.rows[0]).toEqual(before);
+    });
+
+    it('does not while its coin is still unspent', async () => {
+        const out = await run(vaultOf([aged()]), sdkWith({
+            utxos: { [OURS]: { utxos: [{ txid: PARENT, vout: 0, confirmations: 3 }] } },
+        }));
+        expect(out.replaced.size).toBe(0);
+    });
+
+    it('does not when our address could not be read', async () => {
+        const out = await run(vaultOf([aged()]), sdkWith({
+            utxos: { [OURS]: new Error('tracker behind') },
+        }));
+        expect(out.replaced.size).toBe(0);
+    });
+
+    it('does not when a block holds it, or before the pending window ends', async () => {
+        const inBlock = await run(vaultOf([aged()]), sdkWith({
+            blocks: { [TXID.toLowerCase()]: { block_hash: 'ab'.repeat(32), block_height: 7 } },
+        }));
+        expect(inBlock.replaced.size).toBe(0);
+        expect(inBlock.confirmed.size).toBe(1);
+
+        const young = await run(vaultOf([aged({ broadcastAt: iso(YOUNG), createdAt: iso(YOUNG + 1000) })]), sdkWith());
+        expect(young.replaced.size).toBe(0);
+    });
+
+    it('does not when no inclusion lookup exists to rule a block out', async () => {
+        const out = await run(vaultOf([aged()]), sdkWith({ txBlock: false, explorer: false }));
+        expect(out.replaced.size).toBe(0);
     });
 });

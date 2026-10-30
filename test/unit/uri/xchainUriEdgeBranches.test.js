@@ -60,11 +60,11 @@ describe('xchain URI edge branches', () => {
         expect(parseXchainUri(uri, { chainRegistry })).toEqual({ kind: 'unknown' });
     });
 
-    it('keeps an undecodable query key as raw text', () => {
+    it('ignores an undecodable unknown query key instead of carrying its raw text', () => {
         const intent = parseXchainUri('xchain:TBTC/send?%ZZ=value', { chainRegistry });
 
         expect(intent.kind).toBe('send');
-        expect(intent.params).toEqual({ '%ZZ': 'value' });
+        expect(intent.params).toEqual({});
     });
 
     it('normalizes valid fee priorities and drops invalid priorities', () => {

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 import {
     expectConfirmModal,
@@ -35,16 +35,6 @@ const GIVE_AMOUNT = 25;
 const GET_AMOUNT = 10;
 const COIN = REGTEST_COIN.replace(/^R/, '');
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const search = dialog.getByRole('combobox').first();
-    await search.fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
     const password = page.getByLabel('Password', { exact: true });
@@ -63,7 +53,7 @@ async function approveAndReadTxid(page, what) {
 }
 
 async function issueGiveToken(page, source) {
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -110,15 +100,21 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
 
         let swapTxid;
         await test.step('fill the dedicated same-chain Swap form and approve it', async () => {
-            await gotoPalette(page, 'Swap');
+            await openPaletteCommand(page, 'Swap');
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Chain:/ }))
+            await expect(main.getByRole('button', { name: /^Give and get network:/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Chain');
+            await selectVenueChain(main, 'Give and get network');
             await selectNamedToken(page, 'Give token', {
                 chainId: REGTEST_CHAIN_ID,
                 chainLabel: REGTEST_CHAIN_LABEL,
                 tick: GIVE_TICK,
+                // The explorer balance is indexed above, but the picker starts
+                // its own wallet-balance read. On a loaded shared venue that
+                // read can remain pending after the picker's eight-second slow
+                // warning, so wait for the answer rather than treating the
+                // warning as an empty token list.
+                timeoutMs: 180_000,
             });
             await selectNamedToken(page, 'Get token', {
                 chainId: REGTEST_CHAIN_ID,
@@ -127,7 +123,7 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             });
             await main.getByRole('textbox', { name: /^Give amount/ }).fill(String(GIVE_AMOUNT));
             await main.getByRole('textbox', { name: /^Get amount/ }).fill(String(GET_AMOUNT));
-            await main.getByRole('button', { name: 'Swap', exact: true }).click();
+            await main.getByRole('button', { name: 'Review', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
             await expect(page.getByTestId('action-intent'))

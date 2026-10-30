@@ -25,13 +25,8 @@
 //                               want the raw accounting.
 //
 //   • `resolveAdsPlanForNextTx`: adds the configuration check from
-//                               §5.5: if the chain descriptor's
-//                               `adsDonationAddress` is the
-//                               placeholder sentinel, `canSubmit` is
-//                               false and the submission integration
-//                               skips the output injection (counters
-//                               still advance normally so the user's
-//                               lifetimeTxCount reflects reality).
+//                               §5.5 and resolves the selected address
+//                               role for the transaction's network.
 //
 //   • `stepAdsAccumulator` + `commitAdsStep`: state transition after
 //                               a broadcast. Pure + vault-aware pair.
@@ -39,10 +34,27 @@
 // The submitAction integration (inject donation output into
 // encoderOpts.customOutputs, then call commitAdsStep after a
 // successful broadcast) now uses `resolveAdsPlanForNextTx` + the
-// descriptor's `adsDonationAddress`.
+// descriptor's selected donation address.
 
-import { isDonationAddressConfigured } from '../registry/validate.js';
+import {
+    ADS_DEFAULT_DONATION_ADDRESS_ROLE,
+    ADS_DONATION_ADDRESS_ROLES,
+    donationAddressForDescriptor,
+    isDonationAddressConfigured,
+} from '../registry/validate.js';
 import { resolveAdsChainConfig } from '../schemas/settings.js';
+import { serializeSettingsWrites } from './settings.js';
+
+/**
+ * @param {import('../schemas/settings.js').Settings | null} settings
+ * @param {string} chainId
+ * @returns {typeof ADS_DONATION_ADDRESS_ROLES[number] | null}
+ */
+export function resolveAdsDonationAddressRole(settings, chainId) {
+    const selected = settings?.ads?.perChain?.[chainId]?.donationAddressRole
+        ?? ADS_DEFAULT_DONATION_ADDRESS_ROLE;
+    return ADS_DONATION_ADDRESS_ROLES.includes(selected) ? selected : null;
+}
 
 /**
  * Check whether the NEXT transaction on `chainId` should include a
@@ -77,7 +89,7 @@ export function resolveAdsForNextTx(settings, chainId, chainRegistry) {
  * arithmetic result from `resolveAdsForNextTx` with the chain
  * descriptor's donation-address status. `canSubmit` is true only when
  * both are met: the accumulator is over threshold AND the descriptor
- * carries a real address (not the §5.5 placeholder sentinel).
+ * carries the selected address for this network.
  *
  * Callers that want to actually inject the output check `canSubmit`.
  * Callers doing UI preview / stats use `donationAmount` directly.
@@ -123,10 +135,8 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
             reason: 'trigger-not-reached',
         };
     }
-    if (!isDonationAddressConfigured(descriptor)) {
-        // Arithmetic says donate, but the address is still the §5.5
-        // placeholder. Surface the amount so UI can show "pending
-        // donation $X (address not yet configured)" but do NOT inject.
+    const donationAddressRole = resolveAdsDonationAddressRole(settings, chainId);
+    if (!donationAddressRole || !isDonationAddressConfigured(descriptor, donationAddressRole)) {
         return {
             donationAmount: state.accumulatedSats,
             donationAddress: null,
@@ -136,7 +146,7 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
     }
     return {
         donationAmount: state.accumulatedSats,
-        donationAddress: descriptor.adsDonationAddress,
+        donationAddress: donationAddressForDescriptor(descriptor, donationAddressRole),
         canSubmit: true,
         reason: 'ok',
     };
@@ -203,6 +213,10 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainR
  */
 export async function commitAdsStep({ vault, chainId, donationIncluded, chainRegistry }) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
+    return serializeSettingsWrites(vault, () => commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }));
+}
+
+async function commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }) {
     const settings = await vault.settings.get();
     if (!settings) return null;
     const next = stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry });

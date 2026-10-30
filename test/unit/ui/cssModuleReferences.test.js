@@ -18,7 +18,7 @@ const WORD_PATTERN = /\w/;
 
 const DYNAMIC_CLASS_PREFIXES = new Map([
     ['shared/components/PreflightPanel.module.css', ['chip_']],
-    ['shared/components/ToastHost.module.css', ['variant_']],
+    ['shared/components/ToastStack.module.css', ['variant_']],
     ['shared/routes/DispensersList.module.css', ['status_']],
     ['shared/routes/StakingList.module.css', ['status_']],
     ['ui/Button.module.css', ['spinner_']],

@@ -157,7 +157,7 @@ describe('the message key-request reports its failures', () => {
         expect(utils.queryByTestId('confirm-modal'), 'a password prompt this wallet cannot satisfy')
             .toBeNull();
         const said = alertText(utils);
-        expect(said).toMatch(/cannot be signed/i);
+        expect(said).toMatch(/can't be signed/i);
         expect(said, 'names why this wallet has no signer').toMatch(/25th-word passphrase/i);
         expect(said, 'names the unlock screen as the fix').toMatch(/unlock screen/i);
         expect(said, 'names the remedy the banner already offers').toMatch(/plain text/i);
@@ -197,7 +197,7 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(alertText(utils)).toMatch(/Could not send the key request/i);
+        expect(alertText(utils)).toMatch(/Couldn't send the key request/i);
         expect(alertText(utils)).not.toMatch(/the chain refused the handshake/i);
     });
 
@@ -257,9 +257,9 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(utils.getByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(utils.getByText('Unsigned transaction, ready for signing'))
             .toBeTruthy();
-        expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(utils.getByLabelText('Unsigned transaction code').value).toBe('aa00');
         expect(utils.container.textContent).not.toMatch(/Key request sent/i);
     });
 });

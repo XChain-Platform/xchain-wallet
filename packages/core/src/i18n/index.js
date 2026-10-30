@@ -47,14 +47,26 @@
 // Fallback: missing keys fall back to English. Missing English keys
 // return the key itself (so dev sees the missing-string token
 // visually). No exception thrown.
+//
+// English loads by namespace (see locales/en/index.js). This module
+// loads the startup namespaces the first screens render; every other
+// namespace file registers itself into the shared store when a module
+// that renders its keys imports it, so a lazy route's copy arrives with
+// the route's chunk.
 
 import { IntlMessageFormat } from 'intl-messageformat';
 
-import { en } from './locales/en/index.js';
+import { DICTIONARIES } from './store.js';
+import './locales/en/common.js';
+import './locales/en/errors.js';
+import './locales/en/firstPaint.js';
+import './locales/en/home.js';
+import './locales/en/locked.js';
+import './locales/en/onboarding.js';
+import './locales/en/shell.js';
 
-/** @typedef {Record<string, string>} Dictionary */
+/** @typedef {import('./store.js').Dictionary} Dictionary */
 
-const DICTIONARIES = /** @type {Record<string, Dictionary>} */ ({ en });
 let currentLocale = 'en';
 let localeRequestId = 0;
 const subscribers = new Set();
@@ -78,13 +90,60 @@ try {
 
 const LOCALE_PATH_RE = /\/locales\/([^/]+)\/index\.js$/;
 
-/** Return the lazy importer for `code`, or null when none is known. */
+// A browser remembers a module URL whose dynamic import failed (a 404, an
+// offline fetch), so calling the same importer again rejects at once
+// without a request. A locale whose chunk failed is retried by importing
+// its URL with a fresh query, which the module map treats as a new module.
+// The chunk's own imports keep their URLs, so the shared English store is
+// the same instance either way.
+let freshImport = (url) => import(/* @vite-ignore */ url);
+const failedChunkUrls = new Map();
+let retryCounter = 0;
+
+// Chromium and Firefox name the failed module URL in the error message.
+const FAILED_MODULE_URL_RE = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>]+/i;
+
+/** Return the lazy importer for `code` and its glob path, or null. */
 function lazyLoaderFor(code) {
     for (const path in LAZY_LOADERS) {
         const m = LOCALE_PATH_RE.exec(path);
-        if (m && m[1] === code) return LAZY_LOADERS[path];
+        if (m && m[1] === code) return { path, load: LAZY_LOADERS[path] };
     }
     return null;
+}
+
+/**
+ * The URL of a chunk whose import failed: the one the error names, else
+ * the glob path resolved against this module (the dev server layout).
+ */
+function failedChunkUrl(err, path) {
+    const m = FAILED_MODULE_URL_RE.exec(String((err && err.message) || ''));
+    const candidate = m ? m[0].replace(/[),.;]+$/, '') : path;
+    try {
+        const url = new URL(candidate, import.meta.url);
+        url.searchParams.delete('locale-retry');
+        return url.href;
+    } catch (_err) {
+        return null;
+    }
+}
+
+/** Import `url` under a query the browser has not seen fail. */
+function importFresh(url) {
+    const busted = new URL(url);
+    retryCounter += 1;
+    busted.searchParams.set('locale-retry', `${Date.now().toString(36)}-${retryCounter}`);
+    return freshImport(busted.href);
+}
+
+/**
+ * Swap the lazy importer map and the fresh-URL importer. Tests drive the
+ * chunk failure and retry paths through this; production never calls it.
+ */
+export function __setLazyLocaleLoadersForTests(loaders, importer) {
+    LAZY_LOADERS = loaders || {};
+    if (importer) freshImport = importer;
+    failedChunkUrls.clear();
 }
 
 // --- text direction (§54 FOLLOWUP 3) ---------------------------------
@@ -164,7 +223,8 @@ function applyLocale(locale) {
  * chunk, returns a promise that resolves after the chunk loads and the
  * locale is applied; a chunk-load failure keeps the current locale
  * (falling back to English's always-present dictionary) rather than
- * rejecting. Only the latest request applies, so a slower chunk cannot
+ * rejecting, and a later pick of that locale retries the chunk under a
+ * fresh URL. Only the latest request applies, so a slower chunk cannot
  * overwrite a newer picker choice. Throws synchronously only when the
  * locale is neither registered nor lazily discoverable.
  *
@@ -187,8 +247,13 @@ export function setLocale(locale) {
         throw new Error(`setLocale: unknown locale "${locale}"`);
     }
     const requestId = ++localeRequestId;
-    return loader()
+    // After a failed load the original importer only replays the cached
+    // failure, so the retry imports the chunk under a fresh URL.
+    const retryUrl = failedChunkUrls.get(locale);
+    const pending = retryUrl ? importFresh(retryUrl) : loader.load();
+    return pending
         .then((mod) => {
+            failedChunkUrls.delete(locale);
             // `{ import: 'default' }` hands back the default export
             // directly, but tolerate a namespace object too.
             DICTIONARIES[locale] = mod && mod.default ? mod.default : mod;
@@ -197,6 +262,10 @@ export function setLocale(locale) {
             return locale;
         })
         .catch((err) => {
+            if (!failedChunkUrls.has(locale)) {
+                const url = failedChunkUrl(err, loader.path);
+                if (url) failedChunkUrls.set(locale, url);
+            }
             if (typeof console !== 'undefined') {
                 console.warn(
                     `setLocale: failed to load "${locale}"; keeping "${currentLocale}"`,
@@ -240,6 +309,42 @@ export function t(key, vars) {
     // so the equivalence holds by construction rather than by a second
     // brace check here that could drift from the one in format().
     return format(raw, vars, formatLocale);
+}
+
+/**
+ * Join values as an "or" list in the current locale's grammar, for a
+ * dictionary string to interpolate: ['12', '15', '24'] reads
+ * "12, 15, or 24" in English and a single value stays bare.
+ *
+ * @param {Array<string | number>} items
+ * @returns {string}
+ */
+export function formatOrList(items) {
+    const values = items.map(String);
+    try {
+        return new Intl.ListFormat(resolveFormatLocale(currentLocale), { type: 'disjunction' })
+            .format(values);
+    } catch (_err) {
+        // No Intl.ListFormat on this engine: a plain list still reads.
+        return values.join(', ');
+    }
+}
+
+/**
+ * Join values as an "and" list in the current locale's grammar:
+ * ['Bitcoin', 'Litecoin'] reads "Bitcoin and Litecoin" in English.
+ *
+ * @param {Array<string | number>} items
+ * @returns {string}
+ */
+export function formatAndList(items) {
+    const values = items.map(String);
+    try {
+        return new Intl.ListFormat(resolveFormatLocale(currentLocale), { type: 'conjunction' })
+            .format(values);
+    } catch (_err) {
+        return values.join(', ');
+    }
 }
 
 // --- formatjs message formatting -------------------------------------
@@ -418,9 +523,11 @@ function fillMissingArgs(mf, values) {
 
 // --- legacy fallback substitution ------------------------------------
 //
-// The pre-formatjs hand-rolled ICU subset, kept only as a last-resort
-// path for templates formatjs refuses to parse. It handles simple
-// substitution, plural, select, `=N` exact match, and `#`.
+// The pre-formatjs hand-rolled ICU subset, kept as the fallback for a
+// template formatjs throws on AND for one whose caller omitted a coercing
+// argument (fillMissingArgs returns null; see COERCING_ARG_TYPES). It
+// handles simple substitution, plural, select, `=N` exact match, and `#`;
+// any other type, `number` included, renders as plain substitution.
 
 function legacyFormat(template, vars, locale = 'en') {
     if (typeof template !== 'string') return String(template);
@@ -541,5 +648,3 @@ function formatCase(template, argName, valueStr, vars, locale) {
     const expanded = template.replace(/#/g, valueStr);
     return legacyFormat(expanded, vars, locale ?? 'en');
 }
-
-export { en } from './locales/en/index.js';

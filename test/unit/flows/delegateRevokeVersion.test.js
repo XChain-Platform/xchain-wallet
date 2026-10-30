@@ -20,6 +20,10 @@ import { createRequire } from 'node:module';
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(async () => ({ txid: 'tx' })),
 }));
+// The indexed-state check at signing has its own tests (delegationPreSign.test.js).
+vi.mock('../../../packages/core/src/flows/delegationPreSign.js', () => ({
+    assertDelegationActionable: vi.fn(async () => {}),
+}));
 
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { revokeDelegationAction, delegateAction } from '../../../packages/core/src/flows/delegateRevokeActions.js';

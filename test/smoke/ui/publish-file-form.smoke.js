@@ -39,7 +39,7 @@ assert.match(form, /maxPublicFileBytes/, 'public lane uses the encoding-aware ce
 assert.match(form, /fileActionParams/,
     'watcher branch composes via the shared params helper (no drift vs fileAction)');
 assert.match(form, /buildActionPsbtRequest/, 'watcher path builds an unsigned PSBT');
-assert.match(form, /WatcherResultPanel/, 'watcher result surface rendered');
+assert.match(form, /ResultScreen/, 'watcher result surface rendered');
 assert.match(form, /ackForever/, 'irreversibility acknowledgment gates review');
 assert.match(form, /on-chain forever/, 'permanence copy present');
 assert.match(form, /Shorten the title or memo/,

@@ -125,14 +125,26 @@ describe('DeveloperModeSection unavailable actions', () => {
         })).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom chain…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
 
         expect(screen.getByRole('textbox', {
-            name: 'Custom chain descriptor JSON',
+            name: 'Custom network descriptor JSON',
         })).toBeTruthy();
-        expect(screen.getByRole('button', {
-            name: 'Paste custom chain descriptor',
-        })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add network' })).toBeDisabled();
+    });
+
+    it('refuses an oversized custom network paste without calling the host', async () => {
+        messaging.addCustomChain = vi.fn(async () => ({}));
+        render(<DeveloperModeSection />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Custom network descriptor JSON' }), {
+            target: { value: `{"note":"${'x'.repeat(1024 * 1024)}"}` },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add network' }));
+
+        expect(await screen.findByText('That text is too large to be a chain descriptor.')).toBeTruthy();
+        expect(messaging.addCustomChain).not.toHaveBeenCalled();
     });
 
     it('explains when no active wallet is available for activation', async () => {
@@ -178,16 +190,24 @@ describe('DeveloperModeSection unavailable actions', () => {
         }));
     });
 
+    it('labels its master switch as an action instead of repeating the page title', () => {
+        render(<DeveloperModeSection />);
+
+        const toggle = screen.getByRole('switch', { name: 'Turn on developer mode' });
+        expect(toggle.closest('label')).toHaveTextContent(/^Turn on/);
+        expect(screen.queryByText('Developer Mode')).toBeNull();
+    });
+
     it('hides developer-only controls and endpoint navigation while off', () => {
         settings = { ...settings, developerMode: false, activeNetwork: 'mainnet' };
         render(<DeveloperModeSection />);
 
-        expect(screen.getByRole('switch', { name: 'Developer Mode' })).toBeVisible();
+        expect(screen.getByRole('switch', { name: 'Turn on developer mode' })).toBeVisible();
         expect(screen.getByRole('switch', { name: 'Learn Mode' })).toBeVisible();
         expect(screen.queryByRole('switch', { name: 'Show variant popover' })).toBeNull();
         expect(screen.queryByText('Regtest networks')).toBeNull();
         expect(screen.queryByText('Regtest faucet')).toBeNull();
-        expect(screen.queryByText('Custom chains')).toBeNull();
+        expect(screen.queryByText('Custom networks')).toBeNull();
         expect(screen.queryByRole('switch', { name: 'Auto-approve localhost dApps' })).toBeNull();
         expect(screen.queryByText('Logs and diagnostics console')).toBeNull();
 
@@ -196,21 +216,35 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.queryByRole('button', { name: /Network & endpoints/ })).toBeNull();
     });
 
-    it.each(['testnet', 'regtest'])(
-        'persists disabling Developer Mode and Mainnet in one write from %s',
+    it('persists disabling Developer Mode and Mainnet in one write from regtest', async () => {
+        const reload = vi.fn();
+        settings = { ...settings, activeNetwork: 'regtest' };
+        render(<DeveloperModeSection reload={reload} />);
+
+        expect(screen.getByText(/Turning it off while on Regtest returns the wallet to Mainnet\./)).toBeVisible();
+        fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
+
+        await waitFor(() => expect(update).toHaveBeenCalledWith({
+            developerMode: false,
+            activeNetwork: 'mainnet',
+        }));
+        expect(reload).toHaveBeenCalledOnce();
+    });
+
+    // Testnet is open without Developer Mode, so turning it off must not
+    // move the wallet or reload it.
+    it.each(['testnet', 'mainnet'])(
+        'disables Developer Mode alone and keeps %s selected',
         async (activeNetwork) => {
             const reload = vi.fn();
             settings = { ...settings, activeNetwork };
             render(<DeveloperModeSection reload={reload} />);
 
-            expect(screen.getByText(/Turning it off returns the wallet to Mainnet\./)).toBeVisible();
-            fireEvent.click(screen.getByRole('switch', { name: 'Developer Mode' }));
+            fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
 
-            await waitFor(() => expect(update).toHaveBeenCalledWith({
-                developerMode: false,
-                activeNetwork: 'mainnet',
-            }));
-            expect(reload).toHaveBeenCalledOnce();
+            await waitFor(() => expect(update).toHaveBeenCalledWith({ developerMode: false }));
+            expect(update).toHaveBeenCalledOnce();
+            expect(reload).not.toHaveBeenCalled();
         },
     );
 });

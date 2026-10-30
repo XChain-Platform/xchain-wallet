@@ -179,26 +179,211 @@ wait (`waitForTokenBalance`, `waitForValidAction`, `waitForActivationHeight`,
 (`test/unit/e2e/testnet-harness.test.js`) proves the whole healthy path with a
 venue whose forbidden members throw.
 
+The run-input network checks live in `testnet_preflight.js`, but after staging
+and parsing the input, global setup first runs `testnet_keys.js` and its
+synchronous `preflightRunInputKeys` gate. A mismatch stops the suite with
+`Key preflight refused` before any live write can use either supplied key.
+
+Stake-unstake waits for its residual stake row through `waitForResidualStake`
+in `test/e2e/fixtures/testnet_stakes.js`. It polls the explorer's stakes source
+route for the address every 30 seconds within the indexed wait budget, treats a
+non-OK answer, a rejected request, or a 2xx answer with no stake list as a miss
+and keeps polling, and at the deadline names the action index and, when the last
+poll failed, that failure as the HTTP status or an error code. A 2xx answer with
+no stake list reports `NO_STAKE_LIST`, so a refused or misrouted stakes request
+reads differently from a residual that is not yet indexed.
+Stake-unstake reads its activation target through `activationTarget`, which
+refuses an unreadable or non-future activation block at once instead of after
+the activation wait.
+
+Both testnet staking specs drive the wallet through
+`test/e2e/fixtures/testnet_walk.js`. It exports `WALLET_UNLOCK`, the unlock
+password the specs set on the wallets they create; `approve(page, password)`,
+which waits for the confirm modal, fills the password when it is asked for and
+clicks approve; `gotoPalette(page, title)`, which opens the command palette and
+picks the page by title; and `readDoneTxid(page)`, which reads the txid from the
+done screen. It imports nothing from `fixtures/testnet.js`, so a new testnet
+spec imports these helpers instead of declaring its own and a change to the
+confirm modal or the done screen is made once.
+
+Stake-unstake funds each wallet it creates through `fundTestnetAddress(venue,
+treasury, destination, options)` in `test/e2e/fixtures/testnet_funding.js`.
+The helper refuses a destination that is not a Bitcoin testnet address before
+it reads any key or calls the venue, proves that the treasury key derives its
+declared address, builds and broadcasts one payment of `FUNDING_SATS` (or the
+`sendSats` option) from the treasury's confirmed UTXOs, waits through
+`waitForFundingConfirmed` until the destination shows it confirmed, and returns
+its txid. It reads nothing from stdin, so a new testnet spec funds a wallet by
+passing it the treasury from the staged run input instead of composing those
+steps itself.
+
+Stake-unstake mints its XCHAIN gas through `mintTestnetXchain(page, amount,
+options)` in `test/e2e/fixtures/testnet_mint.js`. The helper reads the remaining
+XCHAIN supply capacity from the testnet explorer's token route through
+`readTestnetGasHeadroom` and refuses before any page step when that headroom is
+below the requested amount. It then signs one MINT through the Advanced action
+on the Bitcoin testnet chain from a testnet From address, and never reads the
+regtest explorer.
+
+Three unit guards, `test/unit/e2e/testnet_ui_text.test.js`,
+`test/unit/e2e/testnet_ui_names.test.js` and
+`test/unit/e2e/testnet_ui_regex.test.js`, read every testnet spec and testnet
+fixture. The first two fail with the file, line and text of any plain `getByText`
+literal, `getByRole` name, `getByLabel` or `getByTestId` literal that no file
+under `packages/core/src` holds any more. A name the wallet composes at render
+time is checked by its fragments through the `COMPOSED` map, so a renamed label
+fails the unit suite instead of a live testnet pass 120 s in after coins are
+spent. The third checks each regex first argument of `getByText` and `getByLabel`
+and each regex `name` option of `getByRole` by its longest literal fragment,
+case-insensitively when the pattern carries the `i` flag, against
+`packages/core/src`.
+
+`test/unit/e2e/testnet_config.test.js` imports `playwright.testnet.config.js`
+under a non-CI and a CI load and fails when its one worker, zero retries, serial
+run, testnet spec glob, global setup, `suiteOrigin` base URL, `suitePort`
+preview, fresh strict-port preview server, real browser origin rules or the json
+report path that `testnet_evidence.js` reads by default drift, so a config
+change fails the unit suite instead of hours into a live testnet pass.
+
+`test/unit/e2e/testnet_imports.test.js` parses every testnet spec, every testnet
+fixture, `global-setup.testnet.js` and `playwright.testnet.config.js`. It fails
+with the file, source and name of each relative import whose target is missing
+or no longer exports the imported name, following export-star re-exports, so a
+renamed or dropped fixture export fails the unit suite instead of a live
+testnet pass when it loads the spec. `test/unit/e2e/testnet_cli_entry.test.js`
+runs `testnet_evidence.js` and `testnet_run_input.js` through a symlinked
+fixtures directory, expects their refusal exits, and fails when a testnet CLI
+fixture compares an unresolved entry path instead of resolving it with
+`realpathSync`, so a CLI reached through a symlinked checkout or temp directory
+runs instead of exiting 0 having done nothing.
+
+The Playwright webServer command runs `runOriginPreflight` from
+`test/e2e/fixtures/testnet_origin.js` before the production build. A refused
+origin therefore stops the run before `vite build` starts. Global setup keeps
+the same check before the venue check and before stdin is read by calling
+`assertOriginsAllowed`. The check sends one `OPTIONS` request carrying the
+suite origin to each encoder, explorer and hub URL named by the testnet
+descriptor, skipping an empty hub URL. Each request goes to the URL with a
+trailing slash, because the SDK clients request paths under the descriptor
+URL and the browser therefore preflights `<base>/`; `encoder.xchain.io/TBTC`
+answers CORS only there and sends no CORS headers on the bare `/TBTC`. A service is allowed only when it
+answers with a 2xx status and an
+`access-control-allow-origin` header that is `*` or exactly the suite origin.
+Otherwise setup stops the run with one error starting `Origin preflight refused`
+that names every refused role, the suite origin and the header seen, or the
+fetch rejection code. A public service that permits only the production wallet
+origin therefore fails the run in seconds instead of stalling it hours in. The
+`suitePort` helper in `test/e2e/fixtures/testnet_origin.js` takes
+`XC_PREVIEW_PORT` only when it is an integer from 1 to 65535 and uses `4193`
+otherwise. `playwright.testnet.config.js` serves the preview on `suitePort()`
+and sets `baseURL` to `suiteOrigin()`, so the origin preflight probes the same
+origin the browser is served from. This preflight does not relax browser origin
+rules or decide which origins a service allows.
+
+After the venue check writes its two log lines and before stdin is read,
+`global-setup.testnet.js` runs `preflightGasHeadroom(MINT_AMOUNT, options)` from
+`test/e2e/fixtures/testnet_gas_preflight.js`. It reads the remaining XCHAIN
+supply capacity through `readTestnetGasHeadroom` in `testnet_mint.js` and passes
+when the gas token has no capped record or when its headroom covers
+`MINT_AMOUNT`. That is the gas amount stake-unstake mints, imported from the
+same gas preflight fixture. Otherwise setup stops the run with one error
+starting `Gas headroom preflight refused` that names the headroom and the
+amount. A failed token read instead stops it with an error starting
+`Gas headroom read failed:` followed by the HTTP status or an error code, never
+the rejection's message. A capped XCHAIN supply therefore fails the run in
+seconds, before the run input is staged and before any treasury is sent.
+
 Three things differ from regtest on purpose:
 
 - **No browser relaxation.** The public explorer sends CORS headers, so the
   config launches Chromium with real origin rules. A testnet pass that needed
   `--disable-web-security` would be reporting on a browser nobody ships.
-- **Global setup only reads.** It proves the venue is reachable, not stale,
-  halted or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
-- **Funding comes from the treasury, over stdin.** `fundFromTreasury` reads
-  one JSON object (`{ "wif": ..., "address": ... }`) from the process's stdin,
-  only once the wallet has shown the address to fund. The WIF is held in
-  memory for one signing call, the key buffer is zeroed after the address is
-  derived, and it is never logged, written, or passed in argv or the
-  environment. Before signing, the WIF must derive the declared address, every
-  selected input must be confirmed and pay that address, the value must cover
-  the spend, and change below the dust floor folds into the fee. A refusal
-  happens before any broadcast.
+- **Global setup only reads.** Its origin check and venue probes prove the
+  services accept the suite origin, the venue is reachable, not stale, halted
+  or lagging, that it prices a MINT of XCHAIN, and that the XCHAIN supply
+  covers the gas mint. It seeds nothing.
+- **Funding and recovery input arrive over stdin.** After the venue check
+  passes, `global-setup.testnet.js` reads stdin once and stages it in a
+  mode-0600 file inside a mode-0700 directory. Only that file's path, never a
+  key, is exported as `XC_TESTNET_RUN_INPUT`. The input is one JSON object
+  carrying the treasury `wif` and `address` (`segwitAddress` is accepted as an
+  alias), plus a `claimant` object with its own `wif` and `address` for the
+  partial-claim import. Before any funding is sent, stake-unstake writes each
+  funded wallet's phrase owner-only under the `xchain-wallet-testnet-recovery`
+  directory in the OS temporary directory.
+
+`node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json>`
+assembles that one run-input object from the stored treasury wallet file and
+the validator claimant file. It refuses either file when it is readable by
+group or other users, and refuses to write to a terminal, so the object only
+ever goes down a pipe. Starting that pipe remains the operator's act:
 
 ```bash
-cat <treasury wallet json> | pnpm test:e2e:testnet   # the operator's act, never a script's
+node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> | pnpm test:e2e:testnet
 ```
+
+After staging the input and before any spec runs, `global-setup.testnet.js`
+checks it with `test/e2e/fixtures/testnet_preflight.js`. The preflight refuses
+when confirmed treasury value cannot cover `FUNDING_SATS` plus the fee for two
+outputs, when the `claimant` is absent, or when the claimant's largest confirmed
+UTXO is below `MIN_CLAIM_UTXO_SATS`. A refusal names sats held, sats needed and
+the shortfall, but never a key or an address.
+Setup first proves through `test/e2e/fixtures/testnet_keys.js` that both keys
+derive their declared addresses and stops with `Key preflight refused` when
+either proof fails.
+
+After that run-input preflight and before any spec runs,
+`global-setup.testnet.js` runs `preflightClaimantReward` from
+`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's claimable total
+from the testnet explorer's `api/staking` summary. When the claimant has no
+unclaimed partial validator reward, or a set `claimant.amount` is not a valid
+partial of that reward, setup stops the run with one error starting
+`Claimant reward preflight refused`. The error names the reward seen but never
+a key or an address, so a claimant with nothing to claim fails in seconds
+instead of after stake-unstake has spent treasury and hours of block time.
+
+`node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> | node test/e2e/fixtures/testnet_ready.js`
+runs every global setup check with no build, no preview server and no browser,
+spends nothing and removes the staged input before it exits. It prints
+`testnet run ready` and exits 0 when the venue, the treasury and the claimant
+pass, prints `testnet run not ready: <message>` on stderr and exits 1 when a
+check refuses, and exits 2 without running a check when stdin is a terminal.
+
+When the treasury is short,
+`node test/e2e/fixtures/testnet_topup.js <source-wallet.json> <destination> [--broadcast]`
+refills it by sweeping every confirmed UTXO of a stored testnet key into one
+output to the destination. It prints one JSON line carrying `txid`, `txHex`,
+`fee`, `swept` and `inputs`, and broadcasts only when `--broadcast` is present.
+
+`node test/e2e/fixtures/testnet_recover.js <recovery-wallet.json> <destination> [--broadcast]`
+takes one recovery file that stake-unstake wrote under the
+`xchain-wallet-testnet-recovery` directory. It derives that wallet's key from
+its phrase the way the wallet does, refuses a file readable by group or other
+users, and sweeps every confirmed UTXO of the recovered address into one output
+to the destination. It prints one JSON line carrying `txid`, `txHex`, `fee`,
+`swept` and `inputs`, and broadcasts only when `--broadcast` is present. This is
+how sats left on a funded wallet go back to the treasury without a by-hand
+wallet restore.
+
+Every testnet run writes `test/e2e/test-results-testnet/results.json` through
+Playwright's json reporter beside the list reporter (github and html under CI).
+stake-unstake records its funding, mint, stake and unstake txids, and
+partial-claim its collect txid, as test annotations of type `txid` whose
+description is the label, a space and the txid. Those annotations carry only
+txids, never a key, a phrase or an address. Git ignores the file and the next
+run replaces it, so a pass or a failure leaves its on-chain record in that file
+instead of a scrolled terminal.
+
+`node test/e2e/fixtures/testnet_evidence.js [results.json]` reads that run
+record, `test/e2e/test-results-testnet/results.json` when no path is given. It
+prints one line per test giving its status, spec file and title, with one
+indented label and txid line under it for each txid the test recorded. It then
+ends on `testnet run passed` and exits 0 when the run has no errors, at least
+one test, every test expected and a funding, mint, stake, unstake and collect txid.
+Any absent label is named on a `missing txid` line before the reader ends on
+`testnet run failed` and exits 1. It exits 2 with one stderr line naming the
+path when the file is missing or is not JSON. The ledger closure cites the
+printed txids instead of reading the JSON tree by hand.
 
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is

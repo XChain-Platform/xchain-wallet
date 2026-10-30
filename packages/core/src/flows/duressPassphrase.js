@@ -48,7 +48,7 @@
 // passphrase is never persisted.
 
 import { sha256 } from '@noble/hashes/sha2';
-import { logConsole } from '../shared/utils/logConsole.js';
+import { __resetGuardStorageFailureForTests, noteGuardStorageFailure } from '../shared/utils/storageFailureNote.js';
 import { activatePanicMode, PANIC_ARMED_DURESS } from './panicMode.js';
 
 const STORAGE_KEY = 'xchain-wallet:duress';
@@ -58,18 +58,34 @@ export const DURESS_STORAGE_KEY = STORAGE_KEY;
 
 let memoryFallback = null;
 let memoryFallbackActive = false;
-let storageFailureLogged = false;
+
+// Whether the record this context answers from is the one storage holds. The
+// Safety row reads it so the user is told when a passphrase works only until
+// the app closes, or when removing it was refused and it stays armed:
+//   saved          storage agrees with what isDuressMatch answers
+//   unsaved        storage refused the record; it lives in memory only and a
+//                  restart drops it without a word
+//   clear-failed   storage refused the removal; the passphrase stays armed
+export const DURESS_SAVE_SAVED = 'saved';
+export const DURESS_SAVE_UNSAVED = 'unsaved';
+export const DURESS_SAVE_CLEAR_FAILED = 'clear-failed';
+let saveStatus = DURESS_SAVE_SAVED;
+
+/** @returns {'saved'|'unsaved'|'clear-failed'} */
+export function getDuressSaveStatus() {
+    return saveStatus;
+}
 
 function keepMemoryFallback(record) {
     memoryFallback = record ? { ...record } : null;
     memoryFallbackActive = true;
-    if (storageFailureLogged) return;
-    storageFailureLogged = true;
-    logConsole.record({
-        source: 'duress-passphrase',
-        level: 'warn',
-        message: 'local storage write failed; using in-memory state',
-    });
+    noteStorageFailure();
+}
+
+// The same line the lockout and panic records give (storageFailureNote.js),
+// so the log never names the duress passphrase.
+function noteStorageFailure() {
+    noteGuardStorageFailure();
 }
 
 // Injected async persistence (native shells: the Keychain/Keystore-backed
@@ -145,6 +161,7 @@ export async function configureDuressPersistence(store) {
     persistentStore = store || null;
     memoryFallback = null;
     memoryFallbackActive = false;
+    saveStatus = DURESS_SAVE_SAVED;
     if (!persistentStore) return;
     const configuredStore = persistentStore;
     try {
@@ -176,7 +193,8 @@ export function __resetDuressPersistenceForTests() {
     persistentStore = null;
     memoryFallback = null;
     memoryFallbackActive = false;
-    storageFailureLogged = false;
+    __resetGuardStorageFailureForTests();
+    saveStatus = DURESS_SAVE_SAVED;
 }
 
 function readRecord() {
@@ -199,11 +217,13 @@ function writeRecord(record) {
         memoryFallback = record ? { ...record } : null;
         const store = persistentStore;
         persistBestEffort(() => (record === null ? store.clear() : store.save({ ...record })));
+        saveStatus = DURESS_SAVE_SAVED;
         return;
     }
     const store = getStorage();
     if (!store) {
         keepMemoryFallback(record);
+        saveStatus = record === null ? DURESS_SAVE_SAVED : DURESS_SAVE_UNSAVED;
         return;
     }
     try {
@@ -214,9 +234,32 @@ function writeRecord(record) {
         }
         memoryFallback = null;
         memoryFallbackActive = false;
+        saveStatus = DURESS_SAVE_SAVED;
     } catch (_err) {
+        if (record === null) {
+            // The stored record survives a refused removal, so this context
+            // keeps answering from it too: a passphrase that reads as removed
+            // here and armed after a restart is the half state to avoid.
+            noteStorageFailure();
+            saveStatus = DURESS_SAVE_CLEAR_FAILED;
+            return;
+        }
         keepMemoryFallback(record);
+        saveStatus = DURESS_SAVE_UNSAVED;
     }
+}
+
+/**
+ * Write the record this context holds again after storage refused it: the
+ * in-memory salt and hash for an unsaved passphrase, or the removal that was
+ * refused. The plaintext is never needed.
+ *
+ * @returns {'saved'|'unsaved'|'clear-failed'}
+ */
+export function retryDuressSave() {
+    if (saveStatus === DURESS_SAVE_UNSAVED) writeRecord(readRecord());
+    else if (saveStatus === DURESS_SAVE_CLEAR_FAILED) writeRecord(null);
+    return saveStatus;
 }
 
 function bytesToBase64(bytes) {
@@ -298,6 +341,25 @@ export function isDuressMatch(candidate) {
     } catch (_err) {
         return false;
     }
+}
+
+/**
+ * The refusal every form gives when a wallet password it is about to set
+ * equals the duress passphrase. The Locked screen tries the real unlock
+ * before the duress check, so such a password opens the wallet when it is
+ * typed under duress and arms nothing.
+ */
+export const DURESS_PASSWORD_COLLISION_MESSAGE = 'Choose a password that differs from your duress passphrase.';
+
+/**
+ * Whether a wallet password about to be set (create, import, pair, migrate,
+ * change password) equals the configured duress passphrase.
+ *
+ * @param {string} password
+ * @returns {boolean}
+ */
+export function walletPasswordCollidesWithDuress(password) {
+    return isDuressMatch(password);
 }
 
 /**

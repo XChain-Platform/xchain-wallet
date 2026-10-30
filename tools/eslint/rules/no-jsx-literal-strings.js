@@ -35,11 +35,14 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error, recovery, feeText, emptyActionLabel, warningNoun (the
+//     error, recovery, feeText, emptyActionLabel, warningNoun, message,
+//     description, lead, legend, closeLabel, searchLabel, subtitle,
+//     chainLabel, accessibleLabel, visibleLabel, labelPrefix (the
 //     USER_FACING_ATTRS set below is the authority; keep this list in step
-//     with it). The last thirty are component props rather
-//     than DOM attributes: shipping components render copy through them,
-//     so a DOM-only set left that copy out of the translator index.
+//     with it). The last forty-one are component
+//     props rather than DOM attributes: shipping components
+//     render copy through them, so a DOM-only set left that copy out of the
+//     translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
 //     when the property KEY is one of those same names and the default
 //     is a non-trivial string or template. Copy shipped as a default
@@ -87,8 +90,13 @@
 //     descriptor array that is filtered and mapped before it renders, or
 //     a function-local `const retry = { label: 'Try again' }` passed as
 //     recovery={retry}).
-//   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
-//     wherever the copy is written.
+//   - Copy props and descriptor keys outside USER_FACING_ATTRS, wherever
+//     the copy is written; a component that renders copy through a new
+//     prop name needs that name added to the set.
+//   - A prop default bound to a module-scope STRING const, e.g.
+//     DemoExitConfirm's `message = DEMO_EXIT_MESSAGE` forwarded as
+//     message={message}. The default is an identifier, not a literal,
+//     and the constant-table branch resolves only `{ … }` / `[ … ]` consts.
 //   - Copy passed through a `value` prop, e.g. a row component that
 //     renders <DetailRow label="x" value="Default window" /> as text.
 //     `value` stays unchecked because CopyButton and form controls carry
@@ -217,7 +225,7 @@ const USER_FACING_ATTRS = new Set([
     'copyLabel',
     'balanceText',
     'submitLabel',
-    // Three copy props the set still had no name for. QueuedResultPanel
+    // Three copy props the set still had no name for. ResultScreen
     // interpolates `what` into `Your ${what}` and renders it in the queued
     // hint, and nineteen routes pass it as a literal ("cross-chain swap",
     // "dispenser", "sweep"); StalenessLabel ships `prefix = 'Last synced'`
@@ -265,6 +273,51 @@ const USER_FACING_ATTRS = new Set([
     // SignApproval interpolates `warningNoun` into the sentence under the
     // signed text, the same shape as `noun` and `what`.
     'warningNoun',
+    // ConfirmModal and NoticeModal render `message` verbatim as the dialog
+    // body, and NotificationsSection's NotificationSaveError renders it in a
+    // role="alert" span (Locked's delete-all confirm, the save-error lines).
+    // Checked across packages/*/src: every other JSX `message=` is a runtime
+    // value (`message={deepLinkNotice}` in the three App.jsx shells,
+    // `message={request?.message || ''}` in SignMessageForm), which no gate
+    // reports, and no ObjectPattern gives `message` a non-empty string default.
+    'message',
+    // SectionHeader renders `description` verbatim as the muted line under its
+    // title, and FormSection plus the settings and route screens pass whole
+    // sentences through it. Checked across packages/*/src: every JSX
+    // `description=` carries copy or a runtime value (`description={hint}`),
+    // no ObjectPattern gives it a string default, and the same-named
+    // identifiers are locals, state or `styles.description`, which no gate reaches.
+    'description',
+    // FormNotice forwards `lead` to StatusMessage and NoticeLines, which render it
+    // verbatim as the bold opening sentence. No JSX `lead=` in packages/*/src is technical.
+    'lead',
+    // RadioGroup renders `legend` verbatim as the fieldset's <legend>, its visible
+    // caption and accessible name. No JSX `legend=` in packages/*/src is technical.
+    'legend',
+    // OverlaySurface forwards `closeLabel` straight into its close button's DOM
+    // aria-label, the same one-hop shape as `ariaLabel`, `iconLabel` and `aria`.
+    'closeLabel',
+    // ListToolbar forwards `searchLabel` straight into its search box's DOM
+    // aria-label, the same one-hop shape as `closeLabel`. Every JSX `searchLabel=`
+    // in packages/*/src is copy (the list routes' "Search …" names).
+    'searchLabel',
+    // ListRow renders `subtitle` verbatim as the line under its title. Every JSX
+    // `subtitle=` in packages/*/src is copy (routes and the style guide), a JSX
+    // element or a runtime value, and no gate reports the last two.
+    'subtitle',
+    // TickItemsEditor interpolates `chainLabel` into its "Not found on …" warning.
+    // Every JSX `chainLabel=` but one literal is a runtime display name, a
+    // ChainBadge or null, which no gate reports (the same argument as `message`).
+    'chainLabel',
+    // The settings ToggleRow forwards `accessibleLabel` straight into its switch's
+    // DOM aria-label, the same one-hop shape as `closeLabel`. Every JSX `accessibleLabel=` is copy.
+    'accessibleLabel',
+    // HistoryCopyButton forwards `visibleLabel` to CopyButton's `label`, its visible
+    // text. Every JSX `visibleLabel=` is copy, and its only default is another prop.
+    'visibleLabel',
+    // ParallelComposer's StatusPill prefixes its aria-label with `labelPrefix`, as a
+    // prop default and from its row call site; both are copy.
+    'labelPrefix',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -643,7 +696,7 @@ export function findViolations(node, options = {}) {
             if (!isTrivialString(n.value, allow, minLength)) {
                 out.push({
                     node: n,
-                    message: `Inline JSX text "${truncate(n.value)}" should be moved to i18n/locales/<lang>/index.js and accessed via t('key').`,
+                    message: `Inline JSX text "${truncate(n.value)}" should be moved to the i18n/locales/<lang>/ dictionary and accessed via t('key').`,
                 });
             }
         } else if (n.type === 'JSXAttribute') {

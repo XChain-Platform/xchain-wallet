@@ -22,6 +22,8 @@
 // `actionByTxid` isn't list-specific at the SDK level either (it also
 // resolves the AIRDROP's own action after stage 6 of that flow).
 
+import { explorerReadFresh } from '../sdk/explorerRateLimit.js';
+
 /**
  * Fetch the indexed action for a given tx hash. Returns null when the
  * transaction hasn't been indexed yet (the explorer 404s); the form
@@ -59,20 +61,27 @@ export async function actionByTxid({ sdkRegistry, chainId, txid }) {
  * AIRDROP review to confirm the list's TYPE + item-count match what
  * the user pasted before they sign the AIRDROP.
  *
- * @param {{ sdkRegistry: any, chainId: string, actionIndex: string }} params
+ * A caller that judges a signature on the answer (an access list read at
+ * Approve) passes `fresh`, so both hops go to the indexer past the explorer
+ * wrapper's read reuse and the HTTP cache.
+ *
+ * @param {{ sdkRegistry: any, chainId: string, actionIndex: string, fresh?: boolean }} params
  */
-export async function listByActionIndex({ sdkRegistry, chainId, actionIndex }) {
+export async function listByActionIndex({ sdkRegistry, chainId, actionIndex, fresh = false }) {
     if (!sdkRegistry) throw new Error('listByActionIndex: sdkRegistry is required');
     if (!chainId) throw new Error('listByActionIndex: chainId is required');
     if (!actionIndex) throw new Error('listByActionIndex: actionIndex is required');
     const sdk = sdkRegistry.get(chainId);
-    const action = await sdk.getAction(actionIndex);
+    const read = (index) => (fresh
+        ? explorerReadFresh(sdk, `/action/${encodeURIComponent(String(index))}`, () => sdk.getAction(index))
+        : sdk.getAction(index));
+    const action = await read(actionIndex);
     const format = action?.action_format ?? action?.format;
     if (action?.action === 'LIST'
         && Number(format) === 5
         && action.list_action_index != null
         && action.list_action_index !== '') {
-        return sdk.getAction(action.list_action_index);
+        return read(action.list_action_index);
     }
     return action;
 }

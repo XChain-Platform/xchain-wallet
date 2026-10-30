@@ -1,33 +1,11 @@
 .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: var(--xc-settings-row-gap);
 }
 
-.row,
-.panel,
-.keyPanel {
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-}
-
-.panel,
-.keyPanel,
-.form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.keyPanel {
-    margin-top: var(--xc-space-2);
-}
-
-.dangerPanel {
-    border-color: var(--xc-danger-fg);
-}
+/* Opened rows use FormPage for the shared responsive form card. Result and
+   confirmation rows use the shared card directly with no tinted variant. */
 
 .actions {
     display: flex;

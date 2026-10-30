@@ -10,11 +10,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
 import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './ViewPrivateKey.module.css';
 
 const REVEAL_TIMEOUT_MS = 30_000;
@@ -42,8 +43,9 @@ const REVEAL_TIMEOUT_MS = 30_000;
 export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     // S4: A private key on screen is the wallet. FLAG_SECURE also keeps this
     // window out of the recents thumbnail, which Android writes to disk.
-    // No-op on every shell that installs no screen guard (web, extension,
-    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    // Desktop applies window content protection; web and extension install
+    // no screen guard: a browser tab cannot stop a screenshot and must not
+    // pretend to.
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
@@ -79,17 +81,25 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         onBack();
     }, [clearSensitiveState, onBack]);
 
+    useBackHandler(stage === 'warning' ? undefined : clearSensitiveState);
+
     useEffect(() => {
         if (stage !== 'password') return undefined;
         const id = setTimeout(() => passwordRef.current?.focus(), 0);
         return () => clearTimeout(id);
     }, [stage]);
 
-    // Window blur covers accidental exposure during screen sharing.
+    // Window blur covers accidental exposure during screen sharing. Desktop
+    // also reports native minimize and hide because Electron does not emit a
+    // reliable DOM blur or visibility transition for those paths.
     useEffect(() => {
         const handler = () => setRevealed(false);
         window.addEventListener('blur', handler);
-        return () => window.removeEventListener('blur', handler);
+        window.addEventListener('xc:window-hidden', handler);
+        return () => {
+            window.removeEventListener('blur', handler);
+            window.removeEventListener('xc:window-hidden', handler);
+        };
     }, []);
 
     // A reveal expires even when the window remains focused.
@@ -150,7 +160,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         <PageHeader
             onBack={leaveScreen}
             title="Show private key"
-            titleIcon={<Icon.LockIcon />}
         />
     );
     const wrap = (children) => (
@@ -163,7 +172,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     if (sourceInfo.kind === 'hardware') {
         return wrap(
             <>
-                <h2 className={styles.infoTitle}>Private key is on your hardware device</h2>
+                <SectionHeader title="Private key is on your hardware device" />
                 <p className={styles.paragraph}>
                     The private key for this address lives on your {sourceInfo.deviceLabel}.
                     The wallet never sees or stores it.
@@ -187,7 +196,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     if (sourceInfo.kind === 'watch-only') {
         return wrap(
             <>
-                <h2 className={styles.infoTitle}>No private key for this address</h2>
+                <SectionHeader title="No private key for this address" />
                 <p className={styles.paragraph}>
                     This is a watch-only address. The wallet only observes it; no
                     private key is stored here and nothing can be signed from it.
@@ -238,37 +247,42 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         );
     }
 
+    // The password step is a form, so it lays out through FormPage: bare on a
+    // phone, one card when wide, the submit button closing the form. A refused
+    // password or a failed load is the form notice, the first item on the page.
     if (stage === 'password' || stage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.paragraph}>
-                    Confirm your wallet password. The key stays hidden until you tap to reveal it.
-                </p>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Wallet password"
-                    hint="Required every time you view a private key."
-                    value={password}
-                    onChange={(event) => {
-                        setPassword(event.target.value);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={stage === 'submitting'}
-                    error={submitError || undefined}
-                />
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || password.length === 0}
-                    >
-                        Confirm password
-                    </Button>
-                </div>
-            </form>,
+        return (
+            <Screen variant={variant} header={header}>
+                <FormPage
+                    onSubmit={handleSubmit}
+                    status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
+                    intro="Confirm your wallet password. The key stays hidden until you tap to reveal it."
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={stage === 'submitting' || password.length === 0}
+                        >
+                            Confirm password
+                        </Button>
+                    )}
+                >
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Wallet password"
+                        hint="Required every time you view a private key."
+                        value={password}
+                        onChange={(event) => {
+                            setPassword(event.target.value);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        autoComplete="current-password"
+                        disabled={stage === 'submitting'}
+                    />
+                </FormPage>
+            </Screen>
         );
     }
 

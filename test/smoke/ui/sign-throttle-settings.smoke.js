@@ -122,8 +122,10 @@ assert.match(sectionSrc, /<SignThrottlePanel/,
     'SignThrottlePanel mounted at the bottom of ConnectedSitesSection');
 assert.match(sectionSrc, /function SignThrottlePanel\(\)/,
     'SignThrottlePanel defined');
-assert.match(sectionSrc, /const \{ settings, update \} = useSettings\(\)/,
-    'panel reads + writes settings via useSettings');
+// The panel shows its own save error, so it mounts the hook with reportsOwnError
+// and the hook adds no second message.
+assert.match(sectionSrc, /const \{ settings, update \} = useSettings\(\{ reportsOwnError: true \}\)/,
+    'panel reads + writes settings via useSettings and reports its own error');
 assert.match(
     sectionSrc,
     /aria-label="Sign-throttle burst/,

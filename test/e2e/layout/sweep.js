@@ -11,8 +11,8 @@
 // Layout sweep: walk every screen the wallet can reach and measure it for the
 // faults a user sees but no functional test catches - content off the edge of
 // the screen, text cut off by a clipping parent, a page that scrolls sideways,
-// panels that scroll when they should fit, and content below the fold that
-// nothing lets you reach.
+// panels that scroll when they should fit, content below the fold that
+// nothing lets you reach, and controls drawn over each other.
 //
 // It runs the same walk in every venue (Chromium at Android sizes, WebKit at
 // iPhone and iPad sizes, the Electron desktop app at several window sizes),
@@ -73,6 +73,10 @@ export function measureInPage(opts = {}) {
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 1 || r.height < 1) continue;
+        // A 1x1 box is the visually-hidden pattern (.sr-only, the skip link
+        // before it has focus): text for screen readers, never seen. WebKit
+        // reports it a hair over 1px under page zoom.
+        if (r.width < 1.5 && r.height < 1.5) continue;
         if (scrollable(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) {
             push('xScrollers', { el: desc(el), by: el.scrollWidth - el.clientWidth, w: Math.round(r.width) });
         }
@@ -108,8 +112,12 @@ export function measureInPage(opts = {}) {
                 push('clipped', { el: desc(el), by: desc(clipX), cut: Math.round(Math.max(r.right - R, L - r.left)) });
             }
         }
+        // Text painted transparent is not seen, so it cannot be seen cut: a
+        // read-only address input keeps its full value that way under the
+        // shortened overlay that shows it.
+        const transparentText = /^rgba\(.*,\s*0\)$|^transparent$/.test(cs.color);
         if ((cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.children.length === 0
-            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis') {
+            && el.scrollWidth > el.clientWidth + 1 && cs.textOverflow !== 'ellipsis' && !transparentText) {
             push('clipped', { el: desc(el), by: 'itself', cut: el.scrollWidth - el.clientWidth });
         }
         if (!fixed && !inYScroller && res.pageScrollY === 0 && B > vh + 1) {
@@ -118,27 +126,82 @@ export function measureInPage(opts = {}) {
     }
     res.layout = measureLayout();
     res.narrow = measureNarrowLists();
+    res.overlaps = measureOverlaps();
     if (opts.contrast) measureContrast();
     return res;
 
+    // Controls drawn over each other: an in-field icon that a wider Paste
+    // button runs into at large text, say. Only controls a tap can reach at
+    // their own centre count, so a menu or dialog laid over the page (which
+    // covers the page's controls by design) is not an overlap; and only
+    // controls in the same scroller, so a row scrolling under the fixed
+    // navigation bar is not one either.
+    function measureOverlaps() {
+        const found = [];
+        const scrollerOf = (el) => {
+            for (let a = el.parentElement; a; a = a.parentElement) {
+                const acs = getComputedStyle(a);
+                if (scrollable(acs.overflowY) || scrollable(acs.overflowX)) return a;
+                if (acs.position === 'fixed') return a;
+            }
+            return null;
+        };
+        const controls = [...document.querySelectorAll(
+            'button, a[href], [role="button"], select, input[type="checkbox"], input[type="radio"]',
+        )].filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width < 1.5 || r.height < 1.5) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            if (x < 0 || y < 0 || x > vw || y > vh) return false;
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === el || el.contains(hit)));
+        });
+        for (let i = 0; i < controls.length && found.length < 15; i += 1) {
+            for (let j = i + 1; j < controls.length && found.length < 15; j += 1) {
+                const a = controls[i];
+                const b = controls[j];
+                if (a.contains(b) || b.contains(a)) continue;
+                if (scrollerOf(a) !== scrollerOf(b)) continue;
+                const ra = a.getBoundingClientRect();
+                const rb = b.getBoundingClientRect();
+                const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+                const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+                // A control laid wholly inside another (a row's trailing Info
+                // or Rename button) is that row's own action, drawn there on
+                // purpose; two controls that only partly cover each other are
+                // the collision this looks for.
+                const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5
+                    && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+                if (inside(ra, rb) || inside(rb, ra)) continue;
+                if (w > 2 && h > 2) found.push({ el: desc(a), with: desc(b), w: Math.round(w), h: Math.round(h) });
+            }
+        }
+        return found;
+    }
+
     // The route contract is measured from the main scroller's inner border.
     // This keeps a left navigation rail out of page-gutter coordinates and
-    // puts the right measurement against the scrollbar's real leading edge.
+    // puts both measurements against the scroll frame's usable edges.
     function measureLayout() {
         const main = document.getElementById('xc-main');
         if (!main) return null;
         const mcs = getComputedStyle(main);
         const mr = main.getBoundingClientRect();
         const borderL = main.clientLeft;
-        const borderR = parseFloat(mcs.borderRightWidth) || 0;
         const padL = parseFloat(mcs.paddingLeft) || 0;
         const padR = parseFloat(mcs.paddingRight) || 0;
         const frameLeft = mr.left + borderL;
-        const scrollbarWidth = Math.max(0, mr.width - borderL - borderR - main.clientWidth);
-        const scrollbarLeft = mr.right - borderR - scrollbarWidth;
+        // clientLeft includes a classic left-side scrollbar in RTL Chromium,
+        // so this is the usable right edge in both writing directions.
+        const frameRight = frameLeft + main.clientWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
-        const expectedGutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        // The tiered page gutter (--xc-page-gutter): 12px below 640px, 16px
+        // from 640px, 24px from 900px. Kept in step with pageGutterForWidth by
+        // hand, since this body runs in the page.
+        const vwNow = window.innerWidth;
+        const expectedGutter = vwNow >= 900 ? 24 : vwNow >= 640 ? 16 : 12;
         const visible = (el) => {
             const cs = getComputedStyle(el);
             const r = el.getBoundingClientRect();
@@ -151,21 +214,26 @@ export function measureInPage(opts = {}) {
         const form = first && (first.tagName === 'FORM' || first.getAttribute('role') === 'group');
         const shell = main.parentElement;
         const header = shell ? [...shell.children].find((el) => el.tagName === 'HEADER' && visible(el)) : null;
-        const headerFirst = header ? [...header.children].find(visible) : null;
+        const headerChildren = header ? [...header.children].filter(visible) : [];
+        const headerFirst = headerChildren[0] ?? null;
+        const headerLast = headerChildren.at(-1) ?? null;
         const hr = headerFirst?.getBoundingClientRect();
+        const hlr = headerLast?.getBoundingClientRect();
         const round = (value) => Math.round(value * 100) / 100;
         return {
             expectedGutter,
             contentLeft: round(contentLeft - frameLeft),
-            contentRightGap: round(scrollbarLeft - contentRight),
+            contentRightGap: round(frameRight - contentRight),
             first: first ? {
                 el: desc(first),
                 kind: form ? 'form' : 'list',
                 left: round(fr.left - frameLeft),
-                rightGap: round(scrollbarLeft - fr.right),
+                rightGap: round(frameRight - fr.right),
                 topGap: round(fr.top - mr.top + main.scrollTop - main.clientTop),
             } : null,
             headerLeft: hr ? round(hr.left - frameLeft) : null,
+            headerRightGap: hlr ? round(frameRight - hlr.right) : null,
+            tier: main.closest('[data-xc-tier]')?.getAttribute('data-xc-tier') ?? null,
         };
     }
 
@@ -369,17 +437,45 @@ export function measureControlRows() {
         '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
         '[role="switch"]', '[role="combobox"]', '[role="tab"]', '[role="menuitem"]',
     ].join(',');
+    // A control 2px or less across is visually hidden (a skip link before
+    // focus, the native input under a drawn radio), so nobody sees it in a row.
     const visible = (el) => {
         const cs = getComputedStyle(el);
         const r = el.getBoundingClientRect();
         return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0'
-            && r.width >= 1 && r.height >= 1
+            && r.width > 2 && r.height > 2
             && !el.matches(':disabled, [aria-disabled="true"]');
+    };
+    // A row lives inside one region: a landmark, a dialog or menu, or a
+    // fixed or sticky layer. The sidebar beside the page, the bottom tab bar
+    // over scrolled content and a sticky header over a list share a flex or
+    // grid shell with the content, yet their controls never form a row with
+    // it.
+    const regionSelector = [
+        'main', 'nav', 'aside', 'header', 'footer', 'dialog',
+        '[role="main"]', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+        '[role="complementary"]', '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]',
+    ].join(',');
+    const regionOf = (el) => {
+        for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+            if (node.matches(regionSelector)) return node;
+            if (/^(fixed|sticky)$/.test(getComputedStyle(node).position)) return node;
+        }
+        return document.body;
     };
     // Nested interactive markup represents one control even when both the
     // wrapper and its implementation carry an interactive role.
     const controls = [...document.querySelectorAll(selector)].filter((el) => (
         visible(el) && !el.parentElement?.closest(selector)
+    ));
+    // A control with no background and no full border draws no box: an
+    // underlined text link in a sentence, an underline tab. Its height and
+    // corner radius never show, so only its type is held to the row.
+    const clear = (colour) => !colour || colour === 'transparent' || /^rgba\(.*,\s*0\)$/.test(colour);
+    const drawsBox = (cs) => !clear(cs.backgroundColor) || ['Top', 'Right', 'Bottom', 'Left'].every((side) => (
+        parseFloat(cs[`border${side}Width`]) > 0
+        && !/^(none|hidden)$/.test(cs[`border${side}Style`])
+        && !clear(cs[`border${side}Color`])
     ));
     const records = controls.map((el) => {
         const rect = el.getBoundingClientRect();
@@ -388,17 +484,25 @@ export function measureControlRows() {
         const buttonLike = el.tagName === 'BUTTON' || el.getAttribute('role') === 'button';
         const name = el.getAttribute('aria-label') || text.replace(/\s+/g, ' ').slice(0, 48)
             || el.getAttribute('name') || el.tagName.toLowerCase();
+        // A tab is one stop of its tab strip: the strip's outline is what
+        // sits beside the next control, and the selected tab's tint is a
+        // state inside it, so a tab takes the strip's box and radius.
+        const strip = el.getAttribute('role') === 'tab' ? el.closest('[role="tablist"]') : null;
+        const surface = strip ? getComputedStyle(strip) : cs;
         return {
             el,
+            region: regionOf(el),
             rect,
             height: rect.height,
-            radius: cs.borderRadius,
+            radius: surface.borderRadius,
             fontSize: cs.fontSize,
+            box: drawsBox(surface),
             iconOnly: buttonLike && text.length === 0,
             desc: `${el.tagName.toLowerCase()} "${name}"`,
         };
     });
     const sameRow = (a, b) => {
+        if (a.region !== b.region) return false;
         const horizontallySeparate = a.rect.right <= b.rect.left + 1 || b.rect.right <= a.rect.left + 1;
         const overlap = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
         return horizontallySeparate && overlap >= Math.min(a.rect.height, b.rect.height) / 2;
@@ -443,16 +547,33 @@ export function measureControlRows() {
         }
     }
 
+    // A row that spills: a control past its row container's edge or past the
+    // window. Rows that scroll sideways on purpose (tab strips, chip
+    // scrollers) are left alone, and so is a control parked wholly off screen
+    // until focused (a skip link).
+    const viewportWidth = document.documentElement.clientWidth;
+    const scrollsSideways = (el) => /(auto|scroll)/.test(getComputedStyle(el).overflowX);
+    const parkedOffScreen = (item) => item.rect.right <= 0 || item.rect.left >= viewportWidth;
+    const spills = (container, items) => {
+        if (scrollsSideways(container)) return false;
+        const box = container.getBoundingClientRect();
+        return items.some((item) => !parkedOffScreen(item)
+            && (item.rect.left < Math.max(box.left, 0) - 1
+                || item.rect.right > Math.min(box.right, viewportWidth) + 1));
+    };
+
     const findings = [];
     const signatures = new Set();
-    for (const rows of grouped.values()) {
+    for (const [container, rows] of grouped.entries()) {
         for (const row of rows) {
             const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
-            const heights = items.map((item) => item.height);
+            const heights = items.filter((item) => item.box || item.iconOnly).map((item) => item.height);
             const styled = items.filter((item) => !item.iconOnly);
+            const boxed = styled.filter((item) => item.box);
             const problems = [];
-            if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
-            if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
+            if (spills(container, items)) problems.push('overflow');
+            if (heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
+            if (boxed.length > 1 && new Set(boxed.map((item) => item.radius)).size > 1) problems.push('border-radius');
             if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');
             if (problems.length === 0) continue;
             const signature = `${problems.join(',')}|${items.map((item) => item.desc).join('|')}`;
@@ -466,6 +587,7 @@ export function measureControlRows() {
                     borderRadius: item.radius,
                     fontSize: item.fontSize,
                     iconOnly: item.iconOnly,
+                    box: item.box,
                 })),
             });
         }
@@ -473,90 +595,295 @@ export function measureControlRows() {
     return findings;
 }
 
-/** Applies a venue's root font size before app code runs on every document. */
-export function installRootFontSize(page, rootFontSize) {
-    if (!rootFontSize) return Promise.resolve();
-    return page.addInitScript((size) => {
-        document.documentElement.style.fontSize = size;
-    }, rootFontSize);
+/** The root font size the app computes for a native font scale. */
+export const BASE_ROOT_FONT_PX = 16;
+export function expectedRootFontPx(fontScale) {
+    return fontScale ? BASE_ROOT_FONT_PX * fontScale : null;
 }
 
-/** Returns the route labels and layout-contract failures from a completed sweep. */
-export function layoutSweepFailures(screens) {
-    const failures = [];
-    const topGaps = { form: new Set(), list: new Set() };
+/**
+ * Large text goes in through the app's own font-scale path, the one iOS and
+ * Android use, never by writing the root style from the harness: an init
+ * script runs before the document has a root element, so a root style set
+ * there never applied and the large-text venue measured at 100 percent.
+ *
+ * Cold start: every document starts with the native bootstrap global the app
+ * reads on load (what the iOS shell injects). Live: applyFontScale sends the
+ * native font-scale event once the app is listening.
+ */
+export function installFontScale(page, fontScale) {
+    if (!fontScale) return Promise.resolve();
+    return page.addInitScript((scale) => {
+        window.__xchainNativeFontScale = scale;
+    }, fontScale);
+}
+
+/** Sends the native font-scale event and waits until the root size follows it. */
+export async function applyFontScale(page, fontScale) {
+    if (!fontScale) return;
+    await page.evaluate((scale) => {
+        window.dispatchEvent(new CustomEvent('xchain:native-font-scale', { detail: { fontScale: scale } }));
+    }, fontScale);
+    await page.waitForFunction(
+        (px) => Math.abs(parseFloat(getComputedStyle(document.documentElement).fontSize) - px) <= 0.5,
+        expectedRootFontPx(fontScale),
+        { timeout: 10_000 },
+    );
+}
+
+/** The root font size failure for one measured screen, or null. */
+export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expected }) {
+    if (expected == null) return null;
+    if (typeof rootFontPx === 'number' && Math.abs(rootFontPx - expected) <= 0.5) return null;
+    const actual = typeof rootFontPx === 'number' ? `${rootFontPx}px` : 'unread';
+    return `${label}: root font size ${actual}, expected ${expected}px`;
+}
+
+/**
+ * The compact page gutter, the --xc-page-gutter token below 640px (also the
+ * extension popup and side panel).
+ */
+export const PAGE_GUTTER_PX = 12;
+
+/** The tiered --xc-page-gutter for a viewport width: 12px, 16px from 640px, 24px from 900px. */
+export function pageGutterForWidth(width) {
+    if (width >= 900) return 24;
+    if (width >= 640) return 16;
+    return PAGE_GUTTER_PX;
+}
+
+/**
+ * The layout keys the page gutter contract owns. The other keys
+ * (headerScrolledAway, contentEdge) are open UI debt measured against the
+ * rulings allowlist by tests/layout/rulings-gate.spec.js.
+ */
+export const GUTTER_CONTRACT_KEYS = Object.freeze(['rootFont', 'gutter', 'topGap']);
+
+/**
+ * Every layout finding of a completed sweep, keyed:
+ *   rootFont            the screen lost the text size it was measured at
+ *   gutter              content, header or first block off the page gutter
+ *   topGap              form and list top gaps differ inside one shell
+ *   headerScrolledAway  the app header or navigation left the viewport when
+ *                       the page scrolled (measured with `rulings: true`)
+ *   contentEdge         a list, card or table stops short of the usable
+ *                       content width, so it does not reach the scrollbar
+ * Each finding is { key, screen, detail }; `screen` is null for a finding
+ * about the whole sweep.
+ */
+export function layoutSweepFindings(screens) {
+    const findings = [];
+    const add = (key, screen, detail) => findings.push({ key, screen, detail });
+    // The sidebar layout sets its own top gap per tier, so form and list gaps
+    // are only comparable inside one shell: onboarding screens sit outside it.
+    const gapsByShell = new Map();
     const close = (actual, expected) => Math.abs(actual - expected) <= 1;
+    for (const screen of screens) {
+        const rootFailure = rootFontFailure(screen);
+        if (rootFailure) add('rootFont', screen.label, rootFailure);
+    }
     for (const { label, layout, vw } of screens) {
         if (!layout) {
-            failures.push(`${label}: missing #xc-main layout measurement`);
+            add('gutter', label, `${label}: missing #xc-main layout measurement`);
             continue;
         }
-        const gutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const gutter = pageGutterForWidth(vw);
         const { first } = layout;
         if (!close(layout.contentLeft, gutter)) {
-            failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
+            add('gutter', label, `${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
         }
         if (layout.contentRightGap + 1 < gutter) {
-            failures.push(`${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
+            add('gutter', label, `${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
         }
         if (layout.headerLeft !== null && !close(layout.headerLeft, gutter)) {
-            failures.push(`${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+            add('gutter', label, `${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+        }
+        if (layout.headerRightGap !== null && !close(layout.headerRightGap, gutter)) {
+            add('gutter', label, `${label}: header right gap ${layout.headerRightGap}px, expected ${gutter}px`);
         }
         if (!first) {
-            failures.push(`${label}: missing first content block`);
+            add('gutter', label, `${label}: missing first content block`);
             continue;
         }
         // Wide forms intentionally centre their card inside the guttered
-        // content lane. Every other first block starts on the lane edge.
-        if ((first.kind !== 'form' || vw < 600) && !close(first.left, gutter)) {
-            failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
+        // content lane, as wide onboarding steps centre their column. Every
+        // other first block starts on the lane edge.
+        const centred = vw >= 600 && first.left > gutter * 2 && close(first.left, first.rightGap);
+        if ((first.kind !== 'form' || vw < 600) && !centred && !close(first.left, gutter)) {
+            add('gutter', label, `${label}: first content left ${first.left}px, expected ${gutter}px`);
         }
         if (first.rightGap + 1 < gutter) {
-            failures.push(`${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
+            add('gutter', label, `${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
         }
-        topGaps[first.kind].add(first.topGap);
+        const shell = layout.tier ?? 'none';
+        if (!gapsByShell.has(shell)) gapsByShell.set(shell, { form: new Set(), list: new Set() });
+        gapsByShell.get(shell)[first.kind].add(first.topGap);
     }
-    if (topGaps.form.size && topGaps.list.size) {
+    for (const topGaps of gapsByShell.values()) {
+        if (!topGaps.form.size || !topGaps.list.size) continue;
         const forms = [...topGaps.form].sort((a, b) => a - b);
         const lists = [...topGaps.list].sort((a, b) => a - b);
         if (forms.length !== lists.length || forms.some((gap, i) => !close(gap, lists[i]))) {
-            failures.push(`form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
+            add('topGap', null, `form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
         }
     }
-    return failures;
+    for (const { label, headerScrolledAway = [], narrow = [] } of screens) {
+        for (const item of headerScrolledAway) {
+            add('headerScrolledAway', label, `${label}: ${item.el} scrolled out of view (top ${item.top}px, bottom ${item.bottom}px)`);
+        }
+        for (const item of narrow) {
+            add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
+        }
+    }
+    return findings;
 }
 
-/** A sweep bound to one page, one venue and one output directory. */
+/** Measure one screen and append the layout sweep's shared JSONL record shape. */
+export async function recordMeasuredScreen(page, {
+    venue, outDir, n, label, shot, contrast = false, expectedRootPx = null, onScreen = null, onResult = null,
+    rulings = false, screenshots = true,
+}) {
+    let result;
+    try {
+        result = await page.evaluate(measureInPage, { contrast });
+    } catch (err) {
+        result = { error: String(err?.message || err) };
+    }
+    // Every screen records the root size it was measured at, so a venue
+    // that lost its text size fails by name instead of measuring 100%.
+    try {
+        result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+    } catch { /* reported as a root font failure below */ }
+    if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
+    if (rulings) {
+        try {
+            result.rulings = await page.evaluate(measureRulings);
+            result.headerScrolledAway = await page.evaluate(measureHeaderPinned);
+        } catch (err) {
+            result.rulingsError = String(err?.message || err);
+        }
+    }
+    // Extra per-screen audits hook in here; a failure in one is reported on
+    // the screen's line, never thrown into the walk.
+    if (onScreen) {
+        try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
+    }
+    if (screenshots) {
+        try {
+            await page.screenshot({ path: join(outDir, shot) });
+        } catch { /* a screenshot failure is not a finding */ }
+    }
+    appendFileSync(join(outDir, 'results.jsonl'), `${JSON.stringify({ venue, n, label, shot, ...result })}\n`);
+    if (onResult) await onResult({ label, ...result });
+    return result;
+}
+
+/**
+ * Returns the layout failures of a completed sweep as one line each.
+ * `keys` limits them to some layoutSweepFindings keys; by default every key.
+ */
+export function layoutSweepFailures(screens, { keys = null } = {}) {
+    return layoutSweepFindings(screens)
+        .filter((finding) => !keys || keys.includes(finding.key))
+        .map((finding) => finding.detail);
+}
+
+/**
+ * Runs inside the page. The app header and the primary navigation stay on
+ * screen while the page scrolls: drives every vertical scroller that holds
+ * the page content to its end, reads where each header and navigation bar
+ * outside the content sits, and puts every scroller back. Returns the bars
+ * that were in view before the scroll and left it after.
+ */
+export function measureHeaderPinned() {
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const scrollable = (v) => v === 'auto' || v === 'scroll' || v === 'overlay';
+    const desc = (el) => {
+        let s = el.tagName.toLowerCase();
+        const cls = [...el.classList].slice(0, 2).join('.');
+        if (cls) s += `.${cls}`;
+        const label = el.getAttribute('aria-label');
+        if (label) s += ` "${label.slice(0, 40)}"`;
+        return s;
+    };
+    const inView = (el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        const r = el.getBoundingClientRect();
+        return r.width >= 1.5 && r.height >= 1.5 && r.top >= -1 && r.bottom <= vh + 1 && r.left < vw && r.right > 0;
+    };
+    const main = document.getElementById('xc-main');
+    const scrollers = [];
+    const se = document.scrollingElement || document.documentElement;
+    if (se.scrollHeight > se.clientHeight + 1) scrollers.push(se);
+    for (let a = main; a && a !== document.documentElement && a !== document.body; a = a.parentElement) {
+        if (scrollable(getComputedStyle(a).overflowY) && a.scrollHeight > a.clientHeight + 1) scrollers.push(a);
+    }
+    if (scrollers.length === 0) return [];
+    const saved = scrollers.map((el) => el.scrollTop);
+    const out = [];
+    try {
+        // The bars in view with the page at its top are the ones that must stay.
+        for (const el of scrollers) el.scrollTo({ top: 0, behavior: 'instant' });
+        const bars = [...document.querySelectorAll('header, nav')]
+            .filter((el) => !(main && main.contains(el)) && !el.closest('[role="dialog"], [role="menu"], [aria-hidden="true"]'))
+            .filter((el) => !el.parentElement?.closest('header, nav'))
+            .filter(inView);
+        for (const el of scrollers) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+        for (const bar of bars) {
+            if (inView(bar)) continue;
+            const r = bar.getBoundingClientRect();
+            if (out.length < 12) out.push({ el: desc(bar), top: Math.round(r.top), bottom: Math.round(r.bottom) });
+        }
+    } finally {
+        scrollers.forEach((el, i) => el.scrollTo({ top: saved[i], behavior: 'instant' }));
+    }
+    return out;
+}
+
+/**
+ * A sweep bound to one page, one venue and one output directory.
+ * `rulings` also records measureRulings and measureHeaderPinned on every
+ * screen; `screenshots: false` skips the per-screen PNG.
+ */
 export function createSweep(page, {
-    venue, outDir, restart = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, rootFontSize,
+    venue, outDir, restart: restartPage = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, fontScale,
+    rulings = false, screenshots = true,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
-    const pageReady = installRootFontSize(page, rootFontSize);
+    const pageReady = installFontScale(page, fontScale);
+    const expectedRootPx = expectedRootFontPx(fontScale);
     let n = 0;
+
+    /** Reload the app and, once it is listening, send the font scale again. */
+    async function restart() {
+        await restartPage();
+        if (!fontScale) return;
+        await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
+            .or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 60_000 });
+        await applyFontScale(page, fontScale);
+    }
 
     async function measure(label) {
         await page.waitForTimeout(450);
         n += 1;
         const slug = `${String(n).padStart(3, '0')}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`;
-        let result;
-        try {
-            result = await page.evaluate(measureInPage, { contrast });
-        } catch (err) {
-            result = { error: String(err?.message || err) };
-        }
-        // Extra per-screen audits (the axe sweep) hook in here; a failure in one
-        // is reported on the screen's line, never thrown into the walk.
-        if (onScreen) {
-            try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
-        }
-        try {
-            await page.screenshot({ path: join(outDir, `${slug}.png`) });
-        } catch { /* a screenshot failure is not a finding */ }
-        appendFileSync(linesPath, `${JSON.stringify({ venue, n, label, shot: `${slug}.png`, ...result })}\n`);
-        if (onResult) await onResult({ label, ...result });
-        return result;
+        return recordMeasuredScreen(page, {
+            venue,
+            outDir,
+            n,
+            label,
+            shot: `${slug}.png`,
+            contrast,
+            expectedRootPx,
+            onScreen,
+            onResult,
+            rulings,
+            screenshots,
+        });
     }
 
     /** Close anything open and land on Home. */
@@ -583,24 +910,30 @@ export function createSweep(page, {
 
     /**
      * Open each row of a list screen in turn, measure it, and come back.
-     * Rows are addressed by position and re-found after every return, so a
-     * row whose accessible name differs from its text is still visited.
-     * `reopen` brings the list screen back.
+     * Rows are re-found by their first text line after every return (the
+     * same line's nth occurrence, for repeated labels), so a row whose
+     * accessible name differs from its text is still visited, and a notice
+     * that comes or goes above the list does not shift every row after it.
+     * `reopen` brings the list screen back; `rows` finds its rows.
      */
-    async function crawlRows(prefix, reopen) {
-        await reopen();
-        const labels = await rowButtons().evaluateAll((els) => els.map((e) => (
+    async function crawlRows(prefix, reopen, rows = rowButtons, skip = null) {
+        const firstLines = () => rows().evaluateAll((els) => els.map((e) => (
             (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
         )));
+        await reopen();
+        const labels = await firstLines();
         let visited = 0;
         for (let i = 0; i < labels.length; i += 1) {
             const label = labels[i];
-            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label)) continue;
+            if (!label || /^Back/.test(label) || DESTRUCTIVE.test(label) || skip?.test(label)) continue;
             try {
                 await reopen();
-                const row = rowButtons().nth(i);
-                const now = (await row.innerText({ timeout: 3_000 })).trim().split('\n')[0].trim();
-                if (now !== label) continue; // the list changed under us
+                const occurrence = labels.slice(0, i).filter((other) => other === label).length;
+                const now = await firstLines();
+                const index = now.findIndex((other, j) => other === label
+                    && now.slice(0, j).filter((prev) => prev === label).length === occurrence);
+                if (index < 0) continue; // the row is gone from the list
+                const row = rows().nth(index);
                 await row.click({ timeout: 5_000 });
                 await measure(`${prefix}: ${label}`);
                 visited += 1;
@@ -654,6 +987,7 @@ export function createSweep(page, {
             await dismissIntroCarousel(page);
             await page.getByRole('button', { name: 'Try in demo mode' }).click();
             await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
+            await applyFontScale(page, fontScale);
             return;
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -664,6 +998,7 @@ export function createSweep(page, {
             await page.getByRole('button', { name: 'Continue', exact: true }).click();
         }
         await unlockedShell(page).waitFor({ state: 'visible', timeout: 240_000 });
+        await applyFontScale(page, fontScale);
     }
 
     async function unlocked() {
@@ -675,6 +1010,30 @@ export function createSweep(page, {
             await measure(`home: ${tab}`);
         }
         await home();
+
+        // Every screen the primary navigation opens (the sidebar on a wide
+        // window, the bottom bar on a narrow one), so each top-level screen
+        // is measured as the navigation shows it.
+        const navButtons = () => nav(page).locator('button:visible:not([disabled])');
+        if (await nav(page).count() > 0) {
+            const labelsNow = () => navButtons().evaluateAll((els) => els.map((e) => (
+                (e.getAttribute('title') || e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
+            )));
+            const navLabels = (await labelsNow())
+                .filter((label) => label && !/^(search|more|open command palette)$/i.test(label) && !DESTRUCTIVE.test(label));
+            for (const label of [...new Set(navLabels)]) {
+                try {
+                    await home();
+                    const index = (await labelsNow()).indexOf(label);
+                    if (index < 0) continue;
+                    await navButtons().nth(index).click({ timeout: 5_000 });
+                    await measure(`nav: ${label}`);
+                } catch (err) {
+                    appendFileSync(linesPath, `${JSON.stringify({ venue, label: `nav: ${label}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
+                }
+            }
+            await home();
+        }
 
         // Header popovers.
         for (const name of ['Settings', 'Scan and addresses', 'XChain platform sites']) {
@@ -720,18 +1079,22 @@ export function createSweep(page, {
             await home();
         }
 
-        // The hamburger menu screen and each of its rows.
+        // The header menu and each of its rows. Its links open the platform
+        // sites in a new window and Open in new window opens another wallet
+        // window; neither is a wallet screen, so neither is walked.
         const menu = page.getByRole('button', { name: 'Open menu' }).first();
         if (await menu.count() > 0 && await menu.isVisible()) {
+            const menuPanel = page.getByRole('menu', { name: 'Header actions' });
             await home();
             await menu.click();
             await measure('menu: list');
+            // Reopened fresh for every row: the Settings row opens a flyout
+            // over the menu that would take the next row's click.
             await crawlRows('menu', async () => {
-                if (await page.getByText('Menu', { exact: true }).first().isVisible().catch(() => false)) return;
                 await home();
                 await menu.click();
-                await page.waitForTimeout(300);
-            });
+                await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
+            }, () => menuPanel.locator('button[role="menuitem"]:visible:not([disabled])'), /new window/i);
         }
 
         // Settings and every section in it.
@@ -760,4 +1123,227 @@ export function createSweep(page, {
     }
 
     return { measure, home, onboarding, unlocked };
+}
+
+/**
+ * Runs inside the page. The operator's layout rulings that the geometry
+ * above does not measure: the app header on one row, fields that draw a
+ * border, no Paste button and Max inside its field, no dotted or dashed borders,
+ * every card drawn with the card tokens, notices kept out of headers, no
+ * title repeated on one screen, and no Back button beside a sidebar entry
+ * for the screen it shows. Findings are for a person to judge.
+ */
+export function measureRulings() {
+    const visible = (el) => {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) !== 0
+            && r.width >= 1.5 && r.height >= 1.5;
+    };
+    const desc = (el) => {
+        let s = el.tagName.toLowerCase();
+        const cls = [...el.classList].slice(0, 2).join('.');
+        if (cls) s += `.${cls}`;
+        const label = el.getAttribute('aria-label')
+            || (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        if (label) s += ` "${label}"`;
+        return s;
+    };
+    const text = (el) => (el.getAttribute('aria-label') || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    const out = {
+        headerRows: [], borderlessFields: [], fieldButtonsOutside: [], dashedBorders: [],
+        offTokenCards: [], noticesInHeader: [], repeatedText: [], backBesideSidebar: [], noticePlacement: [],
+    };
+    const cap = (list, item) => { if (list.length < 12) list.push(item); };
+
+    // Header rows: the controls of each visible header share one row. A header
+    // with nothing to press (a form's logo, title and tagline stacked) is a
+    // title block, not a bar, so it has no row to keep.
+    const CONTROL = 'button, a[href], img, svg, h1, h2, input, select, [role="button"]';
+    const PRESSABLE = 'button, a[href], input, select, [role="button"]';
+    for (const header of document.querySelectorAll('header')) {
+        if (!visible(header)) continue;
+        if (![...header.querySelectorAll(PRESSABLE)].some(visible)) continue;
+        const items = [...header.querySelectorAll(CONTROL)]
+            .filter((el) => visible(el) && !el.parentElement?.closest(CONTROL));
+        const rects = items.map((el) => ({ el, r: el.getBoundingClientRect() }));
+        let rows = 1;
+        const sorted = rects.sort((a, b) => a.r.top - b.r.top);
+        let rowBottom = sorted[0]?.r.bottom ?? 0;
+        for (const { r } of sorted.slice(1)) {
+            if (r.top >= rowBottom - 1) { rows += 1; rowBottom = r.bottom; } else rowBottom = Math.max(rowBottom, r.bottom);
+        }
+        if (rows > 1) cap(out.headerRows, { header: desc(header).slice(0, 60), rows, h: Math.round(header.getBoundingClientRect().height) });
+    }
+
+    // Fields draw a border (on themselves or on the wrapper that frames them).
+    const edged = (el) => {
+        const cs = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'];
+        return sides.some((s) => parseFloat(cs[`border${s}Width`]) >= 1 && cs[`border${s}Style`] !== 'none')
+            || (cs.boxShadow && cs.boxShadow !== 'none');
+    };
+    const fields = [...document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select')]
+        .filter(visible);
+    const frameOf = (field) => {
+        if (edged(field)) return field;
+        const fr = field.getBoundingClientRect();
+        for (let a = field.parentElement, i = 0; a && i < 3; a = a.parentElement, i += 1) {
+            const ar = a.getBoundingClientRect();
+            // A wrapper that frames the field hugs it, not a whole card.
+            if (ar.height > fr.height + 24) break;
+            if (edged(a)) return a;
+        }
+        return null;
+    };
+    for (const field of fields) {
+        if (field.closest('[role="dialog"][aria-label="Command palette"]')) continue;
+        if (!frameOf(field)) cap(out.borderlessFields, desc(field));
+    }
+
+    // No Paste button anywhere (users paste with the native menu and
+    // shortcuts); Max sits inside the field it acts on.
+    for (const btn of document.querySelectorAll('button')) {
+        if (!visible(btn)) continue;
+        const name = text(btn);
+        if (/^paste\b/i.test(name)) { cap(out.fieldButtonsOutside, { button: name, paste: true }); continue; }
+        if (!/^max\b/i.test(name)) continue;
+        let field = null;
+        for (let a = btn.parentElement, i = 0; a && i < 4 && !field; a = a.parentElement, i += 1) {
+            field = [...a.querySelectorAll('input, textarea')].find(visible) || null;
+        }
+        if (!field) { cap(out.fieldButtonsOutside, { button: name, field: null }); continue; }
+        const frame = frameOf(field) || field;
+        const fr = frame.getBoundingClientRect();
+        const br = btn.getBoundingClientRect();
+        const inside = br.left >= fr.left - 1 && br.right <= fr.right + 1 && br.top >= fr.top - 1 && br.bottom <= fr.bottom + 1;
+        if (!inside) cap(out.fieldButtonsOutside, { button: name, field: desc(field) });
+    }
+
+    // Dotted or dashed borders anywhere, and boxes drawn off the card tokens.
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;border:var(--xc-card-border);border-radius:var(--xc-card-radius)';
+    document.body.appendChild(probe);
+    const tok = getComputedStyle(probe);
+    const token = { w: tok.borderTopWidth, c: tok.borderTopColor, r: tok.borderTopLeftRadius };
+    probe.remove();
+    void root;
+    const NOT_CARD = 'button, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="dialog"], [role="menu"], [role="listbox"], header, nav, img, svg';
+    const NOTICE = '[role="status"], [role="alert"], [data-variant]';
+    for (const el of document.querySelectorAll('body *')) {
+        if (!visible(el)) continue;
+        // U15 governs notice placement. A StatusMessage keeps data-variant when
+        // a static page notice deliberately has no live-region role.
+        if (el.closest(NOTICE)) continue;
+        const cs = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'];
+        const styled = sides.filter((s) => parseFloat(cs[`border${s}Width`]) > 0);
+        if (styled.some((s) => /dotted|dashed/.test(cs[`border${s}Style`]))) {
+            cap(out.dashedBorders, { el: desc(el), style: cs.borderTopStyle });
+        }
+        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"]')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.height < 44 || r.width < 120) continue;
+        if (parseFloat(cs.borderTopLeftRadius) === 0) continue;
+        // A card is a rounded box with a solid edge all round and content inside.
+        if (el.querySelector('input, textarea, select') && r.height < 70) continue; // a field frame
+        const off = cs.borderTopWidth !== token.w || cs.borderTopStyle !== 'solid'
+            || cs.borderTopColor !== token.c || cs.borderTopLeftRadius !== token.r;
+        if (off) {
+            cap(out.offTokenCards, {
+                el: desc(el), border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`, radius: cs.borderTopLeftRadius,
+                token: `${token.w} solid ${token.c} / ${token.r}`,
+            });
+        }
+    }
+
+    // Notices are page content, never in a header.
+    for (const el of document.querySelectorAll('[role="alert"], [role="status"], [class*="notice" i], [class*="banner" i]')) {
+        if (!visible(el) || !text(el)) continue;
+        if (el.closest('header')) cap(out.noticesInHeader, desc(el));
+    }
+
+    // One title and one copy of each help line per screen. An open modal is
+    // the screen: the page behind it is inert, so its title is not read as a
+    // repeat of a row in the modal. Values in separate rows of one list are
+    // row data, not another copy of a title or help line.
+    // A row is the nearest list item, grid or list row, or element whose class
+    // names a row (ListRow and the activity rows), above the text itself.
+    const ROW = 'li, [role="listitem"], [role="option"], [role="row"], [class*="row" i]';
+    const isRepeatedRowData = (els) => {
+        const rows = els.map((el) => {
+            if (el.closest('h1, h2, h3, h4, [role="heading"]')) return null;
+            if (!el.closest('[class*="value" i], [class*="subtitle" i]')) return null;
+            return el.parentElement?.closest(ROW) ?? null;
+        });
+        return rows.every(Boolean) && new Set(rows).size === rows.length;
+    };
+    const seen = new Map();
+    const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(visible).pop();
+    for (const el of (modal || document).querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
+        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][aria-label="Command palette"]')) continue;
+        if (el.querySelector('h1, h2, h3, h4, p')) continue;
+        const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
+        if (t.length < 4) continue;
+        const key = t.toLowerCase();
+        if (!seen.has(key)) seen.set(key, []);
+        if (!seen.get(key).includes(el)) seen.get(key).push(el);
+    }
+    for (const [t, els] of seen) {
+        if (els.length > 1
+            && !isRepeatedRowData(els)
+            && !els.some((a, i) => els.some((b, j) => i !== j && (a.contains(b) || b.contains(a))))) {
+            cap(out.repeatedText, { text: t.slice(0, 60), count: els.length, els: els.slice(0, 3).map(desc) });
+        }
+    }
+
+    // The screen a sidebar entry opens needs no Back while the sidebar shows:
+    // flagged when the page title names the entry marked current. A screen
+    // below that entry (an order list under DEX) keeps its Back.
+    const sidebar = document.querySelector('nav[aria-label="Primary navigation"]');
+    if (sidebar && visible(sidebar)) {
+        const current = sidebar.querySelector('[aria-current="page"], [aria-current="true"]');
+        const back = [...document.querySelectorAll('header button, header a')]
+            .find((b) => visible(b) && /^back\b/i.test(text(b)));
+        const pageTitle = [...document.querySelectorAll('header h1, header h2')].find(visible);
+        const label = current ? (current.innerText || '').trim().split('\n')[0].trim().toLowerCase() : '';
+        const titleText = pageTitle ? (pageTitle.innerText || '').trim().toLowerCase() : '';
+        if (current && back && label && titleText === label) {
+            cap(out.backBesideSidebar, { current: label, back: text(back) });
+        }
+    }
+
+    // Notices sit first in the page content, at its full width.
+    const main = document.getElementById('xc-main');
+    if (main) {
+        const mr = main.getBoundingClientRect();
+        const mcs = getComputedStyle(main);
+        const left = mr.left + main.clientLeft + (parseFloat(mcs.paddingLeft) || 0);
+        const right = mr.left + main.clientLeft + main.clientWidth - (parseFloat(mcs.paddingRight) || 0);
+        const NOTICE = '[data-xc-notice], [role="alert"], [role="status"]';
+        const notices = [...main.querySelectorAll(NOTICE)]
+            .filter((el) => visible(el) && text(el).length > 0 && !el.parentElement.closest(NOTICE));
+        for (const el of notices) {
+            if (el.closest('form, [role="dialog"], [role="group"]')) continue; // a form's own status line
+            // A status that announces nothing is a label of the data beside
+            // it ("Updated just now" under a balance), not a notice.
+            if (el.matches('[role="status"][aria-live="off"]')) continue;
+            const r = el.getBoundingClientRect();
+            const contentAbove = [...main.querySelectorAll('h2, h3, p, li, button, input, table')]
+                .some((other) => visible(other) && !el.contains(other) && !other.closest(NOTICE)
+                    && other.getBoundingClientRect().bottom <= r.top + 1);
+            const narrow = right - left - r.width > 2;
+            // An empty state stands where its list would be, below the
+            // page's own controls; U15 asks of it only that it fill the
+            // content width, so it is measured for width, not for place.
+            const emptyState = el.matches('[data-xc-empty-state]');
+            if ((contentAbove && !emptyState) || narrow) {
+                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(right - left) });
+            }
+        }
+    }
+
+    for (const k of Object.keys(out)) if (out[k].length === 0) delete out[k];
+    return out;
 }

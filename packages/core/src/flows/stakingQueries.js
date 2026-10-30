@@ -18,6 +18,52 @@
 // have resolved a BTC chain via useBtcAddressesPresent before
 // invoking these. Each flow delegates to an sdkRegistry-scoped SDK.
 
+// The explorer answers a list with one page of at most 100 rows plus the
+// `total` it found. Every sum the staking screens show (staked, accrued,
+// claimed) is only right over ALL rows, so an address-scoped read follows the
+// pages until `total` is covered. A caller that asks for a page or a limit
+// itself is paging on purpose and gets exactly that page.
+const MAX_PAGES = 200;
+const PAGE_CONCURRENCY = 4;
+
+/**
+ * @param {(opts?: object) => Promise<any>} read  one explorer list read
+ * @param {object} [opts]
+ * @returns {Promise<any>}  the first response with `data` holding every row
+ */
+export async function readAllPages(read, opts) {
+    const first = await read(opts);
+    if (opts && (opts.page !== undefined || opts.limit !== undefined)) return first;
+    if (!first || Array.isArray(first) || !Array.isArray(first.data)) return first;
+    const total = Number(first.total);
+    const pageSize = first.data.length;
+    if (!Number.isFinite(total) || pageSize === 0 || pageSize >= total) return first;
+    const pages = Math.ceil(total / pageSize);
+    if (pages > MAX_PAGES) {
+        throw new Error(`This address has ${total} rows, more than the wallet can read at once.`);
+    }
+    const rows = [...first.data];
+    for (let start = 2; start <= pages; start += PAGE_CONCURRENCY) {
+        const batch = [];
+        for (let page = start; page < start + PAGE_CONCURRENCY && page <= pages; page += 1) {
+            batch.push(read({ ...opts, page }));
+        }
+        for (const response of await Promise.all(batch)) {
+            if (!response || !Array.isArray(response.data)) {
+                throw new Error(`The explorer sent an unreadable page of ${total} rows.`);
+            }
+            rows.push(...response.data);
+        }
+    }
+    // A short page (rows that shift out between page reads) would cut every
+    // sum without a sign; a repeated row is fine, since the sums count a
+    // ledger row once per identity.
+    if (rows.length < total) {
+        throw new Error(`The explorer sent ${rows.length} of ${total} rows, so the totals cannot be read yet.`);
+    }
+    return { ...first, data: rows };
+}
+
 /**
  * @typedef {Object} StakingQueryOpts
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -38,7 +84,7 @@ export async function stakesForAddress({ sdkRegistry, chainId, address, opts }) 
     if (!chainId) throw new Error('stakesForAddress: chainId is required');
     if (!address) throw new Error('stakesForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getStakes(address, 'address', opts);
+    return readAllPages((o) => sdk.getStakes(address, 'address', o), opts);
 }
 
 /**
@@ -53,7 +99,7 @@ export async function delegationsForAddress({ sdkRegistry, chainId, address, opt
     if (!chainId) throw new Error('delegationsForAddress: chainId is required');
     if (!address) throw new Error('delegationsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getDelegations(address, 'address', opts);
+    return readAllPages((o) => sdk.getDelegations(address, 'address', o), opts);
 }
 
 /**
@@ -68,7 +114,7 @@ export async function rewardsForAddress({ sdkRegistry, chainId, address, opts })
     if (!chainId) throw new Error('rewardsForAddress: chainId is required');
     if (!address) throw new Error('rewardsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getValidatorRewards(address, 'address', opts);
+    return readAllPages((o) => sdk.getValidatorRewards(address, 'address', o), opts);
 }
 
 /**
@@ -86,7 +132,7 @@ export async function rewardClaimsForAddress({ sdkRegistry, chainId, address, op
     if (!chainId) throw new Error('rewardClaimsForAddress: chainId is required');
     if (!address) throw new Error('rewardClaimsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getCollects(address, 'address', opts);
+    return readAllPages((o) => sdk.getCollects(address, 'address', o), opts);
 }
 
 /**
@@ -99,7 +145,7 @@ export async function validatorsForChain({ sdkRegistry, chainId, opts }) {
     if (!sdkRegistry) throw new Error('validatorsForChain: sdkRegistry is required');
     if (!chainId) throw new Error('validatorsForChain: chainId is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getValidators(opts);
+    return readAllPages((o) => sdk.getValidators(o), opts);
 }
 
 /**
@@ -142,7 +188,7 @@ export async function contractStakesForAddress({ sdkRegistry, chainId, address, 
     if (typeof sdk.getContractStakes !== 'function') {
         throw new Error('contractStakesForAddress: sdk.getContractStakes not yet available (Phase 7 follow-up)');
     }
-    return sdk.getContractStakes(address, 'address', opts);
+    return readAllPages((o) => sdk.getContractStakes(address, 'address', o), opts);
 }
 
 /**
@@ -157,7 +203,7 @@ export async function contractUnstakesForAddress({ sdkRegistry, chainId, address
     if (typeof sdk.getContractUnstakes !== 'function') {
         throw new Error('contractUnstakesForAddress: sdk.getContractUnstakes not yet available (Phase 7 follow-up)');
     }
-    return sdk.getContractUnstakes(address, 'address', opts);
+    return readAllPages((o) => sdk.getContractUnstakes(address, 'address', o), opts);
 }
 
 /**

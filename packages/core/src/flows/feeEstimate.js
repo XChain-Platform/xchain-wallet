@@ -26,7 +26,9 @@
 // number so the user understands what they're looking at.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { decimalToBaseUnits } from '../shared/utils/amountFormat.js';
+import { decimalToBaseUnits, formatWithThousands } from '../shared/utils/amountFormat.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/settings.js';
 
 // Display unit for a per-vbyte chain. Per-kB chains render as
 // `${ticker}/kB` (DOGE/kB for dogecoin), see resolveFeeUnit.
@@ -192,6 +194,83 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
         minimumRate: perByteRateToDisplay(unit, table.minimumRate),
         maximumRate: perByteRateToDisplay(unit, table.maximumRate),
     };
+}
+
+/**
+ * Refusal copy for a custom rate outside the chain bounds, or null when the
+ * rate is in range or unjudged. Settings and every compose form's fee control
+ * share these messages and bounds.
+ *
+ * @param {{ rate: number, tiers: { unit?: string, minimumRate?: number, maximumRate?: number } | null | undefined }} opts
+ * @returns {string | null}
+ */
+export function customFeeRateBoundsError({ rate, tiers } = {}) {
+    if (!tiers || !Number.isFinite(rate) || rate <= 0) return null;
+    if (Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0 && rate < tiers.minimumRate) {
+        return t('settings.fees.rateAtLeast', {
+            rate: formatWithThousands(tiers.minimumRate),
+            unit: tiers.unit,
+        });
+    }
+    if (Number.isFinite(tiers.maximumRate) && tiers.maximumRate > 0 && rate > tiers.maximumRate) {
+        return t('settings.fees.rateNoHigherThan', {
+            rate: formatWithThousands(tiers.maximumRate),
+            unit: tiers.unit,
+        });
+    }
+    return null;
+}
+
+/**
+ * Refusal copy for a custom rate written with more decimal places than the
+ * fee math carries, or null. The rate is the typed text or the number the
+ * fee control emits; an exponent counts toward the places.
+ *
+ * @param {string | number | null | undefined} rate
+ * @returns {string | null}
+ */
+export function customFeeRateDecimalsError(rate) {
+    if (rate === null || rate === undefined) return null;
+    const text = String(rate).trim().toLowerCase();
+    if (text === '') return null;
+    const [mantissa, exponentText] = text.split('e');
+    const exponent = Number(exponentText || 0);
+    if (!Number.isFinite(exponent)) return null;
+    const decimals = Math.max(0, (mantissa.split('.')[1]?.length || 0) - exponent);
+    return decimals > 8 ? t('settings.fees.rateDecimals') : null;
+}
+
+/**
+ * The Review-time stop for a compose form's custom network fee. Every form
+ * with the fee control calls this before it composes: the forms are
+ * noValidate, so the field's own validity never stops a submit, and without
+ * this an out-of-range rate prices the carrier at that rate while an
+ * unpriceable one composes at the encoder's default fee.
+ *
+ * Returns null when Review may go on. Otherwise returns an object whose
+ * formError is the copy for the form status, or null when the fee field
+ * already names the problem under itself, so the message shows once.
+ *
+ * @param {{
+ *   feePick: { mode?: string, customRate?: number | string } | null | undefined,
+ *   tiers: { unit?: string, minimumRate?: number, maximumRate?: number } | null | undefined,
+ *   estimate: { rateValue?: number } | null | undefined,
+ * }} opts
+ * @returns {{ formError: string | null } | null}
+ */
+export function customFeeReviewStop({ feePick, tiers, estimate } = {}) {
+    if (feePick?.mode !== 'custom') return null;
+    const rate = Number(feePick.customRate);
+    // The fee field is on screen only when the form has tiers to draw it with.
+    const fieldShows = Boolean(tiers);
+    const fieldError = !Number.isFinite(rate) || rate <= 0
+        ? t('settings.fees.rateGreaterThanZero')
+        : customFeeRateBoundsError({ rate, tiers }) || customFeeRateDecimalsError(feePick.customRate);
+    if (fieldError) return { formError: fieldShows ? null : fieldError };
+    if (!estimate || !(Number(estimate.rateValue) > 0)) {
+        return { formError: t('settings.fees.rateUnpriced') };
+    }
+    return null;
 }
 
 /**
@@ -390,6 +469,7 @@ export async function fetchNativeSendFeeTiers({
                     fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast', minimumRate }),
                     unit,
                     minimumRate: perByteRateToDisplay(unit, minimumRate),
+                    maximumRate: perByteRateToDisplay(unit, table.maximumRate),
                 };
             }
         } catch {

@@ -20,8 +20,10 @@ import {
     coinFromChainId,
 } from '../components/BalanceList.jsx';
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
+import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { loadBalancesByChain } from '../utils/chainBalanceLoader.js';
 import { useSettings } from '../hooks/useSettings.js';
 import {
     pinnedTokensForWallet,
@@ -80,6 +82,7 @@ function hasSpendableBalance(row) {
  * @param {string} props.walletId
  * @param {string} [props.accountId]
  * @param {string} [props.networkFilter]
+ * @param {string} [props.chainIdFilter] exact chain to show within a coin-family filter
  * @param {(coin: string) => void} [props.onNetworkFilterChange]
  * @param {string} [props.tokenQuery]
  * @param {(query: string) => void} [props.onTokenQueryChange]
@@ -89,7 +92,6 @@ function hasSpendableBalance(row) {
  * Caller's action only accepts one kind (BET escrows tokens, so the
  *   native coin is not a legal wager and must not be offered)
  * @param {string} [props.title]
- * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
  * @param {() => void} [props.onBack]
  * @param {import('react').ElementType} [props.listPageComponent]
@@ -100,6 +102,7 @@ export function TokenPicker({
     walletId,
     accountId,
     networkFilter: networkFilterProp,
+    chainIdFilter,
     onNetworkFilterChange: onNetworkFilterChangeProp,
     tokenQuery: tokenQueryProp,
     onTokenQueryChange: onTokenQueryChangeProp,
@@ -107,7 +110,6 @@ export function TokenPicker({
     onKindFilterChange: onKindFilterChangeProp,
     kindLocked = false,
     title,
-    titleIcon,
     backLabel,
     onBack,
     listPageComponent: ListPageComponent = ListPage,
@@ -123,6 +125,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [balanceReload, setBalanceReload] = useState(0);
+    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const [balanceLoad, setBalanceLoad] = useState({
         walletId: null,
         accountId: null,
@@ -131,6 +134,8 @@ export function TokenPicker({
         balances: null,
         addressesByChain: null,
         error: null,
+        slowChainIds: [],
+        pendingCount: 0,
     });
     const balanceLoadMatches = balanceLoad.walletId === walletId
         && balanceLoad.accountId === accountId
@@ -139,6 +144,8 @@ export function TokenPicker({
     const balances = balanceLoadMatches ? balanceLoad.balances : null;
     const addressesByChain = balanceLoadMatches ? balanceLoad.addressesByChain : null;
     const loadError = balanceLoadMatches ? balanceLoad.error : null;
+    const slowChainIds = balanceLoadMatches ? balanceLoad.slowChainIds : [];
+    const pendingChainCount = balanceLoadMatches ? balanceLoad.pendingCount : 0;
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -196,6 +203,8 @@ export function TokenPicker({
             balances: null,
             addressesByChain: null,
             error: null,
+            slowChainIds: [],
+            pendingCount: 0,
         };
         setBalanceLoad(pendingLoad);
         (async () => {
@@ -212,6 +221,60 @@ export function TokenPicker({
                     // both purposes; only Receive keeps the map around.
                     byChain = await messaging.getAddressesByChain(walletId, accountId);
                     b = flowsLib.synthesizeDemoBalances(byChain);
+                } else if (canByChain && typeof messaging.getWalletBalances === 'function') {
+                    // Each chain is read on its own, so a chain whose explorer
+                    // never answers holds back only itself: every other chain
+                    // lists the moment it replies.
+                    byChain = await messaging.getAddressesByChain(walletId, accountId);
+                    const chainIds = Object.keys(byChain || {});
+                    if (cancelled) return;
+                    if (chainIds.length === 0) {
+                        setBalanceLoad({ ...pendingLoad, balances: {}, addressesByChain: isReceive ? byChain : null });
+                        return;
+                    }
+                    setBalanceLoad((prev) => ({ ...prev, pendingCount: chainIds.length }));
+                    const patch = (fn) => setBalanceLoad((prev) => (
+                        prev.walletId === walletId && prev.accountId === accountId
+                            && prev.isReceive === isReceive && prev.reload === balanceReload
+                            ? fn(prev) : prev));
+                    await loadBalancesByChain({
+                        messaging, walletId, accountId, chainIds,
+                        isCancelled: () => cancelled,
+                        onChain: (chainId, entries) => {
+                            patch((prev) => ({
+                                ...prev,
+                                balances: { ...(prev.balances || {}), [chainId]: entries },
+                                addressesByChain: isReceive ? byChain : null,
+                                slowChainIds: prev.slowChainIds.filter((id) => id !== chainId),
+                                pendingCount: Math.max(0, prev.pendingCount - 1),
+                            }));
+                        },
+                        onSlow: (chainId) => patch((prev) => ({
+                            ...prev,
+                            balances: prev.balances || {},
+                            addressesByChain: isReceive ? byChain : null,
+                            slowChainIds: prev.slowChainIds.includes(chainId)
+                                ? prev.slowChainIds : [...prev.slowChainIds, chainId],
+                        })),
+                        onError: (chainId, err) => {
+                            // A chain that fails keeps the chains that answered on
+                            // screen and offers one retry for the whole read.
+                            patch((prev) => ({
+                                ...prev,
+                                error: prev.error || err.message || 'Failed to load balances.',
+                                slowChainIds: prev.slowChainIds.filter((id) => id !== chainId),
+                                pendingCount: Math.max(0, prev.pendingCount - 1),
+                            }));
+                        },
+                    });
+                    if (!cancelled) {
+                        patch((prev) => ({
+                            ...prev,
+                            balances: prev.balances || {},
+                            addressesByChain: isReceive ? byChain : null,
+                        }));
+                    }
+                    return;
                 } else {
                     const byChainPromise = (isReceive && canByChain)
                         ? messaging.getAddressesByChain(walletId, accountId)
@@ -276,6 +339,9 @@ export function TokenPicker({
         let next = isReceive
             ? allRows
             : allRows.filter(hasSpendableBalance);
+        if (chainIdFilter) {
+            next = next.filter((r) => r.chainId === chainIdFilter);
+        }
         if (networkFilter !== 'all') {
             next = next.filter((r) => coinFromChainId(r.chainId) === networkFilter);
         }
@@ -313,7 +379,7 @@ export function TokenPicker({
                 ...sorted.filter((row) => !hasSpendableBalance(row)),
             ]
             : sorted;
-    }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
+    }, [allRows, isReceive, networkFilter, chainIdFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
@@ -371,7 +437,8 @@ export function TokenPicker({
         setPlatformError(null);
         const handle = setTimeout(async () => {
             const chainIds = Object.keys(addressesByChain).filter((chainId) => (
-                networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+                (!chainIdFilter || chainId === chainIdFilter)
+                && (networkFilter === 'all' || coinFromChainId(chainId) === networkFilter)
             ));
             const cache = platformCacheRef.current;
             try {
@@ -409,7 +476,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, chainIdFilter, addressesByChain, messaging, localKeySet, platformReload]);
 
     const resetFilters = () => {
         setTokenQuery('');
@@ -493,15 +560,14 @@ export function TokenPicker({
     };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
-    const headerIcon = titleIcon ?? (isReceive ? <Icon.ReceiveIcon /> : <Icon.SendIcon />);
     const headerBackLabel = backLabel ?? 'Back to home';
 
     const header = (
         <PageHeader
+            nested
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}
-            titleIcon={headerIcon}
         />
     );
 
@@ -536,7 +602,7 @@ export function TokenPicker({
         ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Choose a chain to display a fresh receive address for it.'
+                ? 'Choose a network to display a fresh receive address for it.'
                 : 'Sendable coin and token balances appear here after funds are received.')
             : 'Balances on this network appear here after this wallet receives funds.');
 
@@ -608,12 +674,17 @@ export function TokenPicker({
                     {loadError}
                 </StatusMessage>
             ) : null}
-            {balances === null && !loadError ? (
+            {slowChainIds.map((chainId) => (
+                <StatusMessage key={chainId} variant="warning" className={styles.error}>
+                    {`${chainRegistry.get(chainId)?.displayName || chainId} is not responding. Its assets appear when it answers.`}
+                </StatusMessage>
+            ))}
+            {(balances === null || (pendingChainCount > 0 && allRows.length === 0 && slowChainIds.length < pendingChainCount)) && !loadError ? (
                 <div role="status" aria-label="Loading balances">
                     <Skeleton.List rows={5} />
                 </div>
             ) : null}
-            {balances ? (
+            {balances && !(pendingChainCount > 0 && allRows.length === 0 && slowChainIds.length < pendingChainCount) ? (
                 <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
@@ -629,6 +700,20 @@ export function TokenPicker({
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
                             )}
+                        />
+                    ) : loadError ? (
+                        // A failed read with nothing listed is already said by the
+                        // error notice above, with its own Try again.
+                        null
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError && balancesUnchecked && !tokenQueryTrim) ? (
+                        // An empty list while balances could not be checked is
+                        // not proof of an empty wallet: say that once instead.
+                        <BalancesUncheckedState
+                            plain={false}
+                            onRetry={() => {
+                                recheckBalances();
+                                setBalanceReload((value) => value + 1);
+                            }}
                         />
                     ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState

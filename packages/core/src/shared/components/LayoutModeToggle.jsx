@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
+import { useToast } from './ToastHost.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
 
 /**
  * Settings tile in the pancake drawer that lets the user pick how
@@ -32,7 +36,6 @@ import styles from './LayoutModeToggle.module.css';
  * the worker's storage listener applies it to the action button
  * the next time the user clicks.
  */
-const STORAGE_KEY = 'xchain.layoutMode';
 
 function isExtensionContext() {
     return typeof chrome !== 'undefined'
@@ -43,6 +46,9 @@ function isExtensionContext() {
 export function LayoutModeToggle() {
     const [mode, setMode] = useState(/** @type {'popup' | 'sidepanel'} */ ('popup'));
     const [available, setAvailable] = useState(false);
+    const persistedModeRef = useRef(/** @type {'popup' | 'sidepanel'} */ ('popup'));
+    const writeVersionRef = useRef(0);
+    const { showToast } = useToast();
     const groupId = useId();
     const labelId = `${groupId}-label`;
     const descriptionId = `${groupId}-description`;
@@ -54,16 +60,23 @@ export function LayoutModeToggle() {
         setAvailable(true);
         const onChanged = (changes, area) => {
             if (area !== 'local') return;
-            if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) return;
+            if (!Object.prototype.hasOwnProperty.call(changes, LAYOUT_MODE_STORAGE_KEY)) return;
             storageChanged = true;
-            const next = changes[STORAGE_KEY]?.newValue;
-            if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
+            const next = changes[LAYOUT_MODE_STORAGE_KEY]?.newValue;
+            if (active && (next === 'popup' || next === 'sidepanel')) {
+                writeVersionRef.current += 1;
+                persistedModeRef.current = next;
+                setMode(next);
+            }
         };
         chrome.storage.onChanged.addListener(onChanged);
-        chrome.storage.local.get(STORAGE_KEY, (items) => {
+        chrome.storage.local.get(LAYOUT_MODE_STORAGE_KEY, (items) => {
             if (!active || storageChanged) return;
-            const v = items?.[STORAGE_KEY];
-            if (v === 'popup' || v === 'sidepanel') setMode(v);
+            const v = items?.[LAYOUT_MODE_STORAGE_KEY];
+            if (v === 'popup' || v === 'sidepanel') {
+                persistedModeRef.current = v;
+                setMode(v);
+            }
         });
         return () => {
             active = false;
@@ -75,20 +88,39 @@ export function LayoutModeToggle() {
 
     function pick(next) {
         if (next === mode) return;
+        const writeVersion = writeVersionRef.current + 1;
+        writeVersionRef.current = writeVersion;
         setMode(next);
+
+        const failWrite = () => {
+            if (writeVersionRef.current === writeVersion) setMode(persistedModeRef.current);
+            showToast({
+                id: 'layout-mode-save-failed',
+                variant: 'error',
+                message: t('components.layoutModeToggle.saveFailed'),
+            });
+        };
+
         try {
-            const pending = chrome.storage.local.set({ [STORAGE_KEY]: next });
-            if (typeof pending?.catch === 'function') void pending.catch(() => {});
+            const pending = chrome.storage.local.set({ [LAYOUT_MODE_STORAGE_KEY]: next });
+            if (typeof pending?.then === 'function') {
+                void Promise.resolve(pending).then(() => {
+                    if (writeVersionRef.current === writeVersion) persistedModeRef.current = next;
+                }, failWrite);
+            } else {
+                persistedModeRef.current = next;
+            }
         } catch {
             // Extension reloads can invalidate the storage context between render and click.
+            failWrite();
         }
     }
 
     return (
         <div className={styles.wrap}>
-            <span id={labelId} className={styles.label}>Open as</span>
+            <span id={labelId} className={styles.label}>{t('components.layoutModeToggle.openAs')}</span>
             <span id={descriptionId} className={styles.description}>
-                Choose how the wallet opens from the extension toolbar.
+                {t('components.layoutModeToggle.chooseHowTheWalletOpens')}
             </span>
             <div
                 className={styles.buttons}
@@ -104,7 +136,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('popup')}
                 >
                     <Icon.HomeIcon />
-                    <span>Popup</span>
+                    <span>{t('components.layoutModeToggle.popup')}</span>
                 </button>
                 <button
                     type="button"
@@ -114,7 +146,7 @@ export function LayoutModeToggle() {
                     onClick={() => pick('sidepanel')}
                 >
                     <Icon.MoreIcon />
-                    <span>Sidebar</span>
+                    <span>{t('components.layoutModeToggle.sidebar')}</span>
                 </button>
             </div>
         </div>

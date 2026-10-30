@@ -219,6 +219,8 @@ describe('MnemonicGrid narrow layout', () => {
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
         expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
         expect(importCss).toMatch(/\.mnemonicHeader\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s);
+        // The label header is its own form child, so it pulls back to the shared label gap.
+        expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*margin-bottom:\s*calc\(var\(--xc-label-gap\) - var\(--xc-form-gap\)\);/s);
         expect(importCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         // The import lane switcher is the kit Tabs bar: it fills the row and
         // scrolls its tabs instead of letting them push the screen wider.

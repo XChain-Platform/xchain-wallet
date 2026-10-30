@@ -24,7 +24,11 @@
 
 import { Input } from '@xchain-wallet/core/ui';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * @param {object} props
@@ -55,7 +59,7 @@ export function MessageConfirmScreen({
         <ConfirmActionModal
             variant="message"
             screenVariant={screenVariant}
-            headline="Sign this message"
+            headline={t('components.messageConfirmScreen.signThisMessage')}
             phase={confirmAction.phase}
             composed={confirmAction.composed}
             report={null}
@@ -80,18 +84,20 @@ export function MessageConfirmScreen({
                         // a freeze is on.
                         <SigningReadyNote>
                             <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                             </p>
                         </SigningReadyNote>
                     ) : (
-                        <Input
-                            type="password"
-                            label="Password"
-                            hint="Required to sign."
-                            value={password}
-                            onChange={(e) => onPasswordChange(e.target.value)}
-                            autoComplete="current-password"
-                        />
+                        <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
+                            <Input
+                                type="password"
+                                label={t('common.password')}
+                                hint={t('components.messageConfirmScreen.requiredToSign')}
+                                value={password}
+                                onChange={(e) => onPasswordChange(e.target.value)}
+                                autoComplete="current-password"
+                            />
+                        </PanicPasswordGate>
                     )}
                 </>
             )}

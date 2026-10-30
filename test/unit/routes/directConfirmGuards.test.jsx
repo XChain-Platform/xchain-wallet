@@ -52,6 +52,14 @@ function guardMessaging({ liveness = 'live' } = {}) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        // A destroy is judged against the source address's read balance.
+        getWalletBalances: () => Promise.resolve({
+            'bitcoin-mainnet': [{
+                address: HD_ADDRESS.address,
+                balances: { native: null, tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }] },
+                error: null,
+            }],
+        }),
         composeForConfirm: record('composeForConfirm', {
             psbt: 'aa00',
             encoding: 'psbt',

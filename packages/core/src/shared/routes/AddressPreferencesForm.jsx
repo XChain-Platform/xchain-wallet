@@ -20,13 +20,13 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -39,6 +39,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import {
     feePreferenceLabel,
     requireMemoLabel,
@@ -46,6 +47,7 @@ import {
 } from '../../flows/addressPreferences.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -59,6 +61,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function AddressPreferencesForm({ walletId, chainId: initialChainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const {
@@ -77,7 +80,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         initialChainId,
         initialFromAddress: address,
         lockedToken: true,
-        noAddressMessage: 'This wallet has no addresses on this chain.',
+        noAddressMessage: 'This wallet has no addresses on this network.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -96,12 +99,19 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [requireMemo, setRequireMemo] = useState(false);
     const [dispPref, setDispPref] = useState(/** @type {'1' | '2'} */ ('1'));
     const [memo, setMemo] = useState('');
+    // Review awaits a baseline read; the memo can change during that wait, so
+    // the post-read check reads the latest text here, not the click-time copy.
+    const memoRef = useRef(memo);
+    memoRef.current = memo;
 
     // Current on-chain values: loaded for the form prefill, then RE-FETCHED
     // at review entry (the confirm-time baseline the review compares against).
     const [current, setCurrent] = useState(/** @type {any} */ (null));
     const [currentError, setCurrentError] = useState(/** @type {string | null} */ (null));
     const [reviewBaseline, setReviewBaseline] = useState(/** @type {any} */ (null));
+    // A ref closes the same-tick gap before React renders a new stage. Only one
+    // baseline read may decide the values and comparison shown by Review.
+    const reviewPending = useRef(false);
     const touched = useRef({ fee: false, requireMemo: false, dispenser: false });
     const initialPrefillOpen = useRef(true);
     // Each choice is independent: a slow read may still prefill untouched
@@ -114,6 +124,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     useEffect(() => {
         let cancelled = false;
         if (!chainId || !address) return undefined;
+        // The prefill read is skipped for a demo wallet, which cannot submit
+        // this form: a demo wallet's addresses never go to an explorer (issue #82).
+        if (demoGuard.blocked) return undefined;
         initialPrefillOpen.current = true;
         setCurrent(null);
         setCurrentError(null);
@@ -136,7 +149,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             })
             .catch((err) => { if (!cancelled) setCurrentError(err?.message || 'Could not load current preferences.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, address]);
+    }, [messaging, chainId, address, demoGuard.blocked]);
 
     // Network fee plumbing (mirrors DestroyForm).
     const [feePick, setFeePick] = useState(
@@ -182,12 +195,34 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     // Review entry re-fetches the on-chain baseline so the "unchanged" rows
     // shown are the truth at sign time, not the load-time snapshot.
+    // Shows the error and returns true for a memo Review refuses. | and ; are
+    // the action line's field delimiters: a memo carrying one composes extra
+    // fields into the ADDRESS write.
+    function refuseMemo(value) {
+        const trimmedMemo = value.trim();
+        if (trimmedMemo.includes('|') || trimmedMemo.includes(';')) {
+            setFormError('Memo cannot contain "|" or ";".');
+            return true;
+        }
+        const memoError = memoLengthError(trimmedMemo);
+        if (memoError) { setFormError(memoError); return true; }
+        return false;
+    }
+
     async function handleReview(event) {
         event.preventDefault();
+        if (reviewPending.current) return;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
+        if (refuseMemo(memo)) return;
+        reviewPending.current = true;
         initialPrefillOpen.current = false;
         try {
             const fresh = await messaging.getAddressPreferences({ chainId, address });
+            // The memo stays editable during the read, so Review checks the
+            // text the write carries, which is the latest one.
+            if (refuseMemo(memoRef.current)) return;
             // Every ADDRESS write carries all three values. Refresh fields the
             // user did not touch so an external update is preserved.
             if (!touched.current.fee) {
@@ -205,6 +240,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             setFormError('Could not re-check the current on-chain values: '
                 + (err?.message || 'unknown error')
                 + '. Review needs a live read, because every write resets all three preferences.');
+        } finally {
+            reviewPending.current = false;
         }
     }
 
@@ -262,7 +299,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (ownerLane.open) {
@@ -281,7 +318,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onBack}
                     what="address preferences"
                     unsaved={result?.unsaved}
@@ -290,7 +328,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+                <ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
         }
         return wrap(
@@ -316,10 +354,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const rows = writtenRows(actionParams, reviewBaseline);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review preferences"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -370,11 +409,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="On-chain preferences"
             onSubmit={handleReview}
             sectioned
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="submit" variant="primary">Review</Button>
@@ -388,12 +428,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
-                    <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
+                    <FieldNote variant="error">{currentError}</FieldNote>
                 ) : null}
                 {current ? (
                     <dl className={styles.detailsList}>
                         <DetailRow
-                            label="Currently on chain"
+                            label="Currently on the network"
                             value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
                         />
                     </dl>
@@ -435,6 +475,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 />
                 <Input
                     label="Memo (optional)"
+                    hint={MEMO_HINT}
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"

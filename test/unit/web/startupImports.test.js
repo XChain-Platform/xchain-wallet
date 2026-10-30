@@ -152,6 +152,76 @@ describe('web startup imports', () => {
         );
     });
 
+    it.each([
+        'packages/core/src/shared/routes/Locked.jsx',
+        'packages/core/src/shared/routes/Onboarding.jsx',
+        'packages/core/src/shared/hooks/useCoinpayObligations.js',
+        'packages/core/src/shared/hooks/useReachability.js',
+        'packages/core/src/shared/hooks/useBtcAddressesPresent.js',
+        'packages/core/src/shared/components/ReachabilityBanner.jsx',
+        'packages/core/src/shared/components/QueuedBroadcastBanner.jsx',
+        'packages/desktop/renderer/deepLinkRoute.js',
+        'packages/web/src/storage/nativeKdfProvider.js',
+    ])('keeps the first-paint module %s off the core and flows barrels', (path) => {
+        // One barrel import from any first-paint module puts every flow, the
+        // SDK clients and the demo fixtures back in the startup bundle.
+        const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+        expect(source).not.toMatch(/from '@xchain-wallet\/core(\/flows)?'/);
+        expect(source).not.toMatch(/from '(\.\.\/)+(flows\/)?index\.js'/);
+    });
+
+    it('loads the command palette, shortcut help and variant badge when first opened', () => {
+        expect(appSource).toContain("const loadCommandPaletteHost = () => import('./CommandPaletteHost.jsx');");
+        expect(appSource).toContain(
+            "const ShortcutHelp = lazyRoute(() => import('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx'), 'ShortcutHelp');",
+        );
+        expect(appSource).toContain(
+            "const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVariantBadge');",
+        );
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/commandPalette\/(CommandPalette\.jsx|commandRegistry\.js)'/);
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/keyboard\/ShortcutHelp\.jsx'/);
+        expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
+    });
+
+    it('loads the action catalogue together with the Actions menu', () => {
+        // Every action's label and description is copy only that menu shows.
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/actionEntries\.js'/);
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx')");
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/actionEntries.js')");
+        expect(appSource).toContain('const ActionsMenu = lazy(loadActionsMenu);');
+        expect(appSource).toContain('entries={(buildActionEntries) => buildActionEntries({');
+    });
+
+    it('loads the signed chain-registry sync after first paint', () => {
+        // The sync's Ed25519 verifier would otherwise ride the first screen,
+        // both from main.jsx and through the registry module first-paint code reads.
+        expect(webMainSource).toContain("import('../../core/src/registry/remote.js')");
+        expect(webMainSource).not.toMatch(/from '\.\.\/\.\.\/core\/src\/registry\/remote\.js'/);
+        const registryIndexSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/registry/index.js'),
+            'utf8',
+        );
+        expect(registryIndexSource).not.toMatch(/from '\.\/remote\.js'/);
+    });
+
+    it('loads the header chain filter with the settings popover', () => {
+        const headerSettingsSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.jsx'),
+            'utf8',
+        );
+        expect(headerSettingsSource).toContain("const loadNetworkFilter = () => import('./NetworkFilter.jsx');");
+        expect(headerSettingsSource).not.toMatch(/from '\.\/NetworkFilter\.jsx'/);
+    });
+
+    it('loads the demo fixtures only when a demo wallet is entered', () => {
+        const onboardingSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/Onboarding.jsx'),
+            'utf8',
+        );
+        expect(onboardingSource).toContain("await import('../../flows/demoFixtures.js')");
+        expect(onboardingSource).not.toMatch(/from '\.\.\/\.\.\/flows\/demoFixtures\.js'/);
+    });
+
     it('keeps the native boot check off the aggregate core barrel', () => {
         expect(nativeVaultSource).not.toContain("from '@xchain-wallet/core'");
         expect(nativeVaultSource).toContain("from '../../../core/src/storage/backend.js'");

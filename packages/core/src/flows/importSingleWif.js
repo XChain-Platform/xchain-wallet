@@ -36,7 +36,8 @@ import {
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
-import { wifFailureMessage } from './_wifFailureMessage.js';
+import { RAW_HEX_KEY, isRawHexPrivateKey, wifFailureMessage } from './_wifFailureMessage.js';
+import { importedKeyAddressType } from './_importedKeyAddressType.js';
 
 // D-64: shares importWif's copy. This lane onboards a wif-only wallet from
 // the welcome screen, so its rejection is the very first thing a new user
@@ -102,16 +103,16 @@ export async function importSingleWif({
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`importSingleWif: unknown chain "${chainId}"`);
-    const type = addressType ?? descriptor.defaultAddressType;
-    if (!descriptor.addressTypes.includes(type)) {
+    if (addressType !== undefined && !descriptor.addressTypes.includes(addressType)) {
         throw new Error(
-            `importSingleWif: addressType "${type}" not supported on ${chainId}`,
+            `importSingleWif: addressType "${addressType}" not supported on ${chainId}`,
         );
     }
 
     // Validate the WIF and derive the address before spending KDF cost
     // on a call that's guaranteed to fail. Matches `importWif` ordering.
     const sdk = sdkRegistry.get(chainId);
+    if (isRawHexPrivateKey(wif)) throw new InvalidWifError('raw hex private key', RAW_HEX_KEY);
     let keyInfo;
     try {
         keyInfo = sdk.wallet.importWIF(wif);
@@ -119,6 +120,17 @@ export async function importSingleWif({
         throw new InvalidWifError(
             e && e.message ? e.message : String(e),
             e && typeof e.code === 'string' ? e.code : undefined,
+        );
+    }
+    const type = importedKeyAddressType(
+        descriptor,
+        addressType,
+        keyInfo,
+        (reason, code) => new InvalidWifError(reason, code),
+    );
+    if (!descriptor.addressTypes.includes(type)) {
+        throw new Error(
+            `importSingleWif: addressType "${type}" not supported on ${chainId}`,
         );
     }
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, { type });

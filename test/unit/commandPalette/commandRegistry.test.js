@@ -168,6 +168,21 @@ describe('buildCommands', () => {
         expect(findById(noBtc, 'nav-multisig-create')).toBeUndefined();
     });
 
+    // Agent accounts is an actions-menu entry behind the Bitcoin gate, so the
+    // palette finds it at every width, the way it finds the multisig surfaces.
+    it('finds Agent accounts behind the Bitcoin gate and hides it in the demo wallet', () => {
+        const navigate = vi.fn();
+        const btc = buildCommands({ navigate, hasBtcAddress: true });
+        for (const query of ['agent accounts', 'agent', 'cosigner']) {
+            expect(filterCommands(btc, query).map((c) => c.id), query).toContain('nav-cosigner-accounts');
+        }
+        findById(btc, 'nav-cosigner-accounts').run();
+        expect(navigate).toHaveBeenCalledWith('cosigner-accounts');
+
+        expect(findById(buildCommands({ navigate() {} }), 'nav-cosigner-accounts')).toBeUndefined();
+        expect(findById(buildCommands({ navigate() {}, hasBtcAddress: true, isDemoWallet: true }), 'nav-cosigner-accounts')).toBeUndefined();
+    });
+
     // The betting views shipped with no palette entry at all, so the only route
     // to them was More -> More actions -> Betting: two clicks deep in a
     // catalogue, for a surface whose whole point is coming back to check a
@@ -270,7 +285,22 @@ describe('buildCommands', () => {
         expect(ids.has('sign-verify')).toBe(true);
     });
 
-    it('limits demo wallets to read-only destinations and wallet utilities', () => {
+    it('drops the create and trade forms from a signer wallet and keeps its signing tools', () => {
+        const commands = buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            hasGovernanceAddress: true,
+            isSignerMode: true,
+        });
+        const ids = commands.map((command) => command.id);
+
+        expect(commands.filter((command) => ['Create', 'Trade'].includes(command.category))).toEqual([]);
+        expect(ids).not.toEqual(expect.arrayContaining(['create-mint', 'trade-swap', 'trade-coinpay']));
+        expect(ids).toEqual(expect.arrayContaining(['sign-message', 'sign-psbt', 'sign-verify', 'nav-home']));
+        expect(ids).not.toEqual(expect.arrayContaining(['nav-send']));
+    });
+
+    it('keeps create and trade forms browsable for demo wallets but hides signing tools', () => {
         const commands = buildCommands({
             navigate() {},
             scan() {},
@@ -281,19 +311,18 @@ describe('buildCommands', () => {
         });
         const ids = commands.map((command) => command.id);
 
-        expect(ids.some((id) => id.startsWith('create-'))).toBe(false);
-        expect(ids.some((id) => id.startsWith('trade-'))).toBe(false);
+        expect(ids).toEqual(expect.arrayContaining(['create-token', 'create-dispenser', 'trade-swap']));
         expect(ids).not.toEqual(expect.arrayContaining([
-            'nav-send',
-            'nav-receive',
             'nav-actions',
             'nav-multisig-create',
             'nav-multisig-sign',
             'sign-message',
             'sign-psbt',
-            'wallet-scan',
         ]));
         expect(ids).toEqual(expect.arrayContaining([
+            'nav-send',
+            'nav-receive',
+            'wallet-scan',
             'nav-home',
             'nav-history',
             'nav-markets',
@@ -411,5 +440,39 @@ describe('contactsToCommands', () => {
         expect(out[1].keywords).toContain('DBob');
         out[0].run();
         expect(navigate).toHaveBeenCalledWith('contacts');
+    });
+});
+
+// The palette lists every row at once, so a subtitle shared by several rows
+// is the same help line repeated down the list (UI ruling U18: screens never
+// repeat titles or help text).
+describe('palette rows never repeat a subtitle', () => {
+    it('no two commands in the full catalogue share a subtitle', () => {
+        const ctx = {
+            navigate() {},
+            openSettings() {},
+            openHelp() {},
+            hasBtcAddress: true,
+            hasVmAddress: true,
+            hasGovernanceAddress: true,
+        };
+        const commands = [
+            ...buildCommands(ctx),
+            ...settingsSectionsToCommands(ctx),
+            ...helpToCommands(ctx),
+            ...contactsToCommands([
+                { id: 'c1', name: 'Alice', address: 'bc1qalice' },
+                { id: 'c2', name: 'Bob', address: 'DBob' },
+                { id: 'c3', name: 'Carol', address: 'ltc1qcarol' },
+            ], ctx),
+        ];
+        const byText = new Map();
+        for (const c of commands) {
+            if (!c.subtitle) continue;
+            const key = String(c.subtitle).trim().toLowerCase();
+            byText.set(key, [...(byText.get(key) || []), c.id]);
+        }
+        const repeated = [...byText].filter(([, ids]) => ids.length > 1).map(([text, ids]) => `${text}: ${ids.join(', ')}`);
+        expect(repeated).toEqual([]);
     });
 });

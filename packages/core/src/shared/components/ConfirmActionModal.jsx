@@ -23,7 +23,7 @@
 // click handler's tick, before any await.
 
 import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
-import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, Screen, PageHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
@@ -33,23 +33,33 @@ import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { approveSettle } from '../utils/approveSettle.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
 import { WalletIdentity } from './WalletIdentity.jsx';
 import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
+import { t } from '../../i18n/index.js';
+import { useSuppressSpamToastsOnConfirm } from './ToastHost.jsx';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
+import '../../i18n/locales/en/send.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
 
 function useSigningWallet(wallet) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const walletId = wallet ? null : readActiveWallet();
+    // Read once: a wallet switch in another surface rewrites the stored active
+    // wallet, and this screen still signs for the wallet it opened on.
+    const [walletAtOpen] = useState(readActiveWallet);
+    const walletId = wallet ? null : walletAtOpen;
     const [resolution, setResolution] = useState(null);
 
     useEffect(() => {
@@ -78,6 +88,11 @@ function formatReviewDecoded(decoded) {
     if (!decoded) return decoded;
     let summary = String(decoded.summary || '');
     const details = (decoded.details || []).map((detail) => {
+        // An EXPIRATION travels as Unix seconds; the review shows the moment it names.
+        if (String(detail?.label || '') === 'Expiration') {
+            const when = formatUnixSecondsLocal(detail.value);
+            return when ? { ...detail, value: when } : detail;
+        }
         if (!/(^|\s)(amount|quantity)$/i.test(String(detail?.label || ''))) return detail;
         const value = String(detail.value ?? '');
         const formatted = formatDisplayAmount(value);
@@ -121,7 +136,7 @@ function reviewDetailLabel(label) {
     return value.replace(/^Recipient(?=\s|$)/, 'To');
 }
 
-function reviewActionLabel(decoded, fallback, chainLabel) {
+export function reviewActionLabel(decoded, fallback, chainLabel) {
     const summary = String(decoded?.summary || '').trim();
     if (!summary) return fallback;
 
@@ -157,7 +172,14 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
         .split(/:\s|\s+to\s+/i)[0]
         .replace(/\s+\([^)]*\)\s*$/, '')
         .trim();
-    return actionPhrase.split(/\s+/).slice(0, 3).join(' ') || fallback;
+    const words = actionPhrase.split(/\s+/);
+    // A list of categories ("Sweep balances, ownerships, open orders, open
+    // dispensers") cut at three words reads "Sweep balances, ownerships," or
+    // "Sweep balances, open": a trailing comma, and a button that hides the
+    // orders and dispensers the sweep closes. The verb alone is accurate; the
+    // summary line above the details lists everything.
+    if (words.length > 3 && actionPhrase.includes(',')) return words[0] || fallback;
+    return words.slice(0, 3).join(' ') || fallback;
 }
 
 /**
@@ -318,10 +340,18 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    useSuppressSpamToastsOnConfirm(open);
     const pageRef = useRef(null);
     const titleRef = useRef(null);
     useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });
     const previewReady = phase === 'ready' && !reportLoading;
+    const [settledRequest, setSettledRequest] = useState(null);
+    useEffect(() => {
+        if (!previewReady || approveSettle.ms <= 0) return undefined;
+        const timer = setTimeout(() => setSettledRequest(composed ?? true), approveSettle.ms);
+        return () => clearTimeout(timer);
+    }, [previewReady, composed]);
+    const approveSettled = previewReady && (approveSettle.ms <= 0 || settledRequest === (composed ?? true));
     const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
 
@@ -366,7 +396,7 @@ export function ConfirmActionModal({
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
         if (approveInFlightRef.current && approveInFlightRef.current.request === composed) return;
-        if (approveDisabled || !previewReady || !canApprove || !credentialsReady || refusal) return;
+        if (approveDisabled || !approveSettled || !canApprove || !credentialsReady || refusal) return;
         const attempt = { request: composed };
         const finish = () => {
             if (approveInFlightRef.current === attempt) approveInFlightRef.current = null;
@@ -379,7 +409,7 @@ export function ConfirmActionModal({
         } catch {
             finish();
         }
-    }, [approveDisabled, previewReady, canApprove, credentialsReady, refusal, composed, onApprove]);
+    }, [approveDisabled, approveSettled, canApprove, credentialsReady, refusal, composed, onApprove]);
 
     const handleReject = useCallback((e) => {
         if (e) e.preventDefault();
@@ -394,9 +424,10 @@ export function ConfirmActionModal({
     // signature is in flight (both exits locked).
     const header = (
         <PageHeader
+            nested
             onBack={handleReject}
             backDisabled={exitsLocked}
-            title="Confirm"
+            title={t('common.confirm')}
             titleRef={titleRef}
         />
     );
@@ -409,13 +440,13 @@ export function ConfirmActionModal({
                 disabled={exitsLocked}
                 data-testid="confirm-reject"
             >
-                Reject
+                {t('extension.approval.reject')}
             </Button>
             <Button
                 variant="success"
                 icon={<Icon.ThumbsUpIcon />}
                 onClick={handleApprove}
-                disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
+                disabled={approveDisabled || !approveSettled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                 data-testid="confirm-approve"
                 aria-label={resolvedApproveLabel}
             >
@@ -437,18 +468,38 @@ export function ConfirmActionModal({
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
-                aria-label={`Confirm ${headlineText || 'action'}`}
+                aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
             >
+                {/* §5.3.4: a credential failure returns the page to `ready`
+                    with this error set, so the user retypes and re-approves
+                    the SAME PSBT. It is the first item of page content,
+                    ahead of the header row. */}
+                {error?.presentation === 'status' ? (
+                    <div className={styles.hwNote} role="status" data-testid="confirm-notice">
+                        {userFacingMessage(
+                            error,
+                            'The request stopped because the wallet service returned no explanation.',
+                        )}
+                    </div>
+                ) : error ? (
+                    <StatusMessage variant="error" role="alert" testId="confirm-error">
+                        {userFacingMessage(
+                            error,
+                            'The request stopped because the wallet service returned no explanation.',
+                        )}
+                    </StatusMessage>
+                ) : null}
+
                 <div className={styles.header}>
                     <span className={styles.actionLabel}>{actionHeaderLabel}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </div>
 
                 <div className={styles.body}>
-                    <WalletIdentity wallet={resolvedSigningWallet} label="Signing with" />
+                    <WalletIdentity wallet={resolvedSigningWallet} label={t('components.confirmActionModal.signingWith')} />
                     <OriginIdentity
                         origin={requestOrigin}
-                        label="Requesting site"
+                        label={t('extension.approval.requestingSite')}
                         testId="confirm-request-origin"
                     />
 
@@ -464,9 +515,9 @@ export function ConfirmActionModal({
                     {/* §5.5 message variant: the full text, verbatim and
                         never truncated - it is the whole thing being signed. */}
                     {variant === 'message' && messageText !== undefined ? (
-                        <section className={styles.messageBox} aria-label="Message to sign">
-                            <p className={styles.messageLabel}>Message to sign</p>
-                            <pre className={styles.messageText} data-testid="confirm-message-text">
+                        <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
+                            <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>
+                            <pre className={styles.messageText} data-testid="confirm-message-text" dir="auto">
                                 {messageText}
                             </pre>
                         </section>
@@ -488,7 +539,7 @@ export function ConfirmActionModal({
                     {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>
-                                {variant === 'message' ? 'Signing address' : 'From'}
+                                {variant === 'message' ? t('components.confirmActionModal.signingAddress') : t('send.fields.from')}
                             </dt>
                             <dd className={styles.sourceValue}>
                                 {sourceName ? (
@@ -515,7 +566,7 @@ export function ConfirmActionModal({
 
                     {envelopeLines ? (
                         <div className={styles.fee} data-testid="confirm-envelope-transactions">
-                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            <div>{t('components.confirmActionModal.twoTransactionsBothSignedNow')}</div>
                             {envelopeLines.map((line) => (
                                 <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
                             ))}
@@ -533,15 +584,15 @@ export function ConfirmActionModal({
 
                     {nativeProtocolFeeAmount ? (
                         <div className={styles.fee} data-testid="confirm-native-protocol-fee">
-                            Protocol fee: {nativeProtocolFeeAmount} {nativeTicker}
+                            {t('components.confirmActionModal.protocolFee')} {nativeProtocolFeeAmount} {nativeTicker}
                             {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
-                            {' (sent on-chain and not refunded if the action is rejected)'}
+                            {t('components.confirmActionModal.sentOnChainAndNot')}
                         </div>
                     ) : null}
 
                     {protocolFeeUnavailable ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
-                            Protocol fee estimate unavailable.
+                            {t('components.confirmActionModal.protocolFeeEstimateUnavailable')}
                         </div>
                     ) : null}
 
@@ -566,29 +617,9 @@ export function ConfirmActionModal({
                         no override. Rendered where the credentials would be so
                         the user sees WHY there is nothing to sign with. */}
                     {refusal ? (
-                        <p className={styles.refusal} role="alert" data-testid="confirm-refusal">
+                        <StatusMessage variant="error" role="alert" testId="confirm-refusal">
                             {refusal}
-                        </p>
-                    ) : null}
-
-                    {/* §5.3.4: a credential failure returns the page to `ready`
-                        with this error set, so the user retypes and re-approves
-                        the SAME PSBT. Sits directly above the credentials block
-                        so the message is adjacent to the field it refers to. */}
-                    {error?.presentation === 'status' ? (
-                        <div className={styles.hwNote} role="status" data-testid="confirm-notice">
-                            {userFacingMessage(
-                                error,
-                                'The request stopped because the wallet service returned no explanation.',
-                            )}
-                        </div>
-                    ) : error ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {userFacingMessage(
-                                error,
-                                'The request stopped because the wallet service returned no explanation.',
-                            )}
-                        </div>
+                        </StatusMessage>
                     ) : null}
 
                     {refusal ? null : (
@@ -602,29 +633,28 @@ export function ConfirmActionModal({
                         on that variant. */}
                     {variant !== 'message' && hardwareSigner ? (
                         <p className={styles.hwNote}>
-                            A hardware device verifies native outputs and destinations only; the action
-                            data is obfuscated on-chain, so this screen is where you verify the action intent.
+                            {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
                         </p>
                     ) : null}
 
                     {phase === 'rechecking' ? (
-                        <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
+                        <p className={styles.recheck} data-testid="confirm-rechecking">{t('components.confirmActionModal.reChecking')}</p>
                     ) : null}
                     {signingTime.showElapsed ? (
                         <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
-                            Signing for {signingTime.elapsedSeconds} seconds. Check your hardware wallet screen if one is connected.
+                            {t('components.confirmActionModal.signingFor')} {signingTime.elapsedSeconds} {t('components.confirmActionModal.secondsCheckYourHardwareWallet')}
                         </p>
                     ) : null}
                     {signingTime.timedOut ? (
-                        <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
-                            Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
-                        </div>
+                        <StatusMessage variant="error" role="alert" testId="confirm-signing-timeout">
+                            {t('components.confirmActionModal.signingIsTakingLongerThan')}
+                        </StatusMessage>
                     ) : null}
                     {/* The queue holds the signed transaction until the user
                         broadcasts it from the queued-transactions banner. */}
                     {phase === 'signed-not-broadcast' ? (
                         <p className={styles.queued} data-testid="confirm-queued">
-                            Signed - not broadcast yet.
+                            {t('components.confirmActionModal.signedNotBroadcastYet')}
                         </p>
                     ) : null}
                 </div>

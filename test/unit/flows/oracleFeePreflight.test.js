@@ -26,6 +26,7 @@ import {
 function makeSdk(quote) {
     const sdk = {
         seen: null,
+        wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
         explorer: {
             async getOracleFeeQuote(args) {
                 sdk.seen = args;

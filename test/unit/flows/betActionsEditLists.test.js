@@ -233,7 +233,7 @@ describe('OracleConsole owner-only open-feed editor', () => {
             params: { feedActionIndex: '42', allowList: '81', blockList: '' },
         });
         expect(calls.some((call) => call.method === 'editBetFeedListsAction')).toBe(false);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
     });
 });
 

@@ -1,0 +1,20 @@
+{
+    "rules": {
+        "packages/core/src/shared/components/BackupReminderCard.module.css | .firm": "The firm state of the backup reminder card, a card with its own heading, body and actions; the card look, not an inline message.",
+        "packages/core/src/shared/components/HeaderActionMenu.module.css | .lockBlock": "The menu section that holds the Lock wallet button; a danger-tinted control group, not a message.",
+        "packages/core/src/shared/components/PreflightPanel.module.css | .chip_fail": "The verdict chip in the preflight panel header, a compact badge, not a message.",
+        "packages/core/src/shared/components/PreflightPanel.module.css | .chip_warn": "The verdict chip in the preflight panel header, a compact badge, not a message.",
+        "packages/core/src/shared/components/PreflightPanel.module.css | .findingError": "One finding row in the preflight findings list, with a headline, a detail line and an acknowledgment control; a list of findings, not one inline message.",
+        "packages/core/src/shared/components/PreflightPanel.module.css | .findingWarning": "One finding row in the preflight findings list, with a headline, a detail line and an acknowledgment control; a list of findings, not one inline message.",
+        "packages/core/src/shared/routes/DispenserDetail.module.css | .dispenseInvalidBadge": "An inline Invalid badge on a dispense row, not a message.",
+        "packages/core/src/shared/routes/History.module.css | .pendingLabelWarning": "An inline status label on a history row, not a message.",
+        "packages/core/src/shared/routes/Onboarding.module.css | .licenseParagraphCritical": "An emphasized paragraph inside the license text the user agrees to; part of the legal document, not a message.",
+        "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "An inline dust badge on a coin-control row, not a message."
+    },
+    "inline": {
+        "packages/core/src/shared/components/WatchOnlyBadge.jsx": {
+            "count": 1,
+            "reason": "The watch-only pill badge beside an address label, not a message."
+        }
+    }
+}

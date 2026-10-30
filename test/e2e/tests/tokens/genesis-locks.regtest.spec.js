@@ -41,7 +41,15 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/genesis-locks.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    submitTokenWizard,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -49,15 +57,25 @@ import {
     REGTEST_COIN,
     fundAddress,
     minerRpc,
+    mintXchain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 3;
+/**
+ * XCHAIN held for protocol fees on Bitcoin, where every ISSUE (genesis and each
+ * later edit) charges its fee in XCHAIN rather than in the coin, and the review
+ * refuses a wallet holding none. Off Bitcoin the fee rides the coin lane and
+ * FUNDING covers it.
+ */
+const MINT_XCHAIN = 20;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `CST${STAMP}`;
 const SUPPLY = 1000;
@@ -77,7 +95,11 @@ const MAX_MINT_EDITED = 50;
 const MINTABLE_TICK = `LKM${STAMP}`;
 const EDITION_SIZE = 100;
 const EDITION_PER_TX = 10;
-const EDITION_DESCRIPTION = `mintable and unlocked ${STAMP}`;
+/**
+ * Artwork URL for the limited-edition template, which refuses to review an
+ * edition without one. Any stable https URL serves: nothing here reads it back.
+ */
+const EDITION_IMAGE_URL = 'https://example.com/art/genesis-locks.png';
 /** Test 3s token: the same mintable shape, locked against MINTING partway through. */
 const LOCKMINT_TICK = `LKX${STAMP}`;
 
@@ -144,22 +166,9 @@ async function waitForTokenField(read, want, what, tick = TICK, timeoutMs = 120_
     throw new Error(`${what} never became ${want} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** §3.5: navigate to Home FIRST, then reload, or the unlock wait times out. */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -188,10 +197,21 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // Success screens may draw the id truncated; waitForShownTxid reads the
+    // full id from its accessible name, and from the text where it is whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
+}
+
+/** Mints the XCHAIN the Bitcoin protocol fee is paid in, then reloads onto a fresh session. */
+async function fundProtocolFee(page, source) {
+    if (REGTEST_COIN !== 'RBTC') return;
+    await mintXchain(page, MINT_XCHAIN);
+    await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
 }
 
 /**
@@ -209,13 +229,12 @@ async function approveAndGetTxid(page) {
  */
 async function mintOnce(page, tick, amount) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Mint supply');
+    await openPaletteCommand(page, 'Mint supply');
     const mint = page.getByRole('main');
     await expect(mint.getByRole('textbox', { name: /^Amount/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(mint);
     await page.getByRole('button', { name: /^Token:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill(tick);
-    await page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first().click();
+    await selectPickerAsset(page, tick);
     await mint.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
     await mint.getByRole('button', { name: 'Mint', exact: true }).click();
     await expectConfirmScreen(page);
@@ -225,9 +244,10 @@ async function mintOnce(page, tick, amount) {
     return minted;
 }
 
-async function openTokenAdmin(page, item, tick = TICK) {
+/** Opens Manage Token for `tick` through My Tokens, the way an owner reaches it. */
+async function openManageToken(page, tick = TICK) {
     await reloadToHome(page);
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -237,24 +257,13 @@ async function openTokenAdmin(page, item, tick = TICK) {
     await expect(page.getByRole('heading', { name: 'Manage Token' })
         .or(page.getByText('Manage Token').first()))
         .toBeVisible({ timeout: 30_000 });
+}
 
-    // Manage Token splits its actions between PAGE BUTTONS and the More menu,
-    // and which action sits where depends on the token's state - "Mint
-    // settings" is a button on this token and is absent from the menu
-    // entirely, while "Description" is a menu item. A helper that only knew
-    // the menu waited 30s for something that was on screen the whole time.
-    // SCOPED TO `main`, and that is not tidiness: the shell's own navigation
-    // carries a "Lock" button that locks the WALLET, so an unscoped lookup for
-    // the token action of the same name logs the session out mid-test and the
-    // failure surfaces three assertions later as a password prompt. Same trap
-    // the campaign hit on "Source" in Session 31.
-    const button = page.getByRole('main').getByRole('button', { name: item, exact: true });
-    if (await button.count() > 0) {
-        await button.first().click();
-        return;
-    }
-    await page.getByRole('button', { name: /More/ }).last().click();
-    await page.getByRole('menuitem', { name: item }).click();
+async function openTokenAdmin(page, item, tick = TICK) {
+    await openManageToken(page, tick);
+
+    // Scope the action to main because the shell has its own wallet Lock button.
+    await clickManageTokenAction(page.getByRole('main'), item);
 }
 
 /**
@@ -265,7 +274,7 @@ async function onboardAndCreateLocked(page) {
     await createWallet(page, { password: PASSWORD, name: 'Genesis Locks Wallet' });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
     await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(probe);
@@ -276,9 +285,10 @@ async function onboardAndCreateLocked(page) {
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await fundProtocolFee(page, source);
     await seedPrices();
 
-    await gotoPalette(page, 'Create a token');
+    await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Custom/ }).click();
     await selectVenueChain(main);
@@ -301,8 +311,7 @@ async function onboardAndCreateLocked(page) {
         .toBeVisible({ timeout: 15_000 });
     await descriptionLock.check();
 
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(issued.status), `the venue rejected the ${TICK} genesis (${issued.status})`)
@@ -364,18 +373,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the venue would ACCEPT a new description for a token whose LOCK_DESCRIPTION is set')
                 .toMatch(/DESCRIPTION \(locked\)/i);
 
-            await openTokenAdmin(page, 'Description');
-            const form = page.getByRole('main');
-            await expect(form.getByLabel('New description')).toBeVisible({ timeout: 30_000 });
-            await form.getByLabel('New description').fill(NEW_DESCRIPTION);
-            await form.getByRole('button', { name: /^(Save|Update|Sign)/ }).first().click();
-
-            // Refused before anything is signed: the fee-bearing pre-flight
-            // answers on the form, so no confirm screen opens.
-            const alert = page.getByRole('alert').filter({ hasText: /DESCRIPTION \(locked\)/i });
-            await expect(alert,
-                'the wallet did not quote the network\'s verdict for an edit to a frozen field')
-                .toBeVisible({ timeout: 90_000 });
+            // Refused before any form opens: Manage Token reads the token's
+            // lock flags and withdraws the Description action, naming the
+            // lock as the reason. The Mint settings edit above went through
+            // the same page, so this is the lock and not a dead menu.
+            await openManageToken(page);
+            await page.getByRole('button', { name: /More/ }).last().click();
+            const describeAction = page.getByRole('menuitem', { name: 'Description', exact: true });
+            await expect(describeAction,
+                'Manage Token offers a description edit on a token whose LOCK_DESCRIPTION is set')
+                .toBeDisabled({ timeout: 30_000 });
+            await expect(describeAction,
+                'the withdrawn Description action does not say the description is locked')
+                .toHaveAttribute('title', /permanently locked/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an edit the network has already refused reached the confirm screen')
                 .toBe(0);
@@ -396,7 +406,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Later Lock Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -406,9 +416,10 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+            await fundProtocolFee(page, source);
             await seedPrices();
 
-            await gotoPalette(page, 'Create a token');
+            await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: /^Limited edition/ }).click();
             await selectVenueChain(main);
@@ -417,9 +428,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token name (ticker)').fill(MINTABLE_TICK);
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_DESCRIPTION);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await submitTokenWizard(page);
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status)).toBe('valid');
@@ -428,13 +438,12 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // step is measured against: minting this token is legal, the wallet
             // offers it, and the chain accepts it.
             await reloadToHome(page);
-            await gotoPalette(page, 'Mint supply');
+            await openPaletteCommand(page, 'Mint supply');
             const mint = page.getByRole('main');
             await expect(mint.getByRole('textbox', { name: /^Amount/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(mint);
             await page.getByRole('button', { name: /^Token:/ }).click();
-            await page.getByLabel('Search coins or tokens').fill(MINTABLE_TICK);
-            await page.getByLabel(new RegExp(`Open ${MINTABLE_TICK} details`, 'i')).first().click();
+            await selectPickerAsset(page, MINTABLE_TICK);
             await mint.getByRole('textbox', { name: /^Amount/ }).fill(String(EDITION_PER_TX));
             await mint.getByRole('button', { name: 'Mint', exact: true }).click();
             await expectConfirmScreen(page);
@@ -511,7 +520,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // can present as unmintable. Asserted on the Manage Token page
             // itself, which is where an owner would look.
             await reloadToHome(page);
-            await gotoPalette(page, 'My Tokens');
+            await openPaletteCommand(page, 'My tokens');
             const list = page.getByRole('main');
             const row = list.getByRole('button').filter({ hasText: MINTABLE_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
@@ -520,13 +529,16 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 .or(page.getByText('Manage Token').first()))
                 .toBeVisible({ timeout: 30_000 });
 
+            // Issuer actions stay hidden until the page has confirmed this
+            // address created the token, so the heading alone is too early.
             const mintAction = page.getByRole('button', { name: 'Mint', exact: true })
                 .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            expect(await mintAction.count(),
-                'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
-                + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
-                + 'freezing the metadata should not retire the mint button')
-                .toBeGreaterThan(0);
+            await expect.poll(() => mintAction.count(), {
+                message: 'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
+                    + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
+                    + 'freezing the metadata should not retire the mint button',
+                timeout: 60_000,
+            }).toBeGreaterThan(0);
         });
     });
 
@@ -537,7 +549,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Mint Lock Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -547,9 +559,10 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+            await fundProtocolFee(page, source);
             await seedPrices();
 
-            await gotoPalette(page, 'Create a token');
+            await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: /^Limited edition/ }).click();
             await selectVenueChain(main);
@@ -558,8 +571,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token name (ticker)').fill(LOCKMINT_TICK);
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await submitTokenWizard(page);
             await expectConfirmScreen(page);
             expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))
                 .toBe('valid');
@@ -607,7 +620,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // still hide it, or the fix traded a false absence for a false
             // presence.
             await reloadToHome(page);
-            await gotoPalette(page, 'My Tokens');
+            await openPaletteCommand(page, 'My tokens');
             const list = page.getByRole('main');
             const row = list.getByRole('button').filter({ hasText: LOCKMINT_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
@@ -631,13 +644,12 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // 90 of 100 units are unminted, so the headroom is a full
             // transaction's worth and the form used to say so.
             await reloadToHome(page);
-            await gotoPalette(page, 'Mint supply');
+            await openPaletteCommand(page, 'Mint supply');
             const mint = page.getByRole('main');
             await expect(mint.getByRole('textbox', { name: /^Amount/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(mint);
             await page.getByRole('button', { name: /^Token:/ }).click();
-            await page.getByLabel('Search coins or tokens').fill(LOCKMINT_TICK);
-            await page.getByLabel(new RegExp(`Open ${LOCKMINT_TICK} details`, 'i')).first().click();
+            await selectPickerAsset(page, LOCKMINT_TICK);
 
             const footer = await mint
                 .getByText(/available to mint|No supply cap|permanently locked|opens at block|closed at block/)

@@ -35,12 +35,35 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
-import { FormPage, FormSection, InfoTip, RadioGroup } from '@xchain-wallet/core/ui';
+import { FormPage, FormSection, InfoTip, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/signerSelect.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const NOOP = () => {};
+
+// A signer list read that never reached the wallet service: a failed fetch, a
+// timeout, or a background whose message port closed or does not answer. Such
+// faults say nothing about the user's signers, so the form names the outage
+// and the software fallback instead of a generic failure or the raw text.
+const TRANSPORT_FAULT_NAMES = new Set(['TimeoutError', 'NetworkTimeoutError', 'NetworkError', 'AbortError']);
+const TRANSPORT_FAULT_TEXT = /failed to fetch|fetch failed|network ?error|network request failed|load failed|timed out|timeout|message port closed|could not establish connection|receiving end does not exist|extension context invalidated|you are offline|\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ERR_NETWORK)\b/i;
+
+function isTransportFault(err) {
+    if (!err) return false;
+    const name = typeof err === 'object' ? String(/** @type {any} */ (err).name || '') : '';
+    if (TRANSPORT_FAULT_NAMES.has(name)) return true;
+    const code = typeof err === 'object' ? String(/** @type {any} */ (err).code || '') : '';
+    const text = typeof err === 'string' ? err : String(/** @type {any} */ (err).message || '');
+    return TRANSPORT_FAULT_TEXT.test(`${code} ${text}`);
+}
+
+function signerListError(err) {
+    if (isTransportFault(err)) return t('signerSelect.loadUnreachable');
+    return userFacingMessage(err, t('signerSelect.loadFailed'));
+}
 
 /**
  * @param {object} props
@@ -81,13 +104,13 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
             .catch((err) => {
                 if (cancelled) return;
                 // Loading the registry failed; fall back to software so
-                // the parent flow stays usable. Surface the error inline
-                // for diagnostic visibility.
+                // the parent flow stays usable. The inline note says whether
+                // the wallet service was out of reach or the read failed.
                 setRegistry({
                     walletId,
                     messaging,
                     signers: [],
-                    error: err?.message || 'Failed to load signers.',
+                    error: signerListError(err),
                 });
             });
         return () => { cancelled = true; };
@@ -104,7 +127,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         // Either still loading (we don't render a placeholder; the
         // overall form does its own loading), or no HW signers exist
         // (auto-resolved above).
-        return error ? <p style={ERROR_STYLE} role="alert">{error}</p> : null;
+        return <StatusMessage variant="error">{error}</StatusMessage>;
     }
 
     /** @type {Array<{ id: string | null, label: string, sub: string, kind: string }>} */
@@ -125,12 +148,14 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
 
     return (
         <FormPage as="div" sectioned label={t('signerSelect.choose')}>
-            <FormSection title={t('signerSelect.choose')}>
-                <InfoTip label={t('signerSelect.intro')} />
+            <FormSection
+                title={t('signerSelect.choose')}
+                trailing={<InfoTip label={t('signerSelect.intro')} />}
+            >
                 {isWatcherMode ? (
-                    <p role="note" style={WATCH_ONLY_STYLE}>
+                    <StatusMessage variant="warning" role="note">
                         {t('signerSelect.watcherNote')}
-                    </p>
+                    </StatusMessage>
                 ) : null}
                 <RadioGroup
                     legend={t('signerSelect.title')}
@@ -149,16 +174,3 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         </FormPage>
     );
 }
-
-const WATCH_ONLY_STYLE = {
-    color: 'var(--xc-warning-fg, var(--xc-text))',
-    fontSize: 'var(--xc-text-xs)',
-    margin: '0 0 var(--xc-space-2)',
-};
-
-
-const ERROR_STYLE = {
-    color: 'var(--xc-danger-fg)',
-    fontSize: 'var(--xc-text-sm)',
-    margin: '0 0 var(--xc-space-3) 0',
-};

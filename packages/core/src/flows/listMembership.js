@@ -96,3 +96,30 @@ export async function findListOwner({ detail, readList }) {
     }
     return null;
 }
+
+export const LIST_OWNER_UNCONFIRMED_MESSAGE =
+    "Couldn't confirm this list's current owner. Check your connection and try again.";
+export const LIST_OWNER_CHANGED_MESSAGE =
+    'This list has a different owner than when this screen opened. Review the owner and try again.';
+
+/**
+ * Re-read a list's owner just before an owner action is signed. An owner
+ * that changed while the screen was open, or one that cannot be read, stops
+ * the action, since the network refuses an edit signed by a former owner and
+ * the fee is spent anyway.
+ *
+ * @param {{ readList: (actionIndex: string) => Promise<any>, actionIndex: string | number, owner: string | null | undefined }} args
+ * @returns {Promise<{ ok: true } | { ok: false, owner: string | null | undefined, message: string }>}
+ */
+export async function recheckListOwner({ readList, actionIndex, owner }) {
+    let latest = null;
+    try {
+        const detail = await readList(String(actionIndex));
+        latest = detail ? await findListOwner({ detail, readList }) : null;
+    } catch {
+        latest = null;
+    }
+    if (latest === null) return { ok: false, owner, message: LIST_OWNER_UNCONFIRMED_MESSAGE };
+    if (latest !== owner) return { ok: false, owner: latest, message: LIST_OWNER_CHANGED_MESSAGE };
+    return { ok: true };
+}

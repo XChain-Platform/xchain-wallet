@@ -139,6 +139,26 @@ function OpenerHarness({ autoFocusInside = false }) {
     );
 }
 
+function RemovedOpenerHarness() {
+    const [open, setOpen] = useState(false);
+    const [finished, setFinished] = useState(false);
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: open });
+    if (finished) {
+        return <main><h1>Destination</h1></main>;
+    }
+    return (
+        <div>
+            <button data-testid="removed-opener" onClick={() => setOpen(true)}>open</button>
+            {open ? (
+                <div ref={ref} role="dialog">
+                    <button onClick={() => { setOpen(false); setFinished(true); }}>continue</button>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 function ContainerInitialHarness() {
     const ref = useRef(null);
     useFocusTrap(ref, { active: true, initialFocusRef: ref });
@@ -246,6 +266,21 @@ describe('useFocusTrap opener handling', () => {
         expect(document.activeElement).toBe(opener);
     });
 
+    it('focuses the destination heading when the opener is removed on close', async () => {
+        render(<RemovedOpenerHarness />);
+        const opener = screen.getByTestId('removed-opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+
+        fireEvent.click(screen.getByRole('button', { name: 'continue' }));
+        await flush();
+
+        const heading = screen.getByRole('heading', { name: 'Destination' });
+        expect(heading).toHaveFocus();
+        expect(heading).toHaveAttribute('tabindex', '-1');
+    });
+
     it('does not pull focus back when something else claimed it on close', async () => {
         render(<div><OpenerHarness /><button data-testid="elsewhere">elsewhere</button></div>);
         const opener = screen.getByTestId('opener');
@@ -298,5 +333,20 @@ describe('useFocusTrap opener handling', () => {
         expect(document.activeElement).toBe(pageOpener);
         expect(styleChanges).toHaveLength(2);
         observer.disconnect();
+    });
+
+    it('locks the scroll of the document the dialog renders in, not the page around it', () => {
+        // The style guide renders open dialogs into width-frame iframes; a lock
+        // on the outer body froze the whole guide.
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameDoc = iframe.contentDocument;
+        const host = frameDoc.body.appendChild(frameDoc.createElement('div'));
+        const { unmount } = render(<TrapHarness active />, { container: host });
+        expect(frameDoc.body.style.overflow).toBe('hidden');
+        expect(document.body.style.overflow).toBe('');
+        unmount();
+        expect(frameDoc.body.style.overflow).toBe('');
+        iframe.remove();
     });
 });

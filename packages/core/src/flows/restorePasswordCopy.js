@@ -144,6 +144,27 @@ export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
         return 'The wallet inside this backup file is missing the details needed to unlock it, so '
             + 'no password can open it. Restore from a different backup file.';
     }
+    // A damaged seal on the wallet inside the backup. Also not about a
+    // password: retyping one cannot help, so it must win before the
+    // wrong-password matchers below.
+    // The open vault refused the device box. Checked before the required and
+    // wrong-password matchers, since its copy quotes the device label.
+    if (/restoredevicepassworderror|not the password this app unlocks with/.test(hay)) {
+        return `That is not the password this app unlocks with. The "${restoreDeviceLabel('add')}" `
+            + 'field wants the password you already unlock this app with; the restored wallet is '
+            + 're-locked with it.';
+    }
+    if (/backupsealdamagederror|wallet inside this backup file is damaged/.test(hay)) {
+        return 'The wallet inside this backup file is damaged, so no password can open it. '
+            + 'Restore from a different backup file.';
+    }
+    // A backup a newer release wrote: its envelope, payload or a record inside
+    // carries a version above the one this build reads. Nothing is wrong with
+    // the file or the passwords, so it must win before the envelope matcher.
+    if (isNewerBackup(hay)) {
+        return 'This backup was made by a newer version of the app. Update the app, then restore '
+            + 'it again.';
+    }
     // The contents are not a backup envelope at all (pasted text, another
     // app's file, a truncated copy). Core's wording ("unexpected magic
     // \"undefined\"") names its own field names, and no password is at fault.
@@ -185,6 +206,20 @@ export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
             + '"Overwrite if any record collides" to restore over them.';
     }
     return sanitize(raw);
+}
+
+/**
+ * Does this failure say the backup carries a version above what this build
+ * reads? The envelope and payload refusals name both numbers; the record
+ * migrator says "newer than target".
+ *
+ * @param {string} hay   lowercased `${name} ${message}`
+ * @returns {boolean}
+ */
+function isNewerBackup(hay) {
+    if (/newer than target v\d+/.test(hay)) return true;
+    const m = /unsupported (?:format|payload)version (\d+) \(expected (\d+)\)/.exec(hay);
+    return m !== null && Number(m[1]) > Number(m[2]);
 }
 
 /**

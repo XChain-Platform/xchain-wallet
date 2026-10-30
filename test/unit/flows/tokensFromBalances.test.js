@@ -33,6 +33,15 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         ]);
     });
 
+    it('skips rows that are not objects and keeps the readable ones', () => {
+        const out = tokensFromBalances({
+            data: [{ tick: 'XCHAIN', quantity: '7', divisibility: 0 }, null, 5, 'x', {}, { tick: null, quantity: '1' }],
+        });
+        expect(out).toEqual([
+            { tick: 'XCHAIN', quantity: '7', divisibility: 0, displayName: 'XCHAIN', imageUrl: null },
+        ]);
+    });
+
     it('reads amount into quantity when quantity is absent', () => {
         const [row] = tokensFromBalances({ data: [{ tick: 'T', amount: '42', decimals: 0 }] });
         expect(row.quantity).toBe('42');
@@ -61,15 +70,16 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         expect(row.quantity).toBe('50000000');
     });
 
-    it('rounds excess explorer precision half away from zero at the atomic boundary', () => {
+    it('rounds excess explorer precision down, so a balance never reads more than is held', () => {
         const out = tokensFromBalances({
             data: [
                 { tick: 'DOWN', amount: '1.2344', decimals: 3 },
                 { tick: 'HALF', amount: '1.2345', decimals: 3 },
                 { tick: 'INDIVISIBLE', amount: '41.5', decimals: 0 },
+                { tick: 'XCHAIN', amount: '40.949', decimals: 0 },
             ],
         });
-        expect(out.map((row) => row.quantity)).toEqual(['1234', '1235', '42']);
+        expect(out.map((row) => row.quantity)).toEqual(['1234', '1234', '41', '40']);
     });
 
     it('keeps very large supplies exact at every divisibility', () => {
@@ -103,5 +113,27 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         expect(tokensFromBalances({})).toEqual([]);
         expect(tokensFromBalances(null)).toEqual([]);
         expect(tokensFromBalances({ data: [{ amount: '1' }] })).toEqual([]); // no tick → dropped
+    });
+
+    it('rejects malformed and negative monetary rows instead of displaying them', () => {
+        const out = tokensFromBalances({
+            data: [
+                { tick: 'NAN', amount: 'NaN', decimals: 0 },
+                { tick: 'INFINITY', amount: Infinity, decimals: 0 },
+                { tick: 'NEGATIVE', amount: '-1', decimals: 0 },
+                { tick: 'EXPONENT', amount: '1e3', decimals: 0 },
+                { tick: 'BAD_SCALE', amount: '1', decimals: -1 },
+                { tick: 'UNSAFE_NUMBER', quantity: 9007199254740992, divisibility: 0 },
+                { tick: 'EXACT_STRING', quantity: '9007199254740993', divisibility: 0 },
+            ],
+        });
+
+        expect(out).toEqual([{
+            tick: 'EXACT_STRING',
+            quantity: '9007199254740993',
+            divisibility: 0,
+            displayName: 'EXACT_STRING',
+            imageUrl: null,
+        }]);
     });
 });

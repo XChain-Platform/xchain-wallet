@@ -54,7 +54,7 @@
 //   1. `gotoSection(page, 'Addresses')` NEVER RETURNS. The bottom bar surfaces
 //      only Home/History/Send/Scan, the fixture falls back to a "More" button,
 //      and this layout renders none - so it waits out its whole 600s budget.
-//      Use the palette (`gotoPalette` below).
+//      Use the palette (`openPaletteCommand`).
 //   2. The "+" menu's rows are `role="menuitem"`, NOT buttons. A
 //      `getByRole('button', { name: 'Import address' })` matches nothing here
 //      and burns its whole budget; the earlier draft died one step later, at
@@ -76,7 +76,7 @@ import bitcoin from 'bitcoinjs-lib';
 import wifCodec from 'wif';
 import * as ecc from 'tiny-secp256k1';
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -130,30 +130,6 @@ function expectedP2wpkh(wif, hrp) {
 }
 
 /**
- * Opens a destination through the COMMAND PALETTE, not `gotoSection`.
- *
- * Measured 2026-08-03, and it cost a full 600s run: `gotoSection(page,
- * 'Addresses')` never returns here. The bottom bar surfaces only
- * Home/History/Send/Scan, so the fixture falls back to a "More" button, and at
- * this layout there is no More button either - the call then waits out its
- * entire budget for a control that is never coming. The palette reaches every
- * destination at every width, which is why `secret-reveal.regtest.spec.js`
- * carries its own copy of this too.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
-/**
  * Lands on the address LIST, from wherever this route currently is.
  *
  * The Addresses route has three screens - list, address detail, import form -
@@ -168,7 +144,7 @@ async function gotoAddressList(page) {
     for (let i = 0; i < 3 && await filters.count() === 0; i++) {
         const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
-        else await gotoPalette(page, 'Addresses');
+        else await openPaletteCommand(page, 'Addresses');
         await filters.or(page.getByRole('status', { name: 'Loading addresses' })).first()
             .waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
     }
@@ -206,12 +182,12 @@ async function openImportForm(page) {
  * steps from the cause.
  */
 async function selectImportChain(page) {
-    const trigger = page.getByRole('button', { name: /^Chain:/ });
-    await expect(trigger, 'the import form has no Chain picker').toBeVisible({ timeout: 30_000 });
+    const trigger = page.getByRole('button', { name: /^Network:/ });
+    await expect(trigger, 'the import form has no Network picker').toBeVisible({ timeout: 30_000 });
     if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
     await trigger.click();
     await page.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
-    await expect(trigger, `the Chain picker would not move to ${REGTEST_CHAIN_LABEL}`)
+    await expect(trigger, `the Network picker would not move to ${REGTEST_CHAIN_LABEL}`)
         .toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL), { timeout: 15_000 });
 }
 
@@ -228,7 +204,7 @@ async function submitImport(page, { wif, label }) {
     // this spec does not depend on which side of that fork the shell is on.
     const password = page.getByLabel('Wallet password', { exact: true });
     if (await password.count() > 0) await password.fill(PASSWORD);
-    await page.getByRole('checkbox', { name: /not backed up by my recovery phrase/i }).check();
+    await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 }
 
@@ -278,7 +254,7 @@ test.describe('Addresses: importing a private key', () => {
                     // can pass over the defect.
                     await page.reload();
                     await unlockAfterReload(page, PASSWORD);
-                    await gotoPalette(page, 'Addresses');
+                    await openPaletteCommand(page, 'Addresses');
                     await showImportedOnly(page);
 
                     await expect(page.getByRole('button', { name: `View address ${imported}` }),
@@ -314,15 +290,21 @@ test.describe('Addresses: importing a private key', () => {
                 await expect(use, 'Use did not leave the address detail, so setAsActive never resolved')
                     .toBeHidden({ timeout: 60_000 });
 
-                await gotoPalette(page, 'Addresses');
+                await openPaletteCommand(page, 'Addresses');
                 await showImportedOnly(page);
                 await page.getByRole('button', { name: `View address ${imported}` }).click();
 
-                await expect(page.getByRole('button', { name: 'Use', exact: true }),
-                    'Use did not make the imported address active - D-65 and its fourth sibling in '
-                    + 'resolveActiveAddresses both present exactly this way, and Send spends the '
-                    + 'ACTIVE address, so an imported key that cannot be activated cannot be spent')
-                    .toHaveAttribute('title', 'This is the active address', { timeout: 30_000 });
+                // The detail marks the active address with an "Active" badge
+                // beside its label and offers no Use action for it, so both
+                // halves are read: the badge appearing and Use going away.
+                const notActivated = 'Use did not make the imported address active - D-65 and its '
+                    + 'fourth sibling in resolveActiveAddresses both present exactly this way, and Send '
+                    + 'spends the ACTIVE address, so an imported key that cannot be activated cannot be spent';
+                await expect(page.getByRole('main').getByText('Active', { exact: true }), notActivated)
+                    .toBeVisible({ timeout: 30_000 });
+                await expect(page.getByRole('group', { name: 'Address actions' })
+                    .getByRole('button', { name: 'Use', exact: true }), notActivated)
+                    .toHaveCount(0);
             });
 
             await test.step('D-67: the same key cannot be imported a second time', async () => {
@@ -340,7 +322,7 @@ test.describe('Addresses: importing a private key', () => {
                 // And no second record. D-67's real damage was a duplicate row
                 // that INFLATED the wallet's balance by counting one address
                 // twice, so the row count is the assertion, not the message.
-                await gotoPalette(page, 'Addresses');
+                await openPaletteCommand(page, 'Addresses');
                 await showImportedOnly(page);
                 await expect(page.getByRole('button', { name: `View address ${imported}` }),
                     'the refused duplicate still created a second record for one address, which is '

@@ -20,6 +20,8 @@ import {
 } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
+import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
+import { pathToAddressN } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 // coinTypeFor's SLIP-44 slots (btc=0', ltc=2', doge=3') are a second,
 // independently-hardcoded copy of the same coin-type the chain descriptors'
@@ -61,13 +63,20 @@ function makeConnect(overrides = {}) {
                 patch_version: 0,
             },
         }),
-        getAddress: vi.fn().mockResolvedValue({
+        // Connect answers a `bundle` call with one payload item per entry,
+        // each echoing its numeric path.
+        getAddress: vi.fn(async (params) => ({
             success: true,
-            payload: { address: 'bc1qmock' },
-        }),
-        getPublicKey: vi.fn().mockResolvedValue({
-            success: true,
-            payload: { publicKey: '02' + 'a'.repeat(64), chainCode: 'c'.repeat(64), fingerprint: '12345678' },
+            payload: params?.bundle
+                ? params.bundle.map((e) => ({ address: 'bc1qmock', path: pathToAddressN(e.path) }))
+                : { address: 'bc1qmock' },
+        })),
+        getPublicKey: vi.fn(async (params) => {
+            const key = { publicKey: '02' + 'a'.repeat(64), chainCode: 'c'.repeat(64), fingerprint: '12345678' };
+            return {
+                success: true,
+                payload: params?.bundle ? params.bundle.map((e) => ({ ...key, path: pathToAddressN(e.path) })) : key,
+            };
         }),
         signTransaction: vi.fn().mockResolvedValue({
             success: true,
@@ -168,6 +177,26 @@ describe('TrezorSigner.getStatus', () => {
         });
         expect(await s.getStatus()).toBe('disconnected');
     });
+
+    it.each(['bitcoin-testnet', 'bitcoin-regtest', 'litecoin-testnet', 'dogecoin-testnet'])(
+        'returns "unsupported-network" for %s, a chain the Trezor path cannot sign on',
+        async (chainId) => {
+            expect(await makeSigner().getStatus({ chainId })).toBe('unsupported-network');
+        },
+    );
+
+    it('returns "available" for every supported chain and when no chainId is given', async () => {
+        const s = makeSigner();
+        for (const chainId of ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet']) {
+            expect(await s.getStatus({ chainId })).toBe('available');
+        }
+        expect(await s.getStatus({})).toBe('available');
+    });
+
+    it('reports the device state before the network gate', async () => {
+        const s = makeSigner({ getFeatures: vi.fn().mockRejectedValue(new Error('disconnected')) });
+        expect(await s.getStatus({ chainId: 'bitcoin-testnet' })).toBe('disconnected');
+    });
 });
 
 describe('TrezorSigner hardware failures', () => {
@@ -266,6 +295,130 @@ describe('TrezorSigner.getAddresses', () => {
         await s.getAddresses({ ...params, verify: true });
         expect(getAddress.mock.calls[0][0]).toMatchObject({ showOnTrezor: true });
     });
+
+    // A device stand-in whose answer depends only on the path it is asked for,
+    // so a bundled and an unbundled scan can be compared item for item.
+    function pathDeterministicConnect() {
+        const address = (p) => ({ address: `addr:${p.coin}:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
+        const key = (p) => ({ publicKey: `pk:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
+        return makeConnect({
+            getAddress: vi.fn(async (params) => ({
+                success: true,
+                payload: params.bundle ? params.bundle.map(address) : address(params),
+            })),
+            getPublicKey: vi.fn(async (params) => ({
+                success: true,
+                payload: params.bundle ? params.bundle.map(key) : key(params),
+            })),
+        });
+    }
+
+    for (const [chainId, addressType] of [
+        ['bitcoin-mainnet', 'p2wpkh'],
+        ['bitcoin-mainnet', 'p2sh-p2wpkh'],
+        ['litecoin-mainnet', 'p2wpkh'],
+        ['dogecoin-mainnet', 'p2pkh'],
+    ]) {
+        it(`bundles 50 ${chainId} ${addressType} paths into two calls with the unbundled result`, async () => {
+            const params = { chainId, accountIndex: 1, change: 0, startIndex: 7, addressType };
+            const bundled = pathDeterministicConnect();
+            const rows = await makeSigner(bundled).getAddresses({ ...params, count: 50 });
+            expect(bundled.getAddress).toHaveBeenCalledTimes(1);
+            expect(bundled.getPublicKey).toHaveBeenCalledTimes(1);
+            expect(bundled.getAddress.mock.calls[0][0].bundle).toHaveLength(50);
+
+            const single = pathDeterministicConnect();
+            const signer = makeSigner(single);
+            const one = [];
+            for (let i = 0; i < 50; i += 1) {
+                one.push(...await signer.getAddresses({ ...params, startIndex: params.startIndex + i, count: 1 }));
+            }
+            expect(single.getAddress).toHaveBeenCalledTimes(50);
+            expect(rows).toEqual(one);
+            expect(rows.map((r) => r.index)).toEqual(Array.from({ length: 50 }, (_, i) => 7 + i));
+        });
+    }
+
+    it('shows every bundled address on the device when verify is set', async () => {
+        const connect = pathDeterministicConnect();
+        await makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 3, addressType: 'p2wpkh', verify: true,
+        });
+        expect(connect.getAddress.mock.calls[0][0].bundle.every((e) => e.showOnTrezor === true)).toBe(true);
+    });
+
+    it('refuses a bundle answer with a different item count', async () => {
+        const connect = makeConnect({
+            getAddress: vi.fn(async () => ({ success: true, payload: [{ address: 'bc1qmock' }] })),
+        });
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/different count/);
+    });
+
+    it('refuses a bundle item that names another path', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getPublicKey.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((_, i) => {
+                const other = params.bundle[(i + 1) % params.bundle.length].path;
+                return { publicKey: 'pk', path: pathToAddressN(other), serializedPath: other };
+            }),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,1\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses an item whose serializedPath matches but whose numeric path drops a hardened bit', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getPublicKey.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => {
+                const numbers = pathToAddressN(e.path);
+                // m/84'/0'/0'/0/i printed the same, with the account index unhardened.
+                numbers[2] &= 0x7fffffff;
+                return { publicKey: `pk:${e.path}`, path: numbers, serializedPath: e.path };
+            }),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,0,0,0\]/);
+    });
+
+    it('refuses a reordered answer', async () => {
+        const connect = pathDeterministicConnect();
+        const address = (p) => ({ address: `addr:${p.coin}:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map(address).reverse(),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 3, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,2\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses a reordered answer that carries numeric paths and no serializedPath', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => ({ address: `addr:${e.path}`, path: pathToAddressN(e.path) })).reverse(),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,1\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses an item that carries no numeric path', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => ({ address: `addr:${e.path}`, serializedPath: e.path })),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \(none\) for m\/84'/);
+    });
 });
 
 describe('TrezorSigner.getPublicKey', () => {
@@ -335,31 +488,16 @@ describe('TrezorSigner.signPsbt', () => {
     // serializedTx that comes back. These three pin the comparison that does.
     //
     // SERIALIZED_TX pays 900 sats to 0014cc…cc from aaaa…:0, which is exactly
-    // what the decomposition below describes.
-    const SERIALIZED_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+    // what DECOMPOSED describes, signed with a real key so its signature verifies.
+    const DECOMPOSED = decomposedFor({
+        inputs: [{ scriptType: 'p2wpkh', txid: 'a'.repeat(64), vout: 0, value: 1000, sequence: 0xffffffff }],
+        outputs: [{ address: 'bc1qmockdestination', scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+    });
+    const SERIALIZED_TX = signedReplyFor(DECOMPOSED);
 
     const signPsbtSdk = () => ({
         wallet: {
-            decomposePsbt: vi.fn().mockReturnValue({
-                inputs: [{
-                    scriptType: 'p2wpkh',
-                    prevTxHash: 'a'.repeat(64),
-                    prevTxIndex: 0,
-                    value: 1000,
-                    sequence: 0xffffffff,
-                    witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
-                    sighashType: null,
-                    redeemScriptHex: null,
-                }],
-                outputs: [{
-                    address: 'bc1qmockdestination',
-                    scriptPubKeyHex: '0014' + 'cc'.repeat(20),
-                    scriptType: 'p2wpkh',
-                    value: 900,
-                }],
-                locktime: 0,
-                txVersion: 2,
-            }),
+            decomposePsbt: vi.fn().mockReturnValue(DECOMPOSED),
             txidOf: vi.fn().mockReturnValue('deadbeef'),
         },
     });

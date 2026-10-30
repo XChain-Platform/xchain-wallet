@@ -14,7 +14,6 @@
 
 import { createRoot } from 'react-dom/client';
 import { defaultRegistry } from '../../core/src/registry/index.js';
-import { syncChainRegistryFromHub } from '../../core/src/registry/remote.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -44,15 +43,16 @@ try { installNativeKdfProvider(); } catch { /* core retains its JS fallback */ }
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
 // registry snapshot after the first screen paints. The signature must verify
 // against the pinned federation key or nothing changes, and any failure
-// leaves the bundled descriptors serving.
+// leaves the bundled descriptors serving. The sync module and its Ed25519
+// verifier load here rather than with the first screen; a failed chunk load
+// is one more failure that leaves the bundled descriptors serving.
 function syncChainRegistry() {
-    try {
-        syncChainRegistryFromHub({ registry: defaultRegistry() })
-            .then((r) => {
-                if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
-            })
-            .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
-    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+    import('../../core/src/registry/remote.js')
+        .then(({ syncChainRegistryFromHub }) => syncChainRegistryFromHub({ registry: defaultRegistry() }))
+        .then((r) => {
+            if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
+        })
+        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 }
 
 // §47.1 / G143: register this origin as a handler for `xchain:` URIs so

@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_TICKER,
+    approveConfirm,
     fundAddress,
     healVenueClock,
     mintXchain,
@@ -23,6 +24,10 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+
+// The composers list source addresses as first6…last6 (a native select cannot
+// shorten text, and a full address ran under the chevron on phones).
+const shortAddress = (address) => `${address.slice(0, 6)}…${address.slice(-6)}`;
 
 const PASSWORD = 'regtestpassword123';
 const STAMP = Date.now().toString().slice(-6);
@@ -59,10 +64,7 @@ const rowField = (scope, role, name) => scope.getByRole(role, { name, exact: tru
 const composerRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
 async function gotoCrossChainTemplates(page) {
-    await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'More actions', exact: true }).click();
-    const actions = page.getByRole('main');
-    await actions.getByRole('button', { name: /^Cross-chain templates/ }).click();
+    await openPaletteCommand(page, 'Cross-chain templates');
     await expect(page.getByRole('main').getByText('Bridge token pair', { exact: true }))
         .toBeVisible({ timeout: 30_000 });
 }
@@ -118,7 +120,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
             await card.getByRole('button', { name: 'Use template', exact: true }).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByText('Compose any number of independent actions'))
+            await expect(composerRow(main, 1), 'the template never reached the Parallel composer')
                 .toBeVisible({ timeout: 30_000 });
             await expect(rowField(main, 'combobox', 'Action')).toHaveCount(3);
             const rows = [1, 2, 3].map((number) => composerRow(main, number));
@@ -130,10 +132,10 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveValue(/<ISSUE action_index from row 1>/);
 
             for (const row of rows) {
-                await rowField(row, 'combobox', 'Chain').selectOption(REGTEST_CHAIN_ID);
+                await rowField(row, 'combobox', 'Network').selectOption(REGTEST_CHAIN_ID);
                 expect(await rowField(row, 'combobox', 'From address')
                     .evaluate((el) => el.options[el.selectedIndex]?.text || ''))
-                    .toBe(source);
+                    .toBe(shortAddress(source));
             }
 
             await rowField(rows[0], 'textbox', 'Params (JSON object)').fill(JSON.stringify({
@@ -165,7 +167,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('sign each prefilled row and verify all three explorer records', async () => {
             const main = page.getByRole('main');
             await main.getByRole('button', { name: 'Review', exact: true }).click();
-            await expect(main.getByText('3 actions across 1 chain')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByText('3 actions across 1 network')).toBeVisible({ timeout: 30_000 });
             await main.getByRole('checkbox', {
                 name: 'I understand successful actions cannot be rolled back if a later action fails.',
             }).check();
@@ -173,11 +175,14 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const password = main.getByLabel('Password', { exact: true });
             for (let row = 0; row < 3; row += 1) {
-                await expect(main.getByText(`Signing action ${row + 1} of 3`))
+                await expect(main.getByText(new RegExp(`^Action ${row + 1} of 3\\.`)))
                     .toBeVisible({ timeout: 120_000 });
                 // An unlocked wallet signs without a password field at all.
                 if (await password.count() && !(await password.inputValue())) await password.fill(PASSWORD);
                 await main.getByRole('button', { name: 'Sign', exact: true }).click();
+                // Each row opens its own confirm screen with a dry run before
+                // anything is signed.
+                await approveConfirm(page, `Parallel row ${row + 1}`);
                 await waitForBroadcastTxid(txids, row + 2);
             }
 

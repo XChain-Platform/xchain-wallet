@@ -5,9 +5,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-const routeModules = import.meta.glob(
+const routeModules = import.meta.glob([
     '../../../packages/core/src/shared/routes/*.jsx',
-);
+    // Split-out pieces of History.jsx are not routes; History.jsx renders them.
+    '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
+    '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+]);
 
 const ROUTES_RENDERED_BY_AXE = [
     'AccountPicker',

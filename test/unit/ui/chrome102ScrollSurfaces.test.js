@@ -38,10 +38,10 @@ describe('Chrome 102 scroll surfaces', () => {
     it.each([
         [
             'bottom sheet',
-            'packages/core/src/shared/components/BottomTabBar.module.css',
+            'packages/core/src/shared/components/OverlaySurface.module.css',
             '.sheet',
             /min\(70vh,\s*var\(--xc-viewport-h,\s*100vh\)\)/,
-            true,
+            false,
         ],
         [
             'file viewer',
@@ -54,14 +54,16 @@ describe('Chrome 102 scroll surfaces', () => {
             'command palette',
             'packages/core/src/shared/commandPalette/CommandPalette.module.css',
             '.overlay',
-            /max-height:\s*var\(--xc-viewport-h,\s*100vh\)/,
+            // Fixed to the viewport top, so the top inset the token subtracts is added back.
+            /max-height:\s*calc\(var\(--xc-viewport-h,\s*100vh\)\s*\+\s*env\(safe-area-inset-top,\s*0px\)\)/,
             false,
         ],
         [
             'shortcut help',
             'packages/core/src/shared/keyboard/ShortcutHelp.module.css',
             '.overlay',
-            /max-height:\s*var\(--xc-viewport-h,\s*100vh\)/,
+            // Fixed to the viewport top, so the top inset the token subtracts is added back.
+            /max-height:\s*calc\(var\(--xc-viewport-h,\s*100vh\)\s*\+\s*env\(safe-area-inset-top,\s*0px\)\)/,
             false,
         ],
     ])('%s caps itself to the fitted WebView height', (_name, path, selector, expected, shrinkable) => {
@@ -74,7 +76,7 @@ describe('Chrome 102 scroll surfaces', () => {
     it.each([
         ['command palette', 'packages/core/src/shared/commandPalette/CommandPalette.module.css', '.panel'],
         ['alerts drawer', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.panel'],
-        ['bottom sheet', 'packages/core/src/shared/components/BottomTabBar.module.css', '.sheet'],
+        ['bottom sheet', 'packages/core/src/shared/components/OverlaySurface.module.css', '.surface'],
         ['file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.panel'],
         ['shortcut help', 'packages/core/src/shared/keyboard/ShortcutHelp.module.css', '.panel'],
     ])('%s lets its internal scroller shrink below min-content height', (_name, path, selector) => {

@@ -96,6 +96,13 @@ describe('UndoSendRow', () => {
         expect(update).toHaveBeenCalledWith({ grace: { undoSendSeconds: 30 } });
     });
 
+    it('typing 600 over a stored 30 shows 30, not the typed 600', () => {
+        withGrace({ undoSendEnabled: true, undoSendSeconds: 30 });
+        render(<UndoSendRow />);
+        typeAndBlur('600');
+        expect(screen.getByLabelText(INPUT_LABEL).value).toBe('30');
+    });
+
     it('typing 12 writes 12', () => {
         withGrace({ undoSendEnabled: true });
         render(<UndoSendRow />);
@@ -117,6 +124,20 @@ describe('UndoSendRow', () => {
         fireEvent.click(screen.getByRole('switch', { name: SWITCH }));
         await new Promise((r) => setTimeout(r, 0));
         expect(spy).toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
+    it('restores the persisted duration when its update is rejected', async () => {
+        withGrace({ undoSendEnabled: true, undoSendSeconds: 5 });
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        update = vi.fn(async () => { throw new Error('storage refused'); });
+        render(<UndoSendRow />);
+
+        typeAndBlur('12');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(screen.getByLabelText(INPUT_LABEL).value).toBe('5');
+        expect(update).toHaveBeenCalledTimes(1);
         spy.mockRestore();
     });
 

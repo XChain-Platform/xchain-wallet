@@ -1,3 +1,5 @@
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 /*********************************************************************
  *
  * Copyright © 2025–2026 Dankest, LLC
@@ -61,7 +63,7 @@ export function MultisigBadge({ threshold, cosignerCount, scheme, size = 'md' })
                 whiteSpace: 'nowrap',
             }}
         >
-            <span>{threshold}-of-{cosignerCount}</span>
+            <span>{threshold}{t('ui.multisigBadge.of')}{cosignerCount}</span>
             <span style={{ opacity: 0.85 }}>{tag}</span>
         </span>
     );

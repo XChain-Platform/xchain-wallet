@@ -17,11 +17,13 @@
 //
 // The address is a free-form input (the user may verify a signature
 // from a counterparty's address, not necessarily one of their own).
-// The form picks an SDK by chainId; the chain selector is populated
-// from the registry rather than the wallet, since verification has no
-// dependency on what the wallet knows.
+// The form picks an SDK by chainId. The chain selector offers the
+// registry's chains on the active network only: the host refuses an
+// address the chosen chain does not accept, and the picker names a chain
+// by its coin alone, so a chain from another network would read the same
+// and answer every check with "Invalid signature".
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -35,7 +37,11 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -69,8 +75,18 @@ export function VerifySignatureForm({ onBack }) {
     // Live registry read: a synced descriptor batch reaches this picker without
     // a restart (the boot sync usually lands after first mount).
     const supportedChains = useSupportedChains(chainRegistry);
-    const chainIds = useMemo(() => supportedChains.map((c) => c.id), [supportedChains]);
-    const [chainId, setChainId] = useState(chainIds[0] || null);
+    const { settings } = useSettings();
+    // No chain until settings answer: the default network is mainnet, and a
+    // submit in that window would check a testnet or regtest address there.
+    const activeNetwork = settings ? getActiveNetwork(settings) : null;
+    const chainIds = useMemo(() => (activeNetwork
+        ? supportedChains.filter((c) => c.networkKind === activeNetwork).map((c) => c.id)
+        : []), [supportedChains, activeNetwork]);
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (chainId && chainIds.includes(chainId)) return;
+        setChainId(chainIds[0] || null);
+    }, [chainId, chainIds]);
     const [address, setAddress] = useState('');
     const [message, setMessage] = useState('');
     const [signature, setSignature] = useState('');
@@ -91,7 +107,7 @@ export function VerifySignatureForm({ onBack }) {
         if (requestPendingRef.current) return;
         setError(null);
         setResult(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (address.trim().length === 0) { setError('Enter an address.'); return; }
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
@@ -117,7 +133,7 @@ export function VerifySignatureForm({ onBack }) {
             }
         } catch {
             if (requestGenerationRef.current === requestGeneration) {
-                setError('Could not verify this signature. Check the chain, address, message, and signature.');
+                setError('Could not verify this signature. Check the network, address, message, and signature.');
             }
         } finally {
             requestPendingRef.current = false;
@@ -140,31 +156,15 @@ export function VerifySignatureForm({ onBack }) {
     // Shown just above the Verify button by FormPage's status slot.
     const status = (error || result) ? (
         <>
-            {error ? (
-                <div role="alert" style={{
-                    color: 'var(--xc-danger-fg)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}>
-                    {error}
-                </div>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
             {result ? (
-                <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                        padding: 'var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-surface)',
-                        border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
-                        fontWeight: 600,
-                    }}
-                >
+                // A verdict is a result, not a failure, so a failed check keeps
+                // the polite status role while it takes the error tone.
+                <StatusMessage variant={result === 'valid' ? 'success' : 'error'} role="status">
                     {result === 'valid' ? t('verifySignature.valid') : null}
                     {result === 'invalid' ? t('verifySignature.invalid') : null}
                     {result === 'malformed' ? t('verifySignature.malformed') : null}
-                </div>
+                </StatusMessage>
             ) : null}
         </>
     ) : disabledReason ? (
@@ -192,10 +192,12 @@ export function VerifySignatureForm({ onBack }) {
                 value={address}
                 onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
+                dir="ltr"
                 placeholder={t('verifySignature.addressPlaceholder')}
             />
             <Textarea
                 id="verify-message"
+                dir="auto"
                 label={t('verifySignature.message')}
                 value={message}
                 onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
@@ -205,6 +207,7 @@ export function VerifySignatureForm({ onBack }) {
             />
             <Textarea
                 id="verify-signature"
+                dir="ltr"
                 label={t('verifySignature.signature')}
                 value={signature}
                 onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}

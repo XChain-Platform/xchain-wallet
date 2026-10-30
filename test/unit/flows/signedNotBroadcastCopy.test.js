@@ -31,7 +31,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
-import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 import {
     BROADCAST_FAILED_TRANSIENT_NAME,
     BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
@@ -103,12 +103,12 @@ describe('useConfirmAction preserves the queue durability verdict', () => {
             });
             expect(settled).toEqual(approved);
 
-            const panel = render(createElement(QueuedResultPanel, { onDone: () => {} }));
+            const panel = render(createElement(ResultScreen, { state: 'signed-not-broadcast', onDone: () => {} }));
             if (expectedUnsaved) {
                 expect(screen.getByRole('alert').textContent).toMatch(/only in this window/i);
                 fireEvent.click(screen.getByRole('button', { name: 'Done' }));
                 panel.unmount();
-                render(createElement(QueuedResultPanel, { onDone: () => {} }));
+                render(createElement(ResultScreen, { state: 'signed-not-broadcast', onDone: () => {} }));
                 expect(screen.queryByRole('alert')).toBeNull();
             } else {
                 expect(screen.queryByRole('alert')).toBeNull();
@@ -129,7 +129,7 @@ describe('A signed-but-not-broadcast result never renders as done', () => {
             expect(/result\?\.queued/.test(src),
                 `${rel}: the done screen reads only result.txid, so a TRANSIENT broadcast failure `
                 + '(which useConfirmAction RESOLVES as { queued: true }) renders as a completed '
-                + 'action. Branch on result?.queued and render QueuedResultPanel.').toBe(true);
+                + 'action. Branch on result?.queued and render ResultScreen.').toBe(true);
         });
     }
 
@@ -195,7 +195,7 @@ describe('submitFailureMessage says what actually happened', () => {
         const { BROADCAST_FAILED_PERMANENT_NAME } =
             await import('../../../packages/core/src/flows/broadcastPermanence.js');
 
-        const err = { name: BROADCAST_FAILED_PERMANENT_NAME, message: 'bad-txns-inputs-missingorspent' };
+        const err = { name: BROADCAST_FAILED_PERMANENT_NAME, message: 'dust' };
         const msg = submitFailureMessage(err, { fallback: "Couldn't mint. The network rejected this transaction." });
         expect(msg).not.toBe(SIGNED_NOT_BROADCAST_MESSAGE);
         expect(msg).toBe("Couldn't mint. The network rejected this transaction.");

@@ -19,12 +19,12 @@ const COIN_CONFIG = {
         smallBalanceBaseUnits: 546n,
         transactionExplorers: {
             mainnet: [
-                { id: 'mempool', label: 'Mempool', iconImg: 'https://mempool.space/resources/favicons/favicon.ico', url: 'https://mempool.space/tx/{txid}' },
-                { id: 'blockstream', label: 'Blockstream', iconImg: 'https://blockstream.info/favicon.ico', url: 'https://blockstream.info/tx/{txid}' },
+                { id: 'mempool', label: 'Mempool', url: 'https://mempool.space/tx/{txid}' },
+                { id: 'blockstream', label: 'Blockstream', url: 'https://blockstream.info/tx/{txid}' },
             ],
             testnet: [
-                { id: 'mempool', label: 'Mempool', iconImg: 'https://mempool.space/resources/favicons/favicon.ico', url: 'https://mempool.space/testnet4/tx/{txid}' },
-                { id: 'blockstream', label: 'Blockstream', iconImg: 'https://blockstream.info/favicon.ico', url: 'https://blockstream.info/testnet/tx/{txid}' },
+                { id: 'mempool', label: 'Mempool', url: 'https://mempool.space/testnet4/tx/{txid}' },
+                { id: 'blockstream', label: 'Blockstream', url: 'https://blockstream.info/testnet/tx/{txid}' },
             ],
         },
     },
@@ -34,11 +34,11 @@ const COIN_CONFIG = {
         smallBalanceBaseUnits: 5460n,
         transactionExplorers: {
             mainnet: [
-                { id: 'litecoinspace', label: 'LitecoinSpace', iconImg: 'https://litecoinspace.org/favicon.ico', url: 'https://litecoinspace.org/tx/{txid}' },
-                { id: 'blockchair', label: 'Blockchair', iconImg: 'https://blockchair.com/favicon.ico', url: 'https://blockchair.com/litecoin/transaction/{txid}' },
+                { id: 'litecoinspace', label: 'LitecoinSpace', url: 'https://litecoinspace.org/tx/{txid}' },
+                { id: 'blockchair', label: 'Blockchair', url: 'https://blockchair.com/litecoin/transaction/{txid}' },
             ],
             testnet: [
-                { id: 'litecoinspace', label: 'LitecoinSpace', iconImg: 'https://litecoinspace.org/favicon.ico', url: 'https://litecoinspace.org/testnet/tx/{txid}' },
+                { id: 'litecoinspace', label: 'LitecoinSpace', url: 'https://litecoinspace.org/testnet/tx/{txid}' },
             ],
         },
     },
@@ -48,8 +48,8 @@ const COIN_CONFIG = {
         smallBalanceBaseUnits: 1000000n,
         transactionExplorers: {
             mainnet: [
-                { id: 'blockchair', label: 'Blockchair', iconImg: 'https://blockchair.com/favicon.ico', url: 'https://blockchair.com/dogecoin/transaction/{txid}' },
-                { id: 'blockcypher', label: 'BlockCypher', iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico', url: 'https://live.blockcypher.com/doge/tx/{txid}' },
+                { id: 'blockchair', label: 'Blockchair', url: 'https://blockchair.com/dogecoin/transaction/{txid}' },
+                { id: 'blockcypher', label: 'BlockCypher', url: 'https://live.blockcypher.com/doge/tx/{txid}' },
             ],
         },
     },
@@ -143,10 +143,11 @@ export function transactionExplorerLinks(descriptor, txid) {
         } catch {
             return [];
         }
+        const label = String(entry.label || entry.id || 'Explorer');
         return [{
             id: String(entry.id || entry.label || url),
-            label: String(entry.label || entry.id || 'Explorer'),
-            iconImg: typeof entry.iconImg === 'string' ? entry.iconImg : undefined,
+            label,
+            icon: label.charAt(0),
             url,
         }];
     });

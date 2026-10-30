@@ -11,6 +11,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
+
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
@@ -21,10 +23,11 @@ const cameraSource = read(
 const biometricSource = read(
     'packages/mobile/ios/App/App/vault/VaultBiometricSidecar.swift',
 );
-const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx');
+// The attachment hint (PNG, JPEG, ...) lives in the English dictionary.
+const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx') + englishDictionarySource();
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
-);
+) + englishDictionarySource();
 
 function plistString(key) {
     const match = new RegExp(

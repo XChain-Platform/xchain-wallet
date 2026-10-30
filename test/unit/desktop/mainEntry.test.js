@@ -17,6 +17,7 @@ const electron = vi.hoisted(() => {
     const appListeners = new Map();
     const powerMonitorListeners = new Map();
     const browserWindowOptions = [];
+    const ipcHandlers = new Map();
     const isolatedSession = { partition: 'trezor-connect-isolated' };
     const state = {
         userDataDir: '/tmp/xchain-main-entry-test',
@@ -42,7 +43,10 @@ const electron = vi.hoisted(() => {
                 isDestroyed: vi.fn(() => false),
                 reload: vi.fn(),
                 reloadIgnoringCache: vi.fn(),
+                ipc: { on: vi.fn() },
+                bridgeListeners: new Map(),
             };
+            this.webContents.on = vi.fn((name, listener) => { this.webContents.bridgeListeners.set(name, listener); });
             this.loadFile = vi.fn(() => state.loadFileError
                 ? Promise.reject(state.loadFileError)
                 : undefined);
@@ -66,10 +70,23 @@ const electron = vi.hoisted(() => {
 
         static getFocusedWindow() { return null; }
     }
+    class Tray {
+        static instances = [];
+
+        constructor(image) {
+            this.image = image;
+            this.setToolTip = vi.fn();
+            this.setContextMenu = vi.fn();
+            this.on = vi.fn();
+            this.destroy = vi.fn();
+            Tray.instances.push(this);
+        }
+    }
     return {
         appListeners,
         powerMonitorListeners,
         browserWindowOptions,
+        ipcHandlers,
         isolatedSession,
         ownerWindow,
         popup,
@@ -86,11 +103,12 @@ const electron = vi.hoisted(() => {
             whenReady: vi.fn(() => new Promise(() => {})),
         },
         BrowserWindow,
+        Tray,
         Menu: {
             buildFromTemplate: vi.fn(() => ({ popup })),
             setApplicationMenu: vi.fn(),
         },
-        ipcMain: { handle: vi.fn() },
+        ipcMain: { handle: vi.fn((name, handler) => { ipcHandlers.set(name, handler); }) },
         powerMonitor: {
             on: vi.fn((name, listener) => { powerMonitorListeners.set(name, listener); }),
         },
@@ -104,6 +122,7 @@ const electron = vi.hoisted(() => {
             fromPartition: vi.fn(() => isolatedSession),
         },
         shell: { openExternal: vi.fn(async () => {}) },
+        dialog: { showMessageBoxSync: vi.fn(() => 0) },
         Notification: class Notification {},
     };
 });
@@ -133,6 +152,7 @@ const runtime = vi.hoisted(() => ({
     enforceSystemAutoLock: vi.fn(),
     ensureHost: vi.fn(),
     handleIpcMessage: vi.fn(),
+    installPanicModePersistence: vi.fn(async () => {}),
     tearDownHost: vi.fn(),
     wipeRuntimeStores: vi.fn(),
 }));
@@ -197,7 +217,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
     attachUpdater: updater.attachUpdater,
 }));
-vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
+vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn(), applyProxyToSession: vi.fn(async () => {}) }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -219,17 +239,20 @@ beforeEach(() => {
     electron.appListeners.clear();
     electron.powerMonitorListeners.clear();
     electron.browserWindowOptions.length = 0;
+    electron.ipcHandlers.clear();
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
     electron.state.normalBounds = { x: 0, y: 0, width: 1024, height: 768 };
     electron.state.loadFileError = null;
     fsControl.failSyncWrite = false;
     electron.BrowserWindow.instances.length = 0;
+    electron.Tray.instances.length = 0;
     electron.app.isPackaged = true;
     vi.clearAllMocks();
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
     runtime.createRuntime.mockReturnValue(runtime.instance);
     runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
+    runtime.enforceIdleAutoLock.mockResolvedValue({ locked: false });
     runtime.enforceSystemAutoLock.mockResolvedValue({ locked: true, reason: 'system-event' });
     updater.attachUpdater.mockResolvedValue({
         checkForUpdates: updater.checkForUpdates,
@@ -442,6 +465,28 @@ describe('desktop main entry point', () => {
         );
     });
 
+    it('tells sibling windows to re-read the session when a wipe fails after the host is torn down', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        const sibling = main.createWindow();
+        runtime.wipeRuntimeStores.mockResolvedValue({
+            ok: false,
+            cleared: [],
+            errors: [{ store: 'meta', message: 'EPERM: operation not permitted' }],
+        });
+        const wipe = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:wipe-storage')[1];
+
+        const result = await wipe({ sender: sender.webContents, senderFrame: { url: appIndex } });
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/meta: EPERM/);
+        expect(sibling.webContents.send).toHaveBeenCalledWith('xchain:state-changed', { kind: 'session' });
+        expect(sender.webContents.send).not.toHaveBeenCalledWith('xchain:state-changed', { kind: 'session' });
+    });
+
     it('restores, shows, and focuses the Electron window receiving a link', async () => {
         const { focusDeepLinkTarget } = await vi.importActual(
             '../../../packages/desktop/main/protocol.js',
@@ -570,7 +615,7 @@ describe('desktop main entry point', () => {
         });
     });
 
-    it('hides on macOS close, permits an explicit quit, and reveals hidden windows', async () => {
+    it.each(['darwin', 'win32', 'linux'])('hides on %s close, permits an explicit quit, and reveals hidden windows', async (platform) => {
         const { applyWindowCloseConvention, revealWindow } = await import('../../../packages/desktop/main/index.js');
         const event = { preventDefault: vi.fn() };
         const win = {
@@ -583,14 +628,13 @@ describe('desktop main entry point', () => {
             isVisible: vi.fn(() => false),
         };
 
-        expect(applyWindowCloseConvention(win, event, { platform: 'darwin', quitting: false })).toBe(true);
+        expect(applyWindowCloseConvention(win, event, { platform, quitting: false })).toBe(true);
         expect(event.preventDefault).toHaveBeenCalledOnce();
         expect(win.hide).toHaveBeenCalledOnce();
 
         event.preventDefault.mockClear();
         win.hide.mockClear();
         expect(applyWindowCloseConvention(win, event, { platform: 'darwin', quitting: true })).toBe(false);
-        expect(applyWindowCloseConvention(win, event, { platform: 'win32', quitting: false })).toBe(false);
         expect(event.preventDefault).not.toHaveBeenCalled();
         expect(win.hide).not.toHaveBeenCalled();
 
@@ -599,6 +643,333 @@ describe('desktop main entry point', () => {
         expect(win.show).toHaveBeenCalledOnce();
         expect(win.focus).toHaveBeenCalledOnce();
     });
+
+    it.each(['darwin', 'win32', 'linux'])('tells the %s renderer its window hid on close', async (platform) => {
+        const { applyWindowCloseConvention } = await import('../../../packages/desktop/main/index.js');
+        const send = vi.fn();
+        const win = {
+            hide: vi.fn(),
+            isDestroyed: vi.fn(() => false),
+            webContents: { send, isDestroyed: vi.fn(() => false) },
+        };
+
+        expect(applyWindowCloseConvention(win, { preventDefault: vi.fn() }, {
+            platform, quitting: false, otherVisible: false, detached: false,
+        })).toBe(true);
+
+        expect(send).toHaveBeenCalledWith('xchain:window-hidden');
+    });
+
+    it.each(['win32', 'linux'])('restores a hidden window from the %s tray', async (platform) => {
+        const { installTray } = await import('../../../packages/desktop/main/index.js');
+        const win = new electron.BrowserWindow({});
+        win.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        const tray = installTray({ platform });
+        const menu = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        menu[0].click();
+
+        await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+        expect(win.focus).toHaveBeenCalledOnce();
+        win.isVisible.mockReturnValue(true);
+        const click = tray.on.mock.calls.find(([name]) => name === 'click')[1];
+        click();
+
+        await vi.waitFor(() => expect(win.focus).toHaveBeenCalledTimes(2));
+        expect(win.show).toHaveBeenCalledOnce();
+    });
+
+    it.each(['darwin', 'win32', 'linux'])('closes a %s window for real while another window is still visible', async (platform) => {
+        const { applyWindowCloseConvention } = await import('../../../packages/desktop/main/index.js');
+        const win = { hide: vi.fn() };
+        for (const options of [{ otherVisible: true, detached: false }, { otherVisible: false, detached: true }]) {
+            const event = { preventDefault: vi.fn() };
+            expect(applyWindowCloseConvention(win, event, { platform, quitting: false, ...options })).toBe(false);
+            expect(event.preventDefault).not.toHaveBeenCalled();
+        }
+        expect(win.hide).not.toHaveBeenCalled();
+    });
+
+    it.each(['darwin', 'win32', 'linux'])('hides only the last of two %s windows on close', async (platform) => {
+        const original = Object.getOwnPropertyDescriptor(process, 'platform');
+        Object.defineProperty(process, 'platform', { value: platform });
+        try {
+            const { createWindow } = await import('../../../packages/desktop/main/index.js');
+            const first = createWindow();
+            const second = createWindow();
+            const closeOf = (win) => win.on.mock.calls.find(([name]) => name === 'close')[1];
+
+            const firstClose = { preventDefault: vi.fn() };
+            closeOf(first)(firstClose);
+            expect(firstClose.preventDefault).not.toHaveBeenCalled();
+            expect(first.hide).not.toHaveBeenCalled();
+            first.isDestroyed.mockReturnValue(true);
+
+            const lastClose = { preventDefault: vi.fn() };
+            closeOf(second)(lastClose);
+            expect(lastClose.preventDefault).toHaveBeenCalledOnce();
+            expect(second.hide).toHaveBeenCalledOnce();
+        } finally {
+            Object.defineProperty(process, 'platform', original);
+        }
+    });
+
+    it.each(['win32', 'linux'])('keeps a %s app in the tray when its windows close and removes the tray on quit', async (platform) => {
+        const original = Object.getOwnPropertyDescriptor(process, 'platform');
+        Object.defineProperty(process, 'platform', { value: platform });
+        try {
+            electron.app.whenReady.mockResolvedValueOnce();
+            await import('../../../packages/desktop/main/index.js');
+            await vi.waitFor(() => expect(electron.Tray.instances).toHaveLength(1));
+            const [tray] = electron.Tray.instances;
+            expect(tray.image).toMatch(/build[\\/]icon\.png$/);
+
+            electron.appListeners.get('window-all-closed')();
+            expect(electron.app.quit).not.toHaveBeenCalled();
+
+            electron.appListeners.get('before-quit')({ preventDefault: vi.fn() });
+            expect(tray.destroy).toHaveBeenCalledOnce();
+            expect(runtime.tearDownHost).toHaveBeenCalled();
+        } finally {
+            Object.defineProperty(process, 'platform', original);
+        }
+    });
+
+    it('adds no tray on macOS, where the dock reopens the app', async () => {
+        const { installTray } = await import('../../../packages/desktop/main/index.js');
+        expect(installTray({ platform: 'darwin' })).toBeNull();
+        expect(electron.Tray.instances).toHaveLength(0);
+    });
+
+    it('quits on the next request once a deferring send has settled', async () => {
+        let finishSend;
+        runtime.handleIpcMessage.mockImplementationOnce(() => new Promise((resolve) => {
+            finishSend = resolve;
+        }));
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        const sending = electron.ipcHandlers.get('xchain-wallet:message')({
+            senderFrame: { url: appIndex },
+            sender: win.webContents,
+        }, { type: 'action.send', request: {} });
+        const deferred = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(deferred);
+        expect(deferred.preventDefault).toHaveBeenCalledOnce();
+
+        finishSend({ ok: true });
+        await sending;
+        const retried = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(retried);
+        expect(retried.preventDefault).not.toHaveBeenCalled();
+        expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+    });
+
+    it('hands a deep link to the window a restore already under way opens', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        let finishIdleCheck;
+        runtime.enforceIdleAutoLock.mockImplementationOnce(() => new Promise((resolve) => {
+            finishIdleCheck = resolve;
+        }));
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.appListeners.has('activate')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        win.isVisible.mockReturnValue(false);
+        // The dock restore is waiting on its idle check when the link lands,
+        // and only then does the primary window become the link target.
+        protocol.pickDeepLinkTarget.mockReturnValue(null);
+        electron.appListeners.get('activate')();
+        await vi.waitFor(() => expect(runtime.enforceIdleAutoLock).toHaveBeenCalledOnce());
+        const handlers = protocol.attachDeepLinkHandlers.mock.calls[0][1];
+        const event = { scheme: 'bitcoin', raw: 'bitcoin:recipient', parsed: null };
+        handlers.onDeepLink(event);
+
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+        win.isVisible.mockReturnValue(true);
+        finishIdleCheck({ locked: false });
+
+        await vi.waitFor(() => expect(win.webContents.send).toHaveBeenCalledWith('xchain:uri', event));
+        expect(electron.BrowserWindow.instances).toHaveLength(1);
+        expect(runtime.enforceIdleAutoLock).toHaveBeenCalledOnce();
+    });
+
+    it('restores a hidden macOS window from the dock', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.appListeners.has('activate')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        win.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        electron.appListeners.get('activate')();
+
+        await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+        expect(win.focus).toHaveBeenCalledOnce();
+    });
+
+    it('delivers a second-instance deep link after restoring a hidden window', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const win = electron.BrowserWindow.instances[0];
+        win.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+        const handlers = protocol.attachDeepLinkHandlers.mock.calls[0][1];
+        const event = { scheme: 'xchain', raw: 'xchain:send?to=recipient', parsed: null };
+
+        handlers.onSecondInstance();
+        handlers.onDeepLink(event);
+
+        await vi.waitFor(() => expect(win.webContents.send).toHaveBeenCalledWith('xchain:uri', event));
+        expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+        expect(win.show).toHaveBeenCalled();
+        expect(win.focus).toHaveBeenCalled();
+    });
+
+    it('opens a primary window for a deep link when only a detached window survives', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        electron.BrowserWindow.instances[0].isDestroyed.mockReturnValue(true);
+        const detached = createWindow({ initialView: 'history', initialContext: { txid: 'pending' } });
+        detached.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(null);
+        const handlers = protocol.attachDeepLinkHandlers.mock.calls[0][1];
+        const event = { scheme: 'xchain', raw: 'xchain:send?to=recipient', parsed: null };
+
+        handlers.onSecondInstance();
+        handlers.onDeepLink(event);
+
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(3));
+        expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+        expect(detached.show).toHaveBeenCalled();
+        expect(electron.BrowserWindow.instances[2].loadFile).toHaveBeenCalledWith(
+            expect.any(String),
+            {},
+        );
+    });
+
+    it('defers quit during an update download and restores a usable window', async () => {
+        let finishDownload;
+        updater.downloadAndInstall.mockImplementationOnce(() => new Promise((resolve) => {
+            finishDownload = resolve;
+        }));
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:updater-install')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        win.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        const downloading = electron.ipcHandlers.get('xchain:updater-install')({
+            senderFrame: { url: appIndex },
+        }, 'download');
+        const quitEvent = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(quitEvent);
+
+        expect(quitEvent.preventDefault).toHaveBeenCalledOnce();
+        expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+        expect(electron.app.quit).not.toHaveBeenCalled();
+        finishDownload({ ok: true });
+        await downloading;
+        expect(electron.app.quit).toHaveBeenCalledOnce();
+    });
+
+    it('defers quit while a wallet send request is in flight', async () => {
+        let finishSend;
+        runtime.handleIpcMessage.mockImplementationOnce(() => new Promise((resolve) => {
+            finishSend = resolve;
+        }));
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        win.isVisible.mockReturnValue(false);
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        const sending = electron.ipcHandlers.get('xchain-wallet:message')({
+            senderFrame: { url: appIndex },
+            sender: win.webContents,
+        }, { type: 'action.send', request: {} });
+        const quitEvent = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(quitEvent);
+
+        expect(quitEvent.preventDefault).toHaveBeenCalledOnce();
+        expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        expect(electron.app.quit).not.toHaveBeenCalled();
+        finishSend({ ok: true });
+        await sending;
+
+        // The settled send re-issues the quit, and that quit goes through.
+        expect(electron.app.quit).toHaveBeenCalledOnce();
+        const retried = { preventDefault: vi.fn() };
+        electron.appListeners.get('before-quit')(retried);
+        expect(retried.preventDefault).not.toHaveBeenCalled();
+        expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+    });
+
+    it('quits at the deadline when a send never settles, whatever further quits arrive', async () => {
+        runtime.handleIpcMessage.mockImplementationOnce(() => new Promise(() => {}));
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+        const win = electron.BrowserWindow.instances[0];
+        protocol.pickDeepLinkTarget.mockReturnValue(win);
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            void electron.ipcHandlers.get('xchain-wallet:message')({
+                senderFrame: { url: appIndex },
+                sender: win.webContents,
+            }, { type: 'action.send', request: {} });
+            const first = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(first);
+            expect(first.preventDefault).toHaveBeenCalledOnce();
+
+            // A second quit (another Cmd+Q, or SIGTERM) waits on the same
+            // clock instead of starting a new one.
+            vi.advanceTimersByTime(10_000);
+            const second = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(second);
+            expect(second.preventDefault).toHaveBeenCalledOnce();
+            expect(electron.app.quit).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(5_000);
+            expect(electron.app.quit).toHaveBeenCalledOnce();
+            const forced = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(forced);
+            expect(forced.preventDefault).not.toHaveBeenCalled();
+            expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it.each(['balances.wallet', 'history.address', 'settings.get', 'action.composeForConfirm'])(
+        'never defers quit for a pending %s read',
+        async (type) => {
+            runtime.handleIpcMessage.mockImplementationOnce(() => new Promise(() => {}));
+            electron.app.whenReady.mockResolvedValueOnce();
+            await import('../../../packages/desktop/main/index.js');
+            await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain-wallet:message')).toBe(true));
+            const win = electron.BrowserWindow.instances[0];
+
+            void electron.ipcHandlers.get('xchain-wallet:message')({
+                senderFrame: { url: appIndex },
+                sender: win.webContents,
+            }, { type, request: {} });
+            const quitEvent = { preventDefault: vi.fn() };
+            electron.appListeners.get('before-quit')(quitEvent);
+
+            expect(quitEvent.preventDefault).not.toHaveBeenCalled();
+            expect(runtime.tearDownHost).toHaveBeenCalledOnce();
+        },
+    );
 
     it('hardens every Electron webContents and opens external links outside the wallet', async () => {
         await import('../../../packages/desktop/main/index.js');
@@ -637,6 +1008,36 @@ describe('desktop main entry point', () => {
         const webview = { preventDefault: vi.fn() };
         handlers.get('will-attach-webview')(webview);
         expect(webview.preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('lets a quit past a page that cancels its unload and asks before any other unload', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const handlers = new Map();
+        const contents = {
+            session: electron.session.defaultSession,
+            getURL: () => appIndex,
+            setWindowOpenHandler: vi.fn(),
+            on: vi.fn((name, handler) => { handlers.set(name, handler); }),
+        };
+        electron.appListeners.get('web-contents-created')({}, contents);
+
+        const stay = { preventDefault: vi.fn() };
+        electron.dialog.showMessageBoxSync.mockReturnValueOnce(0);
+        handlers.get('will-prevent-unload')(stay);
+        expect(electron.dialog.showMessageBoxSync).toHaveBeenCalledOnce();
+        expect(stay.preventDefault).not.toHaveBeenCalled();
+
+        const leave = { preventDefault: vi.fn() };
+        electron.dialog.showMessageBoxSync.mockReturnValueOnce(1);
+        handlers.get('will-prevent-unload')(leave);
+        expect(leave.preventDefault).toHaveBeenCalledOnce();
+
+        electron.appListeners.get('before-quit')({ preventDefault: vi.fn() });
+        electron.dialog.showMessageBoxSync.mockClear();
+        const quitting = { preventDefault: vi.fn() };
+        handlers.get('will-prevent-unload')(quitting);
+        expect(electron.dialog.showMessageBoxSync).not.toHaveBeenCalled();
+        expect(quitting.preventDefault).toHaveBeenCalledOnce();
     });
 
     it('provides context editing actions without exposing an inspect action', async () => {
@@ -727,6 +1128,28 @@ describe('desktop main entry point', () => {
         error.mockRestore();
     });
 
+    it('never shows a window whose close aborted its renderer load', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        createWindow();
+        electron.state.loadFileError = new Error('aborted by close');
+        const closing = createWindow();
+        const readyToShow = closing.once.mock.calls.find(([name]) => name === 'ready-to-show')[1];
+        const close = closing.on.mock.calls.find(([name]) => name === 'close')[1];
+
+        // Another window is visible, so this close goes ahead, and the load
+        // it cut short reports failure while Electron tears the window down.
+        const event = { preventDefault: vi.fn() };
+        close(event);
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        readyToShow();
+        await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[xchain] renderer load failed'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(closing.show).not.toHaveBeenCalled();
+        error.mockRestore();
+    });
+
     it('auto-hides the menu bar on the main window except on macOS', async () => {
         const { createWindow } = await import('../../../packages/desktop/main/index.js');
         const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -740,7 +1163,7 @@ describe('desktop main entry point', () => {
         }
     });
 
-    it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
+    it('denies every window.open, the Trezor bridge window name included', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;
         const contents = {
@@ -750,24 +1173,57 @@ describe('desktop main entry point', () => {
             on: vi.fn(),
         };
         electron.appListeners.get('web-contents-created')({}, contents);
+        const before = electron.browserWindowOptions.length;
 
-        const result = openHandler({
-            url: 'https://connect.trezor.io/',
-            frameName: 'xchain-trezor-connect-bridge',
-        });
+        for (const [url, frameName] of [
+            ['data:text/html;base64,PGh0bWw+', 'xchain-trezor-connect-bridge'],
+            ['https://connect.trezor.io/9/popup.html', 'xchain-trezor-connect-bridge'],
+            ['about:blank', ''],
+        ]) {
+            expect(openHandler({ url, frameName })).toEqual({ action: 'deny' });
+        }
+        expect(electron.browserWindowOptions).toHaveLength(before);
+        expect(electron.session.fromPartition).not.toHaveBeenCalled();
+    });
 
-        expect(result.action).toBe('allow');
-        expect(result.overrideBrowserWindowOptions.webPreferences).toMatchObject({
-            session: electron.isolatedSession,
+    it('builds the Trezor bridge window in main on the isolated no-HID session', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:trezor-bridge-call')).toBe(true));
+        const handler = electron.ipcHandlers.get('xchain:trezor-bridge-call');
+        const before = electron.browserWindowOptions.length;
+
+        await expect(handler({
+            senderFrame: { url: 'https://connect.trezor.io/9/iframe.html' },
+            sender: { getURL: () => 'https://connect.trezor.io/9/iframe.html' },
+        }, { method: 'getFeatures' })).resolves.toEqual({ ok: false, error: 'trezor-bridge: rejected from untrusted frame' });
+        expect(electron.browserWindowOptions).toHaveLength(before);
+
+        const trusted = { senderFrame: { url: appIndex }, sender: { getURL: () => appIndex } };
+        void handler(trusted, { method: 'getFeatures' });
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(before + 1));
+        const options = electron.browserWindowOptions.at(-1);
+        const win = electron.BrowserWindow.instances.at(-1);
+
+        expect(options.webPreferences.session).toBe(electron.isolatedSession);
+        expect(options.webPreferences).toMatchObject({
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
             devTools: false,
         });
-        expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
+        expect(options.webPreferences.preload).toMatch(/[\\/]main[\\/]trezorBridge[\\/]preload\.cjs$/);
+        expect(win.loadFile).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/[\\/]main[\\/]trezorBridge[\\/]connect\.html$/));
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
+        expect(permissions.attachHidPermissions).not.toHaveBeenCalledWith(electron.isolatedSession);
+
+        const close = electron.ipcHandlers.get('xchain:trezor-bridge-close');
+        await expect(close(trusted, 'extra')).resolves.toEqual({ ok: false });
+        win.close = vi.fn();
+        await expect(close(trusted)).resolves.toEqual({ ok: true });
+        expect(win.close).toHaveBeenCalledOnce();
     });
 
     it('turns an IPC rejection into a logged generic response', async () => {

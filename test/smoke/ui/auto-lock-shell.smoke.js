@@ -122,8 +122,8 @@ for (const ev of ['mousemove', 'keydown', 'scroll', 'click', 'touchstart']) {
 
 const policySrc = readFileSync(join(wsRoot, POLICY_REL), 'utf8');
 assert.ok(
-    /messaging\.reportAutoLock\(\{\s*armed,\s*idleMs\s*\}\)/.test(policySrc),
-    'policy hook still reports { armed, idleMs } to the extension service-worker backstop',
+    /messaging\.reportAutoLock\(\{\s*armed,\s*idleMs,\s*issuedAt\s*\}\)/.test(policySrc),
+    'policy hook still reports { armed, idleMs, issuedAt } to the extension service-worker backstop',
 );
 assert.ok(
     /AUTO_LOCK_SHELLS\s*=\s*[\s\S]{0,80}'popup'[\s\S]{0,40}'web'[\s\S]{0,40}'desktop'/.test(policySrc),

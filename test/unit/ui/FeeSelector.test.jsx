@@ -128,9 +128,34 @@ describe('<FeeSelector>', () => {
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5 });
     });
 
+    it.each([
+        ['5.123456789'],
+        ['0.000000015'],
+    ])('names a custom rate %j with more than 8 decimal places under the field', (typed) => {
+        const tiers = { ...TIERS, minimumRate: 0, maximumRate: 1000 };
+        render(
+            <FeeSelector tiers={tiers} value={{ mode: 'custom', customRate: 2 }} onChange={() => {}} />,
+        );
+        const input = screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' });
+        fireEvent.change(input, { target: { value: typed } });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Custom fee rate can have at most 8 decimal places.');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('accepts a custom rate with exactly 8 decimal places', () => {
+        render(
+            <FeeSelector tiers={TIERS} value={{ mode: 'custom', customRate: 2 }} onChange={() => {}} />,
+        );
+        fireEvent.change(screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' }), {
+            target: { value: '2.12345678' },
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it('renders an unavailable state without a slider', () => {
         render(<FeeSelector tiers={null} value={{ mode: 'normal' }} onChange={() => {}} label="Fee" />);
-        expect(screen.getByText('Fee estimate unavailable for this chain.')).toBeInTheDocument();
+        expect(screen.getByText('Fee estimate unavailable for this network.')).toBeInTheDocument();
         expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 

@@ -18,6 +18,11 @@
 // nothing has been broadcast, and the user is one Approve away from both.
 
 import { flows as flowsLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
+import { Button } from '../../ui/Button.jsx';
+import styles from './ResumeConfirmCard.module.css';
 
 /**
  * @param {object} props
@@ -38,34 +43,42 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
     if (offerable.length === 0) return null;
 
     return (
-        <div role="group" aria-label="Unfinished transactions">
+        <div role="group" aria-label={t('components.resumeConfirmCard.unfinishedTransactions')}>
             {offerable.map(({ session, info }) => {
                 const actionString = typeof session?.composed?.actionString === 'string'
                     ? session.composed.actionString
                     : '';
                 return (
                     <div key={info.id} className={className} data-testid="resume-confirm-card">
-                        <button
+                        <Button
                             type="button"
+                            variant="primary"
+                            block
+                            icon={null}
                             onClick={() => onResume(info.id)}
                             data-testid={`resume-confirm-${info.id}`}
                         >
-                            <span>Finish {info.label}</span>
-                            <span>Not sent yet. Approve to sign and send it.</span>
-                            {actionString ? (
-                                <span data-testid={`resume-confirm-action-${info.id}`}>
-                                    Action to submit: <code>{actionString}</code>
-                                </span>
-                            ) : null}
-                        </button>
-                        <button
+                            <span className={styles.content}>
+                                <span>{t('components.resumeConfirmCard.finish')} {info.label}</span>
+                                <span>{t('components.resumeConfirmCard.notSentYetApproveTo')}</span>
+                                {actionString ? (
+                                    <span data-testid={`resume-confirm-action-${info.id}`}>
+                                        {t('components.resumeConfirmCard.actionToSubmit')} <code>{actionString}</code>
+                                    </span>
+                                ) : null}
+                            </span>
+                        </Button>
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
                             onClick={() => onDiscard(info.id)}
-                            aria-label={`Discard unfinished ${info.label}`}
+                            aria-label={t('components.resumeConfirmCard.discardUnfinished', { label: info.label })}
                             data-testid={`discard-confirm-${info.id}`}
                         >
-                            Discard
-                        </button>
+                            {t('send.draft.discard')}
+                        </Button>
                     </div>
                 );
             })}

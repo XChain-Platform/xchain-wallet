@@ -46,6 +46,12 @@
 //               reads empty once may be a transient; the escape stays
 //               behind the WIPE gate because it also drops the meta, and
 //               a blob that DID come back could never be opened without it.
+//   incomplete  the encrypted store is gone and the meta is still here, on a
+//               device whose stores only the wallet writes: a desktop reset
+//               or a phone wipe that stopped between the two, or any other
+//               loss of the blob. Nothing can be opened and onboarding
+//               refuses over the meta, so the one way forward is to finish
+//               the reset, and Reset this wallet leads the screen.
 //
 // The erase path deliberately reuses the Locked screen's type-WIPE gate
 // rather than inventing a lighter one. A user reading this screen has just
@@ -56,6 +62,7 @@ import { useState } from 'react';
 import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { t } from '../../i18n/index.js';
 import styles from './VaultUnavailable.module.css';
 
@@ -93,8 +100,17 @@ const COPY = {
     },
 };
 
+/** Copy for an install whose meta outlived its vault. */
+function incompleteCopy() {
+    return {
+        title: t('vaultUnavailable.incomplete.title'),
+        body: t('vaultUnavailable.incomplete.body'),
+        nextStep: t('vaultUnavailable.incomplete.nextStep'),
+    };
+}
+
 /** The kinds where the user genuinely cannot proceed without the escape. */
-const OFFERS_ESCAPE = new Set(['corrupt', 'evicted']);
+const OFFERS_ESCAPE = new Set(['corrupt', 'evicted', 'incomplete']);
 
 /** The escape panel's copy, per kind: what is being removed and why. */
 const WIPE_COPY = {
@@ -118,20 +134,33 @@ const WIPE_COPY = {
     },
 };
 
+/** The escape panel copy for an incomplete install: the reset, finished. */
+function incompleteWipeCopy() {
+    return {
+        region: t('vaultUnavailable.incomplete.region'),
+        note: t('vaultUnavailable.incomplete.note'),
+        button: t('vaultUnavailable.incomplete.reset'),
+        failed: t('vaultUnavailable.incomplete.failed'),
+    };
+}
+
 /**
  * @param {object} props
- * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted'} props.kind
+ * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted' | 'incomplete'} props.kind
  * @param {() => void | Promise<void>} [props.onRetry] defaults to reloading the app
  * @param {() => Promise<void>} [props.wipe] injectable for tests
  */
 export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const resolvedKind = COPY[kind] ? kind : 'unavailable';
-    const copy = COPY[resolvedKind];
-    const offersRetry = resolvedKind !== 'corrupt';
+    const incomplete = kind === 'incomplete';
+    const resolvedKind = COPY[kind] || incomplete ? kind : 'unavailable';
+    const copy = incomplete ? incompleteCopy() : COPY[resolvedKind];
+    // A re-read of an incomplete install answers the same, so its screen
+    // leads with the reset instead of a retry.
+    const offersRetry = resolvedKind !== 'corrupt' && !incomplete;
     const offersEscape = OFFERS_ESCAPE.has(resolvedKind);
-    const wipeCopy = WIPE_COPY[resolvedKind] || WIPE_COPY.corrupt;
+    const wipeCopy = incomplete ? incompleteWipeCopy() : (WIPE_COPY[resolvedKind] || WIPE_COPY.corrupt);
 
     const [wipeOpen, setWipeOpen] = useState(false);
     const [confirmText, setConfirmText] = useState('');
@@ -153,7 +182,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
 
     async function handleWipe() {
         if (busy) return;
-        if (confirmText.trim().toUpperCase() !== 'WIPE') return;
+        if (!isExactTypedConfirmation(confirmText, 'WIPE')) return;
         setBusy(true);
         setWipeError(null);
         try {
@@ -200,7 +229,19 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                             the vault, so we are in no position to call it damaged.
                             Erasing in either case would destroy a working wallet to
                             fix nothing. */}
-                        {offersEscape && !wipeOpen ? (
+                        {offersEscape && !wipeOpen && incomplete ? (
+                            <Button
+                                type="button"
+                                variant="primary"
+                                block
+                                onClick={() => setWipeOpen(true)}
+                                aria-expanded="false"
+                                aria-controls="vault-unavailable-wipe-panel"
+                            >
+                                {t('vaultUnavailable.incomplete.reset')}
+                            </Button>
+                        ) : null}
+                        {offersEscape && !wipeOpen && !incomplete ? (
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -222,15 +263,16 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 role="region"
                                 aria-label={wipeCopy.region}
                             >
-                                <p className={styles.wipeWarning}>
+                                <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
                                     <strong>
                                         {t('vaultUnavailable.wipeWarning')}
                                     </strong>
-                                </p>
+                                </StatusMessage>
                                 <p className={styles.wipeNote}>{wipeCopy.note}</p>
                                 <Input
                                     type="text"
                                     label={t('vaultUnavailable.wipeConfirm')}
+                                    hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                     value={confirmText}
                                     onChange={(e) => setConfirmText(e.target.value)}
                                     autoComplete="off"
@@ -243,7 +285,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     block
                                     onClick={handleWipe}
                                     loading={busy}
-                                    disabled={busy || confirmText.trim().toUpperCase() !== 'WIPE'}
+                                    disabled={busy || !isExactTypedConfirmation(confirmText, 'WIPE')}
                                 >
                                     {wipeCopy.button}
                                 </Button>

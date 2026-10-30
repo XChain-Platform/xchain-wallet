@@ -89,7 +89,7 @@ assert.match(src, /notes\.map/, 'notes rendered as a list');
 // --- CSS module: hooks the JSX references --------------------------------
 
 for (const cls of [
-    'root', 'heading', 'skeleton', 'error',
+    'root', 'heading', 'skeleton',
     'deltas', 'row', 'tick', 'amount',
     'before', 'after', 'arrow',
     'feeAmount', 'feeNote',

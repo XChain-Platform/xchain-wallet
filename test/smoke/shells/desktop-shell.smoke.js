@@ -201,9 +201,11 @@ assert.ok(
     'BrowserWindow is hardened: contextIsolation + no nodeIntegration + sandbox',
 );
 
-// Scope the hardening pin to createWindow, the preload-bearing window.
-// (index.js holds a second webPreferences block, the Trezor bridge override,
-// whose flags alone satisfy the whole-file regexes above.)
+// Scope the hardening pin to createWindow, the preload-bearing window, so a
+// second webPreferences block added to index.js cannot satisfy it alone.
+// The Trezor Connect bridge window's flags live in trezorBridgeWindow.js
+// (bridgeWindowOptions), pinned by test/unit/desktop/trezorBridgeWindow.test.js
+// and security/trezor-bridge-window.smoke.js.
 const MAIN_WINDOW_REQUIRED = [
     /contextIsolation:\s*true/, /nodeIntegration:\s*false/, /sandbox:\s*true/,
     /preload:\s*join\(here,\s*'\.\.',\s*'preload\.cjs'\)/,
@@ -212,7 +214,7 @@ const MAIN_WINDOW_REQUIRED = [
 // off when packaged and the View menu drops its toggle, matching the
 // mobile shells' debugging-off rule.
 assert.equal((mainIndex.match(/devTools:\s*!app\.isPackaged/g) || []).length, 2,
-    'the main window and the Trezor Connect child both set devTools: !app.isPackaged');
+    'the main window and the Trezor Connect bridge both set devTools: !app.isPackaged');
 assert.match(mainIndex, /\.\.\.\(app\.isPackaged \? \[\] : \[\{ role: 'toggleDevTools' \}\]\)/,
     'the View menu offers Toggle Developer Tools only in an unpackaged run');
 assert.ok(!/^\s*\{ role: 'toggleDevTools' \},?$/m.test(mainIndex),
@@ -257,11 +259,8 @@ for (const [from, to, why] of [
     assert.notEqual(mutated, mainIndex, `the createWindow probe for ${why} changed the source`);
     assert.ok(mainWindowHardeningFailures(mutated).length > 0, `the createWindow hardening check catches ${why}`);
 }
-const unsandboxed = mutateCreateWindow(mainIndex, /\n\s*sandbox:\s*true,/, '');
-assert.ok(
-    /sandbox:\s*true/.test(unsandboxed),
-    'the Trezor override alone still satisfies a whole-file sandbox regex, which is why the check is scoped',
-);
+assert.equal((mainIndex.match(/webPreferences:/g) || []).length, 1,
+    'index.js holds one webPreferences block, createWindow\'s; the bridge window\'s lives in trezorBridgeWindow.js');
 assert.deepEqual(
     mainWindowHardeningFailures(mainIndex.replace('function createWindow(', 'function makeWindow(')),
     ['createWindow or its win.loadFile anchor not found'],

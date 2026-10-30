@@ -45,16 +45,23 @@
 // takes. Routing every path through one helper is what makes "did this form
 // get swept?" a question with one answer.
 
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { nativeFeeErrorMessage, oracleFeeRefusalMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
-import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { broadcastFailureKindFromError, isSpendConflictRejection } from '../../flows/broadcastPermanence.js';
+import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
+import { INPUTS_ALREADY_SPENT_NAME, NAME_SALE_IN_FLIGHT_NAME } from '../../flows/inputLiveness.js';
+import { APPROVE_REFUSAL_NAME } from './approveRefusal.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
-import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
+import { SIGNATURE_MISMATCH_MESSAGE } from '../../signers/verifyInputSignatures.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -137,23 +144,36 @@ export function isWatcherChunkLane(err) {
 }
 
 /**
+ * A confirm-lane tamper refusal (flows/confirmChecks.js#TamperDetectedError),
+ * keyed on name because only `{ name, message }` crosses the messaging boundary
+ * (MessageHost.serializeError); the code covers an in-process caller.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isTamperDetected(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    return e.name === 'TamperDetectedError' || e.code === 'TAMPER_DETECTED';
+}
+
+/**
  * The heading for a transaction that was signed and then failed to reach a
  * node. Shared by every queued done screen so they say one thing.
  */
 export const SIGNED_NOT_BROADCAST_TITLE = 'Signed. Not broadcast yet.';
 
 /**
- * The sentence for a transaction that was signed and then failed to reach a
- * node. Shared with QueuedResultPanel's hint so the two surfaces agree.
+ * The sentence for a signed transaction that no node has taken. Shared with
+ * ResultScreen's hint so the two surfaces agree.
  *
- * this used to promise an automatic re-broadcast, and nothing in the
- * wallet re-broadcasts anything on its own. The only
- * caller of the broadcast route is the user pressing "Broadcast now" in
+ * Nothing in the wallet re-broadcasts on its own. The only caller of the
+ * broadcast route is the user pressing "Broadcast now" in
  * QueuedBroadcastBanner; what the wallet does on its own is show a toast when
- * reachability flips back to normal. So the copy promises exactly that - a
- * reminder - and says who does the sending. Change it back only alongside a
- * real auto-drain; test/smoke/ui/queued-broadcast-copy.smoke.js fails if the
- * two ever disagree again.
+ * reachability flips back to normal. So the copy promises exactly that, a
+ * reminder, and says who does the sending. Change it only alongside a real
+ * auto-drain; test/smoke/ui/queued-broadcast-copy.smoke.js fails if the two
+ * disagree.
  */
 export const SIGNED_NOT_BROADCAST_MESSAGE =
     'Your transaction is signed but could not reach the network. It is waiting in the '
@@ -222,7 +242,7 @@ export function chainGateErrorMessage(err) {
     m = NOT_ON_BITCOIN_RE.exec(message);
     if (m) {
         return `${actionDisplayLabel(m[1])} version ${m[2]} cannot be sent from a Bitcoin address. `
-            + 'Send it from an address on another chain, or remove that action.';
+            + 'Send it from an address on another network, or remove that action.';
     }
     if (VALIDATOR_LANE_RE.test(message)) {
         return 'Validator staking works only on Bitcoin. Send it from a Bitcoin address.';
@@ -233,6 +253,70 @@ export function chainGateErrorMessage(err) {
             + 'Check the VERSION value in that step\'s parameters.';
     }
     return null;
+}
+
+function isSecondPhaseBroadcast(err) {
+    const message = err && typeof err === 'object' ? String(/** @type {any} */ (err).message || '') : '';
+    return /^broadcast failed \(phase2\)/i.test(message.trim());
+}
+
+function isNodeSpendConflict(err) {
+    return broadcastFailureKindFromError(err) === 'permanent' && isSpendConflictRejection(err)
+        && !isSecondPhaseBroadcast(err);
+}
+
+/**
+ * A send refused because a coin it spends is taken: another send from this
+ * wallet holds it (refused before signing), or the node holds a transaction
+ * that spends it. Either way the balance the form showed is out of date.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isSpentCoinsRefusal(err) {
+    return /** @type {any} */ (err)?.name === INPUTS_ALREADY_SPENT_NAME || isNodeSpendConflict(err);
+}
+
+const INTERRUPTED_CODES = new Set(['RUNTIME_DISCONNECTED', 'RUNTIME_NO_RESPONSE']);
+
+export const MAINNET_PRELAUNCH_MESSAGE =
+    'This action is not available on mainnet before launch. Nothing was signed. Switch to a test network to try it.';
+
+/**
+ * The refusal the signing path raises for an XChain action on a mainnet chain
+ * before launch. Matched by name and code so the message survives the hop
+ * through the extension background, which rebuilds errors from those two fields.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isMainnetPrelaunch(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && (e.code === 'MAINNET_PRELAUNCH' || e.name === 'MainnetPrelaunchError'));
+}
+
+/**
+ * A request the extension's service worker dropped by restarting, as the
+ * messaging wrapper reports it. Matched by name and code so core does not
+ * import the extension package.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isActiveNetworkChanged(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && e.name === 'ActiveNetworkChangedError'
+        && /^The active network changed to [a-z]+\. /.test(String(e.message || '')));
+}
+
+function isBackgroundInterrupted(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && e.name === 'RuntimeConnectionError'
+        && INTERRUPTED_CODES.has(e.code)
+        && String(e.message || '').trim());
 }
 
 /**
@@ -259,22 +343,84 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    // A freeze refusal says so only when the user armed it; a duress-armed one
+    // keeps the generic line, which is the cover that flow promises.
+    const panicCopy = panicRefusalMessage(err);
+    if (panicCopy) return panicCopy;
+    if (/** @type {any} */ (err)?.name === 'PanicModeActiveError') return generic;
+    // The extension's service worker restarted while the request was in
+    // flight. The error already carries the wallet's own sentence, which says
+    // to review and try again; the generic line would hide that.
+    if (isBackgroundInterrupted(err)) return String(/** @type {any} */ (err).message).trim();
+    // The host refused a send whose network is no longer the active one, at
+    // Approve or after an Undo hold. Its sentence names the remedy.
+    if (isActiveNetworkChanged(err)) return String(/** @type {any} */ (err).message).trim();
+    // A mainnet action refused before launch names the chain id and the word
+    // "prelaunch" in its own text, which the filters below reduce to the
+    // generic line. Nothing was signed, and the remedy is a test network.
+    if (isMainnetPrelaunch(err)) return MAINNET_PRELAUNCH_MESSAGE;
     if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
     }
+    // A device reply whose signatures do not verify: the sentence is the
+    // wallet's own and says nothing was broadcast, which the form's fallback
+    // or the generic line would hide. Keyed on the name that crosses messaging.
+    if (/** @type {any} */ (err)?.name === 'SignatureMismatchError') return SIGNATURE_MISMATCH_MESSAGE;
     if (isNativeFeeForfeit(err)) {
-        return userFacingMessage(
-            nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,
-        );
+        // The sentence can quote the indexer's verdict, which names the field
+        // it refused ("mint exceeds MINT_ADDRESS_MAX"). The general filter
+        // reads that field name as an error code and would hide the one thing
+        // the user can act on, so the verdict gets the protocol-refusal check.
+        const copy = nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+        return isShowableRefusal(copy) ? copy : userFacingMessage(copy, generic);
     }
+    // The oracle pre-flight's refusal names its remedy only through the
+    // indexer verdict it carries, and "wait a day" and "try again" are both
+    // possible answers, so the verdict is read before the name-only SDK copy.
+    const oracleRefusal = oracleFeeRefusalMessage(err, { coinTicker });
+    if (oracleRefusal) return userFacingMessage(oracleRefusal, generic);
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) {
         return userFacingMessage(String(/** @type {any} */ (err).message || ''), generic);
     }
-    if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
+    // A refused build check: its message is the wallet's own sentence about
+    // the bytes it refused to sign. Forms pass that message as their fallback,
+    // which the tail treats as raw wire text, so it would surface as the generic
+    // line and hide that nothing was signed because the transaction differed.
+    if (isTamperDetected(err)) {
+        return userFacingMessage(
+            `${String(/** @type {any} */ (err).message || '').trim()} Nothing was signed.`, generic,
+        );
+    }
+    // The referenced order, swap or dispenser is expired, or its expiry cannot
+    // be checked against a current chain height. The sentence is the wallet's
+    // own and names the next step; forms pass it as their fallback too, which
+    // the tail treats as raw wire text and would replace with the generic line.
+    if (/** @type {any} */ (err)?.name === OFFER_LIFECYCLE_REFUSAL) {
+        return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
+    }
+    // The form's own Approve-time check stopped the signature. The sentence is
+    // the wallet's and names the next step; the tail would read it as wire text.
+    if (/** @type {any} */ (err)?.name === APPROVE_REFUSAL_NAME) {
+        return `${String(/** @type {any} */ (err).message || '').trim()} ${t('flows.submit.nothingSigned')}`;
+    }
+    // Another send from this wallet is spending these inputs, so the background
+    // refused this one before signing. The sentence is the wallet's own and
+    // names the way forward; the tail would read it as wire text.
+    if (/** @type {any} */ (err)?.name === INPUTS_ALREADY_SPENT_NAME
+        || /** @type {any} */ (err)?.name === NAME_SALE_IN_FLIGHT_NAME) {
+        const nothingSigned = t('flows.submit.nothingSigned');
+        return userFacingMessage(`${String(/** @type {any} */ (err).message || '').trim()} ${nothingSigned}`, generic);
+    }
     const broadcastKind = broadcastFailureKindFromError(err);
+    // The node refused the signed transaction because a coin it spends is spent
+    // or held by another transaction. Nothing left the wallet, and the bytes can
+    // never go out, so the sentence says that rather than quoting the node. A
+    // refused second phase follows a commit that did go out, so it keeps its own copy.
+    if (isNodeSpendConflict(err)) return t('flows.submit.spendConflict');
+    if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
     // Encoder codes are checked only once the error is known NOT to be a
     // broadcast failure: a BroadcastFailedError quotes the node/encoder reason

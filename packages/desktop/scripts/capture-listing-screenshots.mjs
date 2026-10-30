@@ -143,11 +143,12 @@ function pngSize(file) {
 /**
  * Flips Settings → Network to Mainnet.
  *
- * The demo wallet lands on Regtest by design (Onboarding.jsx registers chains
- * on all three networks so the user can look at any of them), and a public
- * store screenshot captioned "BTC · regtest" reads as a testing artifact
- * rather than the product. The extension capture makes the same move for the
- * same reason.
+ * The demo wallet lands on Mainnet since xchain-wallet#78 (Onboarding.jsx
+ * still registers chains on all three networks), so on a current build this
+ * is a guard: the select already reads Mainnet and the pick changes nothing.
+ * It stays because a store screenshot captioned "BTC · regtest" reads as a
+ * testing artifact rather than the product. The extension capture makes the
+ * same move for the same reason.
  *
  * This walk was impossible until 2026-08-07: every section of the desktop
  * Settings screen rendered "Settings unavailable" because the renderer's IPC
@@ -176,8 +177,9 @@ async function main() {
 
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xc-desktop-listing-'));
     const app = await electron.launch({
-        args: ['.', `--user-data-dir=${userDataDir}`],
+        args: ['.', `--user-data-dir=${userDataDir}`, '--use-mock-keychain'],
         cwd: DESKTOP_DIR,
+        env: { ...process.env, XCHAIN_TEST_NO_FOCUS: '1', XCHAIN_TEST_MOCK_KEYCHAIN: '1' },
     });
 
     const produced = [];

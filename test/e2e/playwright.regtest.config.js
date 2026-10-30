@@ -29,6 +29,8 @@
 // browser origin rules.
 
 import { defineConfig, devices } from '@playwright/test';
+import { desktopUserAgentForHost } from './host-user-agent.js';
+import { XCHAIN_SERVICE_HOSTS } from './fixtures/outboundGuard.js';
 
 // Deliberately NOT vite preview's default 4173: a hand-run preview (this
 // venue is also driven manually while debugging, and a second coder shares
@@ -80,9 +82,20 @@ export default defineConfig({
     timeout: 1_800_000,
     expect: { timeout: 30_000 },
     globalSetup: './global-setup.regtest.js',
-    reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+    // `list` prints each test as it ends, so a run cut off by the job cap
+    // still shows which tests passed and failed.
+    reporter: process.env.CI
+        ? [['list'], ['github'], ['html', { open: 'never' }]]
+        : 'list',
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
+        outboundStubHosts: XCHAIN_SERVICE_HOSTS,
+        // Bounds every click and fill that names no timeout of its own. Without
+        // it an action inherits the 30 minute TEST budget above, so one locator
+        // that no longer matches the screen waits out the whole test and eats
+        // the job cap. Chain waits are explicit polls and do not ride on this.
+        // A spec's own `test.use({ actionTimeout })` still wins.
+        actionTimeout: 60_000,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
@@ -92,6 +105,11 @@ export default defineConfig({
             name: 'chromium',
             use: {
                 ...devices['Desktop Chrome'],
+                // Same host-matched user agent as playwright.config.js, so
+                // ControlOrMeta and the wallet's shortcut gate agree on a Mac host.
+                userAgent: desktopUserAgentForHost(),
+                // New headless: the full browser, which renders like the headed one users run.
+                channel: 'chromium',
                 launchOptions: {
                     args: [
                         '--disable-web-security',
@@ -99,10 +117,11 @@ export default defineConfig({
                         // in out-of-process iframes/site-isolated renderers, so
                         // --disable-web-security alone is not enough.
                         '--disable-features=IsolateOrigins,site-per-process',
-                        // Keep the run off the production hub. At boot the wallet
-                        // swaps its bundled descriptors for the hub's signed registry,
-                        // and a snapshot older than the tree names the wrong regtest encoder port.
-                        '--host-resolver-rules=MAP hub.xchain.io ~NOTFOUND',
+                        // Keep every transport off the production services. HTTP
+                        // probes are answered by the page fixture; this also blocks
+                        // WebSockets, which Playwright routes cannot intercept.
+                        '--host-resolver-rules=MAP explorer.xchain.io ~NOTFOUND, '
+                            + 'MAP hub.xchain.io ~NOTFOUND, MAP encoder.xchain.io ~NOTFOUND',
                     ],
                 },
             },
@@ -110,8 +129,8 @@ export default defineConfig({
     ],
     webServer: {
         command: REUSE_BUILD
-            ? `pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`
-            : `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
+            ? `pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort --host 127.0.0.1`
+            : `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PREVIEW_PORT}`,
         // Always false, even locally: reusing a preview server means
         // reusing whatever build it was started with, which reintroduces

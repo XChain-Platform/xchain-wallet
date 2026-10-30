@@ -15,4 +15,6 @@ export {
     isRecipientForChain,
     classifyRecipients,
     reconcileStoredList,
+    bech32IdentityKey,
+    applyTokenAccessLists,
 } from './parseRecipients.js';

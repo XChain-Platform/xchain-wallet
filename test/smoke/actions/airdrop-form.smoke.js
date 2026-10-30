@@ -219,6 +219,9 @@ assert.ok(/messaging\.getListByActionIndex\(\{ chainId, actionIndex: listActionI
     'AirdropForm reads the published list back once it is indexed');
 assert.ok(/listReconcile \? listReconcile\.storedCount : recipients\.valid\.length/.test(src),
     'the recipient count that prices step 2 prefers the chain-stored count');
+assert.ok(/airdropLib\.applyTokenAccessLists\(listed, accessLists\)/.test(src)
+    && /addressPreview\(listReconcile \? listReconcile\.stored : recipients\.valid, count\)/.test(src),
+    'the recipient count drops the addresses the token\'s allow and block lists exclude');
 assert.ok(/recipients\.wrongNetwork\.length > 0/.test(src),
     'AirdropForm calls out wrong-network recipients separately from garbage');
 assert.ok(/useDeferredValue\(pasteText\)/.test(src)

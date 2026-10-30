@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -100,17 +101,22 @@ assert.match(
     /disabled=\{password\.length === 0 \|\| isLockedOut\}/,
     'submit button disabled while locked',
 );
-assert.match(
+assert.doesNotMatch(
     lockedSrc,
-    /Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
-    'button label flips to Locked + countdown',
+    /locked\.locked'?, \{ formatCountdownValue: formatCountdown\(remainingMs\) \}|Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
+    'the banner alone says how long to wait; the button does not repeat the countdown',
 );
 
 // --- banner aria + countdown formatting -------------------------------
 
-assert.match(lockedSrc, /role="status"/, 'banner uses status role');
-assert.match(lockedSrc, /aria-live="polite"/, 'banner is aria-live polite');
-assert.match(lockedSrc, /Too many incorrect passwords/, 'banner copy present');
+// The shared warning notice carries role="status" and aria-live="polite".
+assert.match(lockedSrc, /<StatusMessage variant="warning" className=\{styles\.lockoutBanner\}>/, 'banner is the shared warning notice');
+assert.match(lockedSrc, /className=\{styles\.lockoutCountdown\} aria-live="off"/, 'the countdown ticks without re-announcing the notice');
+// Run alone the screen names its locale key; the smoke runner swaps in the
+// English copy. Either way the English locale carries the sentence.
+const localeSrc = englishDictionarySource();
+assert.match(lockedSrc, /Too many incorrect passwords|t\('locked\.tooManyIncorrectPasswordsOn'\)/, 'banner copy present');
+assert.match(localeSrc, /'locked\.tooManyIncorrectPasswordsOn':\s*'Too many incorrect passwords/, 'banner copy in the English locale');
 
 assert.match(
     lockedSrc,
@@ -124,7 +130,7 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /totalSec === 1 \? 'second' : 'seconds'/,
+    /locked\.countdown\.seconds', \{ count: totalSec \}/,
     'countdown uses plain-language time units',
 );
 

@@ -124,6 +124,17 @@ describe('AirdropForm existing-list name', () => {
         expect(await screen.findByText('List #2700 (address list)')).toBeTruthy();
     });
 
+    it('says why the network refused a list in the list chooser', async () => {
+        mountAirdrop({ ...listRow(), status: 'invalid: LIST_ACTION_INDEX (not owner)' });
+        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), {
+            target: { value: 'existing' },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+
+        const choice = await screen.findByRole('button', { name: /Address list #2700/ });
+        expect(choice.textContent).toBe('Address list #2700 (sent by an address that does not own the list)');
+    });
+
     it('neutralizes U+202E in a loaded list name', async () => {
         await chooseExistingList(listRow({ name: 'Safe\u202Eevil' }));
 

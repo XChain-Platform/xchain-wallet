@@ -9,12 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/renameAccount.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-
-const NAME_MAX_LENGTH = 64;
-const nameLength = (value) => Array.from(value).length;
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -31,8 +33,9 @@ const nameLength = (value) => Array.from(value).length;
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
  * @param {(account: any) => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {unknown} [props.refreshKey]   changes when another window changes account records, so the names are read again
  */
-export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed }) {
+export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed, refreshKey }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -40,6 +43,11 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // A rename made in another window reaches this screen as a fresh read of
+    // the records (refreshKey). Until the user types, the field follows it, so
+    // Save does not put back the name this screen opened with.
+    const edited = useRef(false);
+    const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
@@ -55,17 +63,22 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         if (!walletId || typeof messaging.listAccounts !== 'function') return undefined;
         messaging.listAccounts(walletId)
             .then((list) => {
-                if (!cancelled) setAccounts(Array.isArray(list) ? list : []);
+                if (cancelled) return;
+                const rows = Array.isArray(list) ? list : [];
+                setAccounts(rows);
+                const stored = rows.find((account) => account?.id === accountId)?.name;
+                if (!firstRead.current && !edited.current && typeof stored === 'string' && stored) setName(stored);
+                firstRead.current = false;
             })
             .catch(() => { /* the rename flow performs the authoritative check */ });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging, refreshKey]);
 
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
-        if (trimmed.length === 0) {
+        if (!hasVisibleText(trimmed)) {
             setError('Account name is required.');
             return;
         }
@@ -74,7 +87,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             return;
         }
         if (accounts.some((account) => account?.id !== accountId
-            && account?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            && nameKey(account?.name) === nameKey(trimmed))) {
             setError(`An account named "${trimmed}" already exists.`);
             return;
         }
@@ -88,12 +101,12 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             const result = await messaging.renameAccount({ accountId, name: trimmed });
             onRenamed(result?.account || result);
         } catch (err) {
-            setError(err?.message || 'Failed to rename account.');
+            setError(userFacingMessage(err, t('renameAccount.error')));
             setBusy(false);
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0
+    const saveDisabled = busy || !hasVisibleText(name)
         || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (
@@ -101,30 +114,27 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             onBack={onBack}
             backDisabled={busy}
             title={t('accountPicker.renameTitle')}
-            trailing={(
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={null}
-                    onClick={() => handleSubmit()}
-                    aria-label={t('history.contact.save')}
-                    title={t('history.contact.save')}
-                    disabled={saveDisabled}
-                >
-                    <Icon.CheckIcon />
-                </Button>
-            )}
         />
     );
 
     const formBody = (
-        <FormPage ref={formRef} label={t('accountPicker.renameTitle')} onSubmit={handleSubmit}>
+        <FormPage
+            ref={formRef}
+            label={t('accountPicker.renameTitle')}
+            onSubmit={handleSubmit}
+            actions={(
+                <Button type="submit" variant="primary" disabled={saveDisabled}>
+                    {t('history.contact.save')}
+                </Button>
+            )}
+        >
             <Input
                 ref={nameRef}
                 label={t('renameAccount.name')}
                 value={name}
                 onChange={(e) => {
                     const nextName = e.target.value;
+                    edited.current = true;
                     setName(nextName);
                     setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
                         ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`

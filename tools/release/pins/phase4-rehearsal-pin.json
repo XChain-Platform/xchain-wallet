@@ -1,0 +1,28 @@
+{
+    "_comment": "Written by tools/release/phase4-rehearsal.mjs from a run it just watched. Records how deep a ceremony Phase 4 rehearsal got and against which two trees. Do not hand-edit: the value of this file is that only an observation can set it. A `reached` short of \"signature\" is the NORMAL case, not a defect - the signature needs K1 at a pinentry and no automated run can supply it.",
+    "pinFormat": 4,
+    "tag": "v0.341.3",
+    "lane": "extension",
+    "releaseSet": "release",
+    "gateFallback": [],
+    "reached": "manifest-written",
+    "reachedSignature": false,
+    "blocker": "gpg: signing failed: No secret key",
+    "scriptRef": "74e9a4efaa764e63de2d1e0c031b1efa9b96795e",
+    "repoRef": "3f98279ea96eb5bb7e65ade074baf6ce5f424062",
+    "scriptPath": {
+        "tools/release/sign.sh": "53f45042a0f54a597feb0cf3f8496da4c2605f262aab0a781944a7e63ba7c54c",
+        "tools/release/verify.sh": "3a5d0e82dba7659d55a8a0427485fc05e2e8fe5b44b8122c184df48032501580",
+        "tools/release/lib.sh": "33333e51cac3e0bbbad5963251500e987559b790ecd5f92810b17f15d256c8b0",
+        "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
+        "tools/release/store-profile-status.txt": "93b13279e4c068394889b9fbe1862d4491dd91d17fbe9d840dbe0598f18f8c59"
+    },
+    "repoPath": {
+        "tools/release/shipped-lanes.txt": "e5741ea956a788fcfe75ff5b85d53755531e6fe671d3155c18c2b20a2c9ceb12",
+        "tools/release/expected-artifacts.txt": "389ee77303d0355368e0f1c9c8b44ad3caa5f72428a75ddc074ff6f2862dd0d9",
+        "tools/build-reproduce/check-no-dev-mock.sh": "1bed4891144ea1376bdc99768b846f1d7e8063f946f5d9cb5071a4069bd13ed3",
+        "tools/release/verify-signatures.mjs": "5aa1c30f370723c02b3b58787587a41447ad80f794ed1216db19d54d2864bcfc",
+        "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
+    },
+    "observedAt": "2026-10-21T01:55:05.991Z"
+}

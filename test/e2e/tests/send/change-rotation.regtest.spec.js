@@ -39,7 +39,8 @@
 // change must come home. Without it, a wallet that had stopped producing
 // change outputs at all would pass the first test for the wrong reason.
 
-import { createWallet, expect, gotoSection, mainButton, openSettings, test } from '../../fixtures/wallet.js';
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, openSettings, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_DESTINATION,
@@ -63,27 +64,6 @@ function toField(page) {
 
 function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
-}
-
-/**
- * Opens a destination through the COMMAND PALETTE.
- *
- * Same reason `wif-import.regtest.spec.js` carries its own copy: the
- * bottom bar surfaces only Home/History/Send/Scan, so `gotoSection` for
- * anything else can wait out the entire budget for a control that is
- * never coming.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /** Opens Settings, walks into the Privacy panel, sets the rotation toggle. */
@@ -131,7 +111,7 @@ async function walletAddresses(page) {
     for (let i = 0; i < 3 && await filters.count() === 0; i++) {
         const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
-        else await gotoPalette(page, 'Addresses');
+        else await openPaletteCommand(page, 'Addresses');
         await filters.or(page.getByRole('status', { name: 'Loading addresses' })).first()
             .waitFor({ state: 'visible', timeout: 30_000 })
             .catch(() => {});
@@ -176,7 +156,7 @@ async function sendAndBroadcast(page) {
     // transaction leaves no chain evidence to read.
     await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
-    const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+    const txid = await readShownTxid(page.getByRole('main'));
     expect(txid, 'success screen showed no transaction id').toBeTruthy();
     return txid;
 }

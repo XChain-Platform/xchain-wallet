@@ -204,4 +204,16 @@ describe('flows/priceAlerts', () => {
         await expect(saveAlert({ vault, ...ALERT, targetFiat: 0 })).rejects.toThrow();
         await expect(saveAlert({ vault, ...ALERT, walletId: '' })).rejects.toThrow();
     });
+
+    it('leaves an alert edited since it fired armed when markAlertTriggered carries the fired terms', async () => {
+        const saved = await saveAlert({ vault, ...ALERT });
+        const firedTerms = 'bitcoin-mainnet::above::70000::usd';
+        await saveAlert({ vault, ...ALERT, id: saved.id, targetFiat: 90000 });
+        expect(await markAlertTriggered({ vault, id: saved.id, terms: firedTerms })).toBeNull();
+        const [row] = await listAlertsForWallet({ vault, walletId: 'wallet-1' });
+        expect(row.status).toBe('armed');
+        expect(row.targetFiat).toBe(90000);
+        const marked = await markAlertTriggered({ vault, id: saved.id, terms: 'bitcoin-mainnet::above::90000::usd' });
+        expect(marked.status).toBe('triggered');
+    });
 });

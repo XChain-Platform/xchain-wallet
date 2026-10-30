@@ -46,7 +46,7 @@
 // the window then closes after another interval, which holds exactly one
 // poll of every chain.
 
-import { createWallet, expect, test, unlockedShell } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test, unlockedShell } from '../../fixtures/wallet.js';
 import { switchToRegtest, selectVenueChain, EXPLORER_URL, REGTEST_COIN, REGTEST_CHAIN_ID, REGTEST_TICKER } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../../packages/core/src/flows/balances.js';
@@ -70,19 +70,6 @@ function classify(method, url) {
     return null;
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function listedAddresses(page) {
     const rows = page.getByRole('button', { name: /^View address / });
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -92,7 +79,7 @@ async function listedAddresses(page) {
 }
 
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const before = new Set(await listedAddresses(page));
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
@@ -105,6 +92,11 @@ async function generateVenueAddress(page) {
 
 test.describe(`batch balance reads (${EXPECT})`, () => {
     test.setTimeout(600_000);
+    // The regtest config's `**/*.regtest.spec.js` match picks this file up too,
+    // where localhost:18080 is the shared explorer. It runs only under
+    // playwright.ratelimit.config.js, which demands XC_RATE_LIMIT_AT6=1.
+    test.skip(process.env.XC_RATE_LIMIT_AT6 !== '1',
+        'needs an explorer whose batch-route state is named by XC_BATCH_EXPECT, not the shared regtest venue; run it with playwright.ratelimit.config.js and XC_RATE_LIMIT_AT6=1');
 
     test.beforeAll(async () => {
         expect(['batch', 'fallback'].includes(EXPECT), 'set XC_BATCH_EXPECT=batch or fallback').toBe(true);
@@ -135,7 +127,7 @@ test.describe(`batch balance reads (${EXPECT})`, () => {
 
         const extra = [];
         for (let i = 0; i < EXTRA_ADDRESSES; i += 1) extra.push(await generateVenueAddress(page));
-        await gotoPalette(page, 'Home');
+        await openPaletteCommand(page, 'Home');
         await expect(unlockedShell(page)).toBeVisible();
 
         // Let the cold open (and the fallback venue's one refused probe per

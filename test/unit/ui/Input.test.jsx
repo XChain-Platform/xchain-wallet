@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe('<Input>', () => {
-    it('keeps a visible default border on shared fields and classless selects', () => {
+    it('keeps a visible default border on shared fields and every select', () => {
         const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
         const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
 
@@ -32,7 +32,7 @@ describe('<Input>', () => {
             /\.input\s*\{[^}]*border:\s*1px solid var\(--xc-control-border\)/s,
         );
         expect(tokensCss).toMatch(
-            /:where\(select:not\(\[class\]\)\)\s*\{[^}]*border:\s*1px solid var\(--xc-control-border\)/s,
+            /:where\(select\)\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s,
         );
     });
 
@@ -80,9 +80,9 @@ describe('<Input>', () => {
         const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
         const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
         const mouseTokens = {
-            '--xc-control-font-sm': '13px',
-            '--xc-control-font-md': '14px',
-            '--xc-control-font-lg': '16px',
+            '--xc-control-font-sm': 'var(--xc-text-sm)',
+            '--xc-control-font-md': 'var(--xc-text-md)',
+            '--xc-control-font-lg': 'var(--xc-text-lg)',
             '--xc-control-pad-x-sm': '8px',
             '--xc-control-pad-x-md': '12px',
             '--xc-control-pad-x-lg': '16px',

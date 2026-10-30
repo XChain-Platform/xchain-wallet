@@ -52,7 +52,7 @@ describe('coin ticker metadata edge branches', () => {
         expect(transactionExplorerLinks(descriptor, 'a/b')).toEqual([{
             id: 'https://example.test/tx/a%2Fb',
             label: 'Explorer',
-            iconImg: undefined,
+            icon: 'E',
             url: 'https://example.test/tx/a%2Fb',
         }]);
     });

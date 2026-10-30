@@ -118,7 +118,7 @@ describe('offline route behavior from reachability', () => {
             <Home activeWalletId={WALLET.id} onSend={vi.fn()} onReceive={() => {}} />
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });
@@ -152,6 +152,16 @@ describe('offline route behavior from reachability', () => {
             gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
         });
 
+        writeBalanceCache(WALLET.id, null, {
+            balances: {
+                [CHAIN]: [{
+                    address: ADDRESS,
+                    balances: { native: { tick: 'BTC', quantity: '100000000', divisibility: 8 }, tokens: [] },
+                }],
+            },
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
         renderOffline(messaging, <Send walletId={WALLET.id} onBack={() => {}} />);
 
         expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
@@ -159,7 +169,55 @@ describe('offline route behavior from reachability', () => {
         const send = screen.getByRole('button', { name: 'Send' });
         expect(send).toBeDisabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
-        expect(screen.getByText(/cached balance remains available/i)).toBeInTheDocument();
+        // The cached balance is read after the address list, so under load the
+        // no-cache wording can still be on screen when the inputs first appear.
+        expect(await screen.findByText(/cached balance remains available/i)).toBeInTheDocument();
+        // Offline already explains why sending is blocked, so the fee source
+        // notice is not a second message for the same state.
+        expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();
+        fireEvent.submit(document.getElementById('send-form'));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('says only that sending needs a connection when no balance is saved', async () => {
+        const messaging = messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd' }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({
+                [CHAIN]: { id: 'address-1', address: ADDRESS },
+            }),
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [],
+            }),
+            getSettings: vi.fn().mockResolvedValue({
+                walletMode: 'full',
+                activeNetwork: 'mainnet',
+                grace: { testSendThresholdSats: 0 },
+                privacy: { formDraftTtlMs: 0 },
+            }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            getAddressHistory: vi.fn().mockResolvedValue([]),
+            gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
+        });
+
+        renderOffline(messaging, <Send walletId={WALLET.id} onBack={() => {}} />);
+
+        expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
+        expectOneOfflineNotice();
+        const send = screen.getByRole('button', { name: 'Send' });
+        expect(send).toBeDisabled();
+        expect(send).toHaveAttribute('title', 'Sending needs a network connection');
+        expect(screen.getByText('Sending needs a network connection.')).toBeInTheDocument();
+        expect(screen.queryByText(/cached balance remains available/i)).not.toBeInTheDocument();
+        expect(screen.getAllByText(/balance unavailable/i).length).toBeGreaterThan(0);
+        // Offline already explains why sending is blocked, so the fee source
+        // notice is not a second message for the same state.
+        expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();
         fireEvent.submit(document.getElementById('send-form'));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -190,7 +248,7 @@ describe('offline route behavior from reachability', () => {
         expect(screen.getByRole('button', { name: 'Generate new address' })).toBeEnabled();
     });
 
-    it('keeps cached History rows and disables refresh with a reason', async () => {
+    it('shows one offline state for History and disables refresh with a reason', async () => {
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             getAddressHistory: vi.fn().mockResolvedValue([{
@@ -216,8 +274,10 @@ describe('offline route behavior from reachability', () => {
 
         renderOffline(messaging, <History walletId={WALLET.id} />);
 
-        expect(await screen.findByRole('button', { name: /Send.*Confirmed/i })).toBeInTheDocument();
-        expectOneOfflineNotice();
+        // Offline, no read starts; with nothing saved the page shows its one
+        // offline state, and saved rows are held by the History offline cache spec.
+        expect(await screen.findByText("You're offline")).toBeInTheDocument();
+        expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
         expect(refresh).toBeDisabled();
         expect(refresh).toHaveAttribute('title', 'Refreshing history needs a network connection');

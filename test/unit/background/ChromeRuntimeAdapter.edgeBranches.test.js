@@ -37,6 +37,16 @@ describe('ChromeRuntimeAdapter edge branches', () => {
         );
     });
 
+    it('tells the activity hook which message type a trusted page sent', async () => {
+        const runtime = runtimeBus();
+        const onActivity = vi.fn(() => undefined);
+        attachChromeRuntime({ handle: vi.fn(async () => ({ ok: true, result: null })) }, runtime, { onActivity });
+
+        await runtime.emit({ type: 'balances.wallet' });
+
+        expect(onActivity).toHaveBeenCalledWith('balances.wallet');
+    });
+
     it('declines pre-host messages without calling the host', async () => {
         const runtime = runtimeBus();
         const host = { handle: vi.fn() };

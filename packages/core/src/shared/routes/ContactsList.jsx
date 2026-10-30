@@ -15,6 +15,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
@@ -32,8 +33,17 @@ import {
     findContactByName,
     mergeContactGroup,
 } from '../utils/contactMerge.js';
-import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
+import { BIDI_CONTROLS } from '../utils/textHardening.js';
+
+// A right-to-left override typed into the name would reverse the text shown in
+// the field while the stored name (cleaned on save) reads in order, so the
+// field never holds one: what it shows is what is saved.
+const stripBidiControls = (value) => value.replace(BIDI_CONTROLS, '');
+
+// The contacts store refuses a save whose expected version is not the stored
+// one, with this message (core flows/contacts.js assertExpectedVersion).
+const isVersionConflict = (err) => /changed since this screen loaded/i.test(String(err?.message || err || ''));
 
 const chainRegistry = registryLib.defaultRegistry();
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
@@ -112,11 +122,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // happen. Dismissal lasts for this visit only: the edits stay unpublished.
     const [unpublished, setUnpublished] = useState(0);
     const [nudgeDismissed, setNudgeDismissed] = useState(false);
+    const unpublishedRequestRef = useRef(0);
     const refreshUnpublished = useCallback(async (isCurrent = () => true) => {
         if (typeof messaging?.labelSyncStatusRequest !== 'function') return;
+        const request = ++unpublishedRequestRef.current;
         try {
             const s = await messaging.labelSyncStatusRequest();
-            if (!isCurrent()) return;
+            if (unpublishedRequestRef.current !== request || !isCurrent()) return;
             const count = Number(s?.batch?.changeCount ?? s?.changeCount ?? 0);
             setUnpublished(s?.due || s?.pending ? Math.max(1, count) : 0);
         } catch {
@@ -157,6 +169,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+    const submittingRef = useRef(false);
     const [deleting, setDeleting] = useState(/** @type {string | null} */ (null));
     const [editVersion, setEditVersion] = useState(/** @type {string | null} */ (null));
     // An error answers the last Save; once the user edits the form it no
@@ -181,24 +194,33 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [addrPicker, setAddrPicker] = useState(/** @type {'send' | 'message' | null} */ (null));
     const actionsRef = useRef(null);
     const walletScopeRef = useRef(walletId);
+    const contactsRequestRef = useRef(0);
     walletScopeRef.current = walletId;
 
+    // Resolves to the rows it read, or null when the read fails, the wallet
+    // changes underneath it, or a newer request supersedes it.
     const loadContacts = useCallback(async () => {
         const scope = walletId;
+        const request = ++contactsRequestRef.current;
+        const isCurrent = () => walletScopeRef.current === scope
+            && contactsRequestRef.current === request;
+        let loaded = null;
         setLoadError(null);
         try {
             const rows = await messaging.listContacts();
-            if (walletScopeRef.current !== scope) return;
-            setContacts(Array.isArray(rows) ? rows : []);
+            if (!isCurrent()) return null;
+            loaded = Array.isArray(rows) ? rows : [];
+            setContacts(loaded);
         } catch (err) {
-            if (walletScopeRef.current !== scope) return;
+            if (!isCurrent()) return null;
             setLoadError(err?.message || 'Failed to load contacts.');
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.
-        if (walletScopeRef.current === scope) {
-            await refreshUnpublished(() => walletScopeRef.current === scope);
+        if (isCurrent()) {
+            await refreshUnpublished(isCurrent);
         }
+        return loaded;
     }, [messaging, refreshUnpublished, walletId]);
 
     useEffect(() => {
@@ -394,7 +416,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     async function handleSave(event) {
         event.preventDefault();
-        if (submitting) return;
+        if (submittingRef.current) return;
         if (!formName.trim()) {
             setSubmitError('Name is required.');
             return;
@@ -442,6 +464,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setSubmitError(`This address is already saved for ${addressOwner.name}.`);
             return;
         }
+        submittingRef.current = true;
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -458,8 +481,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             await loadContacts();
             setMode(active ? 'detail' : 'list');
         } catch (err) {
+            // The conflict message tells the user to try again, so the next
+            // Save carries the version stored now instead of the one that
+            // just lost. The form keeps what the user typed.
+            if (active && isVersionConflict(err)) {
+                const rows = await loadContacts();
+                const fresh = rows?.find((contact) => contact.id === active.id);
+                if (fresh) setEditVersion(fresh.updatedAt);
+            }
             setSubmitError(userFacingMessage(err, 'Could not save this contact. Try again.'));
         } finally {
+            submittingRef.current = false;
             setSubmitting(false);
         }
     }
@@ -580,6 +612,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrOpen(false);
             setAddAddrValue('');
         } catch (err) {
+            // Reloading moves `active` to the stored version, so Add again
+            // appends to the current entries under the current version.
+            if (isVersionConflict(err)) await loadContacts();
             setAddAddrError(userFacingMessage(err, 'Could not save this address. Try again.'));
         } finally {
             setAddAddrSaving(false);
@@ -588,6 +623,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const header = (
         <PageHeader
+            nested={mode !== 'list'}
             onBack={() => {
                 if (mode !== 'list') {
                     if (mode === 'edit') leaveGuard.guardedOnBack();
@@ -599,35 +635,33 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             title={mode === 'edit'
                 ? (active ? 'Edit Contact' : 'New contact')
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
-            titleIcon={
-                mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' && active ? (
-                        <IdentityAvatar
-                            name={active.name}
-                            seed={active.avatarSeed || active.id}
-                            context="header"
-                        />
-                    )
-                    : (mode === 'edit' && active) ? <Icon.PencilIcon />
-                    : (mode === 'edit' && !active) ? <Icon.PlusIcon />
-                    : undefined
-            }
-            trailing={mode === 'list' ? (
-                <Button
-                    type="button"
-                    className={picker.addButton}
-                    onClick={() => { setActiveId(null); startEdit(null); }}
-                    aria-label="Add contact"
-                    title="Add contact"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : null}
         />
     );
+    // The page header holds only the title and Back, so Add contact sits in
+    // the list's actions row. An empty list offers Create first contact from
+    // its EmptyState instead, so the screen never shows the action twice.
+    const listActions = (emptyOffersCreate = false) => (mode === 'list' && !emptyOffersCreate ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => { setActiveId(null); startEdit(null); }}
+        >
+            Add contact
+        </Button>
+    ) : null);
 
+    // The list keeps its own offset: a contact or the edit form swaps into
+    // this same Screen, and with one key the short detail view clamped the
+    // list offset to its own height, so Back returned to the top. Those
+    // views open at the top.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            scrollKey={mode === 'list' ? 'list' : mode}
+            restoreScroll={mode === 'list'}
+        >
             {children}
             {confirmDialog.request ? (
                 <ConfirmModal
@@ -642,33 +676,40 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     if (loadError) {
         return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.error}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setContacts(null);
-                        return loadContacts();
-                    },
-                }}
-            >
-                {loadError}
-            </StatusMessage>,
+            <ListPage
+                notices={(
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setContacts(null);
+                                return loadContacts();
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                )}
+                actions={listActions()}
+            />,
         );
     }
 
     if (contacts === null) {
         return wrap(
-            <div role="status" aria-label="Loading contacts">
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage actions={listActions()}>
+                <div role="status" aria-label="Loading contacts">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
 
     if (mode === 'scan') {
         return (
             <ScanRoute
+                nested
                 onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
@@ -686,7 +727,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="New contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -694,7 +735,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <AddressField
                     label="Address"
                     value={entry0.address}
@@ -730,7 +771,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="Edit contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -738,7 +779,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
@@ -928,7 +969,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
                             <div className={picker.modalActions}>
-                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
                             </div>
                         </div>
@@ -941,79 +982,67 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // mode === 'list'
     return wrap(
         <ListPage
+            notices={(
+                <>
+                    {duplicateGroups.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-duplicate-names"
+                            recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
+                        >
+                            {duplicateGroups.length === 1
+                                ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
+                                : `${duplicateGroups.length} names are used by more than one contact.`}
+                            {' '}Merge them into one contact per person, with all of their addresses.
+                        </StatusMessage>
+                    ) : null}
+                    {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-publish-nudge"
+                            recovery={typeof onOpenBackup === 'function'
+                                ? { label: 'Open Backup', onAction: onOpenBackup }
+                                : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
+                        >
+                            {unpublished === 1
+                                ? 'One contact change is only on this device.'
+                                : `${unpublished} contact changes are only on this device.`}
+                            {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
+                            {typeof onOpenBackup === 'function' ? (
+                                <>
+                                    {' '}
+                                    <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
+                                        Not now
+                                    </Button>
+                                </>
+                            ) : null}
+                        </StatusMessage>
+                    ) : null}
+                </>
+            )}
+            actions={listActions(contacts.length === 0)}
             toolbar={(
-                <div className={picker.toolbar}>
-                    <div className={picker.search}>
-                        <Input
-                            type="search"
-                            size="md"
-                            enterKeyHint="search"
-                            autoCapitalize="off"
-                            placeholder="Search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                            aria-label="Search contacts"
-                        />
-                    </div>
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search contacts">
                     <NetworkFilterDropdown
                         value={networkFilter}
                         onChange={setNetworkFilter}
                         announceNetworkCount
                     />
-                    <div className={picker.sort}>
-                        <Select
-                            value={sortBy}
-                            onChange={(e) => {
-                                const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                                setSortBy(value);
-                                persistContactsSort(walletId, value);
-                            }}
-                            aria-label="Sort contacts"
-                        >
-                            {/* Native options remain because Select renders a native listbox. */}
-                            <option value="name">A to Z</option>
-                            {/* Native options remain because Select renders a native listbox. */}
-                            <option value="newest">Newest</option>
-                        </Select>
-                    </div>
-                </div>
+                    <Select
+                        value={sortBy}
+                        onChange={(e) => {
+                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                            setSortBy(value);
+                            persistContactsSort(walletId, value);
+                        }}
+                        aria-label="Sort contacts"
+                    >
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="name">A to Z</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="newest">Newest</option>
+                    </Select>
+                </ListToolbar>
             )}
         >
-            {duplicateGroups.length > 0 ? (
-                <StatusMessage
-                    id="contacts-duplicate-names"
-                    recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
-                >
-                    {duplicateGroups.length === 1
-                        ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
-                        : `${duplicateGroups.length} names are used by more than one contact.`}
-                    {' '}Merge them into one contact per person, with all of their addresses.
-                </StatusMessage>
-            ) : null}
-            {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
-                <StatusMessage
-                    id="contacts-publish-nudge"
-                    recovery={typeof onOpenBackup === 'function'
-                        ? { label: 'Open Backup', onAction: onOpenBackup }
-                        : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
-                >
-                    {unpublished === 1
-                        ? 'One contact change is only on this device.'
-                        : `${unpublished} contact changes are only on this device.`}
-                    {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
-                    {typeof onOpenBackup === 'function' ? (
-                        <>
-                            {' '}
-                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
-                                Not now
-                            </Button>
-                        </>
-                    ) : null}
-                </StatusMessage>
-            ) : null}
             {contacts.length === 0 ? (
                 <EmptyState
                     title="No contacts yet"

@@ -44,7 +44,12 @@ const RULES = [
         say: 'a wire opcode opens a sentence; say "Recipient list", "Airdrop" or "Cross-chain link"',
     },
     { re: /LIST action index/, say: 'names the LIST opcode; say "list number"' },
+    { re: /['"`]Copy txid['"`]/i, say: 'labels a button "Copy txid"; say "Copy transaction ID"' },
     { re: />\s*Txid\s*</, say: 'labels the id row "Txid"; say "Transaction ID"' },
+    {
+        re: /['"`][^'"`]*\bderivation index\b/i,
+        say: 'names the derivation index in a literal; say "address number"',
+    },
     {
         re: /(?:label|hint|sub):\s*'[^']*\b(?:in|the) mempool\b/i,
         say: 'names the mempool; say "the network"',
@@ -91,5 +96,9 @@ const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'loc
 assert.ok('pending.detail.seen' in en, 'the jargon sweep reads the pending block');
 const mempoolKeys = Object.keys(en).filter((key) => /mempool/i.test(String(en[key])));
 assert.deepEqual(mempoolKeys, [], 'en copy names the mempool; say "the network" instead');
+
+// Labels in the en dictionary say "transaction ID" and "address number", never the developer shorthand.
+const shorthandKeys = Object.keys(en).filter((key) => /\btxid\b|derivation index/i.test(String(en[key])));
+assert.deepEqual(shorthandKeys, [], 'en copy carries "txid" or "derivation index"; say "transaction ID" or "address number"');
 
 console.log(`wire-jargon-copy: ${files.length} shared sources and ${Object.keys(en).length} en strings clean`);

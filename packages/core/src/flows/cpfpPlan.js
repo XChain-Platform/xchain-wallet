@@ -15,9 +15,30 @@ export class CpfpPlanError extends Error {
     }
 }
 
-// One P2WPKH input, one P2WPKH output.
-const DEFAULT_CHILD_VBYTES = 110;
-const DUST_SATS = 546n;
+// Child vsize by the spent script type: one input of that type plus one output
+// back to the source address, which is assumed to share it. Overhead is 10 vB
+// legacy or 10.5 vB segwit (marker + flag), rounded up with the total.
+const CHILD_VBYTES_BY_SCRIPT = [
+    { name: 'p2pkh', test: /^76a914[0-9a-f]{40}88ac$/, vbytes: 192, segwit: false },
+    { name: 'p2wpkh', test: /^0014[0-9a-f]{40}$/, vbytes: 110, segwit: true },
+    { name: 'p2sh-p2wpkh', test: /^a914[0-9a-f]{40}87$/, vbytes: 134, segwit: true },
+    { name: 'p2tr', test: /^5120[0-9a-f]{64}$/, vbytes: 111, segwit: true },
+];
+
+// A witness program (v0 to v16) cannot be spent as planned on a chain without segwit.
+function isWitnessProgram(scriptPubKey) {
+    return /^(?:00|5[1-9a-f]|60)(?:14[0-9a-f]{40}|20[0-9a-f]{64})$/.test(scriptPubKey);
+}
+
+// Read the chain's dust floor and segwit flag; never fall back to Bitcoin's 546
+// (it would let a Dogecoin child output under the 100000-koinu floor through).
+function networkRules(network) {
+    const dust = Number(network?.dustThreshold);
+    if (!Number.isSafeInteger(dust) || dust <= 0) {
+        throw new CpfpPlanError('planCpfpChild: dust floor is unknown for this network');
+    }
+    return { dust: BigInt(dust), supportsSegwit: network.supportsSegwit !== false };
+}
 
 function sats(value, label) {
     if (typeof value === 'bigint' && value >= 0n) return value;
@@ -45,7 +66,10 @@ function wireAmount(value) {
  * @param {string[]} [opts.ownAddresses]
  * @param {string|number} opts.feeRate Target package feeRate in sat/vB.
  * @param {number} opts.parentVbytes
- * @param {number} [opts.childVbytes]
+ * @param {number} [opts.childVbytes] Defaults to the size for the spent script type; an
+ *   unrecognized script needs it passed explicitly.
+ * @param {{ dustThreshold: number, supportsSegwit?: boolean }} opts.network The SDK network
+ *   params (`sdk.wallet.getBitcoinNetwork()`); the plan is refused without a dust floor.
  * @returns {{ encoderOpts: object, parentFeeSats: string, childFeeSats: string, packageFeeSats: string, packageVbytes: number }}
  */
 export function planCpfpChild({
@@ -55,7 +79,8 @@ export function planCpfpChild({
     ownAddresses = [sourceAddress],
     feeRate,
     parentVbytes,
-    childVbytes = DEFAULT_CHILD_VBYTES,
+    childVbytes,
+    network,
 } = {}) {
     const txid = String(parentTxid || '').toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(txid)) throw new CpfpPlanError('planCpfpChild: parentTxid is invalid');
@@ -71,11 +96,11 @@ export function planCpfpChild({
         throw new CpfpPlanError('planCpfpChild: feeRate must be a positive satoshi-per-vbyte rate');
     }
     const pBytes = Number(parentVbytes);
-    const cBytes = Number(childVbytes);
     if (!Number.isSafeInteger(pBytes) || pBytes <= 0) {
         throw new CpfpPlanError('planCpfpChild: parentVbytes is required');
     }
-    if (!Number.isSafeInteger(cBytes) || cBytes <= 0) {
+    const explicitChild = childVbytes !== undefined && childVbytes !== null;
+    if (explicitChild && (!Number.isSafeInteger(Number(childVbytes)) || Number(childVbytes) <= 0)) {
         throw new CpfpPlanError('planCpfpChild: childVbytes must be a positive integer');
     }
 
@@ -104,6 +129,11 @@ export function planCpfpChild({
     if (!/^(?:[0-9a-f]{2})+$/.test(spend.scriptPubKey)) {
         throw new CpfpPlanError('planCpfpChild: wallet-owned output has no usable scriptPubKey');
     }
+    const scriptKind = CHILD_VBYTES_BY_SCRIPT.find((kind) => kind.test.test(spend.scriptPubKey));
+    if (!explicitChild && !scriptKind) {
+        throw new CpfpPlanError('planCpfpChild: cannot size the child for this script type; pass childVbytes');
+    }
+    const cBytes = explicitChild ? Number(childVbytes) : scriptKind.vbytes;
 
     // Package fee must reach feeRate over parent + child; the child carries
     // whatever the parent is short, and never less than feeRate on its own.
@@ -117,7 +147,12 @@ export function planCpfpChild({
     const childFloor = BigInt(roundedChildFee);
     const shortfall = packageFloor > parentFee ? packageFloor - parentFee : 0n;
     const childFee = shortfall > childFloor ? shortfall : childFloor;
-    if (spend.value < childFee + DUST_SATS) {
+    const rules = networkRules(network);
+    if (!rules.supportsSegwit && (scriptKind?.segwit || isWitnessProgram(spend.scriptPubKey))) {
+        throw new CpfpPlanError('planCpfpChild: this network has no segwit, so the wallet-owned output cannot be spent');
+    }
+    // The child's single output must clear the chain's own dust floor.
+    if (spend.value < childFee + rules.dust) {
         throw new CpfpPlanError('planCpfpChild: wallet-owned output cannot cover the child fee');
     }
 

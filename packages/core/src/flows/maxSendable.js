@@ -147,6 +147,7 @@ export function insufficientFundsQuote(err) {
  * @property {string} inputSats   satoshis the encoder selected (its own utxo view, not the balance API's)
  * @property {string} otherOutputSats  value of outputs the pipeline adds besides the payment (ADS, protocol fee)
  * @property {'encoder-quote'} source
+ * @property {boolean} [coinsHeld]  every coin at the address is held by another send from this wallet
  */
 
 /**

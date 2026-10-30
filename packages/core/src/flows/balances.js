@@ -26,9 +26,13 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
+import { decimalToBaseUnitsRounded } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+import { explorerFreshScope, explorerReadFresh } from '../sdk/explorerRateLimit.js';
+import { probeTxInclusion } from './txInclusionProbe.js';
+import { markPendingTxIndexed } from '../notifications/pendingTxBridge.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
@@ -150,7 +154,7 @@ function nativeFromAddress(addrResp, nativeTicker) {
     const balances = addrResp && addrResp.balances;
     const confirmed = atomicFromHumanAmount(balances?.confirmed, 8);
     if (confirmed == null || !nativeTicker) return null;
-    const pending = balances?.pending == null
+    const pending = balances?.pending == null || !isExactNonnegativeDecimal(balances.pending)
         ? null
         : atomicFromHumanAmount(balances.pending, 8);
     return {
@@ -175,37 +179,71 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
 // fixtures, dev mocks) are atomic already and pass through untouched.
 export function tokensFromBalances(balResp) {
-    const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
-    return rows
-        .map((r) => {
-            const divisibility = Number(r.divisibility ?? r.decimals ?? 0);
-            let quantity;
-            if (r.quantity != null) {
-                quantity = String(r.quantity);
-            } else {
-                const human = r.amount != null ? r.amount : '0';
-                quantity = atomicFromHumanAmount(human, divisibility) ?? String(human);
-            }
-            return {
-                tick: r.tick,
-                quantity,
-                divisibility,
-                displayName: r.displayName || r.display_name || r.tick,
-                imageUrl: r.imageUrl || r.image || null,
-            };
-        })
-        .filter((t) => t.tick);
+    return tokenRowsFromBalances(balResp).rows;
+}
+
+// A row that is not an object (null, a number) carries no tick; it is skipped
+// so the rest of the ledger stays readable, and the read is marked partial.
+function tokenRowsFromBalances(balResp) {
+    if (!balResp || !Array.isArray(balResp.data)) return { rows: [], invalid: true };
+    const rows = [];
+    let invalid = false;
+    for (const row of balResp.data) {
+        const normalized = normalizeTokenBalanceRow(row);
+        if (!normalized) {
+            invalid = true;
+            continue;
+        }
+        rows.push(normalized);
+    }
+    return { rows, invalid };
+}
+
+function normalizeTokenBalanceRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    const tick = typeof row.tick === 'string' ? row.tick.trim() : '';
+    const divisibility = Number(row.divisibility ?? row.decimals ?? 0);
+    if (!tick || !Number.isInteger(divisibility) || divisibility < 0 || divisibility > 18) return null;
+
+    let quantity;
+    if (row.quantity != null) {
+        if (!isExactNonnegativeInteger(row.quantity)) return null;
+        quantity = String(row.quantity).trim();
+    } else {
+        if (row.amount == null || !isExactNonnegativeDecimal(row.amount)) return null;
+        quantity = atomicFromHumanAmount(row.amount, divisibility);
+        if (quantity === null) return null;
+    }
+    return {
+        tick,
+        quantity,
+        divisibility,
+        displayName: row.displayName || row.display_name || tick,
+        imageUrl: row.imageUrl || row.image || null,
+    };
+}
+
+function isExactNonnegativeInteger(value) {
+    if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0;
+    if (typeof value === 'bigint') return value >= 0n;
+    return /^\d+$/.test(String(value).trim());
+}
+
+function isExactNonnegativeDecimal(value) {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) && value >= 0
+            && (!Number.isInteger(value) || Number.isSafeInteger(value));
+    }
+    return /^\+?\d+(?:\.\d+)?$/.test(String(value).trim());
 }
 
 // Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
-// Explorer aggregates can carry more fractional places than the asset allows,
-// so the boundary rounds half away from zero before applying the atomic scale.
-function atomicFromHumanAmount(amount, decimals) {
-    const scale = Number(decimals);
-    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
-    const rounded = roundDecimalString(amount, scale);
-    if (rounded === null) return null;
-    const atomic = decimalToBaseUnits(rounded, scale);
+// Explorer aggregates can carry more fractional places than the asset allows
+// (gas leaves a 0-decimal XCHAIN balance at 40.949). A held amount rounds
+// down and a pending debit rounds up, so Home never shows more than can be
+// spent: 40.949 reads 40, not 41.
+function atomicFromHumanAmount(amount, decimals, direction = 'down') {
+    const atomic = decimalToBaseUnitsRounded(amount, decimals, direction);
     return atomic === null ? null : atomic.toString();
 }
 
@@ -216,6 +254,104 @@ function subtractAtomic(quantity, debit) {
     } catch {
         return String(quantity);
     }
+}
+
+function pendingBalanceTxKey(chainId, txid) {
+    return `${chainId}/${String(txid || '').trim().toLowerCase()}`;
+}
+
+function hasPendingBalanceDebit(pending) {
+    return /^\d+$/.test(String(pending?.nativeDebitSats ?? ''))
+        || (Array.isArray(pending?.balanceDebits) && pending.balanceDebits.length > 0)
+        || Boolean(pending?.tick && pending.amount != null);
+}
+
+// Home re-reads balances every 20 seconds, and an unconfirmed send can stay
+// unconfirmed for many minutes. A hash with no block answer is not asked
+// again for a minute, so a waiting send does not spend the explorer's shared
+// per-IP budget on every poll. Kept in memory per SDK, so a reload probes at once.
+const NEGATIVE_INCLUSION_TTL_MS = 60_000;
+const negativeInclusionBySdk = new WeakMap();
+
+function negativeInclusionCache(sdk) {
+    if (!sdk || (typeof sdk !== 'object' && typeof sdk !== 'function')) return null;
+    let cache = negativeInclusionBySdk.get(sdk);
+    if (!cache) {
+        cache = new Map();
+        negativeInclusionBySdk.set(sdk, cache);
+    }
+    return cache;
+}
+
+/**
+ * Prove which live balance debits have reached a block before reading balances.
+ *
+ * The WebSocket confirmation is opportunistic and can be missed while the page
+ * is reloading. A positive hash lookup closes that gap. Silence, malformed
+ * hashes and request failures leave the record live, so an unconfirmed send
+ * keeps netting. The returned keys also protect this read when the durable
+ * status write fails after the inclusion proof succeeds.
+ */
+async function reconcileIndexedPendingBalanceTxs({
+    vault, pendingTxs, byChain, chainRegistry, sdkRegistry,
+}) {
+    const indexed = new Set();
+    const txidsByChain = new Map();
+    const originalsByKey = new Map();
+    for (const pending of Array.isArray(pendingTxs) ? pendingTxs : []) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status) || !hasPendingBalanceDebit(pending)) continue;
+        const txid = String(pending.txid || '').trim();
+        if (!/^[0-9a-f]{64}$/i.test(txid)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        if (!entries.some((entry) => entry?.address === pending.fromAddress)) continue;
+        if (!txidsByChain.has(chainId)) txidsByChain.set(chainId, new Set());
+        txidsByChain.get(chainId).add(txid);
+        const key = pendingBalanceTxKey(chainId, txid);
+        if (!originalsByKey.has(key)) originalsByKey.set(key, txid);
+    }
+
+    await Promise.all([...txidsByChain].map(async ([chainId, txids]) => {
+        const sdk = sdkRegistry.get(chainId);
+        const negatives = negativeInclusionCache(sdk);
+        const now = Date.now();
+        const toProbe = [...txids].filter((txid) => {
+            const until = negatives?.get(txid.toLowerCase());
+            return until === undefined || until <= now;
+        });
+        if (toProbe.length === 0) return;
+        let found;
+        try {
+            found = await probeTxInclusion({ sdk, txids: toProbe });
+        } catch {
+            return;
+        }
+        for (const txid of toProbe) {
+            const lowered = txid.toLowerCase();
+            if (found.has(lowered)) negatives?.delete(lowered);
+            else negatives?.set(lowered, now + NEGATIVE_INCLUSION_TTL_MS);
+        }
+        for (const txid of found.keys()) {
+            const key = pendingBalanceTxKey(chainId, txid);
+            indexed.add(key);
+            try {
+                await markPendingTxIndexed(vault, originalsByKey.get(key) || txid);
+            } catch {
+                // The positive inclusion still settles this read; a later read retries persistence.
+            }
+        }
+    }));
+    return indexed;
+}
+
+function withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry) {
+    if (!(indexed instanceof Set) || indexed.size === 0) return pendingTxs;
+    return pendingTxs.map((pending) => {
+        const chainId = pending && chainRegistry.chainIdFor(pending.chain, pending.network);
+        return chainId && indexed.has(pendingBalanceTxKey(chainId, pending.txid))
+            ? { ...pending, status: 'indexed' }
+            : pending;
+    });
 }
 
 /**
@@ -231,8 +367,16 @@ function subtractAtomic(quantity, debit) {
  */
 export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
     if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    // One transaction is one spend: signing an identical payment again leaves a
+    // second record with the same txid, and netting both would debit it twice.
+    const nettedTxids = new Set();
     for (const pending of pendingTxs) {
         if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        if (typeof pending.txid === 'string' && pending.txid) {
+            const key = `${pending.chain}/${pending.network}/${pending.fromAddress}/${pending.txid.toLowerCase()}`;
+            if (nettedTxids.has(key)) continue;
+            nettedTxids.add(key);
+        }
         const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
         const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
         for (const entry of entries) {
@@ -254,14 +398,14 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
                 if (!tick) continue;
                 if (native && tick === nativeTick) {
                     if (!appliedExactNativeDebit) {
-                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8, 'up');
                         if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
                     }
                     continue;
                 }
                 for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
                     if (String(token?.tick || '').toUpperCase() !== tick) continue;
-                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0, 'up');
                     if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
                 }
             }
@@ -281,7 +425,7 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
-    return shapeFromReads({ balResp, addrResp, nativeTicker });
+    return shapeFromReads({ balResp, addrResp, nativeTicker, address });
 }
 
 /**
@@ -296,7 +440,7 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
  *
  * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null }} reads
  */
-function shapeFromReads({ balResp, addrResp, nativeTicker }) {
+function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     const balOk = !(balResp instanceof Error);
     const addrOk = !(addrResp instanceof Error);
     if (!balOk && !addrOk) {
@@ -316,23 +460,38 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     // null amounts when its UTXO tracker is not answering, and that body is
     // "could not read", not "holds nothing". It is marked the same way a
     // thrown read is, so Home says Unavailable and the Confirm preview stops
-    // projecting the coin from zero.
-    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
+    // projecting the coin from zero. A confirmed amount that is not a
+    // non-negative decimal (text, a negative, an object) is the same
+    // "could not read": the number is unknown, not zero.
+    const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
+    const balUnreadable = balOk && tokenResult.invalid;
+    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp, address);
     const unavailable = [
-        ...(balOk ? [] : ['tokens']),
+        ...(balOk && !balUnreadable ? [] : ['tokens']),
         ...(addrOk && !addrUnreadable ? [] : ['native']),
     ];
     const reason = !balOk
         ? balResp?.message
-        : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message);
+        : (balUnreadable
+            ? 'balance service returned invalid token data'
+            : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message));
     return {
         native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,
-        tokens: balOk ? tokensFromBalances(balResp) : [],
+        tokens: tokenResult.rows,
         ...(unavailable.length > 0 ? {
             unavailable,
             unavailableReason: String(reason || 'balance read failed'),
         } : {}),
     };
+}
+
+// Bech32 is case-insensitive, so an echo that differs from the query only in
+// case is the same address; base58 is not, so anything else must match exactly.
+function answersForAddress(echoed, queried) {
+    if (echoed == null || typeof queried !== 'string' || !queried) return true;
+    if (typeof echoed !== 'string') return false;
+    if (echoed === queried) return true;
+    return /^[a-z0-9]+1[a-z0-9]+$/i.test(queried) && echoed.toLowerCase() === queried.toLowerCase();
 }
 
 /** Reason shown when `/address/` answered but carried no coin balance. */
@@ -341,10 +500,63 @@ export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
 // An `/address/` body that answered without a coin balance: the explorer's own
 // "tracker not answering" flag, or a confirmed amount that is missing. A body
 // whose confirmed amount is present (including "0") is a real reading.
-function nativeAnswerUnreadable(addrResp) {
+//
+// The explorer echoes the address it answered for. A body that names a
+// different address (another chain's, or another network's, from a replica
+// or cache keyed wrong) is a reading of someone else's coins, so it is "could
+// not read" too: crediting it would show, and let Max offer, coins this
+// address does not hold. A body without the field is judged on its amounts.
+function nativeAnswerUnreadable(addrResp, address) {
     if (!addrResp || typeof addrResp !== 'object') return true;
     if (addrResp.tracker_available === false) return true;
-    return addrResp.balances?.confirmed == null;
+    if (!answersForAddress(addrResp.address, address)) return true;
+    const confirmed = addrResp.balances?.confirmed;
+    return confirmed == null || !isExactNonnegativeDecimal(confirmed)
+        || atomicFromHumanAmount(confirmed, 8) === null;
+}
+
+// Demo wallets (issue #82). A demo wallet lands on mainnet, so every balance
+// read for it would hand its addresses to the public mainnet explorer. It is
+// recognised here by its vault record's `origin`, not by `isDemoWallet()`:
+// that helper reads `localStorage`, which the extension's background worker
+// does not have, and these flows run in the host. receiveAddress.js and
+// getActiveAddresses.js key on the same field for the same reason.
+async function isDemoOriginWallet(vault, walletId) {
+    try {
+        return (await vault.wallets.get(walletId))?.origin === 'demo';
+    } catch {
+        return false;
+    }
+}
+
+// The demo wallet that owns `address` on `chainId`, or null. Reads the wallet
+// list first and stops there when no demo wallet exists, so a real wallet's
+// read pays one in-memory list and nothing else. Any vault that cannot answer
+// (a stand-in without the collections) counts as "not a demo".
+async function demoWalletOwning({ vault, chainRegistry, chainId, address }) {
+    if (!chainRegistry) return null;
+    try {
+        const wallets = await vault.wallets.list();
+        const demoWallets = wallets.filter((w) => w && w.origin === 'demo');
+        if (demoWallets.length === 0) return null;
+        const [records, accounts] = await Promise.all([
+            vault.addresses.list(),
+            vault.accounts.list(),
+        ]);
+        const walletIdByAccount = new Map(accounts.map((a) => [a.id, a.walletId]));
+        for (const rec of records) {
+            if (!rec || rec.address !== address) continue;
+            if (chainRegistry.chainIdFor(rec.chain, rec.network) !== chainId) continue;
+            const owner = demoWallets.find((w) => (rec.accountId
+                ? walletIdByAccount.get(rec.accountId) === w.id
+                : Array.isArray(w.importedKeys)
+                    && w.importedKeys.some((k) => k && k.addressId === rec.id)));
+            if (owner) return owner.id;
+        }
+    } catch {
+        return null;
+    }
+    return null;
 }
 
 /**
@@ -367,6 +579,7 @@ function nativeAnswerUnreadable(addrResp) {
  * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]  resolves the chain's native ticker; when absent the native side degrades to null
  * @property {string} chainId
  * @property {string} address
+ * @property {import('../storage/Vault.js').Vault} [vault]  lets the read recognise a demo wallet's address and answer from its fixture instead of the explorer; callers without a vault read the explorer as before
  * @property {object} [opts]                  passed through to `sdk.getBalances`
  */
 
@@ -380,14 +593,62 @@ function nativeAnswerUnreadable(addrResp) {
  * @param {AddressBalancesOpts} params
  * @returns {Promise<unknown>}
  */
-export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, opts }) {
+export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, vault, opts }) {
     if (!sdkRegistry) throw new Error('addressBalances: sdkRegistry is required');
     if (!chainId) throw new Error('addressBalances: chainId is required');
     if (!address) throw new Error('addressBalances: address is required');
+    if (vault) {
+        const demoWalletId = await demoWalletOwning({ vault, chainRegistry, chainId, address });
+        if (demoWalletId) {
+            // Answered by the wallet aggregator, which short-circuits a demo
+            // wallet to its fixture, so this address reads exactly the row
+            // Home shows for it (the first address on a chain holds the
+            // fixture, the rest hold zero) and no request leaves the wallet.
+            const byChain = await walletBalances({
+                vault, walletId: demoWalletId, chainRegistry, sdkRegistry, chainId,
+            });
+            const entry = (byChain[chainId] || []).find((e) => e.address === address);
+            if (entry && entry.balances) return entry.balances;
+            return { native: null, tokens: [] };
+        }
+    }
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-    return fetchAddressShape({ sdk, address, nativeTicker, opts });
+    let pendingBeforeRead = [];
+    try {
+        pendingBeforeRead = vault ? await vault.pendingTxs.list() : [];
+    } catch {
+        pendingBeforeRead = [];
+    }
+    const indexed = vault && chainRegistry
+        ? await reconcileIndexedPendingBalanceTxs({
+            vault,
+            pendingTxs: pendingBeforeRead,
+            byChain: { [chainId]: [{ address }] },
+            chainRegistry,
+            sdkRegistry,
+        })
+        : new Set();
+    const readOpts = indexed.size > 0 ? { ...(opts || {}), fresh: true } : opts;
+    const readShape = () => fetchAddressShape({ sdk, address, nativeTicker, opts: readOpts });
+    const shape = indexed.size > 0
+        ? await explorerFreshScope(sdk, readShape)
+        : await readShape();
+    if (!vault || !chainRegistry || !shape || typeof shape !== 'object') return shape;
+    // Net this address's unconfirmed sends the way Home does, so the Send form's
+    // available amount and Max never offer coins an earlier send already spent.
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = pendingBeforeRead;
+    }
+    pendingTxs = withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry);
+    const netted = applyPendingBalanceDeltas(
+        { [chainId]: [{ address, balances: shape }] }, pendingTxs, chainRegistry,
+    );
+    return netted[chainId][0].balances;
 }
 
 /**
@@ -464,10 +725,14 @@ export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
  * timeline falls back to its confirmed-implies-indexed heuristic rather than
  * showing a perpetually-pending row.
  *
- * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} params
+ * A caller that refuses a signature on the height (a SLEEP whose wake block
+ * has passed) passes `fresh`, so the status read goes past the explorer
+ * wrapper's read reuse and the HTTP cache.
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string, fresh?: boolean }} params
  * @returns {Promise<IndexerWatermarkResult>}
  */
-export async function indexerWatermark({ sdkRegistry, chainId }) {
+export async function indexerWatermark({ sdkRegistry, chainId, fresh = false }) {
     if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
     if (!chainId) throw new Error('indexerWatermark: chainId is required');
     let sdk;
@@ -481,7 +746,8 @@ export async function indexerWatermark({ sdkRegistry, chainId }) {
     }
     let status;
     try {
-        status = await sdk.getStatus();
+        // getStatus() takes no options, so a fresh read names the same path.
+        status = fresh ? await explorerReadFresh(sdk, '/status', () => sdk.getStatus()) : await sdk.getStatus();
     } catch {
         return { chainId, watermark: null };
     }
@@ -705,7 +971,7 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
             resp ? resp[addr.address] : null, addr.address,
         );
         try {
-            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker });
+            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker, address: addr.address });
         } catch (e) {
             applyFailure(base, e);
         }
@@ -811,6 +1077,29 @@ export async function walletBalances({
         byChain[cid].push(a);
     }
 
+    // A demo wallet answers from its fixture: the same synthesized entries
+    // Home shows, built from the same grouped addresses, and no explorer
+    // request. Pending deltas are skipped because a demo wallet cannot
+    // broadcast, so it has none, and skipping them keeps this byte-identical
+    // to what Home renders.
+    if (await isDemoOriginWallet(vault, walletId)) {
+        return synthesizeDemoBalances(byChain);
+    }
+
+    let pendingBeforeRead = [];
+    try {
+        pendingBeforeRead = await vault.pendingTxs.list();
+    } catch {
+        pendingBeforeRead = [];
+    }
+    const indexed = await reconcileIndexedPendingBalanceTxs({
+        vault,
+        pendingTxs: pendingBeforeRead,
+        byChain,
+        chainRegistry,
+        sdkRegistry,
+    });
+
     // 3. Fetch balances per chain. Per-address failures are captured as entries
     //    with `error` set, whichever path served them.
     //
@@ -829,31 +1118,38 @@ export async function walletBalances({
             const sdk = sdkRegistry.get(cid);
             const descriptor = chainRegistry.descriptorFor(cid);
             const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-            const canBatch = sdk && typeof sdk.getBalancesBatch === 'function'
-                && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
-            if (!canBatch) {
-                result[cid] = await Promise.all(
-                    addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+            const hasIndexed = [...indexed].some((key) => key.startsWith(`${cid}/`));
+            const readOpts = hasIndexed ? { ...(opts || {}), fresh: true } : opts;
+            const readChain = async () => {
+                const canBatch = sdk && typeof sdk.getBalancesBatch === 'function'
+                    && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
+                if (!canBatch) {
+                    result[cid] = await Promise.all(
+                        addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts: readOpts })),
+                    );
+                    return;
+                }
+                const chunks = [];
+                for (let i = 0; i < addrs.length; i += BALANCES_BATCH_MAX_ADDRESSES) {
+                    chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
+                }
+                const perChunk = await Promise.all(
+                    chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts: readOpts })),
                 );
-                return;
-            }
-            const chunks = [];
-            for (let i = 0; i < addrs.length; i += BALANCES_BATCH_MAX_ADDRESSES) {
-                chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
-            }
-            const perChunk = await Promise.all(
-                chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts })),
-            );
-            // Flattened in chunk order, so the entries come back in the address
-            // order the caller passed however many requests it took.
-            result[cid] = perChunk.flat();
+                // Flattened in chunk order, so the entries come back in the address
+                // order the caller passed however many requests it took.
+                result[cid] = perChunk.flat();
+            };
+            if (hasIndexed) await explorerFreshScope(sdk, readChain);
+            else await readChain();
         }),
     );
     let pendingTxs = [];
     try {
         pendingTxs = await vault.pendingTxs.list();
     } catch {
-        pendingTxs = [];
+        pendingTxs = pendingBeforeRead;
     }
+    pendingTxs = withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry);
     return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }

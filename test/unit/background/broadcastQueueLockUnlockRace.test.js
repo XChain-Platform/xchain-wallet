@@ -18,16 +18,23 @@
 // must still lose the second host's entry, which proves the race is reached.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import {
     createBroadcastQueueStore,
     sealBroadcastQueueStore,
 } from '../../../packages/extension/src/background/broadcastQueueStore.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
 const KEY = 'xchain.broadcastQueue';
+const SIGNED_E = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const SIGNED_F = signedTxFor({
+    inputs: [{ type: 'p2wpkh' }],
+    outputs: [{ script: `0014${'dd'.repeat(20)}`, value: 89_000 }],
+});
 
 // Drain the fire-and-forget persists and timers before asserting on storage.
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
@@ -107,7 +114,11 @@ function openVault(table, hold = null) {
  * the host gets its own adapter and state, which is the per-host negative control.
  */
 function makeHost({ vault, broadcastTx, store }) {
-    const sdk = { encoder: { broadcastTx } };
+    const tracker = trackerFor(SIGNED_E.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault,
         chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }), list: () => [], chainIdFor: () => CHAIN },
@@ -129,10 +140,10 @@ function makeHost({ vault, broadcastTx, store }) {
  */
 function seedQueuedE(chromeStore, table) {
     chromeStore[KEY] = {
-        queues: { [W]: [{ id: 'q-E', chainId: CHAIN, signedTxHex: 'hex-E', summary: 'E', signedAt: 1, pendingTxId: 'p-E' }] },
+        queues: { [W]: [{ id: 'q-E', chainId: CHAIN, signedTxHex: SIGNED_E.txHex, summary: 'E', signedAt: 1, pendingTxId: 'p-E' }] },
         settlements: [],
     };
-    table.rows.set('p-E', { id: 'p-E', status: 'queued', txHex: 'hex-E', txid: null, createdAt: '2026-01-01T00:00:00.000Z' });
+    table.rows.set('p-E', { id: 'p-E', status: 'queued', txHex: SIGNED_E.txHex, txid: null, createdAt: '2026-01-01T00:00:00.000Z' });
 }
 
 /**
@@ -157,9 +168,9 @@ async function lockMidBroadcast({ shared }) {
     const broadcastTx2 = vi.fn(async () => 'txid-second-send');
     const h2 = makeHost({ vault: v2.vault, broadcastTx: broadcastTx2, store });
     await settle();
-    const f = await h2('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-F', summary: 'F' });
+    const f = await h2('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED_F.txHex, summary: 'F' });
     expect(f.ok).toBe(true);
-    expect(chromeStore[KEY].queues[W].map((x) => x.signedTxHex)).toContain('hex-F');
+    expect(chromeStore[KEY].queues[W].map((x) => x.signedTxHex)).toContain(SIGNED_F.txHex);
     return { chromeStore, table, store, gate, inFlight, h2, broadcastTx2 };
 }
 
@@ -173,7 +184,7 @@ describe('broadcast queue across a lock and unlock', () => {
         gate.resolve('txid-E');
         await inFlight;
         await settle();
-        expect(storedHexes(chromeStore)).not.toContain('hex-F');
+        expect(storedHexes(chromeStore)).not.toContain(SIGNED_F.txHex);
     });
 
     it('a late resolve on the torn-down host keeps the next host\'s save and settles E', async () => {
@@ -184,8 +195,8 @@ describe('broadcast queue across a lock and unlock', () => {
         await settle();
 
         // F survives on disk, and E left both the disk and the next host's list.
-        expect(storedHexes(chromeStore)).toContain('hex-F');
-        expect(storedHexes(chromeStore)).not.toContain('hex-E');
+        expect(storedHexes(chromeStore)).toContain(SIGNED_F.txHex);
+        expect(storedHexes(chromeStore)).not.toContain(SIGNED_E.txHex);
         // Host 1's vault was closed, so the landed write is journaled, not lost.
         const journal = chromeStore[KEY].settlements;
         expect(journal.map((s) => s.pendingTxId)).toEqual(['p-E']);
@@ -194,7 +205,7 @@ describe('broadcast queue across a lock and unlock', () => {
 
         // Host 2's open vault drains the journal: E reads 'broadcast', never 'failed'.
         const list = await h2('broadcast.queue.list', { walletId: W });
-        expect(list.result.map((x) => x.signedTxHex)).toEqual(['hex-F']);
+        expect(list.result.map((x) => x.signedTxHex)).toEqual([SIGNED_F.txHex]);
         expect(table.rows.get('p-E').status).toBe('broadcast');
         expect(table.rows.get('p-E').txid).toBe('txid-E');
         expect(chromeStore[KEY].settlements).toEqual([]);
@@ -212,7 +223,7 @@ describe('broadcast queue across a lock and unlock', () => {
         expect(discard.error.message).toMatch(/already being broadcast/);
         expect(table.rows.has('p-E')).toBe(true);
         const listed = await h2('broadcast.queue.list', { walletId: W });
-        expect(listed.result.map((x) => x.signedTxHex)).toContain('hex-E');
+        expect(listed.result.map((x) => x.signedTxHex)).toContain(SIGNED_E.txHex);
 
         gate.resolve('txid-E');
         await inFlight;
@@ -232,15 +243,15 @@ describe('broadcast queue across a lock and unlock', () => {
 
         // E is still queued on both surfaces, so the user can still act on it.
         const listed = await h2('broadcast.queue.list', { walletId: W });
-        expect(listed.result.map((x) => x.signedTxHex)).toContain('hex-E');
-        expect(storedHexes(chromeStore)).toContain('hex-E');
+        expect(listed.result.map((x) => x.signedTxHex)).toContain(SIGNED_E.txHex);
+        expect(storedHexes(chromeStore)).toContain(SIGNED_E.txHex);
         expect(table.rows.get('p-E').status).toBe('queued');
 
         const again = await h2('broadcast.queue.discard', { walletId: W, id: 'q-E' });
         expect(again.result).toEqual({ discarded: true });
         expect(table.rows.has('p-E')).toBe(false);
         const after = await h2('broadcast.queue.list', { walletId: W });
-        expect(after.result.map((x) => x.signedTxHex)).not.toContain('hex-E');
+        expect(after.result.map((x) => x.signedTxHex)).not.toContain(SIGNED_E.txHex);
     });
 
     it('a journal record the torn-down host writes during the next host\'s flush survives it', async () => {

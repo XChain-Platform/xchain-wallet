@@ -78,9 +78,10 @@ assert.match(
     + ' it through the `storage` barrel, not through backend.js directly',
 );
 
-// The destructive escape is offered for exactly two kinds, the ones where
-// the user cannot proceed without it: a corrupt blob, and a blob the
-// browser evicted while the meta record stayed behind. Asserted here as
+// The destructive escape is offered for exactly three kinds, the ones where
+// the user cannot proceed without it: a corrupt blob, a blob the browser
+// evicted while the meta record stayed behind, and an install whose meta
+// outlived its vault (a reset that stopped part way). Asserted here as
 // well as in the unit test because this is the property whose regression is
 // worst: an erase button on a LOCKED vault destroys a wallet that was never
 // damaged, to fix a device the user had simply not unlocked.
@@ -90,12 +91,12 @@ assert.ok(escapeSet, 'the escape kinds are declared once, as OFFERS_ESCAPE');
 const escapeKinds = escapeSet[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean).sort();
 assert.deepEqual(
     escapeKinds,
-    ['corrupt', 'evicted'],
-    'the escape is offered for corrupt and evicted alone, never locked or unavailable',
+    ['corrupt', 'evicted', 'incomplete'],
+    'the escape is offered for corrupt, evicted and incomplete alone, never locked or unavailable',
 );
 assert.match(
     screenSrc,
-    /offersEscape && !wipeOpen/,
+    /offersEscape && !wipeOpen && incomplete[\s\S]*offersEscape && !wipeOpen && !incomplete/,
     'the escape link is gated on the declared escape kinds',
 );
 assert.match(
@@ -103,9 +104,20 @@ assert.match(
     /offersEscape && wipeOpen/,
     'the wipe panel is gated on the declared escape kinds',
 );
+const lockedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx');
 assert.match(
     screenSrc,
-    /confirmText\.trim\(\)\.toUpperCase\(\) !== 'WIPE'/,
+    /isExactTypedConfirmation\(confirmText, 'WIPE'\)/,
+    'the wipe compares the typed word with the shared exact-match gate',
+);
+assert.match(
+    lockedSrc,
+    /isExactTypedConfirmation\(wipeConfirmText, 'WIPE'\)/,
+    'the Locked screen uses the same shared exact-match gate',
+);
+assert.match(
+    screenSrc,
+    /if \(!isExactTypedConfirmation\(confirmText, 'WIPE'\)\) return;/,
     'the wipe stays behind the same type-WIPE gate the Locked screen uses',
 );
 
@@ -114,6 +126,6 @@ console.log(
     + ' failure with vaultErrorKind at the catch and render the shared'
     + ' VaultUnavailable screen, non-vault errors still fall back to Loading,'
     + ' vaultErrorKind is exported from the storage barrel, and the destructive'
-    + ' escape is gated on corrupt and evicted alone behind the type-WIPE'
+    + ' escape is gated on corrupt, evicted and incomplete alone behind the type-WIPE'
     + ' confirmation)',
 );

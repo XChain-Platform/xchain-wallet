@@ -75,9 +75,10 @@ describe('Locked password failure feedback', () => {
         const banner = screen.getByRole('status');
         expect(banner).toHaveTextContent(
             'Too many incorrect passwords on this device. '
-            + 'Wait 5 seconds before trying again. '
-            + 'Changing networks will not skip the wait.',
+            + 'Wait 5 seconds before trying again.',
         );
+        // The lock screen has no network control, so the banner names none.
+        expect(banner.textContent).not.toMatch(/network/i);
         expect(screen.getAllByText(/too many incorrect passwords on this device/i))
             .toHaveLength(1);
         expect(password).toHaveValue('');
@@ -121,5 +122,25 @@ describe('Locked password failure feedback', () => {
         const bodyText = document.body.textContent || '';
         expect(bodyText).not.toMatch(/rate.?limit/i);
         expect(bodyText).not.toMatch(/ip address/i);
+    });
+});
+
+describe('Locked lockout countdown', () => {
+    it('says the wait once, in the banner, and keeps the button label', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        recordLockoutFailure();
+        recordLockoutFailure();
+
+        mount();
+        await act(async () => {
+            submitPassword();
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent(/wait 5 seconds before trying again/i);
+        expect(screen.getAllByText(/5 seconds/)).toHaveLength(1);
+        const unlock = screen.getByRole('button', { name: 'Unlock Wallet' });
+        expect(unlock).toBeDisabled();
+        expect(unlock).not.toHaveTextContent(/second|locked/i);
     });
 });

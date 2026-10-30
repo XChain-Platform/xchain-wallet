@@ -2,7 +2,7 @@
 
 Living doc. The rule it exists to enforce: **if you find yourself copying CSS or JSX between two routes, lift it.** When in doubt, prefer one of the shared primitives below over re-rolling from scratch.
 
-The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
+The live catalog is the style guide page, published at https://wallet.xchain.io/style-guide/ with every web deploy and served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
 
 ## Page templates
 
@@ -59,7 +59,7 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `360px` | the extension popup width: fallbacks at or below the popup |
 | `400px` | extension-width detail layouts |
 | `420px` | narrow row and toolbar stacking |
-| `480px` | compact grids, dense controls and the header network badge |
+| `480px` | compact grids and dense controls |
 | `600px` | the form and narrow route boundary |
 | `640px` | rail layout and sidebar begin |
 | `900px` | full layout and labelled sidebar begin |
@@ -141,7 +141,10 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `title` | centered title text |
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
-| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as medium icon controls |
+| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as icon controls at the Back control size (small), with a touch-floor hit area, so the header keeps one height |
+| `nested` | marks a sub-screen that shares its parent route id (a Settings section, a Contacts detail, a review step), so Back always shows |
+
+**When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, History, Send and Scan. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
 
 **Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
 
@@ -257,7 +260,7 @@ Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete
     onChange={(e) => setToAddress(e.target.value)}
     onPaste={onAddressPaste}
     suggestions={suggestions}
-    placeholder="Enter or paste an address or name…"
+    placeholder="Enter an address or name…"
 />
 ```
 
@@ -265,7 +268,8 @@ Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete
 - Always pass `suggestions`; it's what makes the combobox useful. Source them from contacts + recent send history scoped to the active chain.
 - Treat paste as a special event (`onPaste`) so you can run paste-time validation (chain match, novelty check) before the value lands in state.
 - Let `AddressCombobox` reserve the right padding and position its icon action. Do not wrap it in another absolutely-positioned button.
-- One inline action max (the most-used: typically Address Book). If you have multiple secondary actions (scan, paste-from-clipboard, etc.), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
+- One inline action max (the most-used: typically Address Book). If you have more secondary actions (scan, say), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
+- No Paste button in or beside any field: users paste with the native menu and shortcuts, and `onPaste` sees that paste.
 
 ## Fee selector
 

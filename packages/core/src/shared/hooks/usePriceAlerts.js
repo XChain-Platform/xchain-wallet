@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { PRICE_ALERTS_CHANGED_EVENT } from '../../flows/priceAlerts.js';
 
 /**
  * @typedef {Object} UsePriceAlertsResult
@@ -79,6 +80,14 @@ export function usePriceAlerts(walletId) {
             aliveRef.current = false;
             requestRef.current += 1;
         };
+    }, [reload]);
+
+    // The watcher disarms a fired alert outside this hook; re-read when it says so.
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const onChanged = () => { reload(); };
+        window.addEventListener(PRICE_ALERTS_CHANGED_EVENT, onChanged);
+        return () => window.removeEventListener(PRICE_ALERTS_CHANGED_EVENT, onChanged);
     }, [reload]);
 
     const addAlert = useCallback(async ({ chainId, direction, targetFiat, fiatCurrency }) => {

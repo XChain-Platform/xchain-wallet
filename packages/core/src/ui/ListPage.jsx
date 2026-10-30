@@ -24,15 +24,26 @@ import styles from './ListPage.module.css';
  * Use EmptyState as the content when there is nothing to list, and
  * SectionHeader to title groups within the list.
  *
+ * The page header holds only the title and Back, so a screen's own actions
+ * (create, refresh, open a related screen) go in the actions row. The page
+ * lays out its parts in one fixed order: notices first, then the actions
+ * row, then the intro, the toolbar and the content. When the list is empty
+ * and its EmptyState offers the same create action, leave that action out
+ * of the actions row so the screen never shows it twice.
+ *
  * @param {object} props
+ * @param {import('react').ReactNode} [props.notices]   status messages about this screen, shown first
+ * @param {import('react').ReactNode} [props.actions]   buttons for the screen's own actions
  * @param {import('react').ReactNode} [props.toolbar]   search / filter / sort row above the content
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the toolbar
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
-export function ListPage({ toolbar, intro, className, children, ...rest }) {
+export function ListPage({ notices, actions, toolbar, intro, className, children, ...rest }) {
     return (
         <div className={[styles.page, className].filter(Boolean).join(' ')} {...rest}>
+            {notices || null}
+            {actions ? <div className={styles.actions} data-xc-page-actions="">{actions}</div> : null}
             {intro ? <p className={styles.intro}>{intro}</p> : null}
             {toolbar ? <div className={styles.toolbar}>{toolbar}</div> : null}
             {children}

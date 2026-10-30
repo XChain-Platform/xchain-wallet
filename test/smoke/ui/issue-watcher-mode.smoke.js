@@ -13,7 +13,7 @@
 // First action form to adopt the FOLLOWUP 5 pattern:
 //   - useWalletMode hook for isWatcherMode derivation
 //   - messaging.buildActionPsbtRequest for the encode-only submit path
-//   - Shared <WatcherResultPanel> at the done stage when result.psbtHex
+//   - Shared <ResultScreen> at the done stage when result.psbtHex
 //     is set and there's no txid
 //   - SignCredentials replaced by an explanatory hint at review stage
 //   - Submit button label flips to "Create transaction for signing"
@@ -41,8 +41,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
-    'imports the shared WatcherResultPanel',
+    /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/,
+    'imports the shared ResultScreen',
 );
 
 // ─── 2. Hook usage -----------------------------------------------
@@ -77,17 +77,17 @@ assert.match(
     'HW availability gate skipped in watcher mode',
 );
 
-// ─── 4. Done-stage WatcherResultPanel branch ---------------------
+// ─── 4. Done-stage ResultScreen branch ---------------------
 
 assert.match(
     formSrc,
-    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/,
-    'done stage renders WatcherResultPanel when result.psbtHex is set',
+    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/,
+    'done stage renders ResultScreen when result.psbtHex is set',
 );
 assert.match(
     formSrc,
     /onBuildAnother=\{handleBuildAnother\}/,
-    'WatcherResultPanel wired to handleBuildAnother',
+    'ResultScreen wired to handleBuildAnother',
 );
 
 // ─── 5. Review-stage hint replaces SignCredentials ---------------

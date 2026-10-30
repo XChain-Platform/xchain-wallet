@@ -9,12 +9,16 @@
 // contact legal@dankest.llc.
 
 // Popup and side-panel pages are separate JavaScript realms. The background
-// publishes committed session, wallet, settings and network changes through
+// publishes committed session, wallet, wallet-record, account, settings and network
+// changes through
 // chrome.storage.session so every open trusted extension surface sees them.
 
 export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
-const KINDS = new Set(['session', 'wallet', 'settings', 'network']);
+// 'wallet' names the newly active wallet; 'wallets' reports a change to the
+// wallet records themselves (an added, renamed or removed wallet) and
+// 'accounts' one to a wallet's accounts.
+const KINDS = new Set(['session', 'wallet', 'wallets', 'accounts', 'settings', 'network']);
 
 /**
  * @param {{
@@ -33,7 +37,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 
     return {
         /**
-         * @param {'session' | 'wallet' | 'settings' | 'network'} kind
+         * @param {'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network'} kind
          * @param {Record<string, unknown>} [payload]
          * @returns {Promise<boolean>}
          */
@@ -65,7 +69,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 }
 
 /**
- * @param {(event: { kind: 'session' | 'wallet' | 'settings' | 'network', payload: Record<string, unknown>, revision: string }) => void} onEvent
+ * @param {(event: { kind: 'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network', payload: Record<string, unknown>, revision: string }) => void} onEvent
  * @param {{ addListener: Function, removeListener: Function }} [storageChanges]
  * @returns {() => void}
  */
@@ -87,28 +91,104 @@ export function attachSurfaceStateListener(onEvent, storageChanges) {
     return () => changes.removeListener(listener);
 }
 
+// Sent over chrome.runtime rather than storage: the background sends it when
+// chrome.storage.session refused the auto-lock arm, so the storage broadcast
+// above can be refused too.
+export const AUTO_LOCK_UNSAVED_MESSAGE = 'xchain.autoLockUnsaved';
+
+/**
+ * Tell every open trusted extension surface that the wallet locked because
+ * its auto-lock timer could not be saved.
+ *
+ * @param {{ sendMessage?: Function }} [runtime]
+ * @returns {Promise<void>}
+ */
+export async function announceAutoLockUnsaved(runtime) {
+    const rt = runtime ?? /** @type {any} */ (globalThis.chrome?.runtime);
+    if (typeof rt?.sendMessage !== 'function') return;
+    try {
+        // No surface open means no receiver, which rejects; nothing is owed.
+        await rt.sendMessage({ type: AUTO_LOCK_UNSAVED_MESSAGE });
+    } catch { /* no surface is listening */ }
+}
+
+/**
+ * @param {() => void} onUnsaved
+ * @param {{ addListener: Function, removeListener: Function }} [onMessage]
+ * @returns {() => void}
+ */
+export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
+    const events = onMessage ?? /** @type {any} */ (globalThis.chrome?.runtime?.onMessage);
+    if (typeof onUnsaved !== 'function' || typeof events?.addListener !== 'function') {
+        return () => {};
+    }
+    const listener = (message, sender) => {
+        if (message?.type !== AUTO_LOCK_UNSAVED_MESSAGE) return undefined;
+        // Only this extension's own background may say the wallet locked.
+        const ownId = globalThis.chrome?.runtime?.id;
+        if (ownId && sender?.id !== ownId) return undefined;
+        onUnsaved();
+        return undefined;
+    };
+    events.addListener(listener);
+    return () => events.removeListener(listener);
+}
+
 /**
  * Apply a validated background event to one popup or side-panel realm.
  * Callers inject React setters so this small state machine stays unit-testable.
  *
  * @param {{ kind: string, payload?: Record<string, unknown> }} event
  * @param {{
- *   refreshSession?: () => unknown,
+ *   refreshSession?: (payload?: Record<string, unknown>) => unknown,
  *   selectWallet?: (walletId: string) => unknown,
+ *   refreshWallets?: () => unknown,
+ *   remountScreens?: () => unknown,
+ *   walletRemoved?: (walletId: string) => unknown,
+ *   accountsChanged?: (walletId: string) => unknown,
  *   settingsChanged?: (settings: Record<string, unknown>) => unknown,
  *   remountNetworkState?: () => unknown,
  * }} handlers
  */
 export function applySurfaceStateEvent(event, handlers) {
     if (event?.kind === 'session') {
-        return handlers.refreshSession?.();
+        return handlers.refreshSession?.(event.payload);
     }
     if (event?.kind === 'wallet') {
         const walletId = event.payload?.walletId;
         if (typeof walletId === 'string' && walletId) {
+            // The wallet may have been added in another surface, so this one's
+            // list can lack it and would name it "Unnamed wallet".
+            handlers.refreshWallets?.();
             return handlers.selectWallet?.(walletId);
         }
         return undefined;
+    }
+    if (event?.kind === 'wallets') {
+        if (event.payload?.change === 'added') {
+            // A wallet created, imported or restored in another surface joins
+            // this one's wallet list. No remount: the surface that made the
+            // add hears this too, and a remount would wipe the result or
+            // notice step its add flow is still showing.
+            return handlers.refreshWallets?.();
+        }
+        if (event.payload?.change === 'renamed') {
+            // Screens that fetched their own wallet rows (picker, details) keep
+            // the old name until they mount again.
+            handlers.refreshWallets?.();
+            return handlers.remountScreens?.();
+        }
+        if (event.payload?.change === 'removed') {
+            const walletId = event.payload?.walletId;
+            if (typeof walletId !== 'string' || !walletId) return undefined;
+            return handlers.walletRemoved?.(walletId);
+        }
+        return undefined;
+    }
+    if (event?.kind === 'accounts') {
+        const walletId = event.payload?.walletId;
+        if (typeof walletId !== 'string' || !walletId) return undefined;
+        return handlers.accountsChanged?.(walletId);
     }
     if (event?.kind === 'settings' || event?.kind === 'network') {
         const settings = event.payload?.settings;

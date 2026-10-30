@@ -51,7 +51,7 @@ describe('ConnectApproval validation branches', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'This connection request is missing or invalid.',
         );
-        expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
     });
 
     it('adds an unselected chain and uses an account id as its label', () => {
@@ -68,6 +68,6 @@ describe('ConnectApproval validation branches', () => {
         fireEvent.click(chainBox);
 
         expect(chainBox).toBeChecked();
-        expect(screen.getByRole('button', { name: 'Connect' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
     });
 });

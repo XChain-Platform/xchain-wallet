@@ -65,4 +65,38 @@ describe('<Chip>', () => {
         expect(css).toMatch(/\.toggle:disabled\s*{[^}]*border-color:\s*var\(--xc-control-disabled-border\)/s);
         expect(css).not.toMatch(/color-mix\(|:has\(/);
     });
+
+    it('shares small-button type and radius without replacing Chip geometry', () => {
+        const css = readFileSync('packages/core/src/ui/Chip.module.css', 'utf8');
+        const buttonCss = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+        const ruleBody = (source, selector) => {
+            const match = source.match(new RegExp(`(?:^|\\n)\\${selector}\\s*\\{([^}]*)\\}`));
+            expect(match, `${selector} rule`).not.toBeNull();
+            return match[1];
+        };
+        const declaration = (body, property) => {
+            const match = body.match(new RegExp(`(?:^|;|\\s)${property}:\\s*([^;]+);`));
+            return match ? match[1].trim() : null;
+        };
+
+        const chip = ruleBody(css, '.chip');
+        const toggle = ruleBody(css, '.toggle');
+        const btn = ruleBody(buttonCss, '.btn');
+        const sm = ruleBody(buttonCss, '.sm');
+
+        expect(css).not.toMatch(/composes:\s*btn\b/);
+        expect(declaration(chip, 'border')).toBe('1px solid var(--xc-control-border)');
+        expect(declaration(chip, 'justify-content')).toBe('center');
+        expect(declaration(chip, 'padding')).toBe('0 var(--xc-space-3)');
+        expect(declaration(chip, 'height')).toBe('var(--xc-control-h-sm)');
+
+        expect(declaration(toggle, 'border-radius')).toBe('var(--xc-control-radius)');
+        expect(declaration(btn, 'border-radius')).toMatch(/^var\(--xc-control-radius\b/);
+
+        expect(declaration(toggle, 'font-size')).toBe('var(--xc-control-font-sm)');
+        expect(declaration(sm, '--xc-button-font-size')).toMatch(/^var\(--xc-control-font-sm\b/);
+        expect(declaration(btn, 'font-size')).toMatch(/^var\(--xc-button-font-size\b/);
+
+        expect(declaration(toggle, 'font-weight')).toBe(declaration(btn, 'font-weight'));
+    });
 });

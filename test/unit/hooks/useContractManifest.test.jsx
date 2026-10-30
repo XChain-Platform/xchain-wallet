@@ -50,6 +50,26 @@ describe('useContractManifest', () => {
         });
     });
 
+    it('asks again after an unavailable answer instead of keeping it for the session', async () => {
+        const messaging = {
+            getContractManifest: vi.fn()
+                .mockResolvedValueOnce(UNAVAILABLE)
+                .mockResolvedValueOnce({ permissions: ['SEND'], maxTakeBps: null, status: 'declared' }),
+        };
+        const args = { chainId: 'bitcoin-regtest', contractActionIndex: 'manifest-retry-1' };
+        const first = renderHook(() => useContractManifest(args), { wrapper: wrapperFor(messaging) });
+        await waitFor(() => expect(messaging.getContractManifest).toHaveBeenCalledTimes(1));
+        await act(async () => { await Promise.resolve(); });
+        expect(first.result.current).toEqual(UNAVAILABLE);
+        first.unmount();
+
+        const second = renderHook(() => useContractManifest(args), { wrapper: wrapperFor(messaging) });
+        await waitFor(() => expect(second.result.current).toEqual({
+            permissions: ['SEND'], maxTakeBps: null, status: 'declared',
+        }));
+        expect(messaging.getContractManifest).toHaveBeenCalledTimes(2);
+    });
+
     it('does not fetch while skipped or when a lookup key is missing', () => {
         const messaging = { getContractManifest: vi.fn() };
         const skipped = renderHook(() => useContractManifest({

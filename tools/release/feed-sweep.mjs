@@ -81,6 +81,7 @@ export const FINDINGS = {
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
+    'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
 };
@@ -163,8 +164,12 @@ export function parseJsonPointerVersion(text) {
     return typeof parsed.version === 'string' ? parsed.version.trim() : '';
 }
 
-/** The client's cap on the whole feed body (directUpdateCheck.js MAX_FEED_BYTES). */
-const DIRECT_FEED_MAX_CHARS = 4096;
+/**
+ * The client's cap on the whole feed body, in UTF-8 bytes: the Android bridge
+ * (XChainVaultPlugin.java UPDATE_FEED_MAX_BYTES) drops a longer body before
+ * directUpdateCheck.js applies its own MAX_FEED_BYTES to the decoded text.
+ */
+const DIRECT_FEED_MAX_BYTES = 4096;
 
 /** The client's version rule (directUpdateCheck.js SEMVER_RE), verbatim. */
 const DIRECT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -182,18 +187,19 @@ const DIRECT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
  * `test/smoke/audits/feed-sweep.smoke.js`, which drives BOTH functions
  * over one set of bodies wherever both files exist.
  *
- * The size is measured the client's way - `text.length` on the decoded
- * body, not a stat of the file - because that is the comparison
- * `checkForDirectUpdate` actually makes before it parses anything.
+ * The size is measured in UTF-8 bytes of the body, because the only lane
+ * that self-updates is Android, whose native bridge caps the bytes it reads
+ * before `checkForDirectUpdate` runs; for any string that count is at least
+ * the `text.length` the JS check compares, so the byte rule covers both.
  *
  * @param {string} text
  * @returns {string} the reason, or '' when the client accepts it
  */
 export function directFeedRejection(text) {
     if (typeof text !== 'string') return 'not text';
-    if (text.length > DIRECT_FEED_MAX_CHARS) {
-        return `${text.length} characters, over the client's `
-            + `${DIRECT_FEED_MAX_CHARS}-character cap`;
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (bytes > DIRECT_FEED_MAX_BYTES) {
+        return `${bytes} bytes, over the client's ${DIRECT_FEED_MAX_BYTES}-byte cap`;
     }
     let parsed;
     try { parsed = JSON.parse(text); } catch { return 'not parseable as JSON'; }
@@ -222,11 +228,13 @@ export function directFeedRejection(text) {
  *
  * @param {string} text
  * @param {string} name  the manifest's file name, for the tag fallback
- * @returns {{tag: string, entries: Map<string,string>}}
+ * @returns {{tag: string, gate: string, entries: Map<string,string>}}
+ *   `gate` is the signed `# dev-mock-gate:` value, '' when the header is absent
  */
 export function parseManifestText(text, name) {
     const entries = new Map();
     let tag = '';
+    let gate = '';
 
     for (const rawLine of text.split('\n')) {
         // STRIP THE CARRIAGE RETURN, as every other reader of these files
@@ -242,12 +250,18 @@ export function parseManifestText(text, name) {
         const line = rawLine.replace(/\r$/, '');
         const header = /^# tag:\s*(.+)$/.exec(line);
         if (header) { tag = header[1].trim(); continue; }
+        // Read the gate key exactly as updateVerify.js parseManifest splits it.
+        const split = line.startsWith('#') ? line.indexOf(': ') : -1;
+        if (split > 1 && line.slice(2, split).trim() === 'dev-mock-gate') {
+            gate = line.slice(split + 2).trim();
+            continue;
+        }
         if (line.startsWith('#') || line.trim() === '') continue;
         const m = /^([0-9a-fA-F]{64})\s\s(.+)$/.exec(line);
         if (!m) continue;
         entries.set(basename(m[2].trim()), m[1].toLowerCase());
     }
-    return { tag: tag || name.replace(/\.txt$/, ''), entries };
+    return { tag: tag || name.replace(/\.txt$/, ''), gate, entries };
 }
 
 export function parseManifest(path) {
@@ -411,6 +425,7 @@ export function sweep(root, options = {}) {
     const manifestDir = join(root, MANIFEST_DIR);
     const union = new Map();        // basename -> Set<sha256>
     const byRelease = new Map();    // releaseTagOf(tag) -> Set<basename>
+    const gateByFile = new Map();   // manifest file name -> its dev-mock-gate value
     const tagsSeen = new Set();
     let manifestCount = 0;
     let signaturesChecked = 0;
@@ -447,7 +462,9 @@ export function sweep(root, options = {}) {
             }
 
             manifestCount += 1;
-            const { tag, entries } = parseManifestText(bytes.toString('utf8'), name);
+            const { tag, gate, entries } = parseManifestText(bytes.toString('utf8'), name);
+            // Key the gate by file name: the client fetches v<version>.txt, re-sign included.
+            gateByFile.set(name, gate);
             // The RELEASE, not the signature. A re-sign tag
             // (`v0.336.0-resign1`) is the release tag's tree with the release
             // tooling corrected and nothing else, cut because the dev-mock gate
@@ -592,6 +609,13 @@ export function sweep(root, options = {}) {
         if (!tagsSeen.has(`v${info.version}`)) {
             add('POINTER-NO-MANIFEST', rel,
                 `names version ${info.version}, no RELEASE_HASHES/v${info.version}.txt`);
+        }
+        // Flag a pointer whose own manifest the client refuses for its gate
+        // (updateVerify.js: anything but `enforced`, an absent header included).
+        const ownGate = gateByFile.get(`v${info.version}.txt`);
+        if (ownGate !== undefined && ownGate !== 'enforced') {
+            add('POINTER-UNGATED', rel,
+                `the v${info.version} manifest records the dev-mock gate as '${ownGate || 'unrecorded'}', not 'enforced'`);
         }
 
         // The payload a yml names sits beside the yml. This was a literal

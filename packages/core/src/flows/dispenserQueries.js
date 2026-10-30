@@ -23,6 +23,12 @@
 // getDispensers TODO: GIVE_ESCROW / current stock / dispense count
 // aren't returned yet). Callers render what's present and fall back
 // to a placeholder for missing fields.
+//
+// A read that guards a signature (a buy's Approve re-read, an owner
+// action's open check) passes `fresh`: it goes to the indexer past the
+// explorer wrapper's read reuse and the HTTP cache.
+
+import { explorerReadFresh } from '../sdk/explorerRateLimit.js';
 
 /**
  * @typedef {Object} DispenserQueryOpts
@@ -32,6 +38,7 @@
  * @property {string} [token]                    GIVE_TICK or GET_TICK filter
  * @property {string} [actionIndex]              fetch one dispenser by action index
  * @property {object} [opts]                     passed through to the SDK call (pagination etc.)
+ * @property {boolean} [fresh]                   read past the wrapper's reuse and the HTTP cache
  */
 
 /**
@@ -51,12 +58,12 @@ export async function dispensersForSource({ sdkRegistry, chainId, address, opts 
  * address. Useful when the address is both owner + vendor.
  * @param {DispenserQueryOpts} params
  */
-export async function dispensersForAddress({ sdkRegistry, chainId, address, opts }) {
+export async function dispensersForAddress({ sdkRegistry, chainId, address, opts, fresh = false }) {
     if (!sdkRegistry) throw new Error('dispensersForAddress: sdkRegistry is required');
     if (!chainId) throw new Error('dispensersForAddress: chainId is required');
     if (!address) throw new Error('dispensersForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getDispensers(address, 'address', opts);
+    return sdk.getDispensers(address, 'address', fresh ? { ...(opts || {}), fresh: true } : opts);
 }
 
 /**
@@ -77,12 +84,15 @@ export async function dispensersForToken({ sdkRegistry, chainId, token, opts }) 
  * action index. Used by the detail page.
  * @param {DispenserQueryOpts} params
  */
-export async function dispenserByActionIndex({ sdkRegistry, chainId, actionIndex }) {
+export async function dispenserByActionIndex({ sdkRegistry, chainId, actionIndex, fresh = false }) {
     if (!sdkRegistry) throw new Error('dispenserByActionIndex: sdkRegistry is required');
     if (!chainId) throw new Error('dispenserByActionIndex: chainId is required');
     if (!actionIndex) throw new Error('dispenserByActionIndex: actionIndex is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getAction(actionIndex);
+    if (!fresh) return sdk.getAction(actionIndex);
+    // getAction(index) takes no options, so a fresh read names the same path.
+    return explorerReadFresh(sdk, `/action/${encodeURIComponent(String(actionIndex))}`,
+        () => sdk.getAction(actionIndex));
 }
 
 /**

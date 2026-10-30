@@ -21,9 +21,9 @@
 // actions, so those lines stay action-neutral, and rules that bind only past a
 // network upgrade say "may", never "will".
 
-// The demotion the SDK stamps when the network accepted the action but a
-// local balance projection over the sender's other unconfirmed actions still
-// flags it. Copy keyed on the code alone would contradict the acceptance.
+// The demotion the SDK stamps when the network accepted the action but a local
+// projection over the sender's other unconfirmed actions still flags the balance
+// (code-keyed copy would contradict it); PreflightPanel.findingCopy.test.jsx pins it.
 const LOCAL_DELTA_DOWNGRADE = 'dryrun-valid-local-delta';
 
 const LOCAL_DELTA_HEADLINE = 'The network accepted this action on its own, but counting your other unconfirmed'
@@ -113,14 +113,14 @@ export const UNVERIFIED_COPY = Object.freeze({
 
     // Tokens and their rules.
     NOT_OWNER: 'Whether this address owns the token',
-    ISSUE_GAS_TICK: 'Whether this token name is reserved on this chain',
+    ISSUE_GAS_TICK: 'Whether this token name is reserved on this network',
     ISSUE_TICK_NAMESPACE: 'Whether this token name is available',
     ISSUE_TICK_COIN_PREFIX: 'Whether this token name is allowed',
     ISSUE_BRIDGE_ACTIVATION: 'Whether the network supports this bridging option yet',
     ISSUE_LOCK_RATCHETS: 'Whether the token\'s locks allow this change',
     ISSUE_BRIDGE_POLICY_EXCLUSION: 'Whether the token\'s bridging and transfer rules allow this change',
     SEND_RESTRICTIONS: 'Transfer rules on the token and on both addresses',
-    DESTROY_BRIDGE_SUPPLY: 'Whether this token can be destroyed on this chain',
+    DESTROY_BRIDGE_SUPPLY: 'Whether this token can be destroyed on this network',
     DESTROY_RESTRICTIONS: 'Burn rules on the token and on your address',
     CARET_REF_UNRESOLVABLE: 'Which address a short address reference points to',
 

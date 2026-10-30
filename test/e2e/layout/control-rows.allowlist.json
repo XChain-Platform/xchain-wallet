@@ -1,0 +1,30 @@
+{
+    "ruling": "U07",
+    "rule": "Controls sharing a row line up: one height, one corner radius, one type size",
+    "screens": {
+        "control-rows-768 | nav: DEX": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Popular, Watchlist) beside the market search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        },
+        "control-rows-768 | palette: Markets and orders": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Popular, Watchlist) beside the market search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        },
+        "control-rows-768 | palette: Tokens you own": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Holding) beside the token search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        },
+        "control-rows-1280 | nav: DEX": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Popular, Watchlist) beside the market search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        },
+        "control-rows-1280 | palette: Markets and orders": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Popular, Watchlist) beside the market search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        },
+        "control-rows-1280 | palette: Tokens you own": {
+            "count": 1,
+            "reason": "The kit Tabs strip (All, Holding) beside the token search sets its labels in 13px text against the 14px field type; matching tab type to field type is a Tabs design decision"
+        }
+    }
+}

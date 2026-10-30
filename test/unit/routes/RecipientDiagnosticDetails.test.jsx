@@ -46,7 +46,7 @@ async function expectSkippedAddressDisclosure() {
     fireEvent.click(summary);
     const details = summary.closest('details');
     expect(details).toHaveTextContent(WRONG_NETWORK);
-    expect(details).toHaveTextContent(/Does not belong to the (?:active network|selected chain)\./);
+    expect(details).toHaveTextContent(/Does not belong to the (?:active network|selected network)\./);
 }
 
 afterEach(() => cleanup());
@@ -60,5 +60,31 @@ describe('wrong-network recipient diagnostics', () => {
     it('lists skipped addresses on the create-list screen', async () => {
         mount(<ListCreateForm walletId="wallet-1" chainId={CHAIN} initialType="2" onBack={() => {}} />);
         await expectSkippedAddressDisclosure();
+    });
+});
+
+// A ^<index> entry is an address reference, so it is named as one rather than left as a typo.
+async function expectAddressReferenceNote() {
+    const textarea = await screen.findByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, { target: { value: `${SOURCE}\n^123\n^007` } });
+    const summary = await screen.findByText('Address references (1)');
+    expect(screen.getByText(/One entry is an address reference .* paste the address the reference points to\./))
+        .toBeInTheDocument();
+    fireEvent.click(summary);
+    const details = summary.closest('details');
+    expect(details).toHaveTextContent('^123');
+    expect(details).not.toHaveTextContent('^007');
+    expect(screen.queryByText(/Skipped addresses/)).toBeNull();
+}
+
+describe('address-reference recipient diagnostics', () => {
+    it('names a reference on the airdrop screen', async () => {
+        mount(<AirdropForm walletId="wallet-1" initialChainId={CHAIN} initialTick="TOKEN" onBack={() => {}} />);
+        await expectAddressReferenceNote();
+    });
+
+    it('names a reference on the create-list screen', async () => {
+        mount(<ListCreateForm walletId="wallet-1" chainId={CHAIN} initialType="2" onBack={() => {}} />);
+        await expectAddressReferenceNote();
     });
 });

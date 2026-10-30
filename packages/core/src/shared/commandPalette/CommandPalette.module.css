@@ -1,19 +1,27 @@
 /* §33 Command Palette. Theme-token driven so it tracks light/dark and the
    forced high-contrast block automatically. */
 
+/* Fixed to the viewport, not the content pane, so the scrim also dims the
+   app header and the navigation, as every other modal's scrim does. */
 .overlay {
-    position: absolute;
+    position: fixed;
     inset: 0;
     box-sizing: border-box;
-    max-height: var(--xc-viewport-h, 100vh);
+    /* --xc-viewport-h is the visible height less the top inset the body pads
+       by; this box starts at the true top, so it adds that inset back or the
+       scrim stops short of the bottom edge on a notched phone. */
+    max-height: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
     z-index: var(--xc-z-overlay);
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
     display: flex;
     align-items: flex-start;
     justify-content: center;
     /* The capped gap leaves room for results when the fitted viewport contracts. */
     padding-top: min(12vh, var(--xc-space-8));
     padding-inline: var(--xc-space-4);
+    /* Now fixed to the viewport, the panel keeps clear of the notch. The
+       narrow bottom sheet resets this and insets its own bottom edge. */
+    padding-top: calc(min(12vh, var(--xc-space-8)) + env(safe-area-inset-top, 0));
 }
 
 .panel {
@@ -92,18 +100,40 @@
     flex: 0 0 auto;
 }
 
+/* The search box is a form field like any other, so it carries the shared
+   field border, radius, height and focus ring. */
 .input {
     flex: 1 1 auto;
-    border: none;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
     outline: none;
-    background: transparent;
+    background: var(--xc-surface);
     color: var(--xc-text);
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
+    padding-inline: var(--xc-space-3);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
+    height: var(--xc-control-h-md);
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give this
+   control a real outline there. */
+@media (forced-colors: active) {
+    .input:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
 }
 
 .input::placeholder { color: var(--xc-text-muted); }
@@ -189,6 +219,8 @@
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
+    /* The query is echoed back; one long unbroken word must wrap, not spill past the panel. */
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }

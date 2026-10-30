@@ -251,6 +251,22 @@ describe('receiveAddress fills the lowest unfunded external index', () => {
         expect(rec.derivationPath).toBe(`m/84'/0'/0'/0/${expected}`);
     });
 
+    it.each([
+        ['a body that does not parse', '<html>502 Bad Gateway</html>'],
+        ['an error body', { status: 500, error: 'Internal Server Error' }],
+        ['an empty object', {}],
+    ])('never reissues a deleted interior index whose history is %s', async (_label, body) => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt([0, 2]) });
+        const unreadableSdkRegistry = {
+            get: () => ({ explorer: { getHistory: async () => body } }),
+        };
+
+        const rec = await receiveAddress(base(vault, makeSigner('software'), {
+            sdkRegistry: unreadableSdkRegistry,
+        }));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
+    });
+
     it('ignores the change branch: an internal index 0 does not fill external 0', async () => {
         const vault = makeVault({
             accounts: [ACCOUNT_A],
@@ -405,5 +421,55 @@ describe('receiveAddress index space by wallet format', () => {
             base(vault, makeSigner('software'), { addressType: 'p2wpkh' }),
         );
         expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+});
+
+describe('receiveAddress keeps a demo wallet off the explorer', () => {
+    // xchain-wallet#78: the demo lands on mainnet, so the "ever funded?"
+    // probe would hand a throwaway demo address to a public mainnet explorer.
+    function probingSdk() {
+        const getHistory = async () => [];
+        const calls = [];
+        return {
+            calls,
+            registry: { get: () => ({ explorer: { getHistory: async (...args) => { calls.push(args); return getHistory(); } } }) },
+        };
+    }
+
+    it('derives the next index for a demo wallet without asking the explorer', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'bip39', origin: 'demo' }]);
+        const sdk = probingSdk();
+        const rec = await receiveAddress(base(vault, makeSigner('software'), { sdkRegistry: sdk.registry }));
+        expect(rec.derivationPath.endsWith('/0')).toBe(true);
+        expect(sdk.calls).toEqual([]);
+    });
+
+    it('still probes the explorer for a real wallet', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'bip39', origin: 'created' }]);
+        const sdk = probingSdk();
+        await receiveAddress(base(vault, makeSigner('software'), { sdkRegistry: sdk.registry }));
+        expect(sdk.calls.length).toBeGreaterThan(0);
+    });
+});
+
+describe('receiveAddress concurrent calls', () => {
+    it('gives two simultaneous calls on one vault two different indexes', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const [first, second] = await Promise.all([
+            receiveAddress(base(vault, makeSigner('software'))),
+            receiveAddress(base(vault, makeSigner('software'))),
+        ]);
+        expect(first.address).not.toBe(second.address);
+        const stored = await vault.addresses.list();
+        expect(new Set(stored.map((a) => a.address)).size).toBe(2);
+    });
+
+    it('lets a later call run after an earlier one fails', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        await expect(receiveAddress(base(vault, makeSigner('software'), { accountId: 'missing' }))).rejects.toThrow();
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
     });
 });

@@ -44,6 +44,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    FieldNote,
     Screen,
     Button,
     Input,
@@ -59,7 +60,6 @@ import {
     FormPage,
     ListPage,
 } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -68,6 +68,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import {
     exactNetworkFeeSats,
     exactSats,
@@ -80,7 +81,7 @@ import {
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { decodeBbqrPsbt, parseBbqrFrame } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
@@ -99,11 +100,12 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { SIGNED_NOT_BROADCAST_UNSAVED_WARNING } from '../utils/submitFailureMessage.js';
 
 // Show fixed copy for every parse failure: the parse handler throws only
 // precondition text and decoder exceptions, never wording written for a user.
 const PARSE_FAILED_MESSAGE = "This doesn't look like a transaction this wallet can read. "
-    + 'Check that you pasted the whole thing and picked the right chain.';
+    + 'Check that you pasted the whole thing and picked the right network.';
 
 // Say what the user cannot do here, not which shell API is missing.
 const SIGN_UNAVAILABLE_MESSAGE = "This version of the wallet can't sign transactions on this screen.";
@@ -276,14 +278,14 @@ export function psbtInputError(raw) {
     const compact = raw.replace(/\s+/g, '');
     if (HEX_RE.test(compact)) {
         if (compact.length % 2 !== 0) {
-            return 'Transaction hex must contain complete byte pairs.';
+            return 'Transaction code must contain complete byte pairs.';
         }
-        return `This hex is not a PSBT. A PSBT starts with ${PSBT_MAGIC_HEX}.`;
+        return `This code is not a PSBT. A PSBT starts with ${PSBT_MAGIC_HEX}.`;
     }
     if (compact.startsWith(BASE64_PSBT_PREFIX)) {
         return 'Transaction base64 is incomplete or malformed.';
     }
-    return 'Paste a PSBT as hex or base64, or import a .psbt file.';
+    return 'Paste a PSBT transaction code, or import a .psbt file.';
 }
 
 /**
@@ -332,6 +334,65 @@ export function psbtReviewError(decomposed) {
         return 'The wallet could not verify this transaction\'s network fee.';
     }
     return null;
+}
+
+/**
+ * Name the first input this address would sign whose PSBT asks for a signature
+ * type other than SIGHASH_ALL (a taproot key-path input takes the default type).
+ * Those types leave outputs or other inputs open to change after the signature
+ * exists; the signer refuses them with a developer message after the password is
+ * typed, so the review refuses them first in plain words.
+ *
+ * @param {{ inputs?: Array<{ address?: string | null, sighashType?: number | null, scriptType?: string }> } | null} decomposed
+ * @param {string | undefined} signingAddress
+ * @returns {string | null}
+ */
+export function psbtSighashError(decomposed, signingAddress) {
+    if (!decomposed || !Array.isArray(decomposed.inputs) || !signingAddress) return null;
+    for (let i = 0; i < decomposed.inputs.length; i += 1) {
+        const input = decomposed.inputs[i];
+        if (input?.address !== signingAddress) continue;
+        const type = input.sighashType;
+        if (type === null || type === undefined) continue;
+        const allowed = input.scriptType === 'p2tr' ? 0 : 1;
+        if (type !== allowed) {
+            return `Input ${i + 1} asks for a signature that leaves part of the transaction open to change after you sign. This wallet does not give that signature.`;
+        }
+    }
+    return null;
+}
+
+/**
+ * Warn about a network fee that is unusually large for what the transaction
+ * sends, on the same terms the Send form uses: a fee above 10% of the amount
+ * sent. The amount sent is what leaves the wallet (outputs to addresses the
+ * wallet does not own); a self transfer with no such output is measured against
+ * its total output. A PSBT arrives already built, so the review is the only
+ * place the signer sees that a fee takes most of the inputs. The warning never
+ * changes the transaction; an unverifiable fee is left to psbtReviewError.
+ *
+ * @param {{ inputs?: Array<{ value?: number|string|null }>, outputs?: Array<{ value?: number|string|null, address?: string|null }> } | null} decomposed
+ * @param {Set<string>} ownAddresses
+ * @returns {string[]}
+ */
+export function psbtFeeShareWarnings(decomposed, ownAddresses) {
+    const feeValue = exactNetworkFeeSats(decomposed);
+    if (feeValue === null) return [];
+    const fee = BigInt(feeValue);
+    if (fee === 0n) return [];
+    const totalIn = sumExactSats(decomposed.inputs.map((input) => input?.value));
+    const totalOut = sumExactSats(decomposed.outputs.map((output) => output?.value));
+    if (totalIn === null || totalOut === null || totalIn === 0n) return [];
+    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
+    const external = sumExactSats(decomposed.outputs
+        .filter((output) => output?.address && !own.has(output.address))
+        .map((output) => output.value));
+    const sent = external !== null && external > 0n ? external : totalOut;
+    if (fee * 10n <= sent) return [];
+    const lines = ['The network fee is more than 10% of the amount this transaction sends.'];
+    lines.push(`The network fee is ${(fee * 100n) / totalIn}% of the coins this transaction spends.`);
+    if (fee > totalOut) lines.push('The network fee is more than the total this transaction sends.');
+    return lines;
 }
 
 function nativeAmountLabel(value, descriptor) {
@@ -461,6 +522,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     );
     const [broadcastTxid, setBroadcastTxid] = useState(/** @type {string} */ (''));
     const [broadcastError, setBroadcastError] = useState(/** @type {string | null} */ (null));
+    // True when the host queued the signed bytes but storage refused the save
+    // (`persisted: false`), so the queue copy will not survive a restart.
+    const [broadcastUnsaved, setBroadcastUnsaved] = useState(false);
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
@@ -640,13 +704,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         onError: (message) => {
             setError(message.startsWith('File is too large')
                 ? 'This transaction file is too large. Choose a .psbt file smaller than 2 MB.'
-                : 'Could not read that transaction file. Choose a .psbt file in binary, hex, or base64 form.');
+                : 'Could not read that transaction file. Choose a .psbt file saved as a binary file or as text code.');
         },
         disabled: busy,
         onFile: ({ content }) => {
             const hex = normalizePsbtFile(content);
             if (!hex) {
-                setError('This file does not contain a valid PSBT in binary, hex, or base64 form.');
+                setError('This file does not contain a valid PSBT, either as a binary file or as text code.');
                 return;
             }
             setPasted(hex);
@@ -684,7 +748,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
+                        : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -731,6 +795,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return undefined;
         }
         let cancelled = false;
+        // A review always belongs to the bytes that get signed: drop the
+        // previous transaction's review while the new paste or network parses.
+        setDecomposed(null);
+        setParsedAction(null);
+        setParsedActionReason(null);
         setParsing(true);
         setParseError(null);
         messaging.parsePsbtRequest({ chainId, psbtHex })
@@ -833,11 +902,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ? 'This transaction is already finalized and cannot be signed again.'
                 : 'This transaction contains finalized inputs and cannot be signed on this screen.';
         }
+        const sighashError = psbtSighashError(decomposed, selectedAddress?.address);
+        if (sighashError) return sighashError;
         if (walletOwnedInputCount === 0) {
-            return 'This transaction has no inputs this wallet can sign. Check the selected chain or import a different transaction.';
+            return 'This transaction has no inputs this wallet can sign. Check the selected network or import a different transaction.';
         }
         return null;
-    }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
+    }, [decomposed, finalizedInputCount, walletOwnedInputCount, selectedAddress]);
 
     const totalIn = useMemo(() => {
         if (!decomposed) return null;
@@ -848,6 +919,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return sumExactSats(decomposed.outputs.map((output) => output.value));
     }, [decomposed]);
     const fee = exactNetworkFeeSats(decomposed);
+    // A transaction this screen refuses to sign shows its one refusal, not a fee warning beside it.
+    const feeShareWarnings = useMemo(
+        () => (decomposed && !importEligibilityError ? psbtFeeShareWarnings(decomposed, ownAddressSet) : []),
+        [decomposed, ownAddressSet, importEligibilityError],
+    );
     const chainDescriptor = chainRegistry.get(chainId);
 
     // §5.6 slice 3: software signing goes through the shared confirm
@@ -882,6 +958,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ...(parsedAction?.actionString
                     ? { preflight: (o) => messaging.preflight({ chainId, ...o }) }
                     : {}),
+                // A pasted PSBT has no known age, so Approve always probes its
+                // inputs; spent ones stop the sign with the shared notice.
+                checkInputs: (hex) => messaging.checkInputLiveness({ chainId, psbtHex: hex }),
+                alwaysCheckInputs: true,
                 onApprove: () => messaging.signPsbtUserInitiated({
                     walletId,
                     addressId,
@@ -898,6 +978,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setPassword('');
         } catch (err) {
             if (isUserRejection(err)) return;
+            // A second Sign press lands while the first press's review is still
+            // composing; that review owns the screen, so the repeat press says nothing.
+            if (err?.name === 'ConfirmActionBusyError') return;
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
@@ -910,10 +993,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         event.preventDefault();
         if (busy) return;
         setError(null);
-        if (!chainId) { setError('Pick a chain.'); return; }
+        if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId) { setError('Pick a signing address.'); return; }
-        if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
-        if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
+        if (!psbtHex) { setError('Paste a valid transaction code.'); return; }
+        if (!decomposed) { setError('Transaction could not be parsed for this network.'); return; }
         if (importEligibilityError) return;
         if (ownedInputCount === 0) {
             setError(
@@ -949,18 +1032,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         }
         setBusy(true);
         try {
-            const result = isHwSource
-                ? await messaging.signPsbtUserInitiatedHw({
+            // A hardware device can wait on the user past the idle deadline.
+            const result = await withAutoLockHold(() => (isHwSource
+                ? messaging.signPsbtUserInitiatedHw({
                     walletId,
                     addressId,
                     psbtHex,
                 })
-                : await messaging.signPsbtUserInitiated({
+                : messaging.signPsbtUserInitiated({
                     walletId,
                     addressId,
                     password,
                     psbtHex,
-                });
+                })));
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
             setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
@@ -999,9 +1083,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
-                    {loadError}
-                </div>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </Screen>
         );
     }
@@ -1033,7 +1115,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     under a label naming the artifact that was not there. */}
                 {signedPsbtHex ? (
                     <ArtifactBlock
-                        label="Signed PSBT (hex)"
+                        label="Signed PSBT (code)"
                         copyLabel="Copy signed PSBT"
                         value={signedPsbtHex}
                         testId="signed-psbt-hex"
@@ -1041,7 +1123,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ) : null}
                 {signedTxHex ? (
                     <ArtifactBlock
-                        label="Signed transaction (raw hex)"
+                        label="Signed transaction (code)"
                         copyLabel="Copy signed transaction"
                         value={signedTxHex}
                         testId="signed-tx-hex"
@@ -1052,10 +1134,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         role="status"
                         aria-live="polite"
                         style={{
-                            background: 'var(--xc-surface-raised)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-md)',
-                            padding: 'var(--xc-space-3)',
+                            background: 'var(--xc-card-bg)',
+                            border: 'var(--xc-card-border)',
+                            borderRadius: 'var(--xc-card-radius)',
+                            padding: 'var(--xc-card-pad)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 4,
@@ -1072,17 +1154,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             fontSize: 'var(--xc-text-xs)',
                             wordBreak: 'break-all',
                         }}>{broadcastTxid}</code>
-                        <CopyButton value={broadcastTxid} label="Copy txid" />
+                        <CopyButton value={broadcastTxid} label="Copy transaction ID" />
                     </div>
+                ) : broadcastState === 'queued' && broadcastUnsaved ? (
+                    // Never promise the banner holds bytes the queue failed to save;
+                    // the signed hex above stays on screen to copy.
+                    <StatusMessage variant="error">{SIGNED_NOT_BROADCAST_UNSAVED_WARNING}</StatusMessage>
                 ) : broadcastState === 'queued' ? (
-                    <div role="status" aria-live="polite" style={{ color: 'var(--xc-text-muted)' }}>
+                    <StatusMessage variant="warning">
                         The network could not take the transaction yet. Its signed bytes are saved in the
                         queued-transactions banner, where you can retry without signing again.
-                    </div>
+                    </StatusMessage>
                 ) : broadcastState === 'error' ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)' }}>
-                        {broadcastError}
-                    </div>
+                    <StatusMessage variant="error">{broadcastError}</StatusMessage>
                 ) : signedPsbtHex ? (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         Broadcast directly from this wallet, or hand the signed transaction
@@ -1095,7 +1179,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     // result of this screen cannot support.
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         This transaction is fully signed. Broadcast it directly from this
-                        wallet, or hand the raw hex to any other broadcaster.
+                        wallet, or hand the signed transaction code to any other broadcaster.
                     </p>
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
@@ -1115,15 +1199,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 }
                                 setBroadcastState('broadcasting');
                                 setBroadcastError(null);
+                                setBroadcastUnsaved(false);
                                 try {
-                                    const res = await messaging.broadcastSignedTxRequest({
+                                    const res = await withAutoLockHold(() => messaging.broadcastSignedTxRequest({
                                         walletId,
                                         chainId,
                                         txHex: signedTxHex,
                                         txid: signedTxid || undefined,
                                         fromAddress: selectedAddress?.address || undefined,
-                                    });
+                                        // The signed PSBT's prevouts: the host verifies every
+                                        // input's signature against them before it broadcasts.
+                                        psbtHex: psbtHex || undefined,
+                                    }));
                                     if (res?.queued === true) {
+                                        setBroadcastUnsaved(res?.persisted === false);
                                         setBroadcastState('queued');
                                     } else {
                                         setBroadcastTxid(res?.txid || signedTxid);
@@ -1167,10 +1256,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const previewBlock = decomposed ? (
         <div style={{
-            background: 'var(--xc-surface)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-2)',
+            background: 'var(--xc-card-bg)',
+            border: 'var(--xc-card-border)',
+            borderRadius: 'var(--xc-card-radius)',
+            padding: 'var(--xc-card-pad)',
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
@@ -1191,6 +1280,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Network fee:</strong>{' '}
                 {fee != null ? nativeAmountLabel(fee, chainDescriptor) : 'unavailable'}
             </div>
+            {feeShareWarnings.length > 0 ? (
+                <StatusMessage variant="warning" role="alert" testId="psbt-fee-share-warning">
+                    {feeShareWarnings.map((line) => (
+                        <p key={line}>{line}</p>
+                    ))}
+                </StatusMessage>
+            ) : null}
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
             </div>
@@ -1311,7 +1407,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         setChainId(nextChainId);
                         if (error) setError(null);
                     }}
-                    label="Chain"
+                    label="Network"
                     hideNetworkKind
                 />
             </div>
@@ -1333,20 +1429,22 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     {...drop.rootProps}
                     style={{
                         position: 'relative',
-                        border: drop.isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent',
+                        // The drop target shows its state with an outline so the wrapper
+                        // draws no border of its own and never reads as a card.
+                        outline: drop.isDragOver ? '2px dashed var(--xc-accent)' : 'none',
+                        outlineOffset: 2,
                         borderRadius: 'var(--xc-radius-sm)',
-                        padding: drop.isDragOver ? 0 : 1,
-                        transition: 'border-color 120ms ease',
+                        transition: 'outline-color 120ms ease',
                     }}
                 >
                     <Textarea
                         id="psbt-sign-paste"
-                        label="Unsigned transaction (hex or base64)"
+                        label="Unsigned transaction code"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
-                        placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…), or drop a .psbt file"
+                        placeholder="Paste the transaction code (it starts with 70736274ff or cHNid), or drop a .psbt file"
                         rows={6}
-                        aria-label="Unsigned transaction (hex or base64)"
+                        aria-label="Unsigned transaction code"
                         style={{
                             width: '100%',
                             background: 'var(--xc-bg)',
@@ -1364,13 +1462,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         <Input {...drop.pickerProps} aria-label="Upload transaction file" />
                     </span>
                 </div>
+                {visibleError ? (
+                    <FieldNote
+                        variant="error"
+                        testId="psbt-sign-paste-error"
+                        action={pasted && !psbtHex && !error ? (
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => { setPasted(''); setError(null); }}>
+                                Clear
+                            </Button>
+                        ) : null}
+                    >
+                        {visibleError}
+                    </FieldNote>
+                ) : null}
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
-                    <span>Or</span>
-                    <ClipboardPasteButton
-                        disabled={busy}
-                        label="Paste transaction from clipboard"
-                        onPaste={(text) => { setPasted(text); if (error) setError(null); }}
-                    />
                     <Button
                         variant="ghost"
                         size="sm"
@@ -1392,27 +1497,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
                         <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
                         {scanProgress ? (
-                            <p
-                                role="status"
-                                aria-live="polite"
-                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}
-                            >
+                            <FieldNote variant="info" role="status">
                                 {scanProgress.format === 'UR'
                                     ? `UR decoding progress: ${scanProgress.percent}%`
                                     : `${scanProgress.format} frames received: ${scanProgress.received} of ${scanProgress.total}`}
-                            </p>
+                            </FieldNote>
                         ) : null}
                     </div>
-                ) : null}
-                {visibleError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={pasted && !psbtHex && !error
-                            ? { label: 'Clear', onAction: () => { setPasted(''); setError(null); } }
-                            : undefined}
-                    >
-                        {visibleError}
-                    </StatusMessage>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
@@ -1451,13 +1542,15 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </p>
                 </SigningReadyNote>
             ) : (
-                <Input
-                    type="password"
-                    label="Wallet password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    autoComplete="current-password"
-                />
+                <PanicPasswordGate>
+                    <Input
+                        type="password"
+                        label="Wallet password"
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
+                        autoComplete="current-password"
+                    />
+                </PanicPasswordGate>
             )}
         </FormPage>
     );

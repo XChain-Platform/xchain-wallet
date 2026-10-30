@@ -52,7 +52,7 @@ afterEach(() => {
 
 describe('regression/scanner-without-camera', () => {
     it.each([
-        ['an undefined mediaDevices API', null, /camera access is not available.*paste the code/i],
+        ['an undefined mediaDevices API', null, /camera access isn.t available.*paste the code/i],
         ['a NotAllowedError rejection', 'NotAllowedError', /allow the camera.*settings.*paste the code/i],
         ['a NotFoundError rejection', 'NotFoundError', /no camera.*paste the code/i],
     ])('keeps ScanRoute in its page template for %s', async (_case, errorName, message) => {
@@ -73,10 +73,12 @@ describe('regression/scanner-without-camera', () => {
         expect(within(page).getByRole('textbox', { name: 'Or paste it here' })).toBeInTheDocument();
 
         const cameraState = errorName
-            ? await within(page).findByRole('alert')
+            ? await screen.findByRole('alert')
             : within(page).getByTestId('qr-scanner-unsupported');
         expect(cameraState).toHaveTextContent(message);
-        expect(screen.queryByRole('form', { name: 'This screen could not be shown' })).toBeNull();
+        // A camera failure is a page notice above the form, never a box among its fields.
+        if (errorName) expect(page).not.toContainElement(cameraState);
+        expect(screen.queryByRole('form', { name: 'This screen couldn\'t be shown' })).toBeNull();
         expect(onBoundaryError).not.toHaveBeenCalled();
         if (getUserMedia) expect(getUserMedia).toHaveBeenCalledOnce();
     });

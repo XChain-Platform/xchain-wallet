@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -14,8 +15,10 @@ const routes = join(root, 'packages', 'core', 'src', 'shared', 'routes');
 const settings = join(root, 'packages', 'core', 'src', 'shared', 'components', 'settings');
 const ui = join(root, 'packages', 'core', 'src', 'ui');
 
+// The runner reads wallet source with t('key') calls swapped for their English text;
+// applying the same swap here gives the same text when this file runs alone.
 function source(directory, file) {
-    return readFileSync(join(directory, file), 'utf8');
+    return withEnglishCopy(readFileSync(join(directory, file), 'utf8'));
 }
 
 const createWallet = source(routes, 'CreateWallet.jsx');
@@ -57,9 +60,13 @@ assert.match(
     'unlock uses current-password',
 );
 
-const recoveryPhrase = importWallet.match(/<Textarea[\s\S]{0,1200}?id="xc-mnemonic"[\s\S]{0,1200}?\/>/)?.[0] || '';
+// The field's own props end where its in-box actions (Paste, Scan QR) begin,
+// or at its closing tag when it has none.
+const recoveryPhrase = importWallet.match(/<Textarea[\s\S]{0,1200}?id="xc-mnemonic"[\s\S]{0,2400}?(?:actions=|\/>)/)?.[0] || '';
 assert.match(recoveryPhrase, /autoComplete="off"/, 'recovery phrase disables autocomplete');
 assert.match(recoveryPhrase, /spellCheck=\{false\}/, 'recovery phrase disables spellcheck');
+assert.match(recoveryPhrase, /autoCapitalize="off"/, 'recovery phrase disables autocapitalize');
+assert.match(recoveryPhrase, /autoCorrect="off"/, 'recovery phrase disables autocorrect');
 
 const backupPhrase = backupSection.match(
     /<Textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,

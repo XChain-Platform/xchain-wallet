@@ -28,16 +28,27 @@
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useCallback, useEffect, useRef } from 'react';
+import { FieldNote, StatusMessage } from '@xchain-wallet/core/ui';
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
 import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
+import { t } from '../../i18n/index.js';
+
+// The notice tone for each device state; a state not listed (cancelled) reads as info.
+const STATUS_VARIANT = {
+    available: 'success',
+    'wrong-app': 'warning',
+    locked: 'warning',
+    disconnected: 'error',
+    error: 'error',
+};
 
 /**
  * @param {object} props
  * @param {'trezor'|'ledger'} props.signerKind
- * @param {string} props.signerName                   e.g. "Trezor Model T (My Trezor)"
+ * @param {string} props.signerName                 e.g. "Trezor Model T (My Trezor)"
  * @param {string} props.path                         BIP32 path for the source address
  * @param {string} props.address                      the source address string
  * @param {string} [props.chainId]                    forwarded to getStatus (Ledger uses it for wrong-app detection)
@@ -82,24 +93,19 @@ export function HwSignBlock({
         onStatusChangeRef.current?.({ status, detail, refresh });
     }, [status, detail, refresh]);
 
+    // The host answers 'idle' with a detail when the paired device has no live
+    // connection in this session (after a reload or a lock). That is a state
+    // the reader can act on, unlike the empty pre-first-poll 'idle'.
+    const notConnected = status === 'idle' && Boolean(detail);
+    const shownStatus = notConnected ? 'not-connected' : status;
+
     return (
         <div className={styles.root}>
             {signerInfo ? <HwFirmwareBanner signerInfo={signerInfo} /> : null}
             {requireExplicitConfirm && requireExplicitConfirmReason ? (
-                <p
-                    role="status"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        background: 'var(--xc-warning-bg, var(--xc-surface-raised))',
-                        border: '1px solid var(--xc-warning, var(--xc-border))',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text)',
-                    }}
-                >
+                <FieldNote variant="warning" role="status">
                     {requireExplicitConfirmReason}
-                </p>
+                </FieldNote>
             ) : null}
             <DerivationPathCrossCheck
                 signerKind={signerKind}
@@ -109,21 +115,18 @@ export function HwSignBlock({
                 requireExplicitConfirm={requireExplicitConfirm}
                 onConfirmedChange={onConfirmedChange}
             />
-            {status !== 'idle' ? (
-                <div className={styles.statusRow} data-status={status} role="status">
-                    <span className={styles.statusDot} aria-hidden="true" />
-                    <span className={styles.statusText}>
-                        {statusCopy(status, signerKind, chainId)}
-                    </span>
-                    {status !== 'available' ? (
-                        <button
-                            type="button"
-                            onClick={refresh}
-                            className={styles.refresh}
-                        >
-                            Retry
-                        </button>
-                    ) : null}
+            {shownStatus !== 'idle' ? (
+                <div data-status={notConnected ? 'disconnected' : status}>
+                    <StatusMessage
+                        variant={STATUS_VARIANT[notConnected ? 'disconnected' : status] || 'info'}
+                        role="status"
+                        keepsShellNotice
+                        recovery={shownStatus !== 'available'
+                            ? { label: t('home.retryBalances'), onAction: refresh }
+                            : undefined}
+                    >
+                        {statusCopy(shownStatus, signerKind, chainId)}
+                    </StatusMessage>
                 </div>
             ) : null}
         </div>
@@ -151,6 +154,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
             return detail
                 ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
                 : 'Device not detected. Check its connection, unlock it, and try again.';
+        case 'not-connected':
+            return `This ${signerKind === 'trezor' ? 'Trezor' : 'Ledger'} is not connected in this session. Connect it again with Pair hardware signer, then try again.`;
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':

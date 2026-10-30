@@ -29,6 +29,14 @@ describe('crypto/recoveryPhrase branch handling', () => {
         expect(normalizeRecoveryPhrase(phrase)).toBe(phrase);
     });
 
+    it.each(['\u200B', '\u200C', '\u200D', '\u2060', '\u00AD', '\u200E'])('drops the invisible character U+%s from a pasted phrase', (mark) => {
+        expect(normalizeRecoveryPhrase(`alpha${mark} ${mark}beta gam${mark}ma`)).toBe('alpha beta gamma');
+    });
+
+    it('keeps numbering removal working around invisible characters', () => {
+        expect(normalizeRecoveryPhrase('1.\u200B Alpha \u200B2. Beta')).toBe('alpha beta');
+    });
+
     it('normalizes an empty string', () => {
         expect(normalizeRecoveryPhrase('   ')).toBe('');
     });

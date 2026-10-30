@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/desktop",
-    "version": "0.341.4",
+    "version": "0.342.0",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "_homepageNote": "REQUIRED BY THE .deb LANE, not decoration. fpm refuses to build without a homepage and electron-builder surfaces it as a hard failure ('Please specify project homepage'), so with this unset the Linux lane cannot produce *.deb - a REQUIRED row in tools/release/expected-artifacts.txt. It must live here rather than in electron-builder.config.cjs, whose v26 schema rejects a root 'homepage' key. Product site, not the company site the root package.json carries, because this is the URL a Debian user reads out of the installed package's metadata.",
@@ -24,17 +24,18 @@
         "@xchain-wallet/extension": "workspace:*",
         "@xchain-wallet/signers-ledger": "workspace:*",
         "@xchain-wallet/signers-trezor": "workspace:*",
+        "bitcoinjs-lib": "6.1.7",
         "electron-updater": "^6.8.9",
         "lightweight-charts": "^4.2.0",
         "openpgp": "^6.3.1",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
         "undici": "^8.10.2",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.22.4"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.26.2"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
-        "electron": "^44.7.0",
+        "electron": "^44.9.3",
         "electron-builder": "^26.15.7",
         "electron-builder-squirrel-windows": "^26.15.7",
         "vite": "^6.4.3",

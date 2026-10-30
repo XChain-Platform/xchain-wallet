@@ -15,11 +15,16 @@ import { useConfirmModal } from './useConfirmModal.js';
  * @param {boolean} options.dirty
  * @param {boolean} [options.submitting]
  * @param {boolean} [options.signedUnbroadcast]
+ * @param {number} [options.unsentRows] rows of a part-way multi-row run that have not been
+ *   broadcast; leaving stops the run, so the exit asks first (the form keeps them as a draft).
  * @param {() => void} options.onLeave
+ * @param {() => void} [options.onDiscard] runs only when the user confirms
+ *   "Discard and leave", before onLeave, so a form can drop its saved draft.
+ *   A clean exit skips it: a stored draft the user never restored stays.
  */
-export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast = false, onLeave }) {
+export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast = false, unsentRows = 0, onLeave, onDiscard }) {
     const confirmDialog = useConfirmModal();
-    const shouldWarn = dirty || submitting || signedUnbroadcast;
+    const shouldWarn = dirty || submitting || signedUnbroadcast || unsentRows > 0;
 
     useEffect(() => {
         if (!shouldWarn) return undefined;
@@ -38,6 +43,7 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
         }
 
         let request;
+        let discarding = false;
         if (signedUnbroadcast) {
             request = {
                 title: 'Leave signed transaction?',
@@ -52,7 +58,17 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
                 confirmLabel: 'Leave anyway',
                 danger: true,
             };
+        } else if (unsentRows > 0) {
+            request = {
+                title: 'Leave with unsent rows?',
+                message: unsentRows === 1
+                    ? '1 row has not been sent. Leave anyway?'
+                    : `${unsentRows} rows have not been sent. Leave anyway?`,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            };
         } else {
+            discarding = true;
             request = {
                 title: 'Discard changes?',
                 message: 'Your unsaved changes will be lost.',
@@ -61,8 +77,10 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
             };
         }
 
-        if (await confirmDialog.confirm(request)) onLeave();
-    }, [confirmDialog, onLeave, shouldWarn, signedUnbroadcast, submitting]);
+        if (!(await confirmDialog.confirm(request))) return;
+        if (discarding) onDiscard?.();
+        onLeave();
+    }, [confirmDialog, onLeave, onDiscard, shouldWarn, signedUnbroadcast, submitting, unsentRows]);
 
     const confirmation = confirmDialog.request
         ? createElement(ConfirmModal, {

@@ -31,6 +31,9 @@ import {
 } from '../utils/preflightFindingKey.js';
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -43,6 +46,10 @@ const DRYRUN_UNAVAILABLE = 'DRYRUN_UNAVAILABLE';
 // and the amounts owed.
 const DRYRUN_SUBCOMMAND_UNJUDGED = 'DRYRUN_SUBCOMMAND_UNJUDGED';
 const DRYRUN_ORACLE_FEES_OWED    = 'DRYRUN_ORACLE_FEES_OWED';
+// Name the two info codes the SDK's own trading check emits with no network in
+// the loop; both land in the notice list and say what was NOT checked.
+const EXPIRY_IN_PAST        = 'EXPIRY_IN_PAST';
+const GIVE_NOT_BALANCE_MODE = 'GIVE_NOT_BALANCE_MODE';
 
 // Export the set so a test can pin it against the SDK registry without this
 // component importing the SDK (#3935). Adds no runtime import, no bundle weight.
@@ -74,6 +81,13 @@ export const TIER1_NOTICE_CODES = Object.freeze({
 // utils/preflightFindingKey.js), `findings[].data.subCommandCount` and
 // `findings[].data.accepted` (whether the network judged a batch in FULL; the
 // notice copy and the verdict chip both branch on them),
+// `findings[].data.status` and `findings[].data.error` (the network's
+// `invalid:` refusal text, read through consensusRefusalReason in
+// utils/preflightFindingKey.js for every error row's signer copy and the
+// hard-block fallback, and stripped by name in the extension's
+// advisoryPreflightReport), the `findings[]._downgradedBy` VALUE
+// `dryrun-valid-local-delta` (utils/preflightFindingCopy.js keys the local
+// balance warning headline on it),
 // `restricted` (defined beside REPORT_SCHEMA_VERSION there: a proper-subset
 // report, never a completeness claim; the "Partial check" chip below),
 // `stateHeight`, and `unverified[].check` / `unverified[].reason` straight off
@@ -110,7 +124,7 @@ export const SUPPORTED_SCHEMA_VERSION = 1;
 // below already follows: the sentence must be true of EVERY state its code can
 // carry. A fixed string is only safe while that holds, and DRYRUN_VALID stopped
 // holding it when the arbiter began answering a BATCH at two levels.
-const NOTICE_COPY = {
+export const NOTICE_COPY = Object.freeze({
     // A batch is answered twice over: the transaction is accepted, and each
     // command inside it is judged separately - or not judged at all, because a
     // settlement leg inside a batch answers with no status the probe can read.
@@ -147,7 +161,17 @@ const NOTICE_COPY = {
     // screen is in front of, so the amounts render as the detail and the
     // headline says what it means for signing.
     [DRYRUN_ORACLE_FEES_OWED]: 'This batch owes oracle usage fees the pre-flight cannot check are covered. Confirm the amounts below before signing.',
-};
+    // Say the check happens later: it fires on every order or swap with a numeric
+    // expiration, and nothing is known to be past, whatever the code name says.
+    [EXPIRY_IN_PAST]: 'The network checks this trade\'s expiration when the transaction confirms. It was not checked here.',
+    // Cover both states in one line: an ownership give and a native-coin give carry
+    // no data to tell them apart, and neither is drawn from a token balance.
+    [GIVE_NOT_BALANCE_MODE]: 'What this trade gives is not drawn from a token balance, so no balance check applies to it.',
+});
+
+// Head a notice code with no entry above (a newer SDK, say) in neutral words, so
+// its report-reader text renders only as the detail, as warningText does.
+const NOTICE_FALLBACK = 'The pre-flight checks added a note about this action.';
 
 /*
  * Resolve one notice into the headline the panel vouches for and the
@@ -162,6 +186,9 @@ const NOTICE_COPY = {
  * the cases where it does not.
  */
 function noticeText(f) {
+    if (!Object.hasOwn(NOTICE_COPY, f.code)) {
+        return { headline: NOTICE_FALLBACK, detail: f.message || null };
+    }
     const copy = NOTICE_COPY[f.code];
     const headline = (typeof copy === 'function' ? copy(f) : copy) || f.message;
     return { headline, detail: f.message && f.message !== headline ? f.message : null };
@@ -243,14 +270,14 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <Spinner size="sm" label="Checking…" className={styles.spinner} />
+                <Spinner size="sm" label={t('settings.backup.checking')} className={styles.spinner} />
             </div>
         );
     }
     if (!report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite">
-                <span className={styles.unverified}>Pre-flight unavailable; proceeding is at your discretion.</span>
+                <span className={styles.unverified}>{t('components.preflightPanel.preFlightUnavailableProceedingIs')}</span>
             </div>
         );
     }
@@ -351,7 +378,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                             {f.overridable && !isHardPreflightFinding(f) ? (
                                 <Checkbox
                                     className={styles.ack}
-                                    label="Sign anyway"
+                                    label={t('components.preflightPanel.signAnyway')}
                                     checked={acknowledged.has(preflightFindingKey(f))}
                                     onChange={() => onAcknowledge(preflightFindingKey(f))}
                                     data-testid={`ack-${preflightFindingKey(f)}`}
@@ -383,7 +410,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {report.restricted ? (
-                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
+                <div className={styles.restrictedChip} data-testid="preflight-restricted">{t('components.preflightPanel.partialCheck')}</div>
             ) : null}
 
             {notices.length > 0 ? (
@@ -408,7 +435,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {report.unverified && report.unverified.length > 0 ? (
                 <details className={styles.unverifiedList}>
-                    <summary>Could not verify ({formatDecimalAmount(report.unverified.length)})</summary>
+                    <summary>{t('components.preflightPanel.couldNotVerify')}{formatDecimalAmount(report.unverified.length)})</summary>
                     <ul>
                         {report.unverified.map((u, i) => {
                             const { headline, detail } = unverifiedText(u);
@@ -426,7 +453,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className={styles.stamp}>Checked at block {formatDecimalAmount(report.stateHeight)}</div>
+                <div className={styles.stamp}>{t('components.preflightPanel.checkedAtBlock')} {formatDecimalAmount(report.stateHeight)}</div>
             ) : null}
         </div>
     );

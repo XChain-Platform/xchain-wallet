@@ -15,6 +15,7 @@
 // the gate must refuse to read.
 
 import { strict as assert } from 'node:assert';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,8 +30,13 @@ const laneFeeds = parseLaneFeeds(lanesText);
 const FILE = 'xchain-wallet-0.333.1-x86_64.AppImage';
 const HASH = 'a'.repeat(64);
 
-/** A manifest body with optional header lines, covering FILE. */
+/** A gated manifest body with optional header lines, covering FILE. */
 function manifest(...header) {
+    return ungated('# dev-mock-gate: enforced', ...header);
+}
+
+/** The same body with no gate line unless the caller writes one. */
+function ungated(...header) {
     return ['# XChain Wallet release manifest', '# tag: v0.333.1', ...header, `${HASH}  ${FILE}`, ''].join('\n');
 }
 
@@ -75,21 +81,32 @@ assert.throws(() => parseLaneFeeds('mac SHIPPED\n'), /cannot read the feed/,
     'a lane row with no feed column is unreadable, not skipped');
 
 // The whole check, through checkPointers: missing and unexpected are both named.
-const yml = (version) => `version: ${version}\nfiles:\n  - url: ${FILE}\n    sha512: x\npath: ${FILE}\nsha512: x\n`;
+const BODY = Buffer.from('staged AppImage bytes');
+const sha512Of = (bytes, encoding) => createHash('sha512').update(bytes).digest(encoding);
+const stagedSha512 = new Map([[FILE, sha512Of(BODY, 'hex')]]);
+const yml = (version, sha = sha512Of(BODY, 'base64')) =>
+    `version: ${version}\nfiles:\n  - url: ${FILE}\n    sha512: ${sha}\npath: ${FILE}\nsha512: ${sha}\n`;
 const lanesHeader = manifest('# coverage: partial', '# lanes: linux');
-assert.deepEqual(checkPointers({
-    pointers: [{ name: 'stable-linux.yml', text: yml('0.333.1') }, { name: 'stable-linux-arm64.yml', text: yml('0.333.1') }],
-    manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText,
-}), [], 'a linux partial carrying exactly its two pointers passes');
+const linuxCheck = (sha, staged = stagedSha512) => checkPointers({
+    pointers: [{ name: 'stable-linux.yml', text: yml('0.333.1', sha) }, { name: 'stable-linux-arm64.yml', text: yml('0.333.1') }],
+    manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512: staged,
+});
+assert.deepEqual(linuxCheck(), [], 'a linux partial carrying exactly its two pointers passes');
+assert.deepEqual(linuxCheck(sha512Of(BODY, 'hex')), [], 'a hex sha512 passes, as the client accepts it');
+assert.match(linuxCheck(sha512Of(Buffer.from('another build'), 'base64')).join('\n'),
+    /^stable-linux\.yml: sha512 for .* is not the staged file's/m, 'a pointer from another build of the version is refused');
+assert.match(linuxCheck('x').join('\n'), /^stable-linux\.yml: carries no sha512/m, 'a malformed sha512 is refused');
+assert.match(linuxCheck(undefined, new Map()).join('\n'), /not in the release directory/, 'an unstaged file is refused');
+assert.match(linuxCheck(undefined, null).join('\n'), /not in the release directory/, 'no staged hashes fails shut');
 const refused = checkPointers({
     pointers: [{ name: 'stable-linux.yml', text: yml('0.333.1') }, { name: 'stable-mac.yml', text: yml('0.333.1') }],
-    manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText,
+    manifestText: lanesHeader, tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512,
 });
 assert.ok(refused.some((p) => /^stable-linux-arm64\.yml: missing/.test(p)), `the missing arm64 pointer is named:\n${refused.join('\n')}`);
 assert.ok(refused.some((p) => /^stable-mac\.yml: unexpected/.test(p)), `the out-of-scope mac pointer is named:\n${refused.join('\n')}`);
 const stray = checkPointers({
     pointers: [{ name: 'stable-linux.yml', text: yml('0.333.1') }],
-    manifestText: manifest('# coverage: partial', '# lanes: android'), tag: 'v0.333.1', channel: 'stable', lanesText,
+    manifestText: manifest('# coverage: partial', '# lanes: android'), tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512,
 });
 assert.ok(stray.some((p) => /^stable-linux\.yml: unexpected/.test(p)),
     `a store-only partial carrying a stray desktop pointer is refused, not uploaded:\n${stray.join('\n')}`);
@@ -97,5 +114,19 @@ assert.match(checkPointers({ pointers: [], manifestText: manifest('# lanes:'), t
     .join('\n'), /names no lane/, 'an empty lanes header is a refusal');
 assert.match(checkPointers({ pointers: [], manifestText: manifest(), tag: 'v0.333.1', channel: 'stable', lanesText: '# nothing\n' })
     .join('\n'), /declares no lanes/, 'an empty lane list is a refusal');
+
+// The dev-mock gate, read the way updateVerify.js reads it: only `enforced` passes.
+const linuxPair = [{ name: 'stable-linux.yml', text: yml('0.333.1') }, { name: 'stable-linux-arm64.yml', text: yml('0.333.1') }];
+const gateCheck = (text) => checkPointers({ pointers: linuxPair, manifestText: text, tag: 'v0.333.1', channel: 'stable', lanesText, stagedSha512 });
+assert.match(gateCheck(ungated('# dev-mock-gate: SKIPPED', '# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'SKIPPED', not 'enforced'/, 'a linux partial signed with the gate skipped is refused before upload');
+assert.match(gateCheck(ungated('# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'unrecorded', not 'enforced'/, 'a manifest that records no gate is refused as unrecorded');
+assert.match(gateCheck(ungated('# dev-mock-gate:enforced', '# coverage: partial', '# lanes: linux')).join('\n'),
+    /dev-mock gate as 'unrecorded'/, 'a gate line the client cannot split (no space after the colon) does not pass');
+assert.deepEqual(checkPointers({
+    pointers: [], manifestText: ungated('# dev-mock-gate: SKIPPED', '# coverage: partial', '# lanes: android'),
+    tag: 'v0.333.1', channel: 'stable', lanesText,
+}), [], 'a store-only partial with no pointer is not judged on the updater gate');
 
 console.log('pointer-gate.smoke.js: ok');

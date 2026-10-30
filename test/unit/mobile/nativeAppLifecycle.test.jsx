@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -113,6 +113,50 @@ describe('Capacitor app resume', () => {
         expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
     });
 
+    it('hides the page in the background without unmounting the screen', () => {
+        function Form() {
+            const [text, setText] = React.useState('');
+            return <input aria-label="Name" value={text} onChange={(e) => setText(e.target.value)} />;
+        }
+        const view = render(provider(
+            makeMessaging(0),
+            <><LifecycleHarness /><Form /></>,
+        ));
+        const input = view.getByLabelText('Name');
+        act(() => { input.focus(); });
+        act(() => { fireEvent.change(input, { target: { value: 'typed text' } }); });
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        expect(document.body.style.visibility).toBe('hidden');
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(document.body.style.visibility).toBe('');
+        expect(view.getByLabelText('Name')).toBe(input);
+        expect(input).toHaveValue('typed text');
+    });
+
+    it.each([
+        { awayMs: MINUTE, locks: 0, refreshes: 1 },
+        { awayMs: 10 * MINUTE, locks: 1, refreshes: 0 },
+        { awayMs: 24 * 60 * MINUTE, locks: 1, refreshes: 0 },
+    ])('handles a core-only native shell after $awayMs ms away', async ({
+        awayMs, locks, refreshes,
+    }) => {
+        vi.useFakeTimers();
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const messaging = makeMessaging(5);
+        const onResume = vi.fn();
+        render(provider(messaging, <LifecycleHarness onResume={onResume} />));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        vi.setSystemTime(Date.now() + awayMs);
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(locks);
+        expect(onResume).toHaveBeenCalledTimes(refreshes);
+    });
+
     it('deduplicates plugin and document notifications for one background cycle', async () => {
         const messaging = makeMessaging(0);
         const onBackground = vi.fn();
@@ -121,7 +165,7 @@ describe('Capacitor app resume', () => {
             messaging,
             <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
         ));
-        await act(async () => { await Promise.resolve(); });
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
         act(() => {
             appStateChange({ isActive: false });

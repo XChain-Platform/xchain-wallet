@@ -137,6 +137,20 @@ export function labelSyncRestoreResult(opts) {
     return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
 }
 
+/** @param {{ walletId?: string }} [opts] */
+export function discoverAddresses(opts) {
+    return /** @type {any} */ (sendMessage('wallet.discoverAddresses', opts || {}));
+}
+
+export function addressDiscoveryStatus() {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryStatus', {}));
+}
+
+/** @param {{ id: number }} opts */
+export function addressDiscoveryDismiss(opts) {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryDismiss', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * A wallet created before the passphrase was stored is opened by the password
@@ -222,10 +236,14 @@ export function createAccount(opts) {
  *
  * @param {string} walletId
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account; otherwise aggregate across all accounts under the wallet
+ * @param {string} [chainId]
+ * @param {{ fresh?: boolean }} [opts]
  * @returns {Promise<Record<string, Array<{ address: string, addressType: string, label: string, balances: unknown | null, error: string | null }>>>}
  */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+export function getWalletBalances(walletId, accountId, chainId, opts) {
+    return /** @type {any} */ (sendMessage('balances.wallet', {
+        walletId, accountId, ...(chainId ? { chainId } : {}), ...(opts ? { opts } : {}),
+    }));
 }
 
 /**
@@ -291,6 +309,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (
         sendMessage('addresses.newest', { walletId, chainId, accountId })
     );
+}
+
+/** Which registry address types the installed SDK can generate on a chain. @param {string} chainId */
+export function getSupportedAddressTypes(chainId) {
+    return /** @type {any} */ (sendMessage('sdk.addressTypes', { chainId }));
 }
 
 /** Rename an address (set its label). @param {string} id @param {string} label */
@@ -606,6 +629,21 @@ export function broadcastQueuedRequest(opts) {
  */
 export function discardQueuedRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
+}
+
+/**
+ * Sends of this wallet that settled while another window had locked it.
+ *
+ * @param {{ walletId: string }} opts
+ * @returns {Promise<Array<{ id: string, kind: 'sent' | 'queued' | 'failed' | 'unsent', txid: string | null, amount: string | null, tick: string | null, summary: string | null }>>}
+ */
+export function listLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.list', opts));
+}
+
+/** @param {{ ids: string[] }} opts */
+export function clearLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.clear', opts));
 }
 
 /**
@@ -2530,6 +2568,10 @@ export function findContactByAddress(req) {
 export function saveContact(opts) {
     return /** @type {any} */ (sendMessage('contacts.save', opts));
 }
+/** @param {{ records: object[] }} opts */
+export function saveContacts(opts) {
+    return /** @type {any} */ (sendMessage('contacts.saveMany', opts));
+}
 /** @param {{ id: string }} req */
 export function deleteContact(req) {
     return /** @type {any} */ (sendMessage('contacts.delete', req));
@@ -2579,6 +2621,17 @@ export function buildBatchCommand(req) {
  */
 export function getActionFormats(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/**
+ * The coins whose addresses an address LIST on the chain accepts once
+ * token-policy inheritance is active, read from the explorer's gate flag.
+ * Answers [] when the gate is off or on any failure.
+ *
+ * @param {{ chainId: string, coin: string, networkKind: string }} req
+ */
+export function listAnyCoinItems(req) {
+    return /** @type {any} */ (sendMessage('sdk.listAnyCoinItems', req));
 }
 
 /**
@@ -2693,7 +2746,8 @@ export function updateSettings(patch) {
  * process bounds a keychain relaunch by the same window); plain web keeps the
  * key in memory only and has none.
  *
- * @param {{ armed: boolean, idleMs: number }} signal
+ * @param {{ armed: boolean, idleMs: number, activity?: boolean, issuedAt?: number }} signal
+ *   `issuedAt` lets the worker drop a disarm that lands after a newer arm
  */
 export function reportAutoLock(signal) {
     return /** @type {any} */ (sendMessage('session.autolock', signal));

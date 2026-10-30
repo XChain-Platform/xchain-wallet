@@ -46,6 +46,7 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -70,6 +71,11 @@ function policyAddressError(built, descriptor) {
 
 function exactValue(value) {
     return JSON.stringify(value);
+}
+
+// A policy field left unset is unrestricted; the review says so in words.
+function limitValue(value) {
+    return policyNoLimitText(value) ?? <code>{exactValue(value)}</code>;
 }
 
 /**
@@ -146,13 +152,31 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         };
     }, [walletId, btcChainIds, messaging]);
 
-    // Reset the picked daemon address when the chain changes (the address
-    // belongs to a specific chain).
-    useEffect(() => { setDaemonAddressId(''); }, [chainId]);
+    // The picked daemon address belongs to one chain, so picking another
+    // network clears it. This is done in the handler rather than in an effect
+    // on chainId: an effect runs after the first render with a chain, and a
+    // selection made before that effect flushed was silently wiped.
+    function handleChainChange(next) {
+        setChainId(next);
+        setDaemonAddressId('');
+    }
 
     const chainAddresses = (chainId && addressesByChain?.[chainId]) || [];
     const daemonAddress = chainAddresses.find((a) => a.id === daemonAddressId) || null;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+
+    // Compared without the parity byte: 02K and 03K are one key and its negation,
+    // and whoever holds the private key for one holds it for the other.
+    const walletKeyXOnly = useMemo(() => {
+        const keys = new Set();
+        for (const list of Object.values(addressesByChain || {})) {
+            for (const a of Array.isArray(list) ? list : []) {
+                const key = String(a?.publicKey || '').toLowerCase();
+                if (PUBKEY_RE.test(key)) keys.add(key.slice(2));
+            }
+        }
+        return keys;
+    }, [addressesByChain]);
 
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
@@ -165,8 +189,8 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         if (!PUBKEY_RE.test(agentPubkey.trim())) {
             return 'Enter a compressed agent public key starting with 02 or 03, followed by 64 hex characters.';
         }
-        if (agentPubkey.trim().toLowerCase() === String(daemonAddress.publicKey).toLowerCase()) {
-            return 'The agent key must differ from this wallet\'s key.';
+        if (walletKeyXOnly.has(agentPubkey.trim().toLowerCase().slice(2))) {
+            return 'The agent key must differ from every key in this wallet.';
         }
         const sourceAddressError = addressValidationError(daemonAddress.address, descriptor);
         if (sourceAddressError) return `This wallet's address: ${sourceAddressError}`;
@@ -175,7 +199,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         const addressError = policyAddressError(built, descriptor);
         if (addressError) return addressError;
         return null;
-    }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor]);
+    }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor, walletKeyXOnly]);
 
     function handleReview(event) {
         event?.preventDefault();
@@ -309,13 +333,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                         {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
                     </dd>
                     <dt className={styles.detailsLabel}>Allowed recipients</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.allowedDestinations)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
                     <dt className={styles.detailsLabel}>Per-action limits</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerAction)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerAction)}</dd>
                     <dt className={styles.detailsLabel}>Rolling limit</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerWindow)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerWindow)}</dd>
                     <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.confirmAbove)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.confirmAbove)}</dd>
                     <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
                     <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
                 </dl>
@@ -353,7 +377,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             <ChainPicker
                 label="Network"
                 value={chainId}
-                onChange={setChainId}
+                onChange={handleChainChange}
                 chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                 chainRegistry={chainRegistry}
             />

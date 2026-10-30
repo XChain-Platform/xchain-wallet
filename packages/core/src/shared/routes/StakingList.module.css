@@ -32,6 +32,9 @@
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {
     flex-shrink: 0;
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
     font-size: var(--xc-text-xs);
     color: var(--xc-success);
     font-weight: 600;
@@ -39,11 +42,9 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -63,7 +64,12 @@
     cursor: pointer;
 }
 
-.row:first-of-type {
+.rowItem {
+    display: flex;
+    min-width: 0;
+}
+
+.rowItem:first-of-type > .row {
     border-top: none;
 }
 
@@ -209,39 +215,14 @@
     overflow-wrap: anywhere;
 }
 
-/* Circular header "+" button that opens the new-stake flow (same
-   affordance as the dispenser list / messaging inbox). */
-.addBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addBtn:hover {
-    background: var(--xc-bg-muted);
-}
-
 /* PC-47: claimable-rewards banner above the position list. */
 .claimable {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
     margin-bottom: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .claimable > :first-child {

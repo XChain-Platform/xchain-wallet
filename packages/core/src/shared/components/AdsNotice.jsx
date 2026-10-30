@@ -10,6 +10,8 @@
 
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
+import styles from './AdsNotice.module.css';
 
 /**
  * §36.1 ADS notice: the one-time screen at the end of onboarding, after a
@@ -19,52 +21,27 @@ import { t } from '../../i18n/index.js';
  * live in Settings -> ADS, the same shape FreeWallet desktop uses (operator
  * ruling 2026-10-12).
  *
- * The route supplies its own content classes so the notice matches the
- * screens before it.
+ * The caller places it inside a FormPage, so create and import end on the same
+ * screen at every width.
  *
  * @param {object} props
  * @param {() => void} props.onContinue
- * @param {boolean} props.isFull
- * @param {string} props.headClass
- * @param {string} props.subtitleClass
- * @param {string} props.actionsClass
  * @param {boolean} [props.busy]
  */
-export function AdsNotice({
-    onContinue,
-    isFull,
-    headClass,
-    subtitleClass,
-    actionsClass,
-    busy = false,
-}) {
+export function AdsNotice({ onContinue, busy = false }) {
     return (
         <>
-            <div className={headClass}>
-                <p className={subtitleClass}>{t('adsNotice.subtitle')}</p>
-            </div>
-            <ul style={{
-                margin: 0,
-                padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
-                background: 'var(--xc-surface-raised)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
-                fontSize: 'var(--xc-text-sm)',
-                color: 'var(--xc-text-muted)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--xc-space-1)',
-            }}>
+            <p className={styles.subtitle}>{t('adsNotice.subtitle')}</p>
+            <ul className={styles.list}>
                 <li>{t('adsNotice.defaultBehavior')}</li>
                 <li>{t('adsNotice.optional')}</li>
                 <li>{t('adsNotice.settings')}</li>
             </ul>
-            <div className={actionsClass}>
+            <div className={styles.actions}>
                 <Button
                     variant="primary"
                     onClick={onContinue}
-                    block={!isFull}
-                    size={isFull ? undefined : 'sm'}
+                    block
                     icon={<Icon.CheckIcon />}
                     loading={busy}
                     disabled={busy}

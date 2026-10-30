@@ -27,8 +27,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import LINKS from '../platform-links.json';
+import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './PlatformSwitcher.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 function actionableMenuItems(menu) {
     return Array.from(
@@ -103,8 +106,8 @@ export function PlatformSwitcher({ current }) {
                 }}
                 aria-haspopup="menu"
                 aria-expanded={open ? 'true' : 'false'}
-                aria-label="XChain platform sites"
-                title="XChain platform sites"
+                aria-label={t('components.platformSwitcher.xchainPlatformSites')}
+                title={t('components.platformSwitcher.xchainPlatformSites')}
             >
                 <Icon.ExternalLinkIcon />
             </button>
@@ -113,7 +116,7 @@ export function PlatformSwitcher({ current }) {
                     ref={menuRef}
                     className={styles.menu}
                     role="menu"
-                    aria-label="XChain platform sites"
+                    aria-label={t('components.platformSwitcher.xchainPlatformSites')}
                     onKeyDown={(e) => {
                         const items = actionableMenuItems(menuRef.current);
                         const index = items.indexOf(document.activeElement);
@@ -134,10 +137,10 @@ export function PlatformSwitcher({ current }) {
                             role="menuitem"
                             aria-current="page"
                             aria-disabled="true"
-                            aria-label={`${p.label}, current site`}
+                            aria-label={t('components.platformSwitcher.currentSite', { label: platformLinkLabel(p) })}
                         >
-                            <span>{p.label}</span>
-                            <span className={styles.hereTag} aria-hidden="true">you are here</span>
+                            <span>{platformLinkLabel(p)}</span>
+                            <span className={styles.hereTag} aria-hidden="true">{t('components.platformSwitcher.youAreHere')}</span>
                         </div>
                     ) : (
                         // Each entry leaves the wallet, so it opens in a new
@@ -153,7 +156,7 @@ export function PlatformSwitcher({ current }) {
                             tabIndex={-1}
                             onClick={() => closeMenu(true)}
                         >
-                            <span>{p.label}</span>
+                            <span>{platformLinkLabel(p)}</span>
                             <span className={styles.itemIcon} aria-hidden="true">
                                 <Icon.ExternalLinkIcon />
                             </span>

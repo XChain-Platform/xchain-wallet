@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect, test } from '@playwright/test';
+import { HOST_BLOCK_ARG } from '../../host-block.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const extensionDist = resolve(here, '..', '..', '..', '..', 'packages', 'extension', 'dist');
@@ -53,6 +54,7 @@ test('popup keeps onboarding actions and bottom navigation labels visible', asyn
             args: [
                 `--disable-extensions-except=${extensionDist}`,
                 `--load-extension=${extensionDist}`,
+                HOST_BLOCK_ARG,
             ],
         });
 

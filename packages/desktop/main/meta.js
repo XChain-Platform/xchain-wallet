@@ -25,6 +25,10 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { storage as coreStorage } from '@xchain-wallet/core';
+
+const { VaultCorruptError } = coreStorage;
+
 export class FileMetaBackend {
     /**
      * @param {string} filePath  absolute path.
@@ -49,7 +53,19 @@ export class FileMetaBackend {
             if (err && err.code === 'ENOENT') return null;
             throw err;
         }
-        return JSON.parse(raw);
+        // Metadata that cannot be read must not mean "no wallet": the vault
+        // ciphertext may still need these exact KDF parameters, so the shell
+        // gets the damaged-vault screen instead of an opaque start failure.
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            throw new VaultCorruptError('FileMetaBackend.load: stored metadata is not valid JSON');
+        }
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new VaultCorruptError('FileMetaBackend.load: stored metadata is not an object');
+        }
+        return parsed;
     }
 
     /** @param {unknown} obj */

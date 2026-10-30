@@ -115,7 +115,10 @@ test.describe('Settings: every section', () => {
         await expect(notificationSwitch).toBeVisible();
         const expectedNotification = await flipSwitch(notificationSwitch);
 
-        await page.getByRole('button', { name: 'Lock wallet', exact: true }).first().click();
+        // Wide layouts lock from the side navigation ('Lock'); the phone header carries 'Lock wallet'.
+        await page.getByRole('button', { name: 'Lock', exact: true })
+            .or(page.getByRole('button', { name: 'Lock wallet', exact: true }))
+            .first().click();
         const unlock = page.getByRole('button', { name: 'Unlock Wallet', exact: true });
         await expect(unlock, 'the wallet did not lock').toBeVisible();
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);

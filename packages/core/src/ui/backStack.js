@@ -13,11 +13,13 @@
 // uses available history before requiring a confirmed Home exit. Browsers use
 // a sentinel history entry when route snapshots do not already own history.
 // Overlay handlers take priority over route handlers, so a modal or sheet
-// always closes first.
+// always closes first. A screen handler steps back through a multi-step flow
+// (Create and Import wallet): it outranks route handlers like an overlay, but
+// backgrounding the app never runs it, because a pause is not a Back press.
 
 import { useEffect, useRef } from 'react';
 
-/** @type {{ run: () => void }[]} */
+/** @type {{ run: () => void, kind: 'route' | 'screen' | 'overlay' }[]} */
 const handlers = [];
 /** True while a sentinel entry of ours is the current history entry. */
 let armed = false;
@@ -27,10 +29,24 @@ let syncScheduled = false;
 let listening = false;
 let routeHistoryManaged = false;
 let nativeListener = null;
-let nativeBackRootOwners = 0;
+/**
+ * The mounted native Back root: its first-press hint, and whether Back skips
+ * the history. Only one root screen shows at a time.
+ *
+ * @type {{ current?: (windowMs: number) => void, skipHistory?: boolean } | null}
+ */
+let nativeBackRoot = null;
 let homeBackAt = null;
+/** True from the start of a page unload (a reload or a navigation away) until the grace below passes. */
+let unloading = false;
+let unloadTimer = null;
 
 const HOME_BACK_WINDOW_MS = 2000;
+// A `history.back()` issued while a reload is starting supersedes the reload,
+// so the sentinel is left alone for this long after `beforeunload`. A page
+// that stays open (the user kept a form in the leave prompt) syncs again
+// once the grace has passed.
+const UNLOAD_GRACE_MS = 2000;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
 
@@ -38,7 +54,7 @@ const capacitorApp = () => globalThis.Capacitor?.Plugins?.App;
 
 function topHandler() {
     for (let i = handlers.length - 1; i >= 0; i -= 1) {
-        if (handlers[i].kind === 'overlay') return handlers[i];
+        if (handlers[i].kind !== 'route') return handlers[i];
     }
     return handlers[handlers.length - 1];
 }
@@ -50,14 +66,16 @@ function onNativeBack(event) {
         top.run();
         return;
     }
-    if (event?.canGoBack && typeof window !== 'undefined' && window.history?.back) {
+    // Welcome and unlock skip the history: its entries belong to a session
+    // that has ended, and popping them changes nothing on screen.
+    if (event?.canGoBack && !nativeBackRoot?.skipHistory && typeof window !== 'undefined' && window.history?.back) {
         homeBackAt = null;
         window.history.back();
         return;
     }
-    // Only a native Back root (Home) may background the app, and only on a
-    // second press within the window.
-    if (nativeBackRootOwners === 0) return;
+    // Only a native Back root (Home, Welcome, unlock) may background the
+    // app, and only on a second press within the window.
+    if (!nativeBackRoot) return;
     const pressedAt = Date.now();
     const sinceHomeBack = homeBackAt === null ? null : pressedAt - homeBackAt;
     if (sinceHomeBack !== null && sinceHomeBack >= 0 && sinceHomeBack <= HOME_BACK_WINDOW_MS) {
@@ -66,6 +84,7 @@ function onNativeBack(event) {
         return;
     }
     homeBackAt = pressedAt;
+    nativeBackRoot.current?.(HOME_BACK_WINDOW_MS);
 }
 
 /** iOS edge Back belongs only to in-app navigation and never exits the app. */
@@ -88,6 +107,7 @@ function ensureNativeListener() {
 function sync() {
     syncScheduled = false;
     if (!hasHistory()) return;
+    if (unloading) return;
     const want = handlers.some((entry) => entry.kind !== 'route')
         || (!routeHistoryManaged && handlers.length > 0);
     if (want && !armed) {
@@ -101,6 +121,16 @@ function sync() {
         ignoreNextPop = true;
         window.history.back();
     }
+}
+
+function onBeforeUnload() {
+    unloading = true;
+    clearTimeout(unloadTimer);
+    unloadTimer = setTimeout(() => {
+        unloading = false;
+        unloadTimer = null;
+        scheduleSync();
+    }, UNLOAD_GRACE_MS);
 }
 
 /**
@@ -130,28 +160,22 @@ function onPopState() {
     }
 }
 
-/** Escape dismisses only the top overlay and never acts as route navigation. */
+/** Escape dismisses only the top overlay or flow step and never acts as route navigation. */
 function onKeyDown(event) {
     if (event.key !== 'Escape') return;
-    let top = null;
-    for (let i = handlers.length - 1; i >= 0; i -= 1) {
-        if (handlers[i].kind !== 'route') {
-            top = handlers[i];
-            break;
-        }
-    }
-    if (!top) return;
+    const top = topHandler();
+    if (!top || top.kind === 'route') return;
     event.preventDefault();
     event.stopImmediatePropagation();
     top.run();
 }
 
 /**
- * Register a back action. The most recently registered overlay is "on top";
- * route handlers run only when no overlay is present.
+ * Register a back action. The most recently registered overlay or screen step
+ * is "on top"; route handlers run only when neither is present.
  *
  * @param {() => void} run
- * @param {'route' | 'overlay'} [kind]
+ * @param {'route' | 'screen' | 'overlay'} [kind]
  * @returns {() => void} unregister
  */
 export function registerBackHandler(run, kind = 'overlay') {
@@ -159,6 +183,7 @@ export function registerBackHandler(run, kind = 'overlay') {
     ensureNativeListener();
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
+        window.addEventListener('beforeunload', onBeforeUnload);
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('xchain:native-edge-back', onNativeEdgeBack);
         listening = true;
@@ -173,7 +198,7 @@ export function registerBackHandler(run, kind = 'overlay') {
     };
 }
 
-/** Dismiss every transient overlay while leaving route navigation untouched. */
+/** Dismiss every transient overlay while leaving flow steps and route navigation untouched. */
 export function dismissAllOverlays() {
     const overlays = handlers.filter((entry) => entry.kind === 'overlay').reverse();
     for (const entry of overlays) entry.run();
@@ -191,7 +216,7 @@ export function dismissAllOverlays() {
  *
  * @param {(() => void) | undefined} onBack
  * @param {boolean} [disabled]
- * @param {'route' | 'overlay'} [kind]
+ * @param {'route' | 'screen' | 'overlay'} [kind]
  */
 export function useBackHandler(onBack, disabled = false, kind = 'overlay') {
     const latest = useRef({ onBack, disabled });
@@ -207,15 +232,30 @@ export function useBackHandler(onBack, disabled = false, kind = 'overlay') {
     }, [present, kind]);
 }
 
-/** Marks the mounted screen as the only native Back root that may background the app. */
-export function useNativeBackRoot() {
+/**
+ * Marks the mounted screen as a native Back root (Home, Welcome, unlock)
+ * that may background the app on a second press. `onExitArmed` runs on the
+ * first press, with the window in milliseconds, so the screen can say a
+ * second one leaves. With `skipHistory`, Back ignores the WebView history.
+ *
+ * @param {boolean} [enabled]
+ * @param {(windowMs: number) => void} [onExitArmed]
+ * @param {boolean} [skipHistory]
+ */
+export function useNativeBackRoot(enabled = true, onExitArmed, skipHistory) {
+    const root = useRef(onExitArmed);
+    root.current = onExitArmed;
+    root.skipHistory = skipHistory;
     useEffect(() => {
         ensureNativeListener();
-        nativeBackRootOwners += 1;
+        if (!enabled) return undefined;
+        nativeBackRoot = root;
+        // The next root can mount before this one's cleanup runs (locking
+        // swaps Home for unlock), so only the current root clears the slot.
         return () => {
-            nativeBackRootOwners = Math.max(0, nativeBackRootOwners - 1);
+            if (nativeBackRoot === root) nativeBackRoot = null;
         };
-    }, []);
+    }, [enabled]);
 }
 
 /** Let the shell's route snapshots own browser Back while keeping overlay
@@ -234,14 +274,18 @@ export function resetBackStackForTests() {
     armed = false;
     ignoreNextPop = false;
     syncScheduled = false;
+    unloading = false;
+    clearTimeout(unloadTimer);
+    unloadTimer = null;
     if (listening && typeof window !== 'undefined') {
         window.removeEventListener('popstate', onPopState);
+        window.removeEventListener('beforeunload', onBeforeUnload);
         window.removeEventListener('keydown', onKeyDown, true);
         window.removeEventListener('xchain:native-edge-back', onNativeEdgeBack);
     }
     listening = false;
     routeHistoryManaged = false;
-    nativeBackRootOwners = 0;
+    nativeBackRoot = null;
     homeBackAt = null;
     const listener = nativeListener;
     nativeListener = null;

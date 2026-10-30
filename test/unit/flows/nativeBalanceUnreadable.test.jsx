@@ -121,6 +121,16 @@ describe('issue #74: an /address/ answer without a coin balance is unavailable, 
         expect(shape.unavailable).toBeUndefined();
     });
 
+    it.each([['text', 'abc'], ['a negative', '-5'], ['NaN', 'NaN'], ['an object', {}], ['a boolean', true]])(
+        'marks a malformed confirmed amount (%s) unavailable instead of an empty coin balance',
+        async (_label, confirmed) => {
+            const shape = await readOne(perAddressSdk({ balances: { confirmed } }));
+            expect(shape.native).toBeNull();
+            expect(shape.unavailable).toEqual(['native']);
+            expect(shape.unavailableReason).toBe(NATIVE_BALANCE_UNREADABLE_REASON);
+        },
+    );
+
     it('marks it the same way on the batch route as on the per-address route', async () => {
         const viaPerAddress = await readWallet(perAddressSdk(TRACKER_DOWN));
         _resetBatchSupportMemo();

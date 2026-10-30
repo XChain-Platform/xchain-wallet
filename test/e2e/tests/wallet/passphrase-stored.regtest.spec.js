@@ -74,6 +74,7 @@
 
 import { readFile } from 'node:fs/promises';
 
+import { readShownTxid, waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     createWallet,
     expect,
@@ -84,7 +85,10 @@ import {
     gotoSection,
     lockButton,
     mainButton,
+    openPaletteCommand,
+    openedWalletHome,
     unlockButton,
+    unlockedAnyScreen,
     unlockedShell,
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
@@ -94,12 +98,15 @@ import {
     REGTEST_CHAIN_LABEL,
     expectConfirmModal,
     fundAddress,
+    mintXchain,
     readReceiveAddress,
     seedPrices,
     selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
+    unlockAfterReload,
     waitForConfirmedUtxo,
+    waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
@@ -142,6 +149,8 @@ const STAMP = Date.now().toString().slice(-6);
  * a venue economics failure that reads exactly like a signing failure.
  */
 const ISSUE_FUNDING = 30;
+/** XCHAIN minted ahead of the ISSUE, to cover its protocol fee with room to spare. */
+const ISSUE_FEE_XCHAIN = 10;
 const SEND_FUNDING = 1;
 const SEND_AMOUNT = '0.01';
 
@@ -152,7 +161,7 @@ const SEND_AMOUNT = '0.01';
  * the acceptance test, not decoration around it.
  */
 const CAPTURE_COPY =
-    /It will be stored on this device, protected by your wallet password, so you are not asked again/i;
+    /It will be stored on this device, protected by your wallet password, so you aren't asked again/i;
 
 /**
  * The capture step's passphrase field.
@@ -190,28 +199,7 @@ async function freshContext(browser) {
 
 /** Opens Settings via the command palette. */
 async function openSettingsViaPalette(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill('Settings');
-    await page.getByRole('option', { name: /^Settings\b/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
-/** A palette command by title, for the screens with no nav destination. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await openPaletteCommand(page, 'Settings');
 }
 
 /**
@@ -235,6 +223,8 @@ async function exportEnvelope(page, walletName) {
 
     await page.getByLabel('Backup password', { exact: true }).fill(BACKUP_PASSWORD);
     await page.getByLabel('Confirm backup password').fill(BACKUP_PASSWORD);
+    // Take the download route: a headless browser cannot answer the save picker.
+    await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
         page.getByRole('button', { name: 'Export', exact: true }).click(),
@@ -267,7 +257,9 @@ async function revealRecoveryPhrase(page, password) {
 
     await page.getByLabel('Wallet password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Reveal', exact: true }).click();
-    await expect(page.getByText('Your recovery phrase'),
+    // The heading, by role: the panel's warning paragraph ("Never share your
+    // recovery phrase...") also contains the words as a substring.
+    await expect(page.getByRole('heading', { name: 'Your recovery phrase', exact: true }),
         'the wallet password did not open the reveal, so nothing below can be read back')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }
@@ -343,7 +335,7 @@ async function lockAndUnlockWithPasswordOnly(page, password) {
     await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
 
-    await expect(unlockedShell(page),
+    await expect(unlockedAnyScreen(page),
         'the wallet did not open on its password alone, which is the whole claim of §15.6')
         .toBeVisible({ timeout: kdfStepTimeout() });
     await expect(page.getByText(CAPTURE_COPY),
@@ -400,7 +392,10 @@ async function signSelfSend(page, address) {
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }),
         'the wallet approved a payment that never reached the node')
         .toBeVisible({ timeout: 180_000 });
-    const txid = (await page.getByRole('main').innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // Send's success screen draws the id as `first6…last6` (AddressText) and
+    // carries the full value in that element's aria-label, which
+    // readShownTxid reads; the visible text never holds all 64 characters.
+    const txid = await readShownTxid(page.getByRole('main'));
     expect(txid, 'the success screen showed no transaction id').toBeTruthy();
 
     // The wallet reporting on itself is not enough: a transaction signed with
@@ -435,7 +430,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
             });
 
             await test.step('fund the address the Issue form will sign from', async () => {
-                await gotoPalette(page, 'Issue token');
+                await openPaletteCommand(page, 'Issue token');
                 const main = page.getByRole('main');
                 await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
@@ -444,15 +439,23 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     .toMatch(REGTEST_ADDRESS_RE);
                 await fundAddress(source, ISSUE_FUNDING);
                 await seedPrices();
+                // An ISSUE charges its protocol fee in XCHAIN, and a fresh wallet
+                // holds none: the confirm screen then refuses with "insufficient
+                // funds (FEE)" and Approve never enables, which would read as the
+                // passphrase defect this test guards.
+                await page.reload();
+                await unlockAfterReload(page, PASSWORD);
+                await mintXchain(page, ISSUE_FEE_XCHAIN);
+                await waitForTokenBalance(source, 'XCHAIN', ISSUE_FEE_XCHAIN);
             });
 
             await test.step('lock, and unlock with the password ONLY', async () => {
-                await gotoPalette(page, 'Home');
+                await openPaletteCommand(page, 'Home');
                 await lockAndUnlockWithPasswordOnly(page, PASSWORD);
             });
 
             await test.step('and it signs an ISSUE the chain accepts', async () => {
-                await gotoPalette(page, 'Issue token');
+                await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
                 await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(form);
@@ -476,10 +479,10 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     .toBeEnabled({ timeout: 120_000 });
                 await approve.click();
 
-                const main = page.getByRole('main');
-                await expect(main, 'no transaction id appeared after Approve')
-                    .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-                const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+                const txid = await waitForShownTxid(page.getByRole('main'), {
+                    timeout: 180_000,
+                    message: 'no transaction id appeared after Approve',
+                });
                 const action = await waitForValidAction(txid);
                 expect(String(action.action), 'the chain recorded something other than an ISSUE')
                     .toMatch(/ISSUE/i);
@@ -504,7 +507,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     bip39Passphrase: PASSPHRASE,
                 });
                 await gotoSection(page, 'Receive');
-                originAddress = await page.getByLabel('Address', { exact: true }).inputValue();
+                originAddress = await page.getByTestId('receive-address').inputValue();
                 expect(originAddress.length, 'the origin wallet shows no receive address')
                     .toBeGreaterThan(0);
             });
@@ -523,7 +526,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             words, passphrase: null, name: 'No Passphrase Import',
                         });
                         await gotoSection(control, 'Receive');
-                        const address = await control.getByLabel('Address', { exact: true }).inputValue();
+                        const address = await control.getByTestId('receive-address').inputValue();
                         expect(address,
                             'the same recovery phrase with and without its passphrase opened the '
                             + 'SAME wallet, so the passphrase is not reaching seed derivation and '
@@ -539,7 +542,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             words, passphrase: PASSPHRASE, name: 'Imported Passphrase Wallet',
                         });
                         await gotoSection(two, 'Receive');
-                        expect(await two.getByLabel('Address', { exact: true }).inputValue(),
+                        expect(await two.getByTestId('receive-address').inputValue(),
                             'the import derived a different first address than the wallet it came '
                             + 'from, so the passphrase typed on the import screen did not reach '
                             + 'seed derivation')
@@ -584,7 +587,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             + 'the schema, the migration on the way out of the envelope is missing '
                             + 'and every backup taken by a pre-spec build is unrestorable')
                             .toHaveCount(0);
-                        await expect(unlockedShell(page),
+                        await expect(openedWalletHome(page),
                             'the pre-spec envelope never reached an unlocked wallet')
                             .toBeVisible({ timeout: kdfStepTimeout() });
                     });
@@ -593,7 +596,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     async () => {
                         await page.reload();
                         const unlock = unlockButton(page);
-                        await unlock.or(unlockedShell(page)).first()
+                        await unlock.or(unlockedAnyScreen(page)).first()
                             .waitFor({ state: 'visible', timeout: kdfStepTimeout() });
                         await expect(unlock, 'the reload did not re-lock the vault')
                             .toBeVisible({ timeout: 30_000 });
@@ -655,7 +658,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                 await test.step('the right one is accepted and the wallet opens', async () => {
                     await capturePassphraseField(page).fill(PRE_SPEC_PASSPHRASE);
                     await page.getByRole('button', { name: 'Continue', exact: true }).click();
-                    await expect(unlockedShell(page),
+                    await expect(unlockedAnyScreen(page),
                         'the correct passphrase did not finish the capture step')
                         .toBeVisible({ timeout: kdfStepTimeout() });
                 });
@@ -883,6 +886,6 @@ async function importMnemonic(page, { words, passphrase, name }) {
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
     await acknowledgeDonationNotice(page, 'off');
-    await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
+    await expect(openedWalletHome(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }

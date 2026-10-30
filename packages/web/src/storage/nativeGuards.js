@@ -105,17 +105,23 @@ function dropLegacyRecords(slots) {
 
 /**
  * A `{ load, save, clear }` view over one sub-key of the shared blob.
+ *
+ * A write the native slot refuses rejects to the flow that asked for it, so
+ * panic mode can report a freeze that is not saved; the shared chain carries
+ * on past the refusal so the next write is not stuck behind it.
+ *
  * @param {'lockout'|'duress'|'panic'} slot
  */
 function viewFor(slot) {
     const mutate = (value) => {
-        writeChain = writeChain.then(async () => {
+        const write = writeChain.then(async () => {
             if (!cache || !backend) return;
             if (value === undefined) delete cache[slot];
             else cache[slot] = value;
             await backend.save(cache);
-        }).catch(() => { /* best-effort; the flow's own cache is authoritative */ });
-        return writeChain;
+        });
+        writeChain = write.catch(() => { /* reported to the caller above */ });
+        return write;
     };
     return {
         load: async () => (cache ? cache[slot] ?? null : null),
@@ -131,10 +137,11 @@ function viewFor(slot) {
  * unhydrated cache does not degrade gracefully: it answers "no lockout, no
  * duress, no freeze", which is the permissive answer to all three questions.
  *
- * No-op in a browser, the extension, and the desktop renderer, which keep
- * localStorage: their storage is not evictable in the way iOS's is, and the
- * extension already routes panic mode through chrome.storage.local for its
- * own reason (cross-context visibility, not durability).
+ * No-op in a browser, the extension, and the desktop renderer: their storage
+ * is not evictable in the way iOS's is, the extension already routes panic
+ * mode through chrome.storage.local for its own reason (cross-context
+ * visibility, not durability), and the desktop renderer sends its freeze to
+ * the main process, which signs (desktop/renderer/panicModeBridge.js).
  *
  * @returns {Promise<boolean>} whether native persistence was installed
  */

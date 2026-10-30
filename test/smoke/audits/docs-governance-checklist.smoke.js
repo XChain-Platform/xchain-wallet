@@ -36,6 +36,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
 const contributing = readFileSync(join(wsRoot, 'CONTRIBUTING.md'), 'utf8');
+const maintainers = readFileSync(join(wsRoot, 'MAINTAINERS.md'), 'utf8');
+const codeOfConductUrl = 'https://github.com/XChain-Platform/.github/blob/master/CODE_OF_CONDUCT.md';
 
 // --- 1. CONTRIBUTING.md governance ----------------------------------------
 
@@ -54,6 +56,8 @@ assert.match(
 
 assert.ok(existsSync(join(wsRoot, 'MAINTAINERS.md')),
     'the MAINTAINERS.md the governance section links to actually exists');
+assert.ok(maintainers.includes(codeOfConductUrl),
+    'MAINTAINERS.md links to the organization code of conduct');
 
 // --- 2. Manual QA checklist, per-section docs check ----------------------
 
@@ -102,7 +106,6 @@ const docPaths = {
     'MAINTAINERS.md': join(wsRoot, 'MAINTAINERS.md'),
     'SECURITY.md': join(wsRoot, 'SECURITY.md'),
     'CONTRIBUTING.md': join(wsRoot, 'CONTRIBUTING.md'),
-    'CODE_OF_CONDUCT.md': join(wsRoot, 'CODE_OF_CONDUCT.md'),
 };
 for (const [name, p] of Object.entries(docPaths)) {
     assert.ok(existsSync(p),

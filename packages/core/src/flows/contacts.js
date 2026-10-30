@@ -19,7 +19,7 @@
 // on the extension's local storage for the popup, browser-backed
 // IndexedDB wrapper for the web shell, etc.).
 
-import { createContact, validateContact } from '../schemas/contact.js';
+import { cleanContactName, createContact, validateContact } from '../schemas/contact.js';
 
 const contactMutationTails = new WeakMap();
 
@@ -33,7 +33,22 @@ const contactMutationTails = new WeakMap();
 export async function listContacts({ vault }) {
     if (!vault) throw new Error('listContacts: vault is required');
     const rows = await vault.contacts.list();
-    return Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) return [];
+    // A damaged row must not take down every address-book consumer. Writes are
+    // schema-checked, but older or externally restored storage can still hold
+    // malformed data. Keep valid contacts available and leave repair of the
+    // damaged rows to an explicit recovery path.
+    return rows.filter((row) => validateContact(row).ok).map(withCleanName);
+}
+
+// A record saved before names were cleaned can still carry invisible or
+// bidirectional characters. Every read hands out the cleaned name, so such a
+// contact displays as what it says, and the stored record is left as it is
+// until the user saves it.
+function withCleanName(contact) {
+    if (!contact || typeof contact.name !== 'string') return contact;
+    const name = cleanContactName(contact.name);
+    return name === contact.name ? contact : { ...contact, name };
 }
 
 /**
@@ -56,9 +71,9 @@ export async function findContactByAddress({ vault, chain, address }) {
     }
     const rows = await vault.contacts.list();
     const needle = normalizedEntryKey({ chain, address });
-    for (const c of rows) {
-        for (const e of c.entries || []) {
-            if (normalizedEntryKey(e) === needle) return c;
+    for (const c of Array.isArray(rows) ? rows : []) {
+        for (const e of Array.isArray(c?.entries) ? c.entries : []) {
+            if (normalizedEntryKey(e) === needle) return withCleanName(c);
         }
     }
     return null;
@@ -89,6 +104,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
         } else if (input) {
             rec = createContact(input);
         }
+        rec = { ...rec, name: cleanContactName(rec.name) };
         const validation = validateContact(rec);
         if (!validation.ok) {
             throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
@@ -100,7 +116,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
             && normalizedName(contact.name) === normalizedName(rec.name)
         ));
         if (duplicateName) {
-            throw new Error(`A contact named "${duplicateName.name}" already exists.`);
+            throw new Error(`A contact named "${cleanContactName(duplicateName.name)}" already exists.`);
         }
         const seen = new Set();
         for (const entry of rec.entries) {
@@ -114,7 +130,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
             if (contact.id === rec.id || replaced.has(contact.id)) continue;
             const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedEntryKey(entry)));
             if (duplicate) {
-                throw new Error(`This address is already saved for ${contact.name}: ${duplicate.address}`);
+                throw new Error(`This address is already saved for ${cleanContactName(contact.name)}: ${duplicate.address}`);
             }
         }
         await vault.contacts.put(rec);
@@ -122,8 +138,94 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
     });
 }
 
+/**
+ * Save many full contact records in one vault write, as an import does.
+ * Each record gets the same checks and messages as `saveContact({ record })`,
+ * judged against the stored contacts plus the records accepted before it, so
+ * the outcome matches saving them one by one. A record that fails is
+ * reported by its index and skipped; the rest are written together.
+ *
+ * @param {{ vault: import('../storage/Vault.js').Vault, records: object[] }} opts
+ * @returns {Promise<{ saved: object[], failures: Array<{ index: number, message: string }> }>}
+ */
+export async function saveContacts({ vault, records }) {
+    if (!vault) throw new Error('saveContacts: vault is required');
+    if (!Array.isArray(records)) throw new Error('saveContacts: records[] is required');
+    return withContactMutationLock(vault, async () => {
+        const working = new Map();
+        const nameOwners = new Map();
+        const entryOwners = new Map();
+        const own = (index, key, id) => {
+            if (!index.has(key)) index.set(key, new Set());
+            index.get(key).add(id);
+        };
+        const disown = (index, key, id) => index.get(key)?.delete(id);
+        const entriesOf = (contact) => (Array.isArray(contact?.entries) ? contact.entries : []);
+        const track = (contact) => {
+            working.set(contact.id, contact);
+            own(nameOwners, normalizedName(contact.name), contact.id);
+            for (const entry of entriesOf(contact)) own(entryOwners, normalizedEntryKey(entry), contact.id);
+        };
+        const untrack = (contact) => {
+            disown(nameOwners, normalizedName(contact.name), contact.id);
+            for (const entry of entriesOf(contact)) disown(entryOwners, normalizedEntryKey(entry), contact.id);
+        };
+        const ownedByOther = (index, key, id) => [...(index.get(key) || [])].some((owner) => owner !== id);
+
+        for (const contact of await vault.contacts.list()) track(contact);
+
+        const saved = [];
+        const failures = [];
+        records.forEach((record, index) => {
+            try {
+                if (!record) throw new Error('saveContact: record or input is required');
+                const current = working.get(record.id) || null;
+                let rec = { ...record, updatedAt: nextUpdatedAt(current?.updatedAt || record.updatedAt) };
+                rec = { ...rec, name: cleanContactName(rec.name) };
+                const validation = validateContact(rec);
+                if (!validation.ok) {
+                    throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
+                }
+                if (ownedByOther(nameOwners, normalizedName(rec.name), rec.id)) {
+                    const duplicateName = [...working.values()].find((contact) => (
+                        contact.id !== rec.id && normalizedName(contact.name) === normalizedName(rec.name)
+                    ));
+                    throw new Error(`A contact named "${cleanContactName(duplicateName.name)}" already exists.`);
+                }
+                const seen = new Set();
+                for (const entry of rec.entries) {
+                    const key = normalizedEntryKey(entry);
+                    if (seen.has(key)) {
+                        throw new Error(`This address appears more than once for ${rec.name}: ${entry.address}`);
+                    }
+                    seen.add(key);
+                }
+                if ([...seen].some((key) => ownedByOther(entryOwners, key, rec.id))) {
+                    for (const contact of working.values()) {
+                        if (contact.id === rec.id) continue;
+                        const duplicate = entriesOf(contact).find((entry) => seen.has(normalizedEntryKey(entry)));
+                        if (duplicate) {
+                            throw new Error(`This address is already saved for ${cleanContactName(contact.name)}: ${duplicate.address}`);
+                        }
+                    }
+                }
+                if (current) untrack(current);
+                track(rec);
+                saved.push(rec);
+            } catch (err) {
+                failures.push({ index, message: err instanceof Error ? err.message : String(err) });
+            }
+        });
+
+        // A record saved twice in one batch keeps only its last version.
+        const latest = [...new Map(saved.map((rec) => [rec.id, rec])).values()];
+        await vault.contacts.putMany(latest);
+        return { saved, failures };
+    });
+}
+
 function normalizedName(name) {
-    return String(name || '').trim().toLowerCase();
+    return cleanContactName(name).toLowerCase();
 }
 
 function normalizedEntryKey(entry) {

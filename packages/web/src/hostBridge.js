@@ -39,9 +39,10 @@ import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../core/src/crypto/
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
 import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
+import { devMockSigningError } from '../../core/src/sdk/devMockErrors.js';
 import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
-import { VaultEvictedError } from '../../core/src/storage/backend.js';
+import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
@@ -91,6 +92,7 @@ import {
     fakeOwnedTokensFor,
     fakeTokenInfoFor,
     fakeDispensersFor,
+    fakeDispenserByActionIndex,
     fakeOrdersFor,
     fakeSwapsFor,
     fakeHoldersFor,
@@ -351,6 +353,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                     return [];
                 };
             }
+            if (prop === 'getAction') {
+                // The dispenser detail page reads one dispenser by action
+                // index; answer for rows the token-scoped list served, and keep
+                // the empty answer every other lookup got before.
+                return async (actionIndex) => fakeDispenserByActionIndex(actionIndex, chainId) || [];
+            }
             if (prop === 'getOrders') {
                 return async (query, type /* , opts */) => {
                     if (type === 'token' && query) return fakeOrdersFor(query, chainId);
@@ -382,6 +390,15 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
     });
     const sdk = {
+        // Agent accounts derive their aggregate address through the SDK, so the
+        // dev shell serves a deterministic marker address for the key pair; the
+        // real MuSig2 aggregation needs the real xchain-sdk.
+        coSigner: {
+            deriveMuSig2P2TR(publicKeys) {
+                const tail = (publicKeys || []).map((key) => String(key).slice(2, 10)).join('');
+                return { address: mockDeriveAddress(chainId, 'p2tr', tail), tweaks: [] };
+            },
+        },
         wallet: {
             /**
              * @param {string} publicKeyHex
@@ -392,7 +409,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 // descriptor's default, which is p2pkh on dogecoin.
                 return mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
-            signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
+            signPsbt() { throw devMockSigningError('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
                 return {
                     valid: typeof addr === 'string' && addr.length > 0,
@@ -499,7 +516,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             return { schemaVersion: 1, verdict, restricted: false, checksRun: ['BALANCE_INSUFFICIENT'], findings, unverified: [], quote: null, stateHeight: null, elapsedMs: 0 };
         },
         auth: {
-            signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
+            signMessage() { throw devMockSigningError('Dev SDK stub: message signing requires the real xchain-sdk'); },
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
@@ -944,9 +961,9 @@ function startNotificationsNow() {
                 return flowsNs.getSettings(vault);
             },
             notify,
-            markTriggered: async (id) => {
+            markTriggered: async (id, terms) => {
                 const flowsNs = await getFlows();
-                return flowsNs.markAlertTriggered({ vault, id });
+                return flowsNs.markAlertTriggered({ vault, id, terms });
             },
             logger: console,
         });
@@ -1172,6 +1189,14 @@ export async function getSessionStatus() {
         }
         if (meta && meta.kdfParams) throw new VaultEvictedError();
     }
+    if (blob === null && usingNativeVault()) {
+        // On a phone the blob and the meta both live in the shell's vault,
+        // which only the wallet writes, and the wipe clears them one call at
+        // a time. Meta left behind with no blob is that wipe stopped part
+        // way: onboarding would refuse every create and import over it, so
+        // the incomplete-wallet screen offers the reset that finishes it.
+        if (await createMetaBackend().load()) throw new VaultIncompleteError();
+    }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
     return {
@@ -1364,6 +1389,36 @@ function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
 }
 
 /**
+ * Remove the encrypted blob and kdfParams a failed create / import / restore
+ * left behind. These lanes write the blob once, at their commit, and the
+ * kdfParams right after it; a refused kdfParams save (or any failure once the
+ * blob is down) leaves a blob with no kdfParams, and a native save that
+ * reports failure after landing leaves kdfParams with no blob. Either way
+ * unlock answers "no wallet" and every onboarding lane answers "a wallet
+ * already exists", so the half-written wallet could neither be opened nor
+ * replaced. The caller passes the backends only after `assertFreshVault`
+ * proved the device held neither, so this never discards a wallet that was
+ * there before. A clear that fails too is left for the original error to
+ * report.
+ *
+ * @param {{ clear: () => Promise<void> } | null} ownStorage
+ * @param {{ clear?: () => Promise<void> }} meta
+ * @param {unknown} err  A conflict means another create on this page stored its
+ *   vault first, so the stored blob is that wallet and stays.
+ */
+async function discardPartialVault(ownStorage, meta, err) {
+    if (!ownStorage) return;
+    if (err instanceof VaultConflictError) return;
+    for (const backend of [ownStorage, meta]) {
+        try {
+            if (typeof backend?.clear === 'function') await backend.clear();
+        } catch (_clearErr) {
+            // The failure being reported is the first one.
+        }
+    }
+}
+
+/**
  * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
  * key from `password`, opens a blank Vault, runs the core `createWallet`
  * flow, persists kdfParams to the meta slot, and leaves the host live
@@ -1392,12 +1447,18 @@ export async function createWalletLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -1415,7 +1476,6 @@ export async function createWalletLocal(req) {
             // key instead of paying a second Argon2id round.
             masterKey,
         });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1440,11 +1500,17 @@ export async function createWalletLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta, err);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1476,7 +1542,9 @@ export async function importMnemonicLocal(req) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        format,
         chainId,
+        activeNetwork,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -1504,12 +1572,18 @@ export async function importMnemonicLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();
         await sdkBound();
@@ -1534,12 +1608,17 @@ export async function importMnemonicLocal(req) {
                 name,
                 bip39Passphrase,
                 origin,
+                // The caller's pin, so a phrase both wordlists accept is not read as the other format.
+                format,
                 kdfParams,
                 // Same password, same params: the wallet seal reuses the vault
                 // key instead of paying a second Argon2id round.
                 masterKey,
+                // The network the caller asked to land on (demo mode asks for
+                // mainnet). Undefined keeps the flow's own inference from the
+                // first chain id.
+                activeNetwork,
             });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1564,8 +1643,11 @@ export async function importMnemonicLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         // §19.5.2 restore half: bring back the labels + contacts this seed
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
@@ -1598,7 +1680,10 @@ export async function importMnemonicLocal(req) {
             labelSyncToken,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta, err);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1688,13 +1773,19 @@ export async function importBackupLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();
         const common = {
@@ -1721,7 +1812,6 @@ export async function importBackupLocal(req) {
                 resolveBackupContent: resolveBackupPointerContent,
             })
             : await flowsNs.importBackupFile({ ...common, fileContent: req.fileContent });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1751,8 +1841,11 @@ export async function importBackupLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return {
             walletId: result.walletId,
             walletName: result.payload?.wallet?.name,
@@ -1761,7 +1854,10 @@ export async function importBackupLocal(req) {
             rekeyed: result.rekeyed,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta, err);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);

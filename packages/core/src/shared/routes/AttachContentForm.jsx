@@ -9,14 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, Checkbox, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Checkbox, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { normalizeGenesisRow } from './ManageToken.jsx';
 import {
@@ -25,14 +27,16 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 
@@ -120,6 +124,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function AttachContentForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -189,7 +194,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!byChain || !(byChain[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch((err) => {
@@ -312,6 +317,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: { creator: issuerAddress },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices every broadcast in this multi-step flow (file / link / TIS / edit).
@@ -335,31 +347,10 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
-    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
-    const customFeeDecimals = Math.max(
-        0,
-        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
-    );
-    const customFeePerKb = feeTiers?.unit && Number.isFinite(customFeeRate)
-        ? displayRateToSettingsCustom(feeTiers.unit, customFeeRate)
-        : null;
-    const feeValidationError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom fee rate greater than zero.'
-            : customFeeDecimals > 8
-                ? 'Custom fee rate can have at most 8 decimal places.'
-                : customFeePerKb === 0
-                    ? 'Custom fee rate is too small to encode. Enter a larger rate.'
-                    : !feeCustomEstimate || !Number.isSafeInteger(customFeePerKb)
-                        ? 'Custom fee rate is too high. Enter a smaller rate.'
-                        : null;
 
     // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
-    const ownerMismatch = !!(issuerAddress && fromAddress && fromAddress.address !== issuerAddress);
+    const ownerMismatch = !!issuerEligibility.error;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -510,6 +501,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
         setFormError(null);
+        const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
+        if (fileNameError) {
+            setFormError(fileNameError);
+            return;
+        }
         const { error: typeError } = artworkFileType(file);
         if (typeError) {
             setFormError(typeError);
@@ -539,8 +535,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
 
     async function handleReviewFile(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
-            setFormError('No signing address available on this chain.');
+            setFormError('No signing address available on this network.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!fileMeta) {
@@ -559,6 +565,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+            || actionTextSafetyError(title, 'Title');
+        if (unsafeMetadata) {
+            setFormError(unsafeMetadata);
+            return;
+        }
         if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
             setFormError(`Title cannot be longer than ${MAX_TITLE_LENGTH} characters.`);
             return;
@@ -566,10 +578,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const memoTooLong = memoLengthError(fileParams.MEMO);
         if (memoTooLong) {
             setFormError(memoTooLong);
-            return;
-        }
-        if (feeValidationError) {
-            setFormError(feeValidationError);
             return;
         }
         if (setAsTokenInfo && !previewUrl) {
@@ -693,7 +701,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const tisJson = useMemo(() => {
         if (!fileMeta || !fileActionIndex) return null;
         const doc = {
-            tick: String(tick).toUpperCase(),
+            tick: String(tick),
             categories: [{ type: 'main', data: 'NFT' }],
             images: [{
                 data_ref: 'action:' + String(fileActionIndex),
@@ -714,7 +722,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // UTF-8 bytes first, then to the Latin-1 binary string the encoder
         // expects.
         const rawData = latin1Of(new TextEncoder().encode(tisJson));
-        const tisName = String(tick).toUpperCase() + '.json';
+        const tisName = String(tick) + '.json';
         await runLegThroughConfirm({
             actionData: {
                 action: 'FILE',
@@ -755,7 +763,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // ISSUE v1: edit description (owner-only at the indexer).
         const issueParams = {
             VERSION: '1',
-            TICK: String(tick).toUpperCase(),
+            TICK: String(tick),
             DESCRIPTION: 'action:' + String(tisActionIndex),
         };
         await runLegThroughConfirm({
@@ -811,7 +819,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -822,7 +830,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // copy is queued is the double-broadcast trap).
     if (queuedLeg) {
         return wrap(
-            <QueuedResultPanel
+            <ResultScreen
+                state="signed-not-broadcast"
                 onDone={onBack}
                 what="attachment"
                 unsaved={queuedLeg?.unsaved}
@@ -876,8 +885,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 <p className={styles.hint}>
                     {descTxid
-                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the chain. The explorer and wallets read them with no website involved.`
-                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the chain.`}
+                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the network. The explorer and wallets read them with no website involved.`
+                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the network.`}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -908,7 +917,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     it to {tick} and makes it official.
                 </p>
                 {indexLookupError ? (
-                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                    <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 {slow ? (
                     <p className={styles.hint}>
@@ -945,7 +954,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     description at it.
                 </p>
                 {indexLookupError ? (
-                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                    <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
@@ -957,10 +966,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-tis' && fileMeta && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Upload token info"
                 onSubmit={handleSignTis}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -985,7 +995,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Document</dt>
-                    <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
+                    <dd className={styles.detailsValue}>{String(tick)}.json</dd>
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>application/json</dd>
                     <dt className={styles.detailsLabel}>Title</dt>
@@ -1028,10 +1038,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-desc' && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Update token description"
                 onSubmit={handleSignDescribe}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1095,10 +1106,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-file' && fileMeta && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review artwork upload"
                 onSubmit={handleSignFile}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1194,10 +1206,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-link' && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review artwork link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1231,13 +1244,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            This wallet isn't signing from the token's owner
-                            address ({issuerAddress}). The link will only be
-                            honoured if it's signed by the current owner.
-                        </p>
-                    </div>
+                    <FormNotice variant="error" role="alert">
+                        {issuerEligibility.error}
+                    </FormNotice>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -1262,17 +1271,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // their prerequisites, e.g. addresses reloaded)
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label="Attach artwork"
             onSubmit={handleReviewFile}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={genesisRefreshing}
-                    disabled={genesisRefreshing}
+                    disabled={genesisRefreshing || issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Review upload
                 </Button>
@@ -1360,15 +1370,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setSetAsTokenInfo(e.target.checked)}
                 disabled={Boolean(fileMeta && !previewUrl)}
             />
-            {ownerMismatch ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        This wallet doesn't hold the token's owner address.
-                        the final link step will only be honoured if signed
-                        by the current owner.
-                    </p>
-                </div>
-            ) : null}
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"

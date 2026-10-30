@@ -13,7 +13,13 @@
 // that edit, waits for its indexed ISSUE row, and then reads the new owner from
 // the explorer token record.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -38,21 +44,8 @@ const SUPPLY = 1000;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `OWR${STAMP}`;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -76,7 +69,7 @@ async function approveAndGetTxid(page) {
 
 async function openTokenAdmin(page, item, tick) {
     await reloadToHome(page);
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -87,17 +80,11 @@ async function openTokenAdmin(page, item, tick) {
     await expect(main.getByRole('heading', { name: tick, exact: true }), 'Manage Token did not open on this ticker')
         .toBeVisible({ timeout: 30_000 });
 
-    const button = main.getByRole('button', { name: item, exact: true });
-    if (await button.count() > 0 && await button.first().isVisible()) {
-        await button.first().click();
-        return;
-    }
-    await main.getByRole('button', { name: /^More/ }).click();
-    await main.getByRole('menuitem', { name: item, exact: true }).click();
+    await clickManageTokenAction(main, item);
 }
 
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const listed = async () => {
         const rows = page.getByRole('button', { name: /^View address / });
         await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -152,7 +139,7 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await seedPrices();
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);

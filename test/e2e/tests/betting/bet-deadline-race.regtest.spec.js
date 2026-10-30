@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-112: the deadline race, and the receipt the wallet owes when the
-// user overrides it.
+// The deadline race, and the refusal the wallet owes when the market closes
+// after review opens.
 //
 // THE RACE. A market is `open` when a bet is composed and `closed` by the time
 // it is approved, because the deadline passed while the confirm screen sat
@@ -18,20 +18,12 @@
 // re-check, which re-runs pre-flight when the report is older than
 // STALENESS_MS and INTERRUPTS rather than signs when the verdict degrades.
 //
-// WHAT THIS SPEC IS FOR. That defence works and was proven by hand (campaign
-// session 25). The bug was on the other side of it: overriding the refusal with
-// "Sign anyway" broadcast a real transaction that the chain rejected, for a real
-// miner fee and a real non-refundable protocol fee, and the wallet reported
-// NOTHING - no receipt, no txid, no error. The receipt lived inside a card
-// gated on `feed_status === 'open'`, `placeBet` ends with a reload, the reload
-// came back `closed`, and the card unmounted with the outcome inside it. So "the
-// wallet refused" and "the wallet spent your money and failed" were
-// pixel-identical, with no txid to look the attempt up by.
-//
-// The fix moved the receipt to the top level. This spec is the live half of its
-// proof and the guard that keeps it: a rendering fix is exactly the kind that a
-// later layout change silently undoes, and the only way to see it is to drive a
-// bet the chain will reject and check that the wallet still says so.
+// WHAT THIS SPEC IS FOR. The stale preflight re-check interrupts once and lets
+// the user acknowledge its warning, but the bet form owns a final market read
+// after that acknowledgement. A closed answer stops before signing and stays on
+// the confirm screen with an explicit "Nothing was sent" refusal. This proves
+// both gates and ensures an override of the earlier, advisory preflight report
+// cannot bypass the form's final fail-closed check.
 //
 // WHY IT RUNS ON LITECOIN. Two venue facts, both measured rather than assumed:
 //   1. A deadline is judged against BLOCK_TIME, so the race needs a chain whose
@@ -62,7 +54,7 @@
 // load rather than a test of the wallet. `warmPreflight` is the fix
 // and `warmBet` below is this spec's use of it.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -187,33 +179,8 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-/**
- * Runs a command from the palette by CLICKING its row, not by pressing Enter.
- *
- * Enter runs whatever is at `activeIndex` at the moment the key lands, and the
- * results are re-scored and re-sorted asynchronously as the query is typed. Type
- * then immediately Enter, and on a loaded machine the highlight is still on the
- * previous render's first row: the palette closes, some other command runs, and
- * the failure surfaces one step later as "the screen I asked for is not here"
- * (observed once as a run that pressed Enter for Betting and stayed on Home).
- * Waiting for the row and clicking it removes the race entirely.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
-    await row.click();
-    // The palette is modal; if it is still up, the click did not run a command.
-    await expect(page.getByRole('dialog', { name: 'Command palette' }))
-        .toBeHidden({ timeout: 15_000 });
-}
-
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The hub carries a Network picker of its OWN, separate from the one on the
@@ -229,10 +196,17 @@ async function gotoBettingHub(page) {
  * them rather than juggling two vaults.
  */
 async function useAddress(page, address) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
     await page.getByRole('group', { name: 'Address actions' })
         .getByRole('button', { name: 'Use' }).click();
+    // Use awaits the active-address write and only then returns to Home, and
+    // any route change closes the command palette. A palette opened before
+    // that late navigation is unmounted under the next step, so leaving the
+    // detail screen is what marks the switch as done.
+    await expect(page.getByRole('group', { name: 'Address actions' }),
+        'Use never completed, so the active-address write is still in flight')
+        .toBeHidden({ timeout: 30_000 });
 }
 
 async function fillPasswordIfPresent(scope) {
@@ -295,7 +269,7 @@ test.describe('BET deadline race', () => {
     // indexer can run minutes behind.
     test.setTimeout(1_800_000);
 
-    test('a bet approved after its market closed is refused, and overriding it still reports', async ({ page }) => {
+    test('a bet approved after its market closed is refused after the preflight override', async ({ page }) => {
         let oracle;
         let punter;
         let feedIndex;
@@ -340,7 +314,7 @@ test.describe('BET deadline race', () => {
             //
             // The oracle may not bet its own market (§6 format 2), so the race
             // needs a second address as much as a round trip does.
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
 
             // Snapshot the list BEFORE generating, so the new address is
             // identified by DIFFERENCE rather than by shape. A prefix filter
@@ -377,6 +351,11 @@ test.describe('BET deadline race', () => {
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Same late navigation as in useAddress: the palette the hub opens
+            // next is closed by it unless the switch has finished first.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             // Read the bettor back off a form, the same way the oracle was read:
             // which address a form signs with is resolved through the wallet's
@@ -580,62 +559,30 @@ test.describe('BET deadline race', () => {
             await expect(ack.first()).not.toBeChecked();
         });
 
-        await test.step('overriding it sends the bet AND says so (D-112)', async () => {
+        await test.step('the preflight override still stops before signing and reports the refusal', async () => {
             const ack = page.locator('[data-testid^="ack-"]').first();
             await ack.check();
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 30_000 });
             await page.getByTestId('confirm-approve').click();
 
-            // THE ASSERTION THIS SPEC EXISTS FOR. The submit ends with a reload
-            // that comes back `closed`, which unmounts the whole place-bet card;
-            // before the fix the receipt lived inside it and the user was left on
-            // a page that said nothing at all about a transaction they had just
-            // paid two fees for.
-            const result = page.getByTestId('bet-result');
-            await expect(result, 'the wallet reports nothing after sending a bet (D-112)')
+            // The earlier acknowledgement belongs only to the preflight report.
+            // The form's fresh market read is a final safety gate and cannot be
+            // overridden. It leaves the review visible and says exactly whether
+            // anything was sent.
+            const refusal = page.getByRole('alert').filter({
+                hasText: /market no longer takes bets.*Nothing was sent/i,
+            });
+            await expect(refusal, 'the final market re-check reports no outcome')
                 .toBeVisible({ timeout: 120_000 });
+            await expect(page.getByTestId('confirm-modal')).toBeVisible();
+            await expect(page.getByTestId('bet-result')).toHaveCount(0);
 
-            // Not merely visible: it must say the RIGHT thing. "Bet placed." on a
-            // market that closed is the same silence in a different font.
-            await expect(result).toContainText('betting closed while you were confirming');
-            await expect(result).toContainText(/spent either way/i);
-
-            // And it must carry the txid, which is the only handle the user has
-            // on an attempt the market page will otherwise never mention again.
-            //
-            // Read the definition element, NOT the card's text. `textContent`
-            // concatenates the <dt> and <dd> with no separator, the label is
-            // "Transaction ID", and **it ends in a hex digit ("D")** - so a /[0-9a-f]{64}/i
-            // over the whole card matches one character early and yields a txid
-            // that is off by one at both ends. That cost this spec a full run,
-            // reported as "the bet never reached the chain" while the receipt on
-            // screen was perfectly correct.
-            const txid = ((await result.getByRole('definition').first().textContent()) || '').trim();
-            expect(txid, `no txid in the receipt: ${await result.textContent()}`)
-                .toMatch(/^[0-9a-f]{64}$/i);
-
-            // The chain's own verdict, which is what makes the receipt necessary:
-            // the transaction is real, it cost real fees, and it indexes invalid.
-            const until = Date.now() + 300_000;
-            let row = null;
-            while (Date.now() < until && !row) {
-                const list = await explorerJson('actions?limit=100');
-                row = (list?.data || []).find((r) => r.tx_hash === txid) || null;
-                if (!row) {
-                    await nudgeChain();
-                    await new Promise((r) => setTimeout(r, 2_000));
-                }
-            }
-            expect(row, `the bet named by the receipt never reached the chain: ${txid}`).toBeTruthy();
-            const detail = await explorerJson(`action/${row.action_index}`);
-            expect(String(detail.status), 'the chain rejects a bet on a closed market')
-                .toMatch(/FEED_ACTION_INDEX|feed not open/i);
-
-            // The stake was never escrowed: what the user lost is the two fees,
-            // which is exactly what the receipt says.
+            // Nothing reached escrow. This retains the chain-side consequence
+            // assertion from the old broadcast path while the UI proves why no
+            // transaction receipt exists now.
             const bets = await explorerJson(`bets/${feedIndex}/feed`);
             const open = (bets?.data || []).filter((b) => String(b.bet_status) === 'open');
-            expect(open.length, 'a rejected bet must not hold a stake').toBe(0);
+            expect(open.length, 'a locally refused bet must not hold a stake').toBe(0);
             expect(punter, 'the bettor is not the oracle').not.toBe(oracle);
         });
     });

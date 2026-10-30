@@ -10,6 +10,12 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    WALLET_UNLOCK,
+    approve,
+    gotoPalette,
+    readDoneTxid,
+} from '../../fixtures/testnet_walk.js';
+import {
     INDEXED_WAIT_MS,
     TESTNET_COIN,
     addressTypeOf,
@@ -22,30 +28,17 @@ import {
     unlockAfterReload,
     waitForValidAction,
 } from '../../fixtures/testnet.js';
+import { preflightClaimantUtxo } from '../../fixtures/testnet_preflight.js';
+import {
+    claimAmount,
+    preflightClaimantReward,
+    unclaimedReward,
+} from '../../fixtures/testnet_rewards.js';
 
-const WALLET_UNLOCK = 'testnetpassword123';
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
-const MIN_CLAIM_UTXO_SATS = 20_000;
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
-
-async function approve(page) {
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 120_000 });
-    const password = page.getByLabel('Password', { exact: true });
-    if (await password.count() && await password.isVisible()) await password.fill(WALLET_UNLOCK);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 30_000 });
-    await dialog.getByRole('combobox').fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-}
 
 async function importClaimant(page, claimant) {
     // The live validators stake from P2PKH addresses, so the key is proven
@@ -56,7 +49,7 @@ async function importClaimant(page, claimant) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Import address' }).click();
 
-    const chain = page.getByRole('button', { name: /^Chain:/ });
+    const chain = page.getByRole('button', { name: /^Network:/ });
     await expect(chain).toBeVisible({ timeout: 30_000 });
     if (!((await chain.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await chain.click();
@@ -68,7 +61,7 @@ async function importClaimant(page, claimant) {
     await page.getByLabel('Label (optional)').fill('Testnet validator claimant');
     const password = page.getByLabel('Wallet password', { exact: true });
     if (await password.count()) await password.fill(WALLET_UNLOCK);
-    await page.getByRole('checkbox', { name: /not backed up by my recovery phrase/i }).check();
+    await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
     const notice = page.getByText(/^Imported /);
@@ -79,62 +72,6 @@ async function importClaimant(page, claimant) {
     await expect(use).toHaveAttribute('title', 'Make this the active address');
     await use.click();
     await expect(use).toBeHidden({ timeout: 120_000 });
-}
-
-async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('code, dd')
-        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
-    await expect(value).toBeVisible({ timeout: 120_000 });
-    const txid = (await value.innerText()).trim();
-    expect(txid).toMatch(/^[0-9a-f]{64}$/);
-    return txid;
-}
-
-async function explorerRows(path) {
-    const response = await fetch(`${explorerUrl}/${TESTNET_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`explorer returned HTTP ${response.status} for ${path}`);
-    const body = await response.json();
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body?.data)) return body.data;
-    if (Array.isArray(body?.rows)) return body.rows;
-    return [];
-}
-
-function rewardTotal(rewards, claims) {
-    const accrued = rewards.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    const claimed = claims
-        .filter((row) => String(row.status).toLowerCase() === 'valid')
-        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    return accrued - claimed;
-}
-
-async function unclaimed(address) {
-    const [rewards, claims] = await Promise.all([
-        explorerRows(`rewards/${address}/address`),
-        explorerRows(`collects/${address}/address`),
-    ]);
-    return rewardTotal(rewards, claims);
-}
-
-// A caller may name a smaller claim (claimant.amount) so a live validator's
-// reward is barely touched; it must still leave part of the reward pending.
-function claimAmount(total, requested) {
-    if (requested === undefined) return partialAmount(total);
-    const amount = String(requested);
-    if (!/^\d+(\.\d{1,8})?$/.test(amount) || !(Number(amount) > 0) || !(Number(amount) < total)) {
-        throw new Error('claimant.amount must be a positive decimal below the unclaimed reward');
-    }
-    return amount;
-}
-
-function partialAmount(total) {
-    const units = BigInt(Math.floor(total * 100_000_000));
-    const partial = units > 1n ? units / 2n : 1n;
-    const whole = partial / 100_000_000n;
-    const fraction = (partial % 100_000_000n).toString().padStart(8, '0').replace(/0+$/, '');
-    return fraction ? `${whole}.${fraction}` : String(whole);
 }
 
 test.describe('partial validator reward claim on Bitcoin testnet', () => {
@@ -150,33 +87,12 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
     });
 
     test('claims part of an existing validator reward and leaves the remainder pending', async ({ page }) => {
-        const claimantInput = input.claimant ?? input.validator;
-        if (typeof claimantInput?.wif !== 'string'
-            || typeof (claimantInput?.address ?? claimantInput?.segwitAddress) !== 'string') {
-            throw new Error('testnet stdin needs claimant { wif, address } for the partial-claim spec');
-        }
-        const claimant = {
-            wif: claimantInput.wif,
-            address: claimantInput.address ?? claimantInput.segwitAddress,
-            amount: claimantInput.amount,
-        };
-
-        const before = await unclaimed(claimant.address);
-        if (before <= 0.00000001) {
-            throw new Error('the supplied claimant has no partial validator reward available');
-        }
-        const confirmed = (await venue.utxos(claimant.address))?.utxos
-            ?.filter((row) => Number(row.confirmations) >= 1) ?? [];
-        const largestConfirmed = confirmed.reduce(
-            (largest, row) => Math.max(largest, Number(row.value) || 0),
-            0,
-        );
-        if (largestConfirmed < MIN_CLAIM_UTXO_SATS) {
-            throw new Error(`the supplied claimant needs one confirmed UTXO of at least ${MIN_CLAIM_UTXO_SATS} sats`);
-        }
+        const claimant = input.claimant;
+        const before = await preflightClaimantReward(input, { explorerUrl, coin: TESTNET_COIN });
+        await preflightClaimantUtxo(venue, claimant.address);
 
         await test.step('import and activate the validator claimant', async () => {
-            await createWallet(page, { password: WALLET_UNLOCK });
+            await createWallet(page, { password: WALLET_UNLOCK, waitForBalances: false });
             await switchToTestnet(page, WALLET_UNLOCK);
             await importClaimant(page, claimant);
         });
@@ -192,7 +108,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             // A live validator can hold several stake rows (its first STAKE and
             // any top-up), and every row shows the same reward because COLLECT
             // is claimed per source address, so any of them opens the same claim.
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true }).first();
+            const row = page.getByRole('button', { name: /^Open (Validator stake), / }).first();
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
             const claim = page.getByRole('group', { name: 'Stake actions' })
@@ -210,7 +126,9 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
-            const action = await waitForValidAction(venue, await readDoneTxid(page), {
+            const claimTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `collect ${claimTxid}` });
+            const action = await waitForValidAction(venue, claimTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(action.action).toBe('COLLECT');
@@ -218,7 +136,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             expect(Number(action.amount)).toBeCloseTo(Number(amount), 8);
             expect(String(action.tx_data).split('|')).toHaveLength(3);
 
-            const after = await unclaimed(claimant.address);
+            const after = await unclaimedReward(claimant.address, { explorerUrl, coin: TESTNET_COIN });
             expect(after).toBeGreaterThanOrEqual(before - Number(amount) - 0.00000001);
             expect(after).toBeGreaterThan(0);
         });

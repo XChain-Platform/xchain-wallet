@@ -160,9 +160,13 @@ beforeEach(() => {
 // under the vitest transform). Lazy importers (no `eager`) keep a
 // module-load crash inside the route's own `it()` instead of failing the
 // whole suite at collection time.
-const routeModules = import.meta.glob(
+const routeModules = import.meta.glob([
     '../../packages/core/src/shared/routes/*.jsx',
-);
+    // Split-out pieces of History.jsx are not routes; History.jsx renders them.
+    '!../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
+    '!../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    '!../../packages/core/src/shared/routes/HistoryShared.jsx',
+]);
 
 // Layer 1 messaging: every property access yields a function returning a
 // never-resolving promise → routes stay in their loading branch.
@@ -513,6 +517,14 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({
             walletMode,
+        }),
+        // A destroy is judged against the source address's read balance.
+        getWalletBalances: () => Promise.resolve({
+            'bitcoin-mainnet': [{
+                address: HD_ADDRESS.address,
+                balances: { native: null, tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }] },
+                error: null,
+            }],
         }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         mintToken: record('mintToken'),

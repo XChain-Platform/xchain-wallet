@@ -251,9 +251,12 @@ export function sriPlugin() {
                 if (!existsSync(htmlPath)) continue;
 
                 const lookup = (url) => {
-                    // Vite emits root-relative hrefs ("/assets/x.js"); on disk
-                    // they live under outDir ("<outDir>/assets/x.js").
-                    const rel = url.replace(/^\/+/, '').split(/[?#]/)[0];
+                    // Vite emits base-prefixed hrefs ("/wallet/assets/x.js", or
+                    // "/assets/x.js" at the default base); on disk they live
+                    // under outDir ("<outDir>/assets/x.js").
+                    let path = url.split(/[?#]/)[0];
+                    if (base !== '/' && path.startsWith(base)) path = path.slice(base.length);
+                    const rel = path.replace(/^\/+/, '');
                     const assetPath = join(outDir, rel);
                     if (!existsSync(assetPath)) return undefined;
                     return readFileSync(assetPath);
@@ -265,7 +268,7 @@ export function sriPlugin() {
                 const scripts = {};
                 for (const [name, entry] of Object.entries(bundle)) {
                     if (entry.type !== 'chunk' || !name.endsWith('.js')) continue;
-                    const bytes = lookup(`/${name}`);
+                    const bytes = lookup(`${base}${name}`);
                     if (bytes !== undefined) scripts[`${base}${name}`] = bytes;
                 }
                 const { html, mapped, admitted } = injectIntegrityImportMap(tagged.html, scripts);

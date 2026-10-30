@@ -33,8 +33,10 @@
 #     XCHAIN_BUILD_ANDROID_FULL=1
 #                          also build the SECOND direct APK at the `default`
 #                          profile, for the audience that avoids
-#                          Play deliberately. Off by default: its lane is
-#                          NOT-SHIPPED, so no release demands it yet.
+#                          Play deliberately. Off by default, but its lane
+#                          (android-full) is SHIPPED since v0.341.3, so a
+#                          release covering that lane needs this set;
+#                          without it the set signs only as --lane android.
 #
 # NO PASSWORD IS EVER PASSED ON A COMMAND LINE OR READ FROM THE
 # ENVIRONMENT. jarsigner and apksigner both prompt when the password
@@ -421,14 +423,12 @@ node "$REPO_ROOT/tools/release/verify-apk-signer.mjs" "$WORK_DIR/$APK_NAME" \
     || die "the APK is not signed by the pinned K10 certificate (check XCHAIN_K10_KEYSTORE and XCHAIN_K10_ALIAS); nothing was staged"
 
 # ---------------------------------------------------------------------
-# 3a. Publish the signed store pair into the staging directory
+# 3a. Record, then publish the signed store pair into the staging directory
 # ---------------------------------------------------------------------
 #
 # Staged BEFORE the optional full leg below, not after it. WORK_DIR is removed
 # on every exit, so a full-leg failure used to delete a signed pair that no
 # re-run can reproduce byte for byte; staged here, a failure there costs nothing.
-mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
-mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
 
 # Say, next to the bytes, exactly what they were built from. Without this a
 # rehearsal artifact and a release artifact are indistinguishable on disk, and
@@ -474,6 +474,13 @@ if [ "$REHEARSAL" -eq 1 ]; then
         > "$RECORDS_DIR/DO-NOT-PUBLISH.txt"
 fi
 
+# The signed pair moves in only now, AFTER the records above: the pair must never
+# sit in OUTPUT_DIR without its provenance and, for a rehearsal, its
+# do-not-publish note, so a failure between the two steps cannot leave
+# unmarked signed bytes on disk.
+mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
+mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
+
 # ---------------------------------------------------------------------
 # 3b. OPTIONAL: the second, FULL-feature direct APK
 # ---------------------------------------------------------------------
@@ -481,16 +488,17 @@ fi
 # Everything above builds ONCE and derives the APK from the AAB, because the
 # store lane's two artifacts must be the same bytes (§6 step 2). This leg is
 # the deliberate exception, and it is a second build by necessity rather
-# than by sloppiness: the `default` profile compiles DIFFERENT CODE in (the
-# DEX lane's eight modules, the Trezor connect CSP origin), so there is no
-# bundle to derive it from. Operator answer, 2026-08-07: build
+# than by sloppiness: the `default` profile differs from `store` in the
+# Trezor connect CSP origin, and `HIDDEN_SURFACES` is currently empty for
+# both profiles so no product surface differs, but the CSP and packaging
+# differences mean there is still no single bundle to derive it from. Operator answer, 2026-08-07: build
 # it, rather than document the coupling and leave the self-custody audience
 # with Play's restrictions they went out of their way to avoid.
 #
-# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP, and for the same
-# reason those are: `android-full` is NOT-SHIPPED in shipped-lanes.txt, so
-# no release demands this file yet. An unset variable leaves the ceremony
-# behaving exactly as it did before this block existed.
+# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP: an unset variable
+# leaves the store-only ceremony behaving exactly as it did before this block
+# existed. `android-full` is SHIPPED in shipped-lanes.txt since v0.341.3, so
+# a release whose lane scope includes it needs this file.
 #
 # ORDERED AFTER the store artifacts are signed, verified AND staged in
 # OUTPUT_DIR (3a), so a failure here cannot cost the ones Play is waiting on.
@@ -603,9 +611,9 @@ if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
     echo "    $FULL_APK_NAME   (direct download, FULL feature set)"
     echo
     echo "    The full APK is a SECOND build, not derived from the AAB, because"
-    echo "    the default profile compiles different code in. Its lane is"
-    echo "    NOT-SHIPPED until the release that first publishes it flips"
-    echo "    tools/release/shipped-lanes.txt in the same commit."
+    echo "    the default profile compiles different code in. Its lane"
+    echo "    (android-full) is SHIPPED, so sign it together with the store"
+    echo "    pair: --lane android,android-full."
 fi
 echo
 echo "==> K10 certificate fingerprint. This is the value users verify, and the"

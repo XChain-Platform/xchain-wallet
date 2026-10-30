@@ -10,20 +10,55 @@
 
 import {
     createContext,
+    Fragment,
     useCallback,
     useContext,
     useLayoutEffect,
     useMemo,
     useRef,
+    useState,
 } from 'react';
+import { NoticesClaimedContext, ShellNoticesContext } from '../shared/components/noticesRoute.js';
+import { describeFocusTarget, restoreScrollView } from './scrollRestore.js';
 import styles from './Screen.module.css';
 
 const MAIN_ID = 'xc-main';
 const FOCUS_REVEAL_MARGIN_PX = 12;
 const ScrollRestorationContext = createContext(null);
 
+/** Returns the classic scrollbar lane consumed inside a scroll frame. */
+export function frameScrollbarWidth(frame) {
+    if (!frame) return 0;
+    const view = frame.ownerDocument?.defaultView;
+    const computed = view?.getComputedStyle(frame);
+    const borderLeft = parseFloat(computed?.borderLeftWidth) || 0;
+    const borderRight = parseFloat(computed?.borderRightWidth) || 0;
+    return Math.max(0, frame.offsetWidth - frame.clientWidth - borderLeft - borderRight);
+}
+
 /**
- * Keeps route scroll offsets for the lifetime of the unlocked shell.
+ * Counts the empty states on one page. A page shows at most one empty state:
+ * with two or more (a list per section, all empty), each is drawn as a plain
+ * line under its section instead of a page message.
+ *
+ * `register()` is stable and returns the release; `EmptyStateCountContext`
+ * carries the current count.
+ */
+export const EmptyStateRegistryContext = createContext(
+    /** @type {null | (() => () => void)} */ (null),
+);
+export const EmptyStateCountContext = createContext(0);
+
+/**
+ * True inside the body of a submitted form: an empty list there (no reusable packs, no usable
+ * lists) is about one field's choices, so it is a plain line among the
+ * fields, never the page's message, and the form's notice keeps that place.
+ */
+export const EmptyStateAsLineContext = createContext(false);
+
+/**
+ * Keeps route scroll offsets, and the control the user last used on each
+ * route, for the lifetime of the unlocked shell.
  *
  * @param {object} props
  * @param {string} props.routeKey
@@ -43,6 +78,25 @@ export function ScrollRestoration({ routeKey, children }) {
 }
 
 /**
+ * Isolates route state and saved scroll offsets to the active wallet, so a
+ * wallet switch never restores another wallet's offsets or keeps its route
+ * state mounted.
+ *
+ * @param {object} props
+ * @param {string | null | undefined} props.walletId
+ * @param {string} props.routeKey
+ * @param {import('react').ReactNode} props.children
+ */
+export function WalletRouteScope({ walletId, routeKey, children }) {
+    const walletKey = walletId || 'none';
+    return (
+        <ScrollRestoration routeKey={`${walletKey}:${routeKey}`}>
+            <Fragment key={walletKey}>{children}</Fragment>
+        </ScrollRestoration>
+    );
+}
+
+/**
  * Top-level layout wrapper.
  *
  *   `variant="small"`: narrow viewport, fixed 360×600 (Chrome
@@ -54,6 +108,11 @@ export function ScrollRestoration({ routeKey, children }) {
  * §53.2 / G168: header / main / footer use the right semantic elements
  * so screen readers can navigate by landmark instead of having to walk
  * the entire DOM each screen.
+ *
+ * Inside the unlocked shell the outermost Screen also shows the shell's
+ * notices (stale balances, queued broadcasts, update notices) as the first
+ * thing in its scrolling body, below the page header: notices are page
+ * content, never part of the app or page header.
  *
  * @param {object} props
  * @param {import('react').ReactNode} [props.header]
@@ -79,7 +138,17 @@ export function Screen({
 }) {
     const screenRef = useRef(null);
     const mainRef = useRef(null);
+    const headerRef = useRef(null);
     const restoration = useContext(ScrollRestorationContext);
+    const shellNotices = useContext(ShellNoticesContext);
+    const noticesClaimed = useContext(NoticesClaimedContext);
+    const ownsNotices = Boolean(shellNotices) && !noticesClaimed;
+    const noticesSlotRef = useRef(null);
+    const [emptyStates, setEmptyStates] = useState(0);
+    const registerEmptyState = useCallback(() => {
+        setEmptyStates((count) => count + 1);
+        return () => setEmptyStates((count) => count - 1);
+    }, []);
     const routeKey = restoration?.routeKey;
     const positions = restoration?.positions;
     const positionKey = scrollKey == null ? routeKey : JSON.stringify([routeKey, scrollKey]);
@@ -90,6 +159,30 @@ export function Screen({
     }, [rootRef]);
 
     useLayoutEffect(() => {
+        // The slot renders only while this Screen owns the notices.
+        const slot = noticesSlotRef.current;
+        return slot ? shellNotices.claim(slot) : undefined;
+    }, [ownsNotices, shellNotices]);
+
+    useLayoutEffect(() => {
+        const root = screenRef.current;
+        const main = mainRef.current;
+        if (!root || !main) return undefined;
+
+        // The header is outside the scroll frame, so copy the frame's classic
+        // scrollbar lane to its logical end padding. Overlay scrollbars report
+        // zero and leave the shared page gutter unchanged.
+        const syncScrollbar = () => {
+            root.style.setProperty('--xc-frame-scrollbar', `${frameScrollbarWidth(main)}px`);
+        };
+        syncScrollbar();
+        if (typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(syncScrollbar);
+        observer.observe(main);
+        return () => observer.disconnect();
+    }, []);
+
+    useLayoutEffect(() => {
         const main = mainRef.current;
         if (!main) return undefined;
         if (!restoreScroll) {
@@ -97,8 +190,46 @@ export function Screen({
             return undefined;
         }
         if (positionKey == null || !positions) return undefined;
-        main.scrollTop = positions.get(positionKey) ?? 0;
-        return () => positions.set(positionKey, main.scrollTop);
+        const saved = positions.get(positionKey);
+        // Keep the offset from the last scroll event as well as reading it in
+        // the cleanup: when the same Screen swaps views (a Settings section
+        // replacing the list) React has already put the new, often still
+        // loading, content in place by then, and the read comes back clamped
+        // to its height, usually 0. A clamp only ever lowers the offset, so
+        // the larger of the two is the one the user left; the read still
+        // covers an offset set since the last scroll event fired. While a
+        // restore is still waiting its own clamped writes fire scroll events
+        // too, so the saved offset stands until it settles.
+        let offset = saved ? saved.top : 0;
+        // A first visit starts at the top. A return waits for the content to
+        // grow tall enough for the saved offset (see scrollRestore.js) and
+        // puts focus back on the control the user left from.
+        const restore = saved
+            ? restoreScrollView(main, saved, {
+                header: headerRef.current,
+                onSettle: () => { offset = main.scrollTop; },
+            })
+            : null;
+        if (!saved) main.scrollTop = 0;
+        let focusTarget = saved?.focus ?? null;
+        const track = () => {
+            if (!restore?.pending()) offset = main.scrollTop;
+        };
+        const noteFocus = (event) => {
+            focusTarget = describeFocusTarget(event.target, main) ?? focusTarget;
+        };
+        main.addEventListener('scroll', track, { passive: true });
+        main.addEventListener('focusin', noteFocus);
+        main.addEventListener('click', noteFocus);
+        return () => {
+            main.removeEventListener('scroll', track);
+            main.removeEventListener('focusin', noteFocus);
+            main.removeEventListener('click', noteFocus);
+            // Left before a restore finished: the saved offset still stands.
+            const top = restore?.pending() ? offset : Math.max(offset, main.scrollTop);
+            restore?.cancel();
+            positions.set(positionKey, { top, focus: focusTarget });
+        };
     }, [positionKey, positions, restoreScroll]);
 
     useLayoutEffect(() => {
@@ -149,9 +280,9 @@ export function Screen({
     }, []);
 
     const className = `${styles.screen} ${styles[variant]}`;
-    return (
+    const screen = (
         <div ref={setScreenRef} className={className}>
-            {header ? <header className={styles.header}>{header}</header> : null}
+            {header ? <header ref={headerRef} className={styles.header}>{header}</header> : null}
             <Body
                 ref={mainRef}
                 id={Body === 'main' ? MAIN_ID : undefined}
@@ -159,9 +290,21 @@ export function Screen({
                 className={styles.body}
                 aria-labelledby={bodyLabelledBy}
             >
+                {ownsNotices ? <div ref={noticesSlotRef} /> : null}
                 {children}
             </Body>
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}
         </div>
+    );
+    // A Screen nested in this one (a subpage, a picker) leaves the notices
+    // here. Always wrapped, so a change of owner never remounts the route.
+    return (
+        <NoticesClaimedContext.Provider value={noticesClaimed || Boolean(shellNotices)}>
+            <EmptyStateRegistryContext.Provider value={registerEmptyState}>
+                <EmptyStateCountContext.Provider value={emptyStates}>
+                    {screen}
+                </EmptyStateCountContext.Provider>
+            </EmptyStateRegistryContext.Provider>
+        </NoticesClaimedContext.Provider>
     );
 }

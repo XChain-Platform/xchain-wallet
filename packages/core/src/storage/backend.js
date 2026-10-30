@@ -23,6 +23,25 @@ export class AbstractBackendMethodError extends Error {
     }
 }
 
+/** A conditional save found a different blob than the caller last observed. */
+export class VaultConflictError extends Error {
+    /** @param {string} [collection] */
+    constructor(collection = 'storage') {
+        super(`Vault: ${collection} changed while this write was being prepared`);
+        this.name = 'VaultConflictError';
+        this.collection = collection;
+    }
+}
+
+/** @param {Uint8Array | null} left @param {Uint8Array | null} right */
+export function vaultBlobsEqual(left, right) {
+    if (left === null || right === null) return left === right;
+    if (left.length !== right.length) return false;
+    let difference = 0;
+    for (let i = 0; i < left.length; i += 1) difference |= left[i] ^ right[i];
+    return difference === 0;
+}
+
 // The three ways a load can fail to produce a blob that ISN'T "there is no
 // wallet here". `load()` returning null is a factual claim about the device -
 // the shells turn it straight into the create-a-wallet screen - so a backend
@@ -79,7 +98,22 @@ export class VaultEvictedError extends VaultUnavailableError {
 }
 
 /**
- * Which of the four this error is, or null when it is not one of them.
+ * The blob is gone and the kdfParams meta is still on disk, on a device whose
+ * stores the wallet alone writes: a desktop reset or a native wipe that
+ * cleared the blob and stopped before the meta, or any other loss of the
+ * blob. Nothing here can be opened, and create, import and restore all
+ * refuse over the meta, so the only way forward is to finish the reset.
+ * Distinct from EVICTED, whose copy names the browser as the cause.
+ */
+export class VaultIncompleteError extends VaultUnavailableError {
+    constructor(detail = 'the encrypted vault is missing but its meta record remains') {
+        super(detail);
+        this.name = 'VaultIncompleteError';
+    }
+}
+
+/**
+ * Which of the five this error is, or null when it is not one of them.
  *
  * The shells catch a boot failure and keep only `err.message`, which throws
  * the type away exactly where it is needed: the screen a user sees for a
@@ -97,17 +131,19 @@ export class VaultEvictedError extends VaultUnavailableError {
  * sets its own `name` is still classified.
  *
  * @param {unknown} err
- * @returns {'corrupt' | 'locked' | 'evicted' | 'unavailable' | null}
+ * @returns {'corrupt' | 'locked' | 'evicted' | 'incomplete' | 'unavailable' | null}
  */
 export function vaultErrorKind(err) {
     const name = /** @type {any} */ (err)?.name;
     if (name === 'VaultCorruptError') return 'corrupt';
     if (name === 'VaultLockedError') return 'locked';
     if (name === 'VaultEvictedError') return 'evicted';
+    if (name === 'VaultIncompleteError') return 'incomplete';
     if (name === 'VaultUnavailableError') return 'unavailable';
     if (err instanceof VaultCorruptError) return 'corrupt';
     if (err instanceof VaultLockedError) return 'locked';
     if (err instanceof VaultEvictedError) return 'evicted';
+    if (err instanceof VaultIncompleteError) return 'incomplete';
     if (err instanceof VaultUnavailableError) return 'unavailable';
     return null;
 }
@@ -130,8 +166,11 @@ export class StorageBackend {
         throw new AbstractBackendMethodError('load');
     }
 
-    /** @param {Uint8Array} _blob */
-    async save(_blob) {
+    /**
+     * @param {Uint8Array} _blob
+     * @param {{ expected?: Uint8Array | null }} [_options]
+     */
+    async save(_blob, _options) {
         throw new AbstractBackendMethodError('save');
     }
 
@@ -156,9 +195,16 @@ export class InMemoryBackend extends StorageBackend {
         return this._blob ? new Uint8Array(this._blob) : null;
     }
 
-    async save(blob) {
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('InMemoryBackend.save: blob must be a Uint8Array');
+        }
+        if (Object.hasOwn(options, 'expected')) {
+            const expected = options.expected ?? null;
+            if (expected !== null && !(expected instanceof Uint8Array)) {
+                throw new TypeError('InMemoryBackend.save: expected must be a Uint8Array or null');
+            }
+            if (!vaultBlobsEqual(this._blob, expected)) throw new VaultConflictError();
         }
         this._blob = new Uint8Array(blob);
     }

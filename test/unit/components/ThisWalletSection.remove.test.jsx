@@ -28,6 +28,7 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', async (i
 
 const ACTIVE_WALLET = { id: 'wallet-active', name: 'Active Wallet' };
 const OTHER_WALLET = { id: 'wallet-other', name: 'Other Wallet' };
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 function mount(walletsAfterRemoval, overrides = {}) {
     const reload = vi.fn();
@@ -76,6 +77,22 @@ afterEach(() => {
 });
 
 describe('ThisWalletSection removal completion', () => {
+    it('explains a refused concurrent removal and keeps other errors unchanged', async () => {
+        const removeWallet = vi.fn()
+            .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
+            .mockRejectedValueOnce(new Error('Removal refused'));
+        mount([OTHER_WALLET], { removeWallet });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
+        fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
+        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        expect(await screen.findByText(VAULT_CONFLICT_MESSAGE)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        expect(await screen.findByText('Removal refused')).toBeTruthy();
+    });
+
     it('names the wallet and warns about backups in the confirmation', () => {
         mount([OTHER_WALLET]);
 
@@ -83,7 +100,7 @@ describe('ThisWalletSection removal completion', () => {
 
         expect(screen.getByRole('heading', { name: `Remove ${ACTIVE_WALLET.name}?` })).toBeTruthy();
         expect(screen.getByText(/Make sure you have a backup before continuing/)).toBeTruthy();
-        expect(screen.getByText(/encrypted seed is destroyed and cannot be recovered/)).toBeTruthy();
+        expect(screen.getByText(/encrypted seed is destroyed and can't be recovered/)).toBeTruthy();
     });
 
     it('submits an exact wallet-name confirmation with Enter', async () => {
@@ -94,7 +111,7 @@ describe('ThisWalletSection removal completion', () => {
         expect(screen.getByText('Remove Active Wallet?')).toBeTruthy();
         expect(screen.getByText(/Its accounts, addresses, signers, and pending transactions will be deleted/)).toBeTruthy();
         expect(screen.queryByText(/Removing this wallet/)).toBeNull();
-        expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
+        expect(screen.getByText(/This can't be undone/)).toBeTruthy();
         expect(confirmation).toHaveAttribute('enterkeyhint', 'done');
         fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
         fireEvent.keyDown(confirmation, { key: 'Enter' });
@@ -180,7 +197,7 @@ describe('ThisWalletSection removal completion', () => {
 
         await removeActiveWallet();
 
-        expect(await screen.findByText(/could not finish switching wallets: List failed/)).toBeTruthy();
+        expect(await screen.findByText(/couldn't finish switching wallets: List failed/)).toBeTruthy();
         expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
         expect(reload).toHaveBeenCalledOnce();
         expect(wipeWalletStorage).not.toHaveBeenCalled();

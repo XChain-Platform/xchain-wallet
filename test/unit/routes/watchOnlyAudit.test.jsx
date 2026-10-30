@@ -132,7 +132,7 @@ describe('watch-only mode audit', () => {
             chainId: CHAIN,
             actionData: { action: 'ISSUE', params: { TICK: 'WATCH' } },
         });
-        expect(await screen.findByRole('heading', { name: /unsigned transaction/i })).toBeTruthy();
+        expect(await screen.findByTestId('result-screen-notice')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
     });
 

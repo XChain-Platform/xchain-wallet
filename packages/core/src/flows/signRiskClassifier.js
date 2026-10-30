@@ -32,16 +32,28 @@
 // (the form already has them) and passes them in.
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
 
 const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 const ZERO_WIDTH = /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\u206A-\u206F\uFEFF]/u;
+// Glyphs that draw nothing yet are not whitespace: Braille blank, Hangul and
+// Khmer fillers, variation selectors other than the emoji pair, and tag
+// characters. Left in, they pad a message so its real text sits below the fold.
+const BLANK_GLYPHS = /[\u2800\u115F\u1160\u17B4\u17B5\u3164\uFFA0\uFE00-\uFE0D\u{E0000}-\u{E007F}]/u;
+// Every other format control and default-ignorable code point: musical beam
+// and phrase controls, Mongolian variation selectors, the Syriac abbreviation
+// mark, interlinear annotation, shorthand and hieroglyph format controls. They
+// draw nothing on the review page yet travel in the signed bytes. The emoji
+// text and emoji presentation selectors stay allowed.
+const FORMAT_CONTROLS = /(?![\uFE0E\uFE0F])[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 const LATIN = /\p{Script_Extensions=Latin}/u;
 const GREEK_OR_CYRILLIC = /[\p{Script_Extensions=Greek}\p{Script_Extensions=Cyrillic}]/u;
 const WORDLIKE_RUNS = /[\p{L}\p{N}]+/gu;
 const ASCII_ALPHANUMERIC = /[A-Za-z0-9]/u;
 
 function deceptiveString(value) {
-    if (BIDI_CONTROLS.test(value) || ZERO_WIDTH.test(value)) return true;
+    if (BIDI_CONTROLS.test(value) || ZERO_WIDTH.test(value) || BLANK_GLYPHS.test(value)
+        || FORMAT_CONTROLS.test(value)) return true;
     const mixedScriptWord = (value.match(WORDLIKE_RUNS) ?? [])
         .some((word) => LATIN.test(word) && GREEK_OR_CYRILLIC.test(word));
     if (mixedScriptWord) return true;
@@ -55,6 +67,23 @@ function containsDeceptiveCharacters(value, seen = new Set()) {
     if (!value || typeof value !== 'object' || seen.has(value)) return false;
     seen.add(value);
     return Object.values(value).some((part) => containsDeceptiveCharacters(part, seen));
+}
+
+// C0 controls other than tab and line feed, DEL, the C1 block and unpaired
+// surrogates. A review page draws none of them, and an unpaired surrogate is
+// signed as U+FFFD, so the signed bytes differ from the characters on screen.
+const HIDDEN_CONTROLS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** Whether the text holds a control or unpaired surrogate that a review page cannot show. */
+export function hasHiddenControls(value) {
+    return typeof value === 'string' && HIDDEN_CONTROLS.test(value);
+}
+
+/** Refuse a message holding characters its review page cannot draw. */
+export function assertNoHiddenControls(value, surface = 'signing request') {
+    if (hasHiddenControls(value)) {
+        throw new Error(`${surface}: control characters are not allowed`);
+    }
 }
 
 /** Refuse text whose displayed characters can disagree with its signed bytes. */

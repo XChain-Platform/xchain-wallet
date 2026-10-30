@@ -223,8 +223,7 @@ describe('Send field validation', () => {
         expectPlainCopy(precision);
     });
 
-    // Send above-balance validation bug: review opens without a local field error.
-    it.skip('rejects an amount above the available balance with plain copy', async () => {
+    it('rejects an amount above the available balance with plain copy', async () => {
         const messaging = mountSend({ quantity: '100000000' });
         fireEvent.change(await screen.findByLabelText(/^To$/), {
             target: { value: BITCOIN_TO },
@@ -243,7 +242,7 @@ describe('Create token field validation', () => {
         const messaging = mountWizard();
         fireEvent.click(await screen.findByText('Utility token'));
         await screen.findByLabelText('Fee paid by');
-        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
         await screen.findByText('Step 3 of 4: Details');
 
         const name = screen.getByLabelText('Token name (ticker)');

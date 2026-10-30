@@ -26,15 +26,29 @@
 //   3. BIP21-style:  xchain:<address>?amount=&tick=&memo=&label=&message=
 //      Mirrors per-chain BIP21 (`bitcoin:bc1q…?amount=0.1`) but with the
 //      cross-chain `xchain` scheme. The receiving wallet picks the chain
-//      based on the address format.
+//      based on the address format. The address must be valid on a supported
+//      chain; a documented verb in its place (`xchain:receive`,
+//      `xchain:send?to=...`) is read as that action with no chain.
+//
+// The documented actions are send, receive and execute. A target that is
+// neither one of them nor a valid address, an action outside that set, a
+// destination that is not an address for the link's chain, and an execute
+// link without a numeric contract all return `{ kind: 'unknown' }`.
 //
 // Output is a normalized navigation intent that Send / Receive routes
 // consume directly. Returns `{ kind: 'unknown' }` for malformed input
 // rather than throwing; the caller already had a string from a QR scan
 // or paste, so we don't want to abort their flow over a typo.
 
-import { parseBip21Uri, InvalidBip21Error } from './bip21.js';
-import { chainIdForCoinCode, coinCodeForChainId, isKnownCoinCode } from './coinCodes.js';
+import {
+    parseBip21Uri,
+    InvalidBip21Error,
+    URI_MAX_LENGTH,
+    URI_PARAMETER_LIMITS,
+    isSafeUriParameter,
+} from './bip21.js';
+import { chainIdForCoinCode, coinCodeForChainId, coinNetworkForCoinCode, isKnownCoinCode } from './coinCodes.js';
+import { isValidAddressAnyNetwork, isValidAddressForChain } from '../shared/utils/addressValidation.js';
 import { neutralizeControlText } from '../shared/utils/textHardening.js';
 
 const PATH_PREFIX = 'xchain://';
@@ -95,9 +109,10 @@ function unwrapWebLink(raw) {
     return carried.toLowerCase().startsWith(BIP21_PREFIX) ? carried : undefined;
 }
 
-// Actions that map to `kind: 'receive'` on the parsed intent. Everything
-// else is treated as kind:'send' by default, with the literal action
-// preserved in `intent.action` so new screens can route on it.
+// The documented action verbs (protocol/xchain-uri-scheme.md, Action
+// Registry). A link whose action is not one of these is refused: an
+// unrecognized verb must never be read as a send.
+const SEND_ACTIONS = new Set(['send']);
 const RECEIVE_ACTIONS = new Set(['receive']);
 
 // Actions that map to `kind: 'execute'` (contract method invocation,
@@ -105,7 +120,9 @@ const RECEIVE_ACTIONS = new Set(['receive']);
 // links so a "Write Contract" button lands on the EXECUTE form prefilled.
 const EXECUTE_ACTIONS = new Set(['execute']);
 
-const FEE_PRIORITIES = new Set(['low', 'normal', 'fast']);
+const DOCUMENTED_ACTIONS = new Set([...SEND_ACTIONS, ...RECEIVE_ACTIONS, ...EXECUTE_ACTIONS]);
+
+const FEE_PRIORITIES =new Set(['low', 'normal', 'fast']);
 
 // Numeric URI fields (contract action_index, gas limit). Same gate the
 // explorer applies to its /contract/{idx} route params.
@@ -137,7 +154,7 @@ function normalizeFeePriority(raw) {
  * @property {'low' | 'normal' | 'fast'} [feePriority]   receiver's preferred fee tier; scanners may pre-select but users can override
  * @property {string} [label]
  * @property {string} [message]
- * @property {Record<string, string>} [params]      remaining query params (includes the named ones for caller convenience)
+ * @property {Record<string, string>} [params]      recognized query params (includes the named ones for caller convenience)
  * @property {string[]} [required]                  names of `req-*` params; if non-empty the caller MUST decide whether to honor each or reject the URI per BIP21
  */
 
@@ -153,6 +170,7 @@ export function parseXchainUri(uri, deps) {
     if (typeof uri !== 'string') return { kind: 'unknown' };
     const raw = uri.trim();
     if (raw.length === 0) return { kind: 'unknown' };
+    if (raw.length > URI_MAX_LENGTH) return { kind: 'unknown' };
     const lower = raw.toLowerCase();
 
     // Checked before the scheme branches because a web link IS an https URL and
@@ -178,6 +196,11 @@ export function parseXchainUri(uri, deps) {
         const firstSeg = pathPart.split('/')[0];
         if (pathPart.includes('/') && isKnownCoinCode(firstSeg)) {
             return parseCoinCodeStyle(raw, deps?.chainRegistry);
+        }
+        // A bare verb (`xchain:receive`, `xchain:send?to=...`) is a documented
+        // action without a chain, never an address named after the verb.
+        if (!pathPart.includes('/') && DOCUMENTED_ACTIONS.has(pathPart.toLowerCase())) {
+            return parseActionLink(pathPart.toLowerCase(), queryAt === -1 ? '' : afterScheme.slice(queryAt + 1));
         }
         return parseBip21Style(raw);
     }
@@ -278,12 +301,29 @@ function parseCoinCodeStyle(raw, chainRegistry) {
     const queryPart = queryIdx === -1 ? '' : after.slice(queryIdx + 1);
 
     const segments = pathPart.split('/').filter(Boolean);
-    if (segments.length === 0) return { kind: 'unknown' };
+    // The grammar is exactly <CODE>/<action>: a missing action or a third
+    // segment is malformed, not a default send.
+    if (segments.length !== 2) return { kind: 'unknown' };
     const code = segments[0];
-    const action = segments[1] ? segments[1].toLowerCase() : 'send';
+    const action = segments[1].toLowerCase();
+    if (!DOCUMENTED_ACTIONS.has(action)) return { kind: 'unknown' };
+    return parseActionLink(action, queryPart, {
+        chainId: chainRegistry ? chainIdForCoinCode(code, chainRegistry) : null,
+        network: coinNetworkForCoinCode(code),
+    });
+}
 
+// One documented action. `chain` is present for the coin-code form and absent
+// for a bare verb. A parameter that fails its gate refuses the whole link
+// rather than being dropped, so a link never prefills something other than
+// what it says.
+function parseActionLink(action, queryPart, chain) {
     const { params, required, errors } = parseQuery(queryPart);
     if (errors.length > 0) return { kind: 'unknown' };
+    // BIP21: a `req-*` param the wallet does not implement invalidates the
+    // whole URI. XChain implements none, so any req- param rejects the URI
+    // rather than silently dropping the required directive.
+    if (required.length > 0) return { kind: 'unknown' };
 
     /** @type {XchainUriIntent} */
     const intent = {
@@ -291,17 +331,24 @@ function parseCoinCodeStyle(raw, chainRegistry) {
             : (RECEIVE_ACTIONS.has(action) ? 'receive' : 'send'),
         action,
     };
-    const chainId = chainRegistry ? chainIdForCoinCode(code, chainRegistry) : null;
-    if (chainId) intent.chainId = chainId;
+    if (chain?.chainId) intent.chainId = chain.chainId;
+    // A destination must be an address for the chain the link names, or for
+    // some supported chain when the link names none.
+    if (params.to !== undefined) {
+        const ok = chain?.network
+            ? isValidAddressForChain(params.to, chain.network.coin, chain.network.networkKind)
+            : isValidAddressAnyNetwork(params.to);
+        if (!ok) return { kind: 'unknown' };
+    }
     // Execute intents carry ONLY the contract call target: send-shaped fields
-    // (tick/to/amount/memo) must not leak into an EXECUTE prefill, and the
-    // numeric fields are gated so a crafted link can't ride an arbitrary
-    // string into screen state (a failed gate just drops the field; the
-    // route falls back to its manual form). `params` (the query param) holds
-    // the raw pipe-delimited positional string; parseQuery has already
-    // percent-decoded it, so `|` separators round-trip intact.
+    // (tick/to/amount/memo) must not leak into an EXECUTE prefill. The
+    // contract index is required and numeric; a link without it is unroutable.
+    // `params` (the query param) holds the raw pipe-delimited positional
+    // string; parseQuery has already percent-decoded it, so `|` separators
+    // round-trip intact.
     if (intent.kind === 'execute') {
-        if (params.contract && NUMERIC_RE.test(params.contract)) intent.contractActionIndex = params.contract;
+        if (!params.contract || !NUMERIC_RE.test(params.contract)) return { kind: 'unknown' };
+        intent.contractActionIndex = params.contract;
         if (params.method) intent.method = params.method;
         if (params.params) intent.executeParams = params.params;
         // No `gas` passthrough: EXECUTE v0 has no GAS_LIMIT slot on the wire,
@@ -366,6 +413,14 @@ function parseBip21Style(raw) {
         if (err instanceof InvalidBip21Error) return { kind: 'unknown' };
         throw err;
     }
+    // The target must be a real address on some supported chain, or on the
+    // chain the link names with `chain=`. Anything else is refused: a typo or
+    // an unknown verb is not an address.
+    const namedChain = /^(bitcoin|litecoin|dogecoin)-(mainnet|testnet|regtest)$/.exec(parts.params?.chain ?? '');
+    const addressOk = namedChain
+        ? isValidAddressForChain(parts.address, namedChain[1], namedChain[2])
+        : isValidAddressAnyNetwork(parts.address);
+    if (!addressOk) return { kind: 'unknown' };
     /** @type {XchainUriIntent} */
     const intent = {
         kind: 'send',
@@ -410,6 +465,11 @@ function parseQuery(queryPart) {
             continue;
         }
         try { key = decodeURIComponent(key); } catch { /* keep raw */ }
+        // BIP21 names are case-insensitive for the req- marker and the three
+        // standard fields, as in bip21.js.
+        if (key.toLowerCase().startsWith('req-') || ['amount', 'label', 'message'].includes(key.toLowerCase())) {
+            key = key.toLowerCase();
+        }
         if (key.startsWith('req-')) {
             // Store under the FULL `req-<name>` key (like bip21.js), never the
             // bare name: a req- value must not be silently applied as if it
@@ -418,7 +478,16 @@ function parseQuery(queryPart) {
             required.push(key.slice(4));
             params[key] = value;
         } else {
-            params[key] = value;
+            try {
+                if (Object.hasOwn(params, key)) throw new Error(`${key} appears more than once`);
+                // Preserve custom xchain: amount text because action paths
+                // validate it before review and valid links must not be rewritten.
+                if (key === 'amount' && value.length <= URI_PARAMETER_LIMITS.amount) {
+                    params[key] = value;
+                } else if (isSafeUriParameter(key, value)) params[key] = value;
+            } catch (err) {
+                errors.push(err?.message || `invalid parameter "${key}"`);
+            }
         }
     }
     return { params, required, errors };

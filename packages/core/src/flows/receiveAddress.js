@@ -60,7 +60,9 @@ async function addressEverFunded(sdk, address) {
         if (typeof history.count === 'number') return history.count > 0;
     }
     if (typeof history === 'number') return history > 0;
-    return false;
+    // Any other answer (an error body, an HTML page) is unreadable: the
+    // address's funding stays unknown, never "unfunded".
+    return null;
 }
 
 /**
@@ -81,10 +83,27 @@ async function addressEverFunded(sdk, address) {
  */
 
 /**
+ * Calls on one vault take turns. Each call reads the held indexes, picks the
+ * lowest free one and writes the record, so two in flight (a double tap, the
+ * Receive screen beside the Add addresses dialog) would both pick the same
+ * index and store the same address twice. A failed call never blocks the next.
+ *
  * @param {ReceiveAddressOpts} opts
  * @returns {Promise<import('../schemas/address.js').Address>}
  */
-export async function receiveAddress({
+export function receiveAddress(opts) {
+    const vault = opts?.vault;
+    if (vault === null || typeof vault !== 'object') return deriveReceiveAddress(opts);
+    const previous = receiveQueues.get(vault) ?? Promise.resolve();
+    const run = previous.then(() => deriveReceiveAddress(opts));
+    receiveQueues.set(vault, run.catch(() => {}));
+    return run;
+}
+
+/** Tail of each vault's receive-address queue. */
+const receiveQueues = new WeakMap();
+
+async function deriveReceiveAddress({
     vault,
     walletId,
     password,
@@ -134,11 +153,18 @@ export async function receiveAddress({
     }
 
     let walletFormat;
+    let walletOrigin;
     try {
-        walletFormat = (await vault.wallets?.get(walletId))?.format;
+        const walletRecord = await vault.wallets?.get(walletId);
+        walletFormat = walletRecord?.format;
+        walletOrigin = walletRecord?.origin;
     } catch {
         walletFormat = undefined;
     }
+    // A demo wallet's addresses never go to an explorer: the demo now lands
+    // on mainnet, so the "ever funded?" probe would hand a throwaway address
+    // to a public mainnet explorer. Unknown funding takes the fresh frontier.
+    const probeFunding = walletOrigin !== 'demo';
     if (walletFormat === 'wif-only') {
         throw new Error('receiveAddress: imported-key wallets cannot rotate receive addresses');
     }
@@ -227,7 +253,9 @@ export async function receiveAddress({
                     count: 1,
                     addressType: type,
                 });
-                const funded = await addressEverFunded(sdk, candidate.address);
+                const funded = probeFunding
+                    ? await addressEverFunded(sdk, candidate.address)
+                    : null;
                 // An unreadable explorer cannot prove a deleted interior
                 // gap safe. The first index beyond every held record is
                 // still the normal fresh frontier and remains available

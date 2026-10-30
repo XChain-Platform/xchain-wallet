@@ -39,6 +39,18 @@ export async function saveWatchlistEntry({ vault, walletId, chainId, tick1, tick
     if (!chainId) throw new Error('saveWatchlistEntry: chainId is required');
     if (!tick1) throw new Error('saveWatchlistEntry: tick1 is required');
     if (!tick2) throw new Error('saveWatchlistEntry: tick2 is required');
+    // Saves on one vault run one at a time: the popup and the expanded tab
+    // share a background vault, and two saves that both read before either
+    // wrote would each add a row for the same market.
+    const previous = saveQueues.get(vault) || Promise.resolve();
+    const run = previous.then(() => saveOne({ vault, walletId, chainId, tick1, tick2 }));
+    saveQueues.set(vault, run.catch(() => {}));
+    return run;
+}
+
+const saveQueues = new WeakMap();
+
+async function saveOne({ vault, walletId, chainId, tick1, tick2 }) {
     const existing = await vault.watchlistEntries.findBy('walletId', walletId);
     const targetKey = `${chainId}::${tick1}::${tick2}`;
     const match = (existing || []).find((e) => watchlistEntryKey(e) === targetKey);

@@ -10,11 +10,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    FieldNote,
     Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
     ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useProtectedScreen } from '../utils/screenGuard.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import {
     encodeXcwChunks,
     createXcwCollector,
@@ -22,8 +24,21 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { formatOrList } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
+import '../../i18n/locales/en/settings.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
+import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 
 const MIN_PASSWORD_LENGTH = 8;
+
+// The vault refuses a first wallet over an existing one with a named error; a
+// shell that passes errors across a message boundary keeps only the message.
+function isWalletExistsError(err) {
+    return err?.name === 'WalletExistsError' || /^A wallet already exists\b/.test(String(err?.message || ''));
+}
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const INVALID_PARTNER_CODE = 'That pairing code is invalid or incomplete. '
     + 'Paste or scan the complete code from the other wallet.';
@@ -68,8 +83,9 @@ const MAX_QR_CHARS = 1200;
  * @param {() => void} [props.onPaired]        fires once the pairing persists; caller refreshes App state
  * @param {string} [props.walletId]            existing wallet to pair (Settings entry point). Absent = onboarding, which imports the shared phrase first.
  * @param {'watcher' | 'signer'} [props.initialMode]   preselects the role stage
+ * @param {{ report: (holding: boolean) => void }} [props.ownWriteGuard]   told while this lane imports the shared phrase and until it hands back
  */
-export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId, initialMode }) {
+export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId, initialMode, ownWriteGuard }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -87,6 +103,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [walletId, setWalletId] = useState(existingWalletId || null);
 
     const [name, setName] = useState('Paired Wallet');
+    // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
+    const walletName = name.trim() || 'Paired Wallet';
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -99,10 +117,16 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [verification, setVerification] = useState(/** @type {any} */ (null));
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Another window or tab made this device's wallet first: the shared phrase
+    // was not imported here, and the way on is that wallet's lock screen.
+    const [walletElsewhere, setWalletElsewhere] = useState(false);
     const [partnerCodeError, setPartnerCodeError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
 
     const lane = flowsLib.describePairingLane(walletMode);
+    // The code exchange follows the lane's own import of the shared phrase, so
+    // the lane holds the screen from that import until Finish or Back.
+    useOwnWalletWriteHold(ownWriteGuard, !existingWalletId && (walletId !== null || (stage === 'seed' && busy)));
 
     // On entering the exchange stage, ask the host for this wallet's
     // pairing code. The password is still in hand from the seed stage;
@@ -122,7 +146,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     walletId,
                     walletMode,
                     password: password || undefined,
-                    label: name,
+                    label: walletName,
                 });
                 if (cancelled) return;
                 setLocalCode(res?.encoded || null);
@@ -137,7 +161,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             }
         })();
         return () => { cancelled = true; };
-    }, [stage, walletId, localCode, messaging, password, name]);
+    }, [stage, walletId, localCode, messaging, password, walletName]);
 
     // The frames this device shows. A short code uses one still frame. A long
     // one (the normal case: three chains ≈ 1907 characters)
@@ -219,9 +243,22 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setError('Recovery phrase is required.');
             return;
         }
+        // A blank name takes the default; a name that draws no mark or runs past
+        // the cap would read as nothing in every list, as on Create and Import.
+        const typedName = name.trim();
+        if (typedName.length > 0 && !hasVisibleText(typedName)) {
+            setError('Wallet name must include a visible character.');
+            return;
+        }
+        if (nameLength(typedName) > NAME_MAX_LENGTH) {
+            setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
         const wordCount = trimmed.split(' ').length;
         if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
-            setError(`Expected ${ACCEPTED_WORD_COUNTS.join(', ')} words, got ${wordCount}.`);
+            // Copy stays inline until this screen moves to the dictionary; the
+            // list still reads "12, 15, 18, 21, or 24" like the import screen.
+            setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -232,6 +269,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setError('Passwords do not match.');
             return;
         }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
+            return;
+        }
         if (typeof messaging.importMnemonic !== 'function') {
             setError('Wallet import is not available in this shell.');
             return;
@@ -239,7 +280,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         setError(null);
         setBusy(true);
         try {
-            const r = await messaging.importMnemonic({ password, mnemonic: trimmed, name });
+            const r = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
                 throw new Error('The wallet imported but the shell returned no wallet id, so pairing cannot continue.');
@@ -251,7 +292,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setWalletId(id);
             setStage('exchange');
         } catch (err) {
-            setError(err?.message || 'Could not import the recovery phrase.');
+            if (isWalletExistsError(err)) {
+                // The phrase and password typed here cannot be used on this
+                // device any more, so they leave the screen.
+                setMnemonic('');
+                setPassword('');
+                setConfirm('');
+                setWalletElsewhere(true);
+                setError('This device already has a wallet, so the shared phrase was not imported here. Unlock that wallet to continue.');
+            } else {
+                setError(userFacingMessage(err, 'Could not import the recovery phrase.'));
+            }
         } finally {
             setBusy(false);
         }
@@ -284,20 +335,44 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 walletMode,
                 partner: normalizedPartnerCode,
                 password: password || undefined,
-                label: name,
+                label: walletName,
             });
             setVerification(res?.verification || null);
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'The two wallets could not be paired.');
+            // The flow prefixes its refusals with its own name; the reason after it is the copy.
+            setError(String(err?.message || '').replace(/^pairPartner:\s*/, '') || 'The two wallets could not be paired.');
         } finally {
             setBusy(false);
         }
     }
 
+    // Once the shared phrase is imported here the vault exists, so leaving by the
+    // welcome screen would offer create and import against it and fail at the last
+    // step. The completion callback re-reads shell state and lands on unlock.
+    function handleBack() {
+        if (!existingWalletId && (walletId || walletElsewhere) && typeof onPaired === 'function') {
+            onPaired();
+            return;
+        }
+        // Back from the phrase step returns to the role step the indicator
+        // counts as step 1, and the typed secrets leave the screen with it.
+        if (stage === 'seed' && !initialMode) {
+            setMnemonic('');
+            setPassword('');
+            setConfirm('');
+            setError(null);
+            setStage('role');
+            return;
+        }
+        onBack?.();
+    }
+
+    // The window title names the pairing lane the heading shows.
+    useDocumentTitleSection(lane.title || 'Pair a partner wallet');
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
             backDisabled={busy}
             title={lane.title || 'Pair a partner wallet'}
         />
@@ -327,7 +402,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             This device signs. Pair a watcher
                         </Button>
                     </div>
-                    <InfoTip label="An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them." />
+                    <p style={COPY}>An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them.</p>
                 </ListPage>
             </Screen>
         );
@@ -339,7 +414,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <FormPage
                     label="Pairing setup"
                     onSubmit={handleSeedSubmit}
-                    status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                    status={error ? (
+                        <StatusMessage
+                            variant="error"
+                            recovery={walletElsewhere && typeof onPaired === 'function' ? {
+                                label: 'Unlock',
+                                onAction: onPaired,
+                            } : undefined}
+                        >
+                            {error}
+                        </StatusMessage>
+                    ) : null}
                     actions={(
                         <Button type="submit" variant="primary" loading={busy} disabled={busy}>
                             Continue
@@ -419,8 +504,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     )}
                 >
                     <StepIndicator {...step} />
-                    <InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />
-                    <FormSection title="This wallet’s code">
+                    <FormSection
+                        title="This wallet’s code"
+                        trailing={<InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />}
+                    >
                     {localCode ? (
                         <>
                             {localFrames ? (
@@ -434,17 +521,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                         // One text node on purpose: a sentence split across JSX
                                         // children renders as several text nodes, and both this
                                         // spec's unit matcher and a screen reader see it in pieces.
-                                        <StatusMessage>
+                                        <FieldNote variant="info" role="status">
                                             {`This code is too long for one QR, so it cycles through ${frameCount} frames. `
                                                 + 'Point the other wallet’s camera at it and hold still until it has them all.'}
-                                        </StatusMessage>
+                                        </FieldNote>
                                     ) : null}
                                 </>
                             ) : (
-                                <StatusMessage variant="error">
+                                <FieldNote variant="error">
                                     This wallet&rsquo;s pairing code could not be drawn as a QR.
                                     Copy the text below instead.
-                                </StatusMessage>
+                                </FieldNote>
                             )}
                             <div style={CODE_BOX}>{localCode}</div>
                             <CopyButton value={localCode} label="Copy pairing code" />
@@ -455,7 +542,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             ) : null}
                         </>
                     ) : (
-                        <StatusMessage>{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</StatusMessage>
+                        <FieldNote variant="info" role="status">{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</FieldNote>
                     )}
                     </FormSection>
 
@@ -464,10 +551,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         <>
                             <QrScanner onFrame={handleScanFrame} />
                             {partnerCollector.total ? (
-                                <StatusMessage>
+                                <FieldNote variant="info" role="status">
                                     Pairing frames received: {partnerCollector.receivedCount} of
                                     {' '}{partnerCollector.total}
-                                </StatusMessage>
+                                </FieldNote>
                             ) : null}
                         </>
                     ) : null}
@@ -499,7 +586,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 </StatusMessage>
                 {verification?.sharedChainIds?.length ? (
                     <p style={COPY}>
-                        Matching chains: {verification.sharedChainIds.join(', ')}.
+                        Matching networks: {verification.sharedChainIds.join(', ')}.
                     </p>
                 ) : null}
                 <div style={STACK}>
@@ -567,13 +654,11 @@ const STACK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    marginBlockStart: 'var(--xc-space-3)',
 };
 
 const COPY = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-sm)',
-    marginBlockEnd: 'var(--xc-space-3)',
 };
 
 const CODE_BOX = {
@@ -598,5 +683,5 @@ const STEP_INDICATOR = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
     fontWeight: 600,
-    margin: '0 0 var(--xc-space-2)',
+    margin: 0,
 };

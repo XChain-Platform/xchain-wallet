@@ -21,6 +21,7 @@ import {
     contractMetaOf,
     contractAddressFor,
     contractDisplayLabel,
+    contractBalanceRows,
 } from '../../../packages/core/src/shared/routes/contractResponseShape.js';
 
 describe('sanitizeAbi', () => {
@@ -49,9 +50,26 @@ describe('sanitizeAbi', () => {
         expect(out.methods.info.view).toBe(true);
     });
 
-    it('filters non-object param entries', () => {
+    it('drops a method instead of shifting positions around a malformed param', () => {
         const out = sanitizeAbi({ version: 1, methods: { f: { params: [null, 'str', { name: 'y', type: 'tick' }] } } });
-        expect(out.methods.f.params).toEqual([{ name: 'y', type: 'tick' }]);
+        expect(out).toBeNull();
+    });
+
+    it('drops methods with wrong param field types and keeps valid siblings', () => {
+        const out = sanitizeAbi({
+            version: 1,
+            methods: {
+                badName: { params: [{ name: 42, type: 'number' }] },
+                badType: { params: [{ name: 'count', type: { kind: 'number' } }] },
+                good: { params: [{ name: 'count', type: 'number' }] },
+            },
+        });
+        expect(Object.keys(out.methods)).toEqual(['good']);
+    });
+
+    it('rejects array-shaped ABI objects and method maps', () => {
+        expect(sanitizeAbi([])).toBeNull();
+        expect(sanitizeAbi({ version: 1, methods: [{ params: [] }] })).toBeNull();
     });
 
     it('every kept method always exposes an array params (invariant across shapes)', () => {
@@ -74,6 +92,14 @@ describe('sanitizeAbi', () => {
         expect(sanitizeAbi({ version: 1, methods: 'nope' })).toBeNull();
         expect(sanitizeAbi({ version: 1, methods: {} })).toBeNull();
         expect(sanitizeAbi({ version: 1, methods: { onlyBad: { params: 42 } } })).toBeNull();
+    });
+});
+
+describe('contractBalanceRows', () => {
+    it('ignores malformed list entries while retaining valid balances', () => {
+        expect(contractBalanceRows({
+            data: [null, 'bad', ['also bad'], { tick: 'SAFE', quantity: '9007199254740993' }],
+        })).toEqual([{ tick: 'SAFE', quantity: '9007199254740993' }]);
     });
 });
 

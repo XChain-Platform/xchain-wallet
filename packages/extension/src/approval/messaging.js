@@ -15,8 +15,25 @@
 import { sendMessage } from '../shared/chromeMessaging.js';
 import { interruptedApprovalMessage } from './interruptedMessage.js';
 
+// A runtime reply that never arrives means the service worker that held the
+// parked request stopped; the request is gone just as when the broker no
+// longer knows the id.
+const LOST_REQUEST_CODES = new Set([
+    'RUNTIME_DISCONNECTED',
+    'RUNTIME_NO_RESPONSE',
+    'RUNTIME_TIMEOUT',
+    'RUNTIME_UNAVAILABLE',
+]);
+const LOST_REQUEST_TEXT = /a listener indicated an asynchronous response|the message port closed before a response was received/i;
+
+function isLostApproval(err) {
+    return err?.name === 'ApprovalNotFoundError'
+        || LOST_REQUEST_CODES.has(err?.code)
+        || LOST_REQUEST_TEXT.test(String(err?.message || err || ''));
+}
+
 function normalizeInterruptedApproval(err) {
-    if (err?.name !== 'ApprovalNotFoundError') throw err;
+    if (!isLostApproval(err)) throw err;
     const interrupted = new Error(interruptedApprovalMessage());
     interrupted.name = 'ApprovalInterruptedError';
     throw interrupted;
@@ -35,7 +52,8 @@ export function listWallets() {
 /**
  * Fetch the parked approval request by id. Thrown errors carry
  * `name: 'ApprovalInterruptedError'` when the broker has no entry for
- * the id because its owning background session ended.
+ * the id, or the runtime connection dropped, because its owning
+ * background session ended.
  *
  * @param {string} id
  * @returns {Promise<{ id: string, kind: string, payload: unknown }>}

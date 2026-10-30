@@ -57,6 +57,7 @@ import {
 } from '../flows/autopayConsent.js';
 import { coinpayAction as defaultCoinpayAction } from '../flows/coinpayAction.js';
 import { indexerWatermark } from '../flows/balances.js';
+import { ATTEMPTED_STATUSES, pendingTxReferencesMatch } from '../market/coinpayPending.js';
 import {
     extractCoinpayRows,
     getCoinpayObligationsForAddress,
@@ -75,35 +76,7 @@ const NOTIFIED_CAP = 500;
 // takeover window, inside the spec's 15-minute bound for 5-min cycles).
 const LEASE_CYCLES = 3;
 
-/** PendingTx statuses that mean "a payment may already be in flight". */
-const ATTEMPTED_STATUSES = new Set([
-    'signed', 'queued', 'broadcasting', 'broadcast', 'indexed',
-]);
-
-/**
- * Does a PendingTx row reference a COINPAY for this ORDER_MATCH?
- * Prefers the structured params snapshot; falls back to the two
- * summary wordings (manual CoinpayForm and this engine's).
- *
- * @param {import('../schemas/pendingTx.js').PendingTx} tx
- * @param {string} matchIndex
- * @returns {boolean}
- */
-export function pendingTxReferencesMatch(tx, matchIndex) {
-    if (!tx || tx.action !== 'COINPAY') return false;
-    const idx = String(matchIndex);
-    // The index reaches here straight from an API row; a non-numeric
-    // value can never label a real payment and must not reach RegExp.
-    if (!/^\d+$/.test(idx)) return false;
-    const fromParams = tx.params && tx.params.ORDER_MATCH_ACTION_INDEX != null
-        ? String(tx.params.ORDER_MATCH_ACTION_INDEX) === idx
-        : false;
-    if (fromParams) return true;
-    const summary = typeof tx.actionSummary === 'string' ? tx.actionSummary : '';
-    // Digit boundary after the index: "#900" must not match inside "#9001".
-    const boundary = new RegExp(`(?:ORDER_MATCH|match) #${idx}(?!\\d)`);
-    return boundary.test(summary);
-}
+export { pendingTxReferencesMatch };
 
 export class CoinpayAutopayWatcher {
     /**

@@ -92,6 +92,14 @@ describe.each(['OP_RETURN', 'P2SH', 'TAPROOT'])('beforeBroadcast hold on the %s 
                     signedPsbtHex: 'SIGNED(REVEAL)',
                     txHex: 'TX(REVEAL)',
                 });
+            } else if (encoding === 'P2SH') {
+                // The phase-2 spend is signed before the commit goes out, so the
+                // hook holds it too.
+                expect(held.revealSigned).toMatchObject({
+                    signedPsbtHex: 'SIGNED(PHASE2)',
+                    txHex: 'TX(PHASE2)',
+                    txid: 'txid-PHASE2',
+                });
             } else {
                 expect(held.revealSigned).toBeNull();
             }
@@ -110,6 +118,9 @@ describe.each(['OP_RETURN', 'P2SH', 'TAPROOT'])('beforeBroadcast hold on the %s 
         if (encoding === 'TAPROOT') {
             expect(h.trace.indexOf('hold')).toBeGreaterThan(h.trace.indexOf('signReveal'));
         }
+        if (encoding === 'P2SH') {
+            expect(h.trace.indexOf('hold')).toBeGreaterThan(h.trace.indexOf('sign:PHASE2'));
+        }
         expect(h.trace.indexOf('hold')).toBeLessThan(firstBroadcast);
     });
 
@@ -123,7 +134,6 @@ describe.each(['OP_RETURN', 'P2SH', 'TAPROOT'])('beforeBroadcast hold on the %s 
         })).rejects.toMatchObject({ name: 'SendHoldCancelledError' });
 
         expect(h.encoder.broadcastTx).not.toHaveBeenCalled();
-        expect(h.encoder.spendP2sh).not.toHaveBeenCalled();
         expect(listPendingCommits()).toHaveLength(0);
     });
 

@@ -162,6 +162,7 @@ describe('<FormErrorSummary>', () => {
 
         const summary = screen.getByRole('alert', { name: 'Form errors' });
         expect(document.activeElement).toBe(summary);
+        expect(within(summary).getByText('Fix these 2 fields:')).toBeInTheDocument();
         const links = within(summary).getAllByRole('link');
         expect(links.map((link) => link.getAttribute('href'))).toEqual(['#ticker', '#amount']);
 
@@ -217,6 +218,19 @@ describe('<FormErrorSummary>', () => {
 
         expect(document.activeElement).toBe(screen.getByRole('alert', { name: 'Form errors' }));
     });
+
+    it('does not describe a submit failure as a field error', () => {
+        render(
+            <FormErrorSummary errors={[
+                { message: "Couldn't send. Something went wrong. Try again." },
+            ]} focusKey={1} />,
+        );
+
+        const summary = screen.getByRole('alert', { name: 'Form errors' });
+        expect(within(summary).getByText("Couldn't send. Something went wrong. Try again.")).toBeInTheDocument();
+        expect(within(summary).queryByText(/Fix (?:this|these).*field/)).not.toBeInTheDocument();
+        expect(within(summary).queryByRole('link')).not.toBeInTheDocument();
+    });
 });
 
 describe('<FormPage>', () => {
@@ -232,17 +246,61 @@ describe('<FormPage>', () => {
         expect(within(form).getByRole('button', { name: 'Verify' })).toBeInTheDocument();
     });
 
-    it('puts the action row last, after the fields and the status line', () => {
+    it('puts the notice first, the fields next and the action row last', () => {
         const { container } = render(
             <FormPage status={<p>Problem</p>} actions={<button type="submit">Go</button>}>
                 <input aria-label="Amount" />
             </FormPage>,
         );
         const form = container.querySelector('form');
+        // The notice leads the page just above the form (its card, when wide).
+        const page = [...form.parentElement.children];
+        expect(page).toHaveLength(2);
+        expect(page[0]).toHaveTextContent('Problem');
+        expect(page[1]).toBe(form);
         const kids = [...form.children];
         expect(kids.at(-1)).toContainElement(screen.getByRole('button', { name: 'Go' }));
-        expect(kids.at(-2)).toHaveTextContent('Problem');
-        expect(kids.at(-3)).toContainElement(screen.getByLabelText('Amount'));
+        expect(kids.at(-2)).toContainElement(screen.getByLabelText('Amount'));
+        expect(form).not.toHaveTextContent('Problem');
+    });
+
+    it('keeps the same form and the focused field when a notice comes and goes', () => {
+        const page = (status) => (
+            <FormPage label="Pay" status={status} actions={<button type="submit">Go</button>}>
+                <input aria-label="Amount" />
+            </FormPage>
+        );
+        const { rerender } = render(page(null));
+        const form = screen.getByRole('form', { name: 'Pay' });
+        const amount = screen.getByLabelText('Amount');
+        amount.focus();
+
+        rerender(page(<p role="alert">Problem</p>));
+        expect(screen.getByRole('form', { name: 'Pay' })).toBe(form);
+        expect(screen.getByLabelText('Amount')).toBe(amount);
+        expect(document.activeElement).toBe(amount);
+
+        rerender(page(null));
+        expect(screen.getByRole('form', { name: 'Pay' })).toBe(form);
+        expect(document.activeElement).toBe(amount);
+    });
+
+    it('lets an error summary above the form take focus and lead to its field', () => {
+        render(
+            <FormPage
+                label="Pay"
+                status={<FormErrorSummary errors={[{ id: 'pay-amount', label: 'Amount', message: 'Enter an amount.' }]} focusKey={1} />}
+                actions={<button type="submit">Go</button>}
+            >
+                <input id="pay-amount" aria-label="Amount" />
+            </FormPage>,
+        );
+        const summary = screen.getByRole('alert');
+        const form = screen.getByRole('form', { name: 'Pay' });
+        expect(form).not.toContainElement(summary);
+        expect(document.activeElement).toBe(summary);
+        fireEvent.click(within(summary).getByRole('link'));
+        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
     });
 
     it('calls onSubmit when the form is submitted, and skips browser validation by default', () => {
@@ -331,11 +389,13 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
 
     it('puts every form in one centred 560px card when wide', () => {
         const card = ruleBody(wide, '.form');
-        expect(card).toMatch(/max-width:\s*560px/);
+        expect(css('tokens.css')).toMatch(/--xc-form-card-max-width:\s*560px/);
+        expect(card).toMatch(/max-width:\s*var\(--xc-form-card-max-width\)/);
         expect(card).toMatch(/margin:\s*0 auto/);
-        expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
-        expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
-        expect(card).toMatch(/padding:\s*var\(--xc-space-6\)/);
+        expect(card).toMatch(/background:\s*var\(--xc-card-bg\)/);
+        expect(card).toMatch(/border:\s*var\(--xc-card-border\)/);
+        expect(card).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
+        expect(card).toMatch(/padding:\s*var\(--xc-card-pad\)/);
     });
 
     it('keeps the card inside the pane at the 600px tablet boundary', () => {
@@ -487,7 +547,7 @@ describe('page gutter ownership', () => {
         expect(shell).not.toMatch(/--xc-page-gutter:/);
         expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
         expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
-        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
+        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\) and \(min-aspect-ratio: 3\/2\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
     });
 
     it('keeps scrolling, an end-edge scrollbar lane, and page padding on Screen body', () => {

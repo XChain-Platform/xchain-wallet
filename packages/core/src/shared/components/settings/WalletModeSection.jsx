@@ -18,38 +18,43 @@ import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js'
 import { SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
+import cardStyles from '../../../ui/Card.module.css';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
-const MODE_OPTIONS = /** @type {const} */ ([
+// Built per call so a locale switch applies.
+const modeOptions = () => /** @type {const} */ ([
     {
         value: 'full',
-        label: 'Normal',
-        hint: 'Sign and broadcast transactions on this device with password or hardware-signing prompts.',
-        confirmation: 'Normal mode can use this device\'s private keys to sign and broadcast transactions.',
+        label: t('ui.feeSelector.normal'),
+        hint: t('settings.walletMode.normalHint'),
+        confirmation: t('settings.walletMode.normalConfirm'),
     },
     {
         value: 'watcher',
-        label: 'Watcher (watch-only)',
-        hint: 'View balances and build unsigned transactions without password prompts or signing on this device.',
-        confirmation: 'Transaction actions produce unsigned PSBTs for a separate signer because watcher mode stops this device from signing.',
+        label: t('settings.page.modeWatcher'),
+        hint: t('settings.walletMode.watcherHint'),
+        confirmation: t('settings.walletMode.watcherConfirm'),
     },
     {
         value: 'signer',
-        label: 'Signer (air-gapped)',
-        hint: 'Sign transactions from a watcher wallet without showing send or receive screens or broadcasting from this device.',
-        confirmation: 'Signer mode hides Send and Receive, signs imported PSBTs, and does not broadcast them.',
+        label: t('settings.page.modeSigner'),
+        hint: t('settings.walletMode.signerHint'),
+        confirmation: t('settings.walletMode.signerConfirm'),
     },
 ]);
 
 export function WalletModeSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [pending, setPending] = useState(/** @type {typeof WALLET_MODES[number] | null} */ (null));
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
     useBackHandler(pending ? () => setPending(null) : undefined, saving);
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const current = WALLET_MODES.includes(settings.walletMode)
         ? settings.walletMode
@@ -78,27 +83,30 @@ export function WalletModeSection() {
     };
 
     const selected = pending || current;
-    const pendingOption = MODE_OPTIONS.find((opt) => opt.value === pending);
+    const options = modeOptions();
+    const pendingOption = options.find((opt) => opt.value === pending);
 
     return (
         <>
+            <div className={cardStyles.card}>
             <RadioGroup
-                legend="Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing."
+                legend={t('settings.walletMode.chooseHowThisWalletHandles')}
                 name="walletMode"
                 value={selected}
                 onChange={onChange}
                 disabled={saving}
-                options={MODE_OPTIONS.map((opt) => ({
+                options={options.map((opt) => ({
                     value: opt.value,
                     label: opt.label,
                     description: opt.hint,
                 }))}
             />
+            </div>
             {pendingOption ? (
                 <ConfirmModal
-                    title={`Switch to ${pendingOption.label} mode?`}
+                    title={t('settings.walletMode.switchToMode', { label: pendingOption.label })}
                     message={pendingOption.confirmation}
-                    confirmLabel="Confirm mode change"
+                    confirmLabel={t('settings.walletMode.confirmModeChange')}
                     busy={saving}
                     error={saveError}
                     onConfirm={confirmChange}

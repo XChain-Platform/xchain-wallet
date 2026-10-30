@@ -13,7 +13,7 @@ import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, L
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
+import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -30,13 +30,13 @@ import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
     decimalFromBaseUnits,
+    expandDecimalNotation,
     formatAtomicAmount,
     formatDecimalAmount,
     formatTokenQuantity,
@@ -51,7 +51,7 @@ import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
-import { sumTickOnChain } from '../utils/walletBalanceShape.js';
+import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -75,9 +75,7 @@ function callAsync(callback) {
  * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 ship the richer metadata
  * via `messaging.getTokenInfo`: description / creator / supply / lock
  * status / market price / extracted image URL all surface inline below
- * the existing fixed metadata block. Phase-3 features (Sell on DEX,
- * Market view, supply chart over time) and reputation remain tracked
- * in FOLLOWUPS.md under §27.
+ * the existing fixed metadata block.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -88,10 +86,13 @@ function callAsync(callback) {
  * @param {number} [props.divisibility]
  * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
  * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
+ * @param {boolean} [props.fiatRateStale]           true when the rate is a kept observation after a failed refresh
+ * @param {string | null} [props.fiatRateFetchedAt]  ISO time the rate was observed
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
+ * @param {() => void} [props.onBuy]                 navigate to the selected asset's market view
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
@@ -114,6 +115,8 @@ function TokenDetailContent({
     divisibility = null,
     fiatRate = null,
     fiatRateSource = null,
+    fiatRateStale = false,
+    fiatRateFetchedAt = null,
     quantity: suppliedQuantity,
     imageUrl: rowImageUrl = null,
     onBack,
@@ -124,40 +127,48 @@ function TokenDetailContent({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings, error: settingsError } = useSettings();
+    const { settings, loading: settingsLoading, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const walletModeReady = settings !== null;
-    const isWatcherMode = settings?.walletMode === 'watcher';
-    const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
-    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
+    // A failed settings read still opens the screen in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
+    const isDemo = isDemoWallet(walletId);
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkActionsAvailable = !networkOffline;
     const variant = screenVariantFor(shell);
     const tabsId = useId();
     const [resolvedQuantity, setResolvedQuantity] = useState(
         typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
     );
+    // A failed balance read leaves the amount unknown; it never reads as zero.
+    const [balanceFailed, setBalanceFailed] = useState(false);
     useEffect(() => {
+        setBalanceFailed(false);
         if (typeof suppliedQuantity === 'string') {
             setResolvedQuantity(suppliedQuantity);
             return undefined;
         }
         setResolvedQuantity(null);
-        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        if (typeof messaging.getWalletBalances !== 'function') {
+            setBalanceFailed(true);
+            return undefined;
+        }
         let cancelled = false;
         messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
             .then((byChain) => {
-                if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+                if (cancelled) return;
+                // A failed address leaves the total short, so the amount is unknown.
+                if (chainReadFailed(byChain, chainId)) setBalanceFailed(true);
+                else setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
             })
             .catch(() => {
-                if (!cancelled) setResolvedQuantity('0');
+                if (!cancelled) setBalanceFailed(true);
             });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick, suppliedQuantity]);
-    const quantity = resolvedQuantity ?? '0';
+    const quantity = resolvedQuantity;
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
-    const isDemo = isDemoWallet(walletId);
     // The price section shows outside test networks, including before
     // settings load; the demo wallet prices its synthetic test holdings.
     const fiatSupported = isDemo || (settings
@@ -166,6 +177,11 @@ function TokenDetailContent({
     // A fiat value itself needs a mainnet holding, whatever the settings say.
     const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
     const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
+    // A kept rate from before a failed refresh says how old it is, so it
+    // never reads as a current price.
+    const staleFiatRateAsOf = fiatRateStale === true && displayFiatRate != null
+        ? Date.parse(fiatRateFetchedAt || '')
+        : NaN;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
@@ -176,16 +192,24 @@ function TokenDetailContent({
         ? normalizedDivisibility(divisibility)
         : normalizedDivisibility(assetInfo?.divisibility) ?? normalizedDivisibility(divisibility);
     const [tokenMissing, setTokenMissing] = useState(false);
+    const [readFailed, setReadFailed] = useState(false);
     useEffect(() => {
         setTokenMissing(false);
+        setReadFailed(false);
         if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
         callAsync(() => messaging.getTokenInfo({ chainId, tick }))
-            .then((info) => { if (!cancelled) setTokenMissing(info == null); })
-            .catch(() => { /* A read failure is not proof that the token is gone. */ });
+            .then((info) => {
+                if (cancelled) return;
+                setTokenMissing(info == null);
+                setReadFailed(info?.loadError === true);
+            })
+            // A read failure is not proof that the token is gone; it is a notice.
+            .catch(() => { if (!cancelled) setReadFailed(true); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, isNative, isDemo]);
-    const metadataLoading = !isNative && !assetInfo && !tokenMissing;
+    const loadFailed = !isNative && (readFailed || assetInfo?.loadError === true);
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing && !readFailed;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -216,7 +240,7 @@ function TokenDetailContent({
         }
         : queriedNativePrice;
 
-    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
+    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative || isDemo });
 
     const handleBack = useCallback(() => {
         onBack();
@@ -248,6 +272,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setHolders([]);
+            setHoldersLoading(false);
+            setHoldersError(null);
+            return undefined;
+        }
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
@@ -283,7 +313,7 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
     const loadMoreHolders = useCallback(() => {
         if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
@@ -316,6 +346,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setGatedGroups(getDemoGatedGroupsForTick(tick));
+            setGatedLoading(false);
+            setGatedError(null);
+            return undefined;
+        }
         if (typeof messaging.listGatedContent !== 'function') {
             // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
@@ -337,12 +373,19 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
+    // A native coin's holding is valued at the live price the stats strip
+    // shows. The rate carried in from the balance row, or restored with the
+    // route after a reload, only stands in until that price answers, so the
+    // hero never prices the holding at an older rate than the screen quotes.
+    const liveNativeRate = isNative ? positiveFiniteNumber(nativePrice.entry?.priceFiat) : null;
+    const holdingFiatRate = liveNativeRate ?? displayFiatRate;
+    const showStaleFiatRate = liveNativeRate === null && Number.isFinite(staleFiatRateAsOf);
     const fiat = useMemo(() => {
-        if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
-        return fiatValue(quantity, resolvedDivisibility, displayFiatRate);
-    }, [quantity, resolvedDivisibility, displayFiatRate]);
+        if (typeof holdingFiatRate !== 'number' || !isFinite(holdingFiatRate)) return null;
+        return fiatValue(quantity, resolvedDivisibility, holdingFiatRate);
+    }, [quantity, resolvedDivisibility, holdingFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -352,10 +395,11 @@ function TokenDetailContent({
     // show the right glyph in the header + balance hero.
     const headerIconUrl = useMemo(() => {
         const tisImages = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
-        const iconHit = tisImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
+        const webImages = tisImages.filter((i) => safeHttpUrl(i?.url));
+        const iconHit = webImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
         const fromTis = iconHit?.url
-            || tisImages[0]?.url
-            || assetInfo?.imageUrl
+            || webImages[0]?.url
+            || safeHttpUrl(assetInfo?.imageUrl)
             || rowImageUrl
             || null;
         if (fromTis) return fromTis;
@@ -379,21 +423,6 @@ function TokenDetailContent({
                     {pageTitle}
                 </span>
             )}
-            titleIcon={headerIconUrl ? (
-                <AssetArtwork
-                    src={headerIconUrl}
-                    className={styles.headerIcon}
-                    fallbackClassName={styles.headerIconFallback}
-                    fallbackText={tick}
-                />
-            ) : metadataLoading ? (
-                <Skeleton
-                    shape="avatar"
-                    width={28}
-                    height={28}
-                    ariaLabel="Loading token artwork"
-                />
-            ) : null}
         />
     );
 
@@ -462,7 +491,7 @@ function TokenDetailContent({
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
     const atomicQuantity = parseAtomicQuantity(quantity);
     const sendDisabledReason = atomicQuantity == null
-        ? 'Balance is unavailable.'
+        ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
         : atomicQuantity <= 0n ? 'No balance to send.'
         : !networkActionsAvailable ? 'Send needs a network connection.' : null;
     const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
@@ -478,6 +507,11 @@ function TokenDetailContent({
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
+                {loadFailed ? (
+                    <StatusMessage variant="error">
+                        Token details could not be loaded from the explorer. Try again in a moment.
+                    </StatusMessage>
+                ) : null}
                 {/* Token balance hero: gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
                     a swap button for flipping tick ↔ fiat as primary,
@@ -561,6 +595,12 @@ function TokenDetailContent({
                                         {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
+                                {showStaleFiatRate ? (
+                                    <StalenessLabel
+                                        lastSyncedAt={staleFiatRateAsOf}
+                                        className={styles.balanceHeroStaleness}
+                                    />
+                                ) : null}
                             </div>
                         ) : null}
                     </div>
@@ -569,13 +609,15 @@ function TokenDetailContent({
                 {/* "Official token" banner: the token is on a project
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
-                    it" (every attesting project is listed). */}
-                {!isNative ? (
+                    it" (every attesting project is listed). The slot is
+                    held only while metadata loads or a banner shows, so a
+                    token on no roster leaves no blank band above the chart. */}
+                {!isNative && (metadataLoading || (Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0)) ? (
                     <div className={styles.officialBannerSlot}>
                         {metadataLoading ? (
                             <Skeleton height={38} ariaLabel="Loading token verification" />
                         ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                            <p className={styles.officialBanner} role="status">
+                            <StatusMessage variant="success">
                                 This token is an official token in the{' '}
                                 {assetInfo.projects.map((p, i) => (
                                     <span key={p} className={styles.officialBannerProject}>
@@ -583,7 +625,7 @@ function TokenDetailContent({
                                     </span>
                                 ))}
                                 {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}
@@ -616,25 +658,29 @@ function TokenDetailContent({
                     </div>
                 ) : null}
 
+                {/* The empty state stands alone at full width rather than
+                    inside the chart card, so it never reads as a box in a box. */}
                 {!isNative && supplyHistory.available ? (
-                    <div className={`${styles.infoCard} ${styles.supplyCard}`}>
-                        <RouteErrorBoundary
-                            variant="compact"
-                            resetKey={`${chainId}:${tick}:supply`}
-                        >
-                            {supplyHistory.loading ? (
-                                <Skeleton height={94} ariaLabel="Loading supply history" />
-                            ) : supplyHistory.points.length >= 2 ? (
-                                <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
-                            ) : (
-                                <EmptyState
-                                    title="No supply history yet"
-                                    body="Indexed issuance and destruction activity builds this history."
-                                    titleAs="p"
-                                />
-                            )}
-                        </RouteErrorBoundary>
-                    </div>
+                    supplyHistory.loading || supplyHistory.points.length >= 2 ? (
+                        <div className={`${styles.infoCard} ${styles.supplyCard}`}>
+                            <RouteErrorBoundary
+                                variant="compact"
+                                resetKey={`${chainId}:${tick}:supply`}
+                            >
+                                {supplyHistory.loading ? (
+                                    <Skeleton height={94} ariaLabel="Loading supply history" />
+                                ) : (
+                                    <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
+                                )}
+                            </RouteErrorBoundary>
+                        </div>
+                    ) : (
+                        <EmptyState
+                            title="No supply history yet"
+                            body="Indexed issuance and destruction activity builds this history."
+                            titleAs="p"
+                        />
+                    )
                 ) : null}
 
                 {isNative && fiatSupported ? (
@@ -656,7 +702,7 @@ function TokenDetailContent({
                     disappear, while temporary blocks stay visible with the
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
+                    {typeof onSend === 'function' && walletModeReady ? (
                         <ListRow
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}
@@ -682,7 +728,7 @@ function TokenDetailContent({
                             aria-label="Trade"
                             aria-busy="false"
                             leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
-                            title="Trade"
+                            title={<span>Market view</span>}
                             subtitle={tradeDisabledReason}
                         />
                     ) : null}
@@ -748,6 +794,7 @@ function TokenDetailContent({
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
                                     loading={metadataLoading}
+                                    loadFailed={loadFailed}
                                 />
                             ) : null}
 
@@ -819,16 +866,61 @@ function useSupplyHistory({ messaging, chainId, tick, skip }) {
             .then((resp) => {
                 if (cancelled) return;
                 const list = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
-                const clean = list
-                    .map((p) => ({ at: p?.timestamp ?? p?.height ?? null, supply: Number(p?.supply) }))
-                    .filter((p) => Number.isFinite(p.supply));
-                setPoints(clean);
+                setPoints(cleanSupplyHistory(list));
             })
             .catch(() => { if (!cancelled) setPoints([]); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, available]);
     return { points, loading, available };
+}
+
+const SUPPLY_CHART_MAX_POINTS = 500;
+
+/** A history time as a sortable number, or null when the value is not a time or height. */
+function historyTime(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Keeps the points with a non-negative decimal supply, orders them by time
+ * when every point carries one, and thins a long history to a drawable size.
+ * The exact supply text rides along for the label because a double cannot
+ * hold a 20-digit supply.
+ */
+function cleanSupplyHistory(list) {
+    let points = [];
+    for (const p of list) {
+        const rawSupply = p?.supply;
+        let text = null;
+        if (typeof rawSupply === 'string') {
+            const trimmed = rawSupply.trim();
+            if (/^\d+(?:\.\d+)?$/.test(trimmed)) text = trimmed;
+        } else if (typeof rawSupply === 'number' && Number.isFinite(rawSupply) && rawSupply >= 0) {
+            text = String(rawSupply);
+        }
+        if (text === null) continue;
+        points.push({ at: historyTime(p?.timestamp ?? p?.height), supply: Number(text), text });
+    }
+    if (points.length > 1 && points.every((p) => p.at !== null)) {
+        points = points
+            .map((p, i) => ({ p, i }))
+            .sort((a, b) => a.p.at - b.p.at || a.i - b.i)
+            .map(({ p }) => p);
+    }
+    if (points.length > SUPPLY_CHART_MAX_POINTS) {
+        const last = points.length - 1;
+        points = Array.from(
+            { length: SUPPLY_CHART_MAX_POINTS },
+            (_, i) => points[Math.round((i * last) / (SUPPLY_CHART_MAX_POINTS - 1))],
+        );
+    }
+    return points;
 }
 
 function SupplyChart({ points, divisibility, tick }) {
@@ -845,7 +937,7 @@ function SupplyChart({ points, divisibility, tick }) {
             return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
         })
         .join(' ');
-    const latest = formatTokenQuantity(String(points[points.length - 1].supply), divisibility);
+    const latest = formatTokenQuantity(points[points.length - 1].text, divisibility);
     return (
         <section aria-label="Supply over time">
             <SectionHeader title="Supply over time" />
@@ -1059,10 +1151,14 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
     if (marketPriceNum != null && Number.isFinite(marketPriceNum) && marketPriceNum > 0) {
         priceLabel = 'Price (DEX)';
-        priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
+        // The record carries the price as a number, which prints a small one in
+        // exponent form (1.5e-9) and leaves the decimal product below without
+        // a market cap, so both read the expanded decimal.
+        const marketPriceText = expandDecimalNotation(String(assetInfo.marketPrice));
+        priceCell = `${formatDecimalAmount(marketPriceText, undefined, priceDigits(marketPriceText))} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
-            const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
+            const marketCap = multiplyDecimalStrings(marketPriceText, supply);
             if (marketCap !== null) {
                 const formatted = formatDecimalAmount(marketCap, undefined, {
                     minimumFractionDigits: 0,
@@ -1095,7 +1191,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
             sparkline = synth.sparkline;
         }
     } else if (!assetInfo) {
-        hint = 'Loading market data…';
+        hint = 'Market data is unavailable.';
     }
 
     return (
@@ -1187,7 +1283,7 @@ function DetailsPanel({
                 ) : null}
                 <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
                 {descriptor ? (
-                    <DetailRow label="Chain"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                    <DetailRow label="Network"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
                 ) : null}
                 {!isNative ? (
                     <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
@@ -1245,7 +1341,7 @@ function DetailsPanel({
 function DetailRow({ label, children }) {
     return (
         <li>
-            <ListRow title={label} trailing={children} />
+            <ListRow className={styles.detailRow} title={label} trailing={children} />
         </li>
     );
 }
@@ -1256,7 +1352,7 @@ function DetailRow({ label, children }) {
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
+function InfoPanel({ isNative, assetInfo, hasDescription, loading, loadFailed = false }) {
     if (isNative) {
         return (
             <EmptyState
@@ -1273,6 +1369,9 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
             </div>
         );
     }
+    // The page-level notice already says the read failed; an empty-state here
+    // would claim the issuer published nothing.
+    if (loadFailed && (!assetInfo || assetInfo.loadError)) return null;
     if (!assetInfo) {
         return (
             <EmptyState
@@ -1282,9 +1381,8 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
             />
         );
     }
-    const hasLinks = Boolean(assetInfo.website)
-        || (Array.isArray(assetInfo.socials) && assetInfo.socials.length > 0)
-        || (Array.isArray(assetInfo.files) && assetInfo.files.length > 0);
+    const linkTargets = tokenLinkTargets(assetInfo);
+    const hasLinks = linkTargets.websites.length > 0 || linkTargets.socials.length > 0;
     const hasOwner = Boolean(assetInfo.owner
         && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
     const hasContacts = Array.isArray(assetInfo.contacts) && assetInfo.contacts.length > 0;
@@ -1311,7 +1409,6 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <SectionHeader title="About" />
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1587,6 +1684,9 @@ function OwnerBlock({ owner }) {
     );
 }
 
+// A plain address only: a query or fragment after it would add recipients or a body to the draft.
+const PLAIN_EMAIL = /^[^\s@?&#:,;<>()"']+@[^\s@?&#:,;<>()"']+\.[^\s@?&#:,;<>()"']+$/;
+
 const CONTACT_LABELS = {
     email: 'Email',
     phone: 'Phone',
@@ -1603,7 +1703,7 @@ function ContactsBlock({ contacts }) {
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
-                        const isMail = c.type === 'email';
+                        const isMail = c.type === 'email' && PLAIN_EMAIL.test(c.value);
                         const isPhone = c.type === 'phone';
                         const safeUrl = safeHttpUrl(c.value);
                         let display = c.value;
@@ -1655,7 +1755,7 @@ function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
             <SectionHeader title="PGP signature" />
-            <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
+            <pre className={styles.pgpsigBlock} tabIndex={0}>{pgpsig}</pre>
         </div>
     );
 }
@@ -1789,7 +1889,7 @@ function SocialIcon({ platform }) {
  * null when the TIS document carries none of these so the section
  * disappears entirely for tokens without rich metadata.
  */
-function LinksAndFiles({ assetInfo }) {
+function tokenLinkTargets(assetInfo) {
     // Prefer the `websites` array (primary + alternates) but fall back to
     // the singular `website` field for older bundles that haven't been
     // re-normalized. Files live in the Media tab's Files subtab now;
@@ -1804,6 +1904,20 @@ function LinksAndFiles({ assetInfo }) {
             return url ? [{ ...social, url }] : [];
         })
         : [];
+    return { websites, socials };
+}
+
+/** The host a link opens, as the browser resolves it (punycode exposes look-alike letters). */
+function linkHost(url) {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return '';
+    }
+}
+
+function LinksAndFiles({ assetInfo }) {
+    const { websites, socials } = tokenLinkTargets(assetInfo);
     const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
     const multipleWebsites = websites.length > 1;
@@ -1823,7 +1937,9 @@ function LinksAndFiles({ assetInfo }) {
                             <span className={styles.socialChipIcon} aria-hidden="true">
                                 <Icon.ExternalLinkIcon />
                             </span>
-                            <span>{multipleWebsites ? `Website ${i + 1}` : 'Website'}</span>
+                            <span>
+                                {multipleWebsites ? `Website ${i + 1}` : 'Website'} · {linkHost(w)}
+                            </span>
                         </a>
                     ))}
                 </div>
@@ -1905,7 +2021,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
                 setAddresses(usable);
                 if (usable.length === 0) {
-                    setAddressesError('No unlockable addresses for this chain. Holders need an HD or imported-WIF address that holds the token.');
+                    setAddressesError('No unlockable addresses for this network. Holders need an HD or imported-WIF address that holds the token.');
                 }
             })
             .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
@@ -1981,7 +2097,6 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
-    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2136,7 +2251,7 @@ function GatedGroupCard({
         event.preventDefault();
         if (submitting || password.length === 0) return;
         if (!Array.isArray(addresses) || addresses.length === 0) {
-            setUnlockError('No usable holding address found for this chain.');
+            setUnlockError('No usable holding address found for this network.');
             return;
         }
         setSubmitting(true);
@@ -2291,23 +2406,7 @@ function GatedGroupCard({
                     );
                 })}
             </ul>
-            {accessError ? (
-                <p
-                    role="alert"
-                    style={{
-                        marginTop: 'var(--xc-space-2)',
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-bg-muted)',
-                        border: '1px dashed var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text)',
-                        lineHeight: 1.5,
-                    }}
-                >
-                    {accessError}
-                </p>
-            ) : null}
+            <StatusMessage variant="error">{accessError}</StatusMessage>
             {passwordOpen ? (
                 <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
                     {addressesLoading ? (
@@ -2325,19 +2424,8 @@ function GatedGroupCard({
                             if (unlockError) setUnlockError(null);
                         }}
                         autoComplete="current-password"
-                        aria-invalid={unlockError ? true : undefined}
-                        aria-describedby={unlockError ? unlockErrorId : undefined}
+                        error={unlockError || undefined}
                     />
-                    {unlockError ? (
-                        <p
-                            id={unlockErrorId}
-                            role="alert"
-                            className={styles.error}
-                            style={{ marginTop: 'var(--xc-space-1)' }}
-                        >
-                            {unlockError}
-                        </p>
-                    ) : null}
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"
@@ -2463,6 +2551,7 @@ function HoldersPanel({
                     return (
                         <li key={holderIdentity(h) || `holder:${i}`}>
                             <ListRow
+                                className={styles.holdersRow}
                                 title={(
                                     <span className={styles.holdersAddrWrap}>
                                         {address === '-' ? (
@@ -2479,6 +2568,7 @@ function HoldersPanel({
                                     </span>
                                 )}
                                 trailing={<span className={styles.holdersQty}>{balance}</span>}
+                                trailingClassName={styles.holdersTrailing}
                             />
                         </li>
                     );
@@ -2551,6 +2641,19 @@ function formatCompactFiat(value, currency) {
     return formatFiat(value, currency);
 }
 
+/**
+ * Fraction digits for a coin-denominated price: eight significant digits
+ * past its leading zeros, so a small price keeps its value and its unit
+ * fits the stats cell.
+ * @param {string} decimal  expanded decimal text
+ */
+function priceDigits(decimal) {
+    const fraction = /\.(\d+)$/.exec(decimal)?.[1] || '';
+    const leadingZeros = /^-?0\./.test(decimal) ? /^0*/.exec(fraction)[0].length : 0;
+    const digits = Math.min(fraction.length, leadingZeros + 8);
+    return { minimumFractionDigits: 0, maximumFractionDigits: digits };
+}
+
 function positiveFiniteNumber(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -2599,7 +2702,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
     const scale = normalizedDivisibility(divisibility);
     if (quantity == null || scale == null || typeof fiatRate !== 'number' || !isFinite(fiatRate) || fiatRate <= 0) return null;
     const amount = decimalFromBaseUnits(quantity, scale);
-    return multiplyDecimalStrings(amount, String(fiatRate));
+    return multiplyDecimalStrings(amount, expandDecimalNotation(fiatRate));
 }
 
 // Returns just the symbol-prefixed numeric portion of a fiat value in

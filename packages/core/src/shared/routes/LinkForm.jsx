@@ -12,10 +12,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -25,8 +25,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { explorerErrorCode } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -34,6 +36,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -79,6 +82,7 @@ const COIN_DISPLAY_TICKER = {
  */
 export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -144,7 +148,7 @@ export function LinkForm({ walletId, onBack }) {
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a link.',
+                        'No addresses on any network yet. Use Receive to generate one before creating a link.',
                     );
                     return;
                 }
@@ -210,7 +214,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -229,7 +236,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -261,15 +271,15 @@ export function LinkForm({ walletId, onBack }) {
         if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
-        if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
-        if (!/^\d+$/.test(actionIndex2)) return 'The action number on chain B must be a whole number.';
+        if (!/^\d+$/.test(actionIndex1)) return 'The action number on the network A must be a whole number.';
+        if (!/^\d+$/.test(actionIndex2)) return 'The action number on the network B must be a whole number.';
         if (ticker1 === ticker2 && BigInt(actionIndex1) === BigInt(actionIndex2)) {
             return 'Cannot link an action to itself.';
         }
-        if (preview1?.error) return 'Could not verify the action on chain A. Check the number and try again.';
-        if (preview2?.error) return 'Could not verify the action on chain B. Check the number and try again.';
-        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on chain A at that number.';
-        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on chain B at that number.';
+        if (preview1?.error) return 'Could not verify the action on the network A. Check the number and try again.';
+        if (preview2?.error) return 'Could not verify the action on the network B. Check the number and try again.';
+        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on the network A at that number.';
+        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on the network B at that number.';
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
 
@@ -390,18 +400,19 @@ export function LinkForm({ walletId, onBack }) {
     // reachable from the review screen is in an invalid state.
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chain1Id || !chain2Id) {
-            setFormError('Pick both chains before reviewing.');
+            setFormError('Pick both networks before reviewing.');
             return;
         }
         if (!fromAddress || !submitChainId) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError) {
-            setFormError(validationError);
-            return;
-        }
+        // The live banner above the form already states this problem; copying it
+        // into formError printed the same sentence twice.
+        if (validationError) return;
         if (previewPending) {
             setFormError('Wait for both action previews to finish loading.');
             return;
@@ -491,7 +502,7 @@ export function LinkForm({ walletId, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across chains'}
+            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across networks'}
         />
     );
     const wrap = (children) => (
@@ -504,7 +515,7 @@ export function LinkForm({ walletId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -515,7 +526,8 @@ export function LinkForm({ walletId, onBack }) {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -527,7 +539,7 @@ export function LinkForm({ walletId, onBack }) {
         // below would report a link that is not on any chain yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="link" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="link" unsaved={result.unsaved} />,
             );
         }
         return wrap(
@@ -589,10 +601,11 @@ export function LinkForm({ walletId, onBack }) {
 
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -629,11 +642,11 @@ export function LinkForm({ walletId, onBack }) {
                     {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
                         {submitDescriptor
                             ? <ChainBadge descriptor={submitDescriptor} size="sm" showName={false} />
-                            : 'Selected chain'}
+                            : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -643,7 +656,7 @@ export function LinkForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side A decoded</dt>
+                    <dt className={styles.detailsLabel}>First action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview1?.loading
                             ? 'Loading…'
@@ -653,7 +666,7 @@ export function LinkForm({ walletId, onBack }) {
                                     ? decodePreview(preview1.action)
                                     : '(preview not loaded)'}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side B decoded</dt>
+                    <dt className={styles.detailsLabel}>Second action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview2?.loading
                             ? 'Loading…'
@@ -704,18 +717,19 @@ export function LinkForm({ walletId, onBack }) {
 
     return wrapForm(
         <FormPage
-            label="Link two actions across chains"
+            demoGuard={demoGuard}
+            label="Link two actions across networks"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {validationError}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -739,7 +753,7 @@ export function LinkForm({ walletId, onBack }) {
                 gap: 'var(--xc-space-3)',
             }}>
                 <SidePanel
-                    title="Chain A"
+                    title="Network A"
                     chainIds={chainIds}
                     chainId={chain1Id}
                     onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
@@ -748,7 +762,7 @@ export function LinkForm({ walletId, onBack }) {
                     previewCache={previewCache}
                 />
                 <SidePanel
-                    title="Chain B"
+                    title="Network B"
                     chainIds={chainIds}
                     chainId={chain2Id}
                     onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
@@ -775,11 +789,11 @@ export function LinkForm({ walletId, onBack }) {
                 options={[
                     {
                         value: 'chain1',
-                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Chain A',
+                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Network A',
                     },
                     {
                         value: 'chain2',
-                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Chain B',
+                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Network B',
                         disabled: !chain2Id || chain2Id === chain1Id,
                     },
                 ]}
@@ -791,7 +805,7 @@ export function LinkForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         {chainRegistry.get(submitChainId)
                             ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" showName={false} />
-                            : 'Selected chain'}
+                            : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -831,19 +845,13 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
     const preview = previewKey ? previewCache[previewKey] : null;
 
     return (
-        <fieldset style={{
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
-            margin: 0,
-            background: 'var(--xc-bg-muted)',
-        }}>
+        <fieldset className={cardStyles.card} style={{ margin: 0 }}>
             <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
                 {title}
             </legend>
 
             <ChainPicker
-                label="Chain"
+                label="Network"
                 value={chainId}
                 onChange={onChainChange}
                 chainIds={chainIds}
@@ -874,9 +882,11 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                             ? humanizeError(preview.error, 'load that action').message
                             : preview?.action
                                 ? `Preview: ${decodePreview(preview.action)}`
-                                : descriptor && actionIndex
-                                    ? 'Enter the action number from the explorer to see a preview…'
-                                    : ''}
+                                : preview
+                                    ? 'No action was found at that number.'
+                                    : descriptor && actionIndex
+                                        ? 'Enter the action number from the explorer to see a preview…'
+                                        : ''}
             </div>
         </fieldset>
     );
@@ -885,7 +895,8 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
 function decodePreview(action) {
     if (!action) return '(empty)';
     const a = action.action || action.ACTION;
-    if (!a) return JSON.stringify(action).slice(0, 80);
+    // Never show raw row JSON to a person; a row with no action name says so plainly.
+    if (!a) return 'Action details unavailable';
     // Show the humanized action label, never the raw all-caps opcode.
     const label = actionDisplayLabel(a);
     if (a === 'ISSUE') {

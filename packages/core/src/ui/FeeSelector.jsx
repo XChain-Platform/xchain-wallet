@@ -9,17 +9,27 @@
 // contact legal@dankest.llc.
 
 import { useId, useMemo, useState } from 'react';
-import { isPerKbUnit } from '../flows/feeEstimate.js';
+import { customFeeRateBoundsError, customFeeRateDecimalsError, isPerKbUnit } from '../flows/feeEstimate.js';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
 } from '../shared/utils/amountFormat.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
+import { FormNotice } from './FormNotice.jsx';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/send.js';
+import '../i18n/locales/en/ui.js';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
-const SPEED_LABELS = { low: 'Slow', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+// Resolved per call so a locale switch applies; a module-level table would freeze the load-time text.
+const speedLabel = (speed) => ({
+    low: t('ui.feeSelector.slow'),
+    normal: t('ui.feeSelector.normal'),
+    fast: t('ui.feeSelector.fast'),
+    custom: t('ui.feeSelector.custom'),
+}[speed]);
 const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
@@ -62,6 +72,8 @@ const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 
  *   - showEstimateNotice  whether fee-source availability notices render
  *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
  *               amount so it's unambiguous which coin the fee is paid in
+ *   - error      a refusal about the fee (for example the node's relay
+ *               minimum); renders in the selector's feedback slot
  *
  * @typedef {object} FeeSelectorValue
  * @property {'low' | 'normal' | 'fast' | 'custom'} mode
@@ -78,6 +90,7 @@ export function FeeSelector({
     label = null,
     coinTicker = '',
     showEstimateNotice = true,
+    error = null,
 }) {
     const customInputId = useId();
     const feeInputId = useId();
@@ -104,14 +117,14 @@ export function FeeSelector({
                 <span className={styles.label}>
                     {label}
                     <InfoTip
-                        aria="Fee priority help"
-                        label="Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate."
+                        aria={t('ui.feeSelector.feePriorityHelpLabel')}
+                        label={t('ui.feeSelector.pickHowFastThisTransaction')}
                     />
                 </span>
             ) : <span />}
             {Number.isFinite(etaMinutes) ? (
                 <span className={`${styles.headerEta} ${styles[ETA_TONE[speed]] || ''}`.trim()}>
-                    ~{etaMinutes} min
+                    ~{etaMinutes} {t('ui.feeSelector.min')}
                 </span>
             ) : null}
         </div>
@@ -127,13 +140,21 @@ export function FeeSelector({
         ({ estimate }) => estimate?.source === 'static-placeholder',
     );
 
-    if (!tiers || tierList.length === 0) {
+    // Inside a FormPage the notice leads the page content with the form's
+    // others (above the card when wide); anywhere else it stays under the selector.
+    const noEstimate = !tiers || tierList.length === 0;
+    let noticeText = null;
+    if (showEstimateNotice) {
+        if (noEstimate) noticeText = t('ui.feeSelector.feeEstimateUnavailableForThis');
+        else if (usesFallbackRates) noticeText = t('ui.feeSelector.liveFeeEstimateUnavailableUsing');
+    }
+    const inlineNotice = <FormNotice variant="warning">{noticeText}</FormNotice>;
+
+    if (noEstimate) {
         return (
             <div className={styles.wrap}>
                 {headerRow()}
-                {showEstimateNotice ? (
-                    <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
-                ) : null}
+                {inlineNotice}
             </div>
         );
     }
@@ -254,9 +275,8 @@ export function FeeSelector({
     const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
         ? tiers.fast.rateValue
         : null;
-    const minimumRate = Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0
-        ? tiers.minimumRate
-        : null;
+    // An out-of-range rate blocks the enclosing form's submit through the field's own validity.
+    const rangeError = isCustom ? customFeeRateBoundsError({ rate: customRateNumber, tiers }) : null;
     let customFeedback = null;
     let customFeedbackTone = null;
     if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
@@ -268,14 +288,21 @@ export function FeeSelector({
     } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
         customFeedback = 'Custom fee rate must be greater than zero.';
         customFeedbackTone = 'error';
-    } else if (isCustom && minimumRate !== null && customRateNumber < minimumRate) {
-        customFeedback = `This rate is below the network minimum of ${formatWithThousands(minimumRate)} ${tiers.unit}. `
-            + 'It may not relay.';
-        customFeedbackTone = 'warning';
+    } else if (isCustom && rangeError) {
+        customFeedback = rangeError;
+        customFeedbackTone = 'error';
+    } else if (isCustom && customFeeRateDecimalsError(customRateCanonical)) {
+        customFeedback = customFeeRateDecimalsError(customRateCanonical);
+        customFeedbackTone = 'error';
     } else if (isCustom && fastPresetRate !== null
         && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
         customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
         customFeedbackTone = 'warning';
+    }
+
+    if (error) {
+        customFeedback = error;
+        customFeedbackTone = 'error';
     }
 
     return (
@@ -291,10 +318,22 @@ export function FeeSelector({
                     onChange={(e) => onSliderChange(e.target.value)}
                     onKeyDown={onSliderKeyDown}
                     disabled={disabled}
-                    aria-label="Network fee"
+                    aria-label={t('send.networkFee')}
                     aria-valuetext={isCustom
-                        ? `Custom: ${Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : ''} ${tiers.unit}`.trim()
-                        : `${SPEED_LABELS[sliderSpeed]}: ${formatWithThousands(activeEstimate?.coinAmount ?? '')}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                        ? t('ui.feeSelector.customValueText', {
+                            rate: Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : '',
+                            unit: tiers.unit,
+                        }).trim()
+                        : (activeEstimate?.etaMinutes
+                            ? t('ui.feeSelector.speedValueTextEta', {
+                                speed: speedLabel(sliderSpeed),
+                                amount: formatWithThousands(activeEstimate?.coinAmount ?? ''),
+                                eta: activeEstimate.etaMinutes,
+                            })
+                            : t('ui.feeSelector.speedValueText', {
+                                speed: speedLabel(sliderSpeed),
+                                amount: formatWithThousands(activeEstimate?.coinAmount ?? ''),
+                            }))}
                     className={styles.slider}
                 />
                 <div className={styles.sliderTicks} aria-hidden="true">
@@ -307,11 +346,11 @@ export function FeeSelector({
                             onClick={() => pickSpeed(s)}
                             disabled={disabled}
                             tabIndex={-1}
-                            aria-label={SPEED_LABELS[s]}
+                            aria-label={speedLabel(s)}
                         >
-                            <span>{SPEED_LABELS[s]}</span>
+                            <span>{speedLabel(s)}</span>
                             {Number.isFinite(tiers[s]?.etaMinutes) ? (
-                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} min</span>
+                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} {t('ui.feeSelector.min')}</span>
                             ) : null}
                         </button>
                     ))}
@@ -336,13 +375,14 @@ export function FeeSelector({
                                             min={0}
                                             step="any"
                                             className={`${styles.customInput} ${styles.feeInput}`}
+                                            ref={(el) => el?.setCustomValidity(rangeError || '')}
                                             value={feeDraft}
                                             onChange={(e) => onFeeDraftChange(e.target.value)}
                                             onBlur={() => setFeeDraft(null)}
                                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                             aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
                                             aria-describedby={customFeedback ? customFeedbackId : undefined}
-                                            aria-label={`Network fee amount${coinTicker ? ` (${coinTicker})` : ''}`}
+                                            aria-label={(coinTicker ? t('ui.feeSelector.networkFeeAmountTicker', { ticker: coinTicker }) : t('ui.feeSelector.networkFeeAmount'))}
                                             disabled={disabled}
                                             autoFocus
                                         />
@@ -358,8 +398,8 @@ export function FeeSelector({
                                                 className={styles.readoutEdit}
                                                 onClick={beginFeeEdit}
                                                 disabled={disabled}
-                                                aria-label="Edit exact fee amount"
-                                                title="Select to edit the exact fee"
+                                                aria-label={t('ui.feeSelector.editExactFeeAmount')}
+                                                title={t('ui.feeSelector.selectToEditTheExact')}
                                             >
                                                 {formatWithThousands(activeEstimate.coinAmount)}
                                             </button>
@@ -384,6 +424,7 @@ export function FeeSelector({
                                         min={0.00000001}
                                         step="any"
                                         className={styles.customInput}
+                                        ref={(el) => el?.setCustomValidity(rangeError || '')}
                                         value={customRateRaw}
                                         onChange={(e) => onCustomRateChange(e.target.value)}
                                         onBlur={() => {
@@ -391,7 +432,7 @@ export function FeeSelector({
                                         }}
                                         aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
                                         aria-describedby={customFeedback ? customFeedbackId : undefined}
-                                        aria-label={`Custom fee rate (${tiers.unit})`}
+                                        aria-label={t('ui.feeSelector.customFeeRate', { unit: tiers.unit })}
                                         disabled={disabled}
                                         autoFocus={!editingFee}
                                     />
@@ -403,8 +444,8 @@ export function FeeSelector({
                                     className={`${styles.readoutEdit} ${styles.sliderReadoutRate}`}
                                     onClick={beginRateEdit}
                                     disabled={disabled}
-                                    aria-label={`Edit fee rate (${tiers.unit})`}
-                                    title="Select to edit the fee rate"
+                                    aria-label={t('ui.feeSelector.editFeeRate', { unit: tiers.unit })}
+                                    title={t('ui.feeSelector.selectToEditTheFee')}
                                 >
                                     {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
                                 </button>
@@ -427,11 +468,7 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
-            {showEstimateNotice && usesFallbackRates ? (
-                <p className={styles.placeholder} aria-live="polite">
-                    Live fee estimate unavailable. Using safe default rates. Custom fees remain available.
-                </p>
-            ) : null}
+            {inlineNotice}
         </div>
     );
 }

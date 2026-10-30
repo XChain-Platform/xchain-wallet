@@ -23,6 +23,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
 const { LocaleSync } = await import('../../../packages/core/src/shared/LocaleSync.jsx');
 
 beforeEach(async () => {
+    localStorage.clear();
     await setLocale('en');
     registerLocale('restart-test', { 'common.back': 'Retour' });
     settings = { language: 'restart-test' };
@@ -74,5 +75,51 @@ describe('LocaleSync', () => {
         expect(screen.getByRole('button', { name: 'Retour en direct 1' })).toBeTruthy();
         expect(document.documentElement.lang).toBe('live-test');
         expect(document.documentElement.dir).toBe('ltr');
+    });
+
+    it('keeps the chosen language on the lock screen, where settings are unreadable', async () => {
+        const unlocked = render(<LocaleSync />);
+        await waitFor(() => expect(getLocale()).toBe('restart-test'));
+        unlocked.unmount();
+
+        // A reload: nothing is active and the vault is locked, so settings are null.
+        await setLocale('en');
+        settings = null;
+        render(<LocaleSync />);
+
+        await waitFor(() => expect(getLocale()).toBe('restart-test'));
+        expect(document.documentElement.lang).toBe('restart-test');
+    });
+
+    it('applies the cached direction of a right-to-left language while locked', async () => {
+        registerLocale('ar', { 'common.back': 'رجوع' });
+        settings = { language: 'ar' };
+        const unlocked = render(<LocaleSync />);
+        await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
+        unlocked.unmount();
+
+        await setLocale('en');
+        expect(document.documentElement.dir).toBe('ltr');
+        settings = null;
+        render(<LocaleSync />);
+
+        await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
+    });
+
+    it('drops the cached language when the settings no longer carry one', async () => {
+        const unlocked = render(<LocaleSync />);
+        await waitFor(() => expect(localStorage.getItem('xc:language')).toBe('restart-test'));
+        unlocked.unmount();
+
+        settings = {};
+        const cleared = render(<LocaleSync />);
+        await waitFor(() => expect(localStorage.getItem('xc:language')).toBeNull());
+        cleared.unmount();
+
+        await setLocale('en');
+        settings = null;
+        render(<LocaleSync />);
+        await act(async () => {});
+        expect(getLocale()).toBe('en');
     });
 });

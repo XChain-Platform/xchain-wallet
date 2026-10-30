@@ -1,31 +1,8 @@
-.headPopup {
-    margin-bottom: var(--xc-space-3);
-}
-
-.headFull {
-    text-align: center;
-    margin-bottom: var(--xc-space-5);
-}
-
 .logo {
     /* 96px preserves the brand artwork's intended display width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
-}
-
-.subtitlePopup {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-    margin: 0;
-}
-
-.subtitleFull {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
 }
 
 .copyHint {
@@ -54,25 +31,8 @@
     overflow-wrap: anywhere;
 }
 
-.actionsPopup {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-3);
-}
-
-.actionsFull {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-5);
-}
-
 .wordCountRow {
-    /* 1px keeps the fieldset boundary as a crisp hairline. */
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-3) 0 0;
     min-width: 0;
     width: 100%;
@@ -132,39 +92,8 @@
     flex: 1;
 }
 
-.advancedWarning {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-warning-bg, var(--xc-bg-muted));
-    /* 1px keeps the warning boundary as a crisp hairline. */
-    border: 1px solid var(--xc-warning, var(--xc-border));
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    margin: 0;
-    line-height: 1.4;
-}
-
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-on-danger);
-    background: var(--xc-danger);
-    /* 1px keeps the error boundary as a crisp hairline. */
-    border: 1px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    margin: var(--xc-space-3) 0 0;
-    text-align: center;
-    font-weight: 500;
-    line-height: 1.4;
-}
-
 /* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
-    .headPopup,
-    .headFull {
-        margin-bottom: var(--xc-space-2);
-    }
-
     .logo {
         /* 64px preserves the compact artwork size in short viewports. */
         width: 64px;

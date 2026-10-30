@@ -29,7 +29,15 @@
 // screen, which is itself backed by a live indexer read) rather than
 // only the form's own success copy.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    expectMyTokensRow,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -57,29 +65,10 @@ const SUPPLY = '1000';
 const MINT_XCHAIN = 100;
 const STAMP = Date.now().toString().slice(-6);
 
-/** Opens the command palette and runs the named command. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
-    return txid;
+    return waitForShownTxid(page.getByRole('main'), { message: 'no transaction id ever appeared after Approve' });
 }
 
 /**
@@ -111,27 +100,28 @@ async function readLabelledTxid(page, doneHeading, label = 'Link transaction') {
  * once there are more than three, so both are checked (same split
  * `collectible-one-of-one.regtest.spec.js` already reads around).
  */
+/**
+ * The My Lists row that opens list `index`.
+ *
+ * The accessible name sits on the row's button, not on its list item, and it
+ * follows the list's name: "Open address list #N" while unnamed, and
+ * "Open <name> (List #N)" once a rename has landed.
+ */
+function myListsRow(page, index) {
+    return page.getByRole('button', {
+        name: new RegExp(`^Open (address list #${index}|.* \\(List #${index}\\))$`),
+    });
+}
+
 async function openManageTokenAction(page, tick, label) {
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
-    await expect(row, `${tick} is on chain but My Tokens does not list it`)
-        .toBeVisible({ timeout: 60_000 });
+    await expectMyTokensRow(main, row, `${tick} is on chain but My Tokens does not list it`);
     await row.click();
     await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
 
-    const primary = main.getByRole('button', { name: label, exact: true });
-    if (await primary.count() > 0 && await primary.first().isVisible()) {
-        await primary.first().click();
-        return;
-    }
-    const more = main.getByRole('button', { name: /^More/ });
-    await expect(more, `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout: 15_000 });
-    await more.first().click();
-    const item = page.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `no "${label}" action available for ${tick}`).toBeVisible({ timeout: 15_000 });
-    await item.click();
+    await clickManageTokenAction(main, label);
 }
 
 /** Issues `tick` on the venue chain from `source` and returns its ISSUE action index. */
@@ -139,12 +129,12 @@ async function issueToken(page, source, tick) {
     // Opening Issue token from the palette while its own "Token issued" screen
     // is showing keeps that screen (same view, no remount), so a second issue in
     // a row would find no Ticker field. Leave for another view first.
-    await gotoPalette(page, 'My Tokens');
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'My tokens');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From').inputValue(),
+    expect(await main.getByLabel('From', { exact: true }).inputValue(),
         `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
         + 'by the address this test funded')
         .toBe(source);
@@ -176,11 +166,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Content Registry Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const issueMain = page.getByRole('main');
             await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(issueMain);
-            source = await issueMain.getByLabel('From').inputValue();
+            source = await issueMain.getByLabel('From', { exact: true }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -254,14 +244,14 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('Link: pair the same two actions again, in the opposite order', async () => {
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             await page.getByRole('main').getByText('Link cross-chain actions', { exact: true })
                 .first().click();
 
-            const panelA = page.locator('fieldset').filter({ hasText: 'Chain A' });
-            const panelB = page.locator('fieldset').filter({ hasText: 'Chain B' });
-            await selectVenueChain(panelA, 'Chain');
-            await selectVenueChain(panelB, 'Chain');
+            const panelA = page.locator('fieldset').filter({ hasText: 'Network A' });
+            const panelB = page.locator('fieldset').filter({ hasText: 'Network B' });
+            await selectVenueChain(panelA, 'Network');
+            await selectVenueChain(panelB, 'Network');
             await panelA.getByLabel('Action to reference').fill(issueActionIndex);
             await panelB.getByLabel('Action to reference').fill(fileActionIndex);
 
@@ -285,15 +275,15 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(linked, `the LinkForm broadcast is not on the explorer's links list for ${source}`)
                 .toBeTruthy();
             expect(String(linked.coin1_action_index),
-                'LinkForm did not encode Chain A\'s action number as COIN1_ACTION_INDEX')
+                'LinkForm did not encode Network A\'s action number as COIN1_ACTION_INDEX')
                 .toBe(issueActionIndex);
             expect(String(linked.coin2_action_index),
-                'LinkForm did not encode Chain B\'s action number as COIN2_ACTION_INDEX')
+                'LinkForm did not encode Network B\'s action number as COIN2_ACTION_INDEX')
                 .toBe(fileActionIndex);
         });
 
         await test.step('the list manager: create, fork, and read the membership back from ListDetail', async () => {
-            await gotoPalette(page, 'Create a list');
+            await openPaletteCommand(page, 'Create a list');
             const main = page.getByRole('main');
             await selectVenueChain(main);
             // The first textbox on this form is the read-only From field; the
@@ -309,8 +299,8 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const listActionIndex = String(created.action_index);
             managedListIndex = listActionIndex;
 
-            await gotoPalette(page, 'My Lists');
-            const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
+            await openPaletteCommand(page, 'My lists');
+            const listRow = myListsRow(page, listActionIndex);
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await listRow.click();
@@ -341,8 +331,8 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forked = await waitForValidAction(forkTxid);
             const forkActionIndex = String(forked.action_index);
 
-            await gotoPalette(page, 'My Lists');
-            const forkRow = page.getByRole('listitem', { name: `Open address list #${forkActionIndex}` });
+            await openPaletteCommand(page, 'My lists');
+            const forkRow = myListsRow(page, forkActionIndex);
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
@@ -362,14 +352,16 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
             const NAME = `Roster ${STAMP}`;
             const openManagedList = async () => {
-                await gotoPalette(page, 'My Lists');
-                const row = page.getByRole('listitem', { name: `Open address list #${managedListIndex}` });
+                await openPaletteCommand(page, 'My lists');
+                const row = myListsRow(page, managedListIndex);
                 await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
                 await row.click();
             };
 
             await openManagedList();
-            await page.getByRole('button', { name: 'Rename list', exact: true }).click();
+            // List details read through the shared host gate, which holds every
+            // read while the venue's per-IP limit is paused after a 429.
+            await page.getByRole('button', { name: 'Rename list', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await renameMain.getByLabel('Name (empty means unchanged)').fill(NAME);
             await renameMain.getByRole('button', { name: 'Review', exact: true }).click();
@@ -413,6 +405,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await openManageTokenAction(page, PROJECT, 'Official list');
             const rosterMain = page.getByRole('main');
             await expect(rosterMain.getByLabel('Tokens (one per line)')).toBeVisible({ timeout: 30_000 });
+            await expect(rosterMain.getByText('No list published yet. This will be the first.', { exact: true }),
+                'the wallet never finished checking the current official-token list')
+                .toBeVisible({ timeout: 60_000 });
             await rosterMain.getByLabel('Tokens (one per line)').fill(MEMBER);
             await rosterMain.getByRole('button', { name: 'Review list', exact: true }).click();
 

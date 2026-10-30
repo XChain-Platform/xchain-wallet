@@ -31,7 +31,13 @@ describe('host bridge dev mock branches', () => {
             expect(await sdk[method]('LITEGEM', 'address')).toEqual([]);
         }
 
-        expect(await sdk.getHolders('LITEGEM')).not.toHaveLength(0);
+        expect(await sdk.getHolders('LITEGEM')).toEqual(expect.objectContaining({
+            tick: 'LITEGEM',
+            total: 12,
+            data: expect.arrayContaining([
+                expect.objectContaining({ address: expect.any(String), amount: expect.any(String) }),
+            ]),
+        }));
         expect(await sdk.getHolders('')).toEqual([]);
         expect(await sdk.getUnknownResource()).toEqual([]);
         expect(sdk.unknownResource).toBeUndefined();
@@ -107,5 +113,17 @@ describe('host bridge dev mock branches', () => {
         expect(unsubscribeMempool).toEqual(expect.any(Function));
         unsubscribeAddress();
         unsubscribeMempool();
+    });
+});
+
+describe('host bridge dev mock agent accounts', () => {
+    it('derives a deterministic aggregate address for an agent key pair', () => {
+        const sdk = __createDevMockSdkForTests({ network: 'bitcoin-mainnet' });
+        const agent = `02${'ab'.repeat(32)}`;
+        const wallet = `03${'cd'.repeat(32)}`;
+        const first = sdk.coSigner.deriveMuSig2P2TR([agent, wallet]);
+        expect(first.address).toMatch(/^bc1p/);
+        expect(sdk.coSigner.deriveMuSig2P2TR([agent, wallet]).address).toBe(first.address);
+        expect(sdk.coSigner.deriveMuSig2P2TR([wallet, agent]).address).not.toBe(first.address);
     });
 });

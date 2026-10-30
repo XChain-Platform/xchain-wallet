@@ -116,6 +116,7 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
+ * @property {boolean} [loadError]                     true when the explorer failed to answer; every field then reads as unknown
  * @property {string[]} projects                         project ticks whose CURRENT roster includes this token (the "Official" banner data)
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
@@ -864,11 +865,17 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // === 0`, so an explicitly-configured 0 and a never-configured field
     // are indistinguishable on the wire; treat both as "unset" (null)
     // rather than showing a misleading "0" in the Mint settings panel.
+    // The explorer sends these as numbers or as decimal strings, and a string
+    // "0" is truthy, so zero is tested by value: read as a cap, it made the
+    // Mint form call every token without MAX_MINT "at its supply cap".
     const mintsRaw = row?.mints && typeof row.mints === 'object' ? row.mints : {};
-    const mintMax = mintsRaw.max ? String(mintsRaw.max) : null;
-    const mintAddressMax = mintsRaw.address_max ? String(mintsRaw.address_max) : null;
-    const mintStartBlock = mintsRaw.start_block ? String(mintsRaw.start_block) : null;
-    const mintStopBlock = mintsRaw.stop_block ? String(mintsRaw.stop_block) : null;
+    const unsetWhenZero = (value) => (
+        value == null || String(value).trim() === '' || Number(value) === 0 ? null : String(value)
+    );
+    const mintMax = unsetWhenZero(mintsRaw.max);
+    const mintAddressMax = unsetWhenZero(mintsRaw.address_max);
+    const mintStartBlock = unsetWhenZero(mintsRaw.start_block);
+    const mintStopBlock = unsetWhenZero(mintsRaw.stop_block);
     // PC-03 callback config (ISSUE v4): xchain-explorer's getToken groups
     // these under a `callback` object { tick, price, block, amount }. Unlike
     // the mint fields (which run every column through Number(), collapsing 0
@@ -1118,6 +1125,9 @@ function parseTisText(text) {
  * @param {boolean} [params.demo]
  * @param {boolean} [params.metadataFetchEnabled]
  * @param {typeof fetch} [params.fetch]
+ * @param {boolean} [params.fresh]  read the token row past the explorer
+ *        wrapper's read reuse and the HTTP cache, for a caller that judges a
+ *        signature on its list pointers
  * @returns {Promise<TokenInfo>}
  */
 export async function tokenInfoFor({
@@ -1127,21 +1137,25 @@ export async function tokenInfoFor({
     demo = false,
     metadataFetchEnabled = true,
     fetch: fetchImpl,
+    fresh = false,
 }) {
     if (!sdkRegistry) throw new Error('tokenInfoFor: sdkRegistry is required');
     if (!chainId) throw new Error('tokenInfoFor: chainId is required');
     if (!tick) throw new Error('tokenInfoFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
     let raw = demo ? demoRowFor(tick) : null;
+    // A read the explorer failed to answer is not a token it does not know.
+    let readFailed = false;
     if (!demo && typeof sdk?.getToken === 'function') {
         try {
-            raw = await sdk.getToken(tick);
+            raw = fresh ? await sdk.getToken(tick, { fresh: true }) : await sdk.getToken(tick);
         } catch {
             raw = null;
+            readFailed = true;
         }
     }
     let tisBundle = null;
-    if (metadataFetchEnabled) {
+    if (metadataFetchEnabled && !demo) {
         const row = Array.isArray(raw) ? raw[0] : raw;
         const description = row?.info?.description;
         const actionRef = typeof description === 'string'
@@ -1160,17 +1174,20 @@ export async function tokenInfoFor({
             });
         }
     }
-    // When a demo entry ships a pre-built `tis` block (offline-friendly
-    // bundle that doesn't need a network round-trip), use it as the
-    // fallback if the live fetch came back empty.
+    // Demo entries use their bundled TIS document without attempting the
+    // public description URL, keeping synthetic wallets offline.
     if (!tisBundle && demo) {
         const fixture = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
         if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
-    resolveMediaDataRefs(tisBundle, sdk);
-    return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
-        allowRemoteMedia: metadataFetchEnabled,
+    if (!demo) resolveMediaDataRefs(tisBundle, sdk);
+    const info = normalizeTokenInfo(chainId, tick, raw, tisBundle, {
+        allowRemoteMedia: metadataFetchEnabled && !demo,
     });
+    // Marks a record built without the explorer's answer, so callers neither
+    // cache it nor present its empty fields as the token's real state.
+    if (readFailed) info.loadError = true;
+    return info;
 }
 
 // Resolve on-chain media references (dataRef = "action:<index>") across a

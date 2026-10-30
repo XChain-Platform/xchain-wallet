@@ -124,7 +124,10 @@ async function checkPrivateKeyScrubbing(page, label) {
     // Leave the app entirely so the demo entry starts from a blank page, as in
     // every other spec; a second load of the same URL straight from the setup
     // screen is aborted intermittently.
-    await page.goto('about:blank');
+    // The page's own navigation can supersede a goto issued from it, so the page
+    // leaves by itself and the test waits for the blank URL.
+    await page.evaluate(() => window.location.replace('about:blank'));
+    await page.waitForURL('about:blank');
 }
 
 async function setWatcherMode(page, label) {
@@ -186,7 +189,7 @@ for (const viewport of VIEWPORTS) {
         expect(await main.evaluate((element) => element.scrollTop),
             `${viewport.name}: sweep review did not open at the top`).toBeLessThanOrEqual(1);
         // The chain shows as its icon badge, named for screen readers.
-        await expect(detailValue(review, 'Chain').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
+        await expect(detailValue(review, 'Network').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
         // Addresses are middle-truncated on screen; the accessible name is the full value.
         await expect(detailValue(review, 'From').getByLabel(source, { exact: true })).toBeVisible();
         await expect(detailValue(review, 'Destination').getByLabel(DESTINATION, { exact: true })).toBeVisible();

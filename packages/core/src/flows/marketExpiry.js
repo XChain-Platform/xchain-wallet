@@ -3,11 +3,27 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { explorerReadFresh, explorerReadOnce } from '../sdk/explorerRateLimit.js';
+
 const KIND_STATUS_FIELD = Object.freeze({
     order: 'order_status',
     swap: 'swap_status',
     dispenser: 'dispenser_status',
 });
+
+/**
+ * Name of the error this module raises about the referenced offer. Its message
+ * is written for the user, and the name is what survives the messaging boundary
+ * (MessageHost.serializeError keeps only name, message and code), so a submit
+ * surface can show the sentence as written instead of a generic line.
+ */
+export const OFFER_LIFECYCLE_REFUSAL = 'OfferLifecycleRefusal';
+
+function offerRefusal(message) {
+    const err = new Error(message);
+    err.name = OFFER_LIFECYCLE_REFUSAL;
+    return err;
+}
 
 function finiteNumber(value) {
     if (value == null || value === '') return null;
@@ -26,16 +42,23 @@ function coinValue(map, coin) {
  * height. This prevents an old block timestamp from keeping an expired offer
  * open while the explorer is catching up.
  *
+ * A caller that refuses a signature on the answer passes `fresh`, so the
+ * status read goes to the indexer past the explorer wrapper's read reuse and
+ * the HTTP cache.
+ *
  * @param {any} sdk
+ * @param {{ fresh?: boolean }} [options]
  * @returns {Promise<{ blockTime: number|null, indexedHeight: number|null, chainHeight: number|null, stale: boolean }>}
  */
-export async function readMarketExpiryClock(sdk) {
+export async function readMarketExpiryClock(sdk, { fresh = false } = {}) {
     if (!sdk || typeof sdk.getStatus !== 'function') {
         return { blockTime: null, indexedHeight: null, chainHeight: null, stale: false };
     }
     let status;
     try {
-        status = await sdk.getStatus({ noRetry: true });
+        status = fresh && typeof sdk.explorer?.get === 'function'
+            ? await sdk.explorer.get('/status', { noRetry: true, fresh: true })
+            : await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
     } catch {
         return { blockTime: null, indexedHeight: null, chainHeight: null, stale: false };
     }
@@ -122,12 +145,30 @@ function rowWithExpiryStatus(row, kind, expiryStatus) {
     };
 }
 
+// Hydration reads one detail per row, so a list of hundreds of offers runs a
+// few reads at a time instead of all at once into the explorer's rate limit.
+const ROW_MAP_CONCURRENCY = 6;
+
+async function mapRowsBounded(rows, mapRow) {
+    const out = new Array(rows.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < rows.length) {
+            const index = next;
+            next += 1;
+            out[index] = await mapRow(rows[index]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(ROW_MAP_CONCURRENCY, rows.length) }, worker));
+    return out;
+}
+
 async function mapResponseRows(response, mapRow) {
-    if (Array.isArray(response)) return Promise.all(response.map(mapRow));
+    if (Array.isArray(response)) return mapRowsBounded(response, mapRow);
     if (!response || typeof response !== 'object') return response;
     for (const key of ['data', 'rows', 'orders', 'swaps', 'dispensers']) {
         if (Array.isArray(response[key])) {
-            return { ...response, [key]: await Promise.all(response[key].map(mapRow)) };
+            return { ...response, [key]: await mapRowsBounded(response[key], mapRow) };
         }
     }
     if (response.data && typeof response.data === 'object') {
@@ -145,8 +186,8 @@ async function mapResponseRows(response, mapRow) {
  * @param {'order'|'swap'|'dispenser'} kind
  * @param {{ hydrate?: boolean }} [options]
  */
-export async function withMarketExpiry(sdk, response, kind, { hydrate = false } = {}) {
-    const clock = await readMarketExpiryClock(sdk);
+export async function withMarketExpiry(sdk, response, kind, { hydrate = false, fresh = false } = {}) {
+    const clock = await readMarketExpiryClock(sdk, { fresh });
     return mapResponseRows(response, async (row) => {
         const current = hydrate && Number.isFinite(clock.blockTime)
             ? await hydrateMarketOffer(sdk, row)
@@ -154,6 +195,11 @@ export async function withMarketExpiry(sdk, response, kind, { hydrate = false } 
         return rowWithExpiryStatus(current, kind, classifyExpiry(current, kind, clock));
     });
 }
+
+const ORDER_CLOSED_STATUSES = new Set(['filled', 'complete', 'cancelled']);
+// The indexer writes 'complete' on a match; 'filled' and 'settled' are the
+// other spellings My swaps reads as settled.
+const SWAP_CLOSED_STATUSES = new Set(['complete', 'filled', 'settled', 'cancelled']);
 
 const ACTION_REFERENCE = Object.freeze({
     ORDER: { kind: 'order', field: 'ORDER_ACTION_INDEX' },
@@ -164,6 +210,8 @@ const ACTION_REFERENCE = Object.freeze({
 /**
  * Refuse a cancel, edit, or close when its referenced offer is expired. A
  * timestamped offer also requires a current indexed height before signing.
+ * Both reads guard the signature, so both read fresh: an offer that filled or
+ * was cancelled a moment ago must not hide behind a reused or cached answer.
  *
  * @param {{ sdkRegistry: any, chainId: string, actionData: any }} params
  */
@@ -178,20 +226,88 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
 
     let detail;
     try {
-        detail = await sdk.getAction(String(actionIndex));
+        // getAction(index) takes no options, so the fresh read names the same path.
+        detail = await explorerReadFresh(sdk, `/action/${encodeURIComponent(String(actionIndex))}`,
+            () => sdk.getAction(String(actionIndex)));
     } catch {
-        throw new Error(`Could not verify whether this ${ref.kind} has expired. Try again.`);
+        throw offerRefusal(`Could not verify whether this ${ref.kind} has expired. Try again.`);
     }
-    if (marketLifecycleStatusOf(detail, ref.kind) === 'expired') {
-        throw new Error(`This ${ref.kind} has expired.`);
+    const lifecycle = marketLifecycleStatusOf(detail, ref.kind);
+    if (lifecycle === 'expired') {
+        throw offerRefusal(`This ${ref.kind} has expired.`);
+    }
+    // The indexer records a cancel or edit of a filled or cancelled order as
+    // invalid and keeps the fee, so a fill or cancel that landed after the list
+    // loaded is refused here, before anything is signed.
+    if (ref.kind === 'order' && ORDER_CLOSED_STATUSES.has(lifecycle)) {
+        throw offerRefusal(lifecycle === 'cancelled'
+            ? 'This order has already been cancelled.'
+            : 'This order has already been filled.');
+    }
+    // A SWAP cancel or edit is invalid unless the swap is open, and the fee
+    // is kept the same way.
+    if (ref.kind === 'swap' && SWAP_CLOSED_STATUSES.has(lifecycle)) {
+        throw offerRefusal(lifecycle === 'cancelled'
+            ? 'This swap has already been cancelled.'
+            : 'This swap has already been completed.');
     }
 
     const expiration = marketExpirationOf(detail);
     if (expiration == null || expiration <= 0) return;
-    const clock = await readMarketExpiryClock(sdk);
+    const clock = await readMarketExpiryClock(sdk, { fresh: true });
     if (!Number.isFinite(clock.blockTime)) {
         const reason = clock.stale ? 'the chain height is still syncing' : 'the current chain height is unavailable';
-        throw new Error(`Could not verify whether this ${ref.kind} has expired because ${reason}. Try again.`);
+        throw offerRefusal(`Could not verify whether this ${ref.kind} has expired because ${reason}. Try again.`);
     }
-    if (expiration <= clock.blockTime) throw new Error(`This ${ref.kind} has expired.`);
+    if (expiration <= clock.blockTime) throw offerRefusal(`This ${ref.kind} has expired.`);
+}
+
+// PendingTx statuses of a cancel that may still confirm. A failed or dropped
+// one cannot, and an indexed one shows in the cancels feed the lists re-read.
+const CANCEL_IN_FLIGHT_STATUSES = new Set(['signed', 'queued', 'broadcasting', 'broadcast']);
+
+function pendingTxCancels(tx, ref, actionIndex) {
+    if (!tx || tx.action !== ref.action) return false;
+    if (tx.params && tx.params[ref.field] != null && String(tx.params.VERSION) === '1') {
+        return String(tx.params[ref.field]) === actionIndex;
+    }
+    const summary = typeof tx.actionSummary === 'string' ? tx.actionSummary : '';
+    // Digit boundary after the index: "#900" must not match inside "#9001".
+    return new RegExp(`^Cancel ${ref.kind} #${actionIndex}(?!\\d)`).test(summary);
+}
+
+/**
+ * Refuse a cancel or edit of an order or swap whose cancel this wallet already
+ * signed and has not seen fail. The explorer lists the offer as open until that
+ * cancel confirms and indexes, so another window, or the same list opened
+ * again, still offers Cancel; the second cancel or an edit indexes invalid and
+ * keeps its fee. A list that cannot be read is unknown and does not refuse.
+ *
+ * @param {{ vault: any, chainRegistry: any, chainId: string, actionData: any }} params
+ */
+export async function assertNoOfferCancelInFlight({ vault, chainRegistry, chainId, actionData }) {
+    const ref = actionData?.action === 'ORDER' || actionData?.action === 'SWAP'
+        ? { ...ACTION_REFERENCE[actionData.action], action: actionData.action }
+        : null;
+    const actionIndex = ref ? String(actionData?.params?.[ref.field] ?? '').trim() : '';
+    if (!/^\d+$/.test(actionIndex)) return;
+    if (typeof vault?.pendingTxs?.list !== 'function') return;
+    const descriptor = chainRegistry?.get?.(chainId);
+    if (!descriptor) return;
+    let rows;
+    try {
+        rows = await vault.pendingTxs.list();
+    } catch {
+        return;
+    }
+    const inFlight = (Array.isArray(rows) ? rows : []).some((tx) => tx
+        && CANCEL_IN_FLIGHT_STATUSES.has(tx.status)
+        && tx.chain === descriptor.coin
+        && tx.network === descriptor.networkKind
+        && pendingTxCancels(tx, ref, actionIndex));
+    if (!inFlight) return;
+    const isCancel = String(actionData.params.VERSION ?? '') === '1';
+    throw offerRefusal(isCancel
+        ? `A cancel for this ${ref.kind} is already on its way. Nothing was signed. Check History for the earlier cancel.`
+        : `This ${ref.kind} has a cancel on its way. Nothing was signed. Check History for the earlier cancel.`);
 }

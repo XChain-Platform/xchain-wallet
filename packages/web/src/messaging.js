@@ -117,6 +117,20 @@ export function labelSyncRestoreResult(opts) {
     return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
 }
 
+/** @param {{ walletId?: string }} [opts] */
+export function discoverAddresses(opts) {
+    return /** @type {any} */ (sendMessage('wallet.discoverAddresses', opts || {}));
+}
+
+export function addressDiscoveryStatus() {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryStatus', {}));
+}
+
+/** @param {{ id: number }} opts */
+export function addressDiscoveryDismiss(opts) {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryDismiss', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * Rejects with PassphraseMismatchError when the passphrase does not own the
@@ -164,9 +178,11 @@ export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));
 }
 
-/** @param {string} walletId @param {string} [accountId] */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+/** @param {string} walletId @param {string} [accountId] @param {string} [chainId] @param {{ fresh?: boolean }} [opts] */
+export function getWalletBalances(walletId, accountId, chainId, opts) {
+    return /** @type {any} */ (sendMessage('balances.wallet', {
+        walletId, accountId, ...(chainId ? { chainId } : {}), ...(opts ? { opts } : {}),
+    }));
 }
 
 /**
@@ -219,6 +235,11 @@ export function getAddressesByChain(walletId, accountId) {
 /** @param {string} walletId @param {string} chainId @param {string} [accountId] */
 export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId, accountId }));
+}
+
+/** Which registry address types the installed SDK can generate on a chain. @param {string} chainId */
+export function getSupportedAddressTypes(chainId) {
+    return /** @type {any} */ (sendMessage('sdk.addressTypes', { chainId }));
 }
 
 /** Rename an address (set its label). @param {string} id @param {string} label */
@@ -495,6 +516,14 @@ export function broadcastQueuedRequest(opts) {
 /** @param {{ walletId: string, id: string }} opts */
 export function discardQueuedRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
+}
+/** Sends of this wallet that settled while it was locked. @param {{ walletId: string }} opts */
+export function listLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.list', opts));
+}
+/** @param {{ ids: string[] }} opts */
+export function clearLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.clear', opts));
 }
 /**
  * Cluster G FOLLOWUP 1: push a signed-but-unbroadcast tx onto the
@@ -1872,6 +1901,8 @@ export function listContacts() { return /** @type {any} */ (sendMessage('contact
 export function findContactByAddress(req) { return /** @type {any} */ (sendMessage('contacts.findByAddress', req)); }
 /** @param {object} opts */
 export function saveContact(opts) { return /** @type {any} */ (sendMessage('contacts.save', opts)); }
+/** @param {{ records: object[] }} opts */
+export function saveContacts(opts) { return /** @type {any} */ (sendMessage('contacts.saveMany', opts)); }
 /** @param {{ id: string }} req */
 export function deleteContact(req) { return /** @type {any} */ (sendMessage('contacts.delete', req)); }
 
@@ -1894,6 +1925,17 @@ export function buildBatchCommand(req) {
 /** @param {object} req */
 export function getActionFormats(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/**
+ * The coins whose addresses an address LIST on the chain accepts once
+ * token-policy inheritance is active, read from the explorer's gate flag.
+ * Answers [] when the gate is off or on any failure.
+ *
+ * @param {{ chainId: string, coin: string, networkKind: string }} req
+ */
+export function listAnyCoinItems(req) {
+    return /** @type {any} */ (sendMessage('sdk.listAnyCoinItems', req));
 }
 
 /**

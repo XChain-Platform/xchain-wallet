@@ -90,17 +90,17 @@ for (const call of ['isDemoWallet', 'synthesizeDemoStaking', 'synthesizeDemoCont
     assert.ok(listSrc.includes(call), `StakingList uses ${call}`);
 }
 
-// 5. List-pattern chrome: header "+", search, and rows
+// 5. List-pattern chrome: the "New stake" action, search, and rows
 // that hand a { kind, chainId, address, contractActionIndex? } ref up.
 // Operator ruling: the chain filter stays; it names chains, never network kinds.
 assert.ok(/<NetworkFilterDropdown\b/.test(listSrc),
     'StakingList keeps its chain filter');
 assert.ok(/aria-label="Search staking positions"/.test(listSrc),
     'StakingList renders the free-text search input');
-assert.ok(/local\.addBtn/.test(listSrc) && /Icon\.PlusIcon/.test(listSrc),
-    'StakingList renders the header "+" (new stake) button');
-assert.ok(/aria-label="New stake"/.test(listSrc),
-    'StakingList labels the "+" button');
+assert.ok(/Icon\.PlusIcon/.test(listSrc) && /New stake\s*<\/Button>/.test(listSrc),
+    'StakingList renders the "New stake" button in the content actions row');
+assert.ok(!/trailing=/.test(listSrc),
+    'StakingList keeps its action out of the page header');
 assert.ok(/onNewStake/.test(listSrc), 'StakingList exposes onNewStake');
 assert.ok(/onOpenStake\(row\.ref\)/.test(listSrc),
     'StakingList rows hand their position ref to onOpenStake');
@@ -114,8 +114,8 @@ assert.ok(/network !== 'all' && coinFromChainId\(row\.chainId\) !== network/.tes
 // pending/lifetime strip, that detail lives on StakeDetail).
 assert.ok(/rewardChip/.test(listSrc) && /XCHAIN reward/.test(listSrc),
     'StakingList surfaces unclaimed rewards as a per-row chip');
-assert.ok(/unclaimedRewards\(\{[\s\S]{0,120}rewards,[\s\S]{0,120}claims: rewardClaims/.test(listSrc),
-    'StakingList computes each reward chip from accruals and claim-ledger rows');
+assert.ok(/unclaimedRewards\(\{[\s\S]{0,120}rewards: owned\(rewards\),[\s\S]{0,120}claims: owned\(rewardClaims\)/.test(listSrc),
+    'StakingList computes each reward chip from the owning address accruals and claim-ledger rows');
 assert.ok(!/Pending rewards/.test(listSrc),
     'StakingList has no page-level pending/lifetime rewards strip');
 

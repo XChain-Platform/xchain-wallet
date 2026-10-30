@@ -9,26 +9,31 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { memoLengthError } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/gatedPublish.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -55,6 +60,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -150,7 +156,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (issuerAddress) return onChain.find((a) => a.address === issuerAddress) || null;
         return onChain[0] || null;
     }, [addressesByChain, chainId, issuerAddress]);
-    const ownerMissing = !!(addressesByChain && issuerAddress && !fromAddress);
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: { creator: issuerAddress },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
+    const ownerMissing = !!issuerEligibility.error;
     const hw = isHwSource(fromAddress);
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
@@ -209,6 +222,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!file) return;
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
+        const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
+        if (fileNameError) { setFormError(fileNameError); return; }
         const { type, error: typeError } = publishFileType(file);
         if (typeError) { setFormError(typeError); return; }
         const cap = plainCapFor(file.name, type);
@@ -248,21 +263,32 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
     async function handleReview(event) {
         event.preventDefault();
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
+            return;
+        }
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
         if (!fromAddress) {
             setFormError(ownerMissing
                 ? `This wallet does not hold the owner address for ${tick}; only the token owner can publish gated files.`
-                : 'No signing address available on this chain.');
+                : 'No signing address available on this network.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+            || actionTextSafetyError(title, 'Title');
+        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
-        if (feeError) { setFormError(feeError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
         const thresholdError = thresholdValue
             ? flowsLib.gateMinAmountValidationError(thresholdValue)
@@ -321,7 +347,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 const current = await messaging.getIndexerWatermark({ chainId });
                 const height = Number(current?.watermark);
                 if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
-                    setFormError('Unlock thresholds are not active on this chain right now. Remove the threshold to continue.');
+                    setFormError('Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
                     return;
                 }
             } catch {
@@ -423,7 +449,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -456,7 +482,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (result?.psbtHex && !result?.txid) {
             return wrap(
                 <>
-                    <WatcherResultPanel
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={() => { setResult(null); setStage('form'); }}
                         onDone={onBack}
@@ -469,7 +496,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what={t('gatedPublish.queuedWhat')} unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('gatedPublish.queuedWhat')} unsaved={result.unsaved} />,
             );
         }
         return wrap(
@@ -501,11 +528,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('gatedPublish.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -629,24 +657,28 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={[
+                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                ownerMissing ? (
+                    <StatusMessage variant="error">
+                        {issuerEligibility.error}
+                    </StatusMessage>
+                ) : null,
+            ]}
             actions={(
-                <Button type="submit" variant="primary">
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error}
+                >
                     {t('common.review')}
                 </Button>
             )}
         >
-            {ownerMissing ? (
-                <StatusMessage variant="error" className={styles.error}>
-                    {t('gatedPublish.ownerMissing.beforeAddress')}
-                    {' '}(<AddressText address={issuerAddress} />){' '}
-                    {t('gatedPublish.ownerMissing.afterAddress', { tick })}
-                </StatusMessage>
-            ) : null}
-
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {
@@ -748,7 +780,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {packs === null ? (
                 <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
             ) : packsError ? (
-                <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
+                <FieldNote variant="error">{packsError}</FieldNote>
             ) : packs.length === 0 ? (
                 <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
             ) : null}

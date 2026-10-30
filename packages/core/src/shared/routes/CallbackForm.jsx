@@ -8,14 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -27,7 +31,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -39,13 +43,19 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import {
+    UNKNOWN_TOKEN_ISSUER_MESSAGE,
+    tokenIssuerEligibility,
+} from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -59,13 +69,14 @@ const PROTOCOL_COIN_TICKER = {
 const WHOLE_NUMBER_RE = /^\d+$/;
 const POSITIVE_DECIMAL_RE = /^\d+(?:\.\d+)?$/;
 
-function decimalPlaces(value) {
-    const text = String(value ?? '').toLowerCase();
-    const [mantissa, exponentText] = text.split('e');
-    return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
-}
-
 export function callbackTermsError(info, payoutDivisibility = null) {
+    // A record without an owner was not read well enough to establish its
+    // callback state. Keep that distinct from a readable record whose callback
+    // fields are genuinely absent.
+    if (!info || typeof info !== 'object' || info.loadError
+        || !String(info.creator || '').trim()) {
+        return UNKNOWN_TOKEN_ISSUER_MESSAGE;
+    }
     const callbackTick = String(info?.callbackTick || '').trim();
     const callbackAmount = String(info?.callbackAmount ?? '').trim();
     const callbackBlock = String(info?.callbackBlock ?? '').trim();
@@ -91,21 +102,9 @@ export function callbackTermsError(info, payoutDivisibility = null) {
     return null;
 }
 
-export function callbackFeeError(feePick, feeEstimate) {
-    if (feePick?.mode !== 'custom') return null;
-    const rate = Number(feePick.customRate);
-    if (!Number.isFinite(rate) || rate <= 0) {
-        return 'Enter a custom fee rate greater than zero.';
-    }
-    if (decimalPlaces(feePick.customRate) > 8 || !feeEstimate) {
-        return 'Custom fee rate can have at most 8 decimal places.';
-    }
-    return null;
-}
-
 function sameCallbackTerms(left, right) {
-    return String(left?.callbackTick || '').trim().toUpperCase()
-            === String(right?.callbackTick || '').trim().toUpperCase()
+    return String(left?.callbackTick || '').trim()
+            === String(right?.callbackTick || '').trim()
         && compareDecimalStrings(left?.callbackAmount, right?.callbackAmount) === 0
         && String(BigInt(String(left?.callbackBlock || '0')))
             === String(BigInt(String(right?.callbackBlock || '0')))
@@ -119,7 +118,7 @@ function tokenBalanceAt(byChain, chainId, address, tick) {
     if (!entry || entry.balances?.unavailable?.includes('tokens')) return null;
     const balances = decoderLib.balancesFromSdk(entry.balances) || [];
     const match = balances.find((balance) => (
-        String(balance?.tick || '').toUpperCase() === String(tick || '').toUpperCase()
+        String(balance?.tick || '') === String(tick || '')
     ));
     if (match?.unknown || (match && compareDecimalStrings(match.amount, '0') == null)) return null;
     return match ? String(match.amount) : '0';
@@ -145,6 +144,7 @@ function tokenBalanceAt(byChain, chainId, address, tick) {
  */
 export function CallbackForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -170,10 +170,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before a callback.',
+            'No addresses on any network yet. Use Receive to generate one before a callback.',
     });
 
-    const ticker = (initialTick || '').toUpperCase();
+    const ticker = initialTick || '';
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
@@ -183,7 +183,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
     // same typed-word rail as DESTROY / SWEEP).
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'CALLBACK';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'CALLBACK');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -203,8 +203,18 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         ? Number(cbBlockText)
         : null;
     const owner = assetInfo?.creator || null;
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: assetInfo,
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
     const payoutInfo = useTokenInfo({ chainId, tick: cbTick, skip: !cbTick });
-    const payoutDivisibility = payoutInfo == null
+    // Unknown until the payout token answers: a failed read carries no
+    // decimals, and guessing 0 floors every holder's payout to whole units.
+    const payoutPending = !!cbTick && payoutInfo == null;
+    const payoutDivisibility = payoutInfo == null || payoutInfo.loadError
         ? null
         : Number.isInteger(Number(payoutInfo.divisibility))
             && Number(payoutInfo.divisibility) >= 0
@@ -245,23 +255,34 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setSummaryLoading(false);
             return undefined;
         }
+        // The payout figure is floored to the payout token's decimals, so it
+        // waits for them instead of showing a short total meanwhile.
+        if (payoutDivisibility == null) {
+            setSummary(null);
+            setSummaryLoading(payoutPending);
+            return undefined;
+        }
         let cancelled = false;
         setSummaryLoading(true);
         messaging.tokenHolderSummary({
             chainId, tick: ticker, owner,
             callbackAmount: cbAmount,
-            callbackDecimals: payoutDivisibility ?? 0,
+            callbackDecimals: payoutDivisibility,
         })
             .then((s) => { if (!cancelled) setSummary(s || null); })
             .catch(() => { if (!cancelled) setSummary(null); })
             .finally(() => { if (!cancelled) setSummaryLoading(false); });
         return () => { cancelled = true; };
-    }, [chainId, ticker, cbTick, cbAmount, owner, payoutDivisibility, messaging, walletId]);
+    }, [chainId, ticker, cbTick, cbAmount, owner, payoutDivisibility, payoutPending, messaging, walletId]);
 
     const demoWallet = flowsLib.isDemoWallet(walletId);
     const blockReached = cbBlock != null
         && (demoWallet || (currentHeight != null && currentHeight >= cbBlock));
     const configComplete = !!(cbTick && cbAmount && cbBlockText);
+    // A token record the explorer did not answer for carries no callback
+    // fields, which is not the same as a token with no callback: the terms
+    // are unknown, and the issuer refusal above already says to try again.
+    const termsUnread = !!assetInfo?.loadError;
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -338,7 +359,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             <dd className={styles.detailsValue}>
                 {configComplete
                     ? `${cbAmount} ${cbTick} per unit of ${ticker}`
-                    : <em>No callback configured for {ticker}.</em>}
+                    : termsUnread
+                        ? t('balances.unavailable')
+                        : <em>No callback configured for {ticker}.</em>}
             </dd>
             {cbBlock != null ? (
                 <>
@@ -414,23 +437,33 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: {
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                        // The shared mapping, envelope and deferred outputs included.
-                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
-                    },
-                }),
+                onApprove: async (_creds, composed) => {
+                    // Review read the owner, terms, height and payout before
+                    // composing. The confirm page can stay open past an
+                    // ownership transfer or a payout-token spend, and its
+                    // pre-flight re-check waits for its report to age, so
+                    // Approve reads them all again and stops before signing.
+                    const approveError = await refreshBeforeReview();
+                    if (approveError) throw approveRefusal(approveError);
+                    return submit({
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        extraBase: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                            // The shared mapping, envelope and deferred outputs included.
+                            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+                        },
+                    });
+                },
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
-            console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
+            // The form's own Approve-time refusal is an answer, not a fault.
+            if (err?.name !== APPROVE_REFUSAL_NAME) console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
@@ -462,6 +495,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(tickerError);
             return false;
         }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return false;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
+            return false;
+        }
         if (!configComplete) {
             setFormError(`${ticker} has no callback configured, so there is nothing to recall. Set the callback token and payout first.`);
             return false;
@@ -481,14 +522,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(memoTooLong);
             return false;
         }
-        const feeError = callbackFeeError(feePick, feeEstimate);
-        if (feeError) {
-            setFormError(feeError);
-            return false;
-        }
         return true;
     }
 
+    // Review and Approve re-read past the explorer reuse window, so a change
+    // that lands seconds before Approve is seen before anything is signed.
     async function refreshBeforeReview() {
         if (demoWallet) {
             if (!blockReached) {
@@ -504,12 +542,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         }
         try {
             const [freshInfo, watermark] = await Promise.all([
-                messaging.getTokenInfo({ chainId, tick: ticker, demo: false }),
-                messaging.getIndexerWatermark({ chainId }),
+                Promise.resolve()
+                    .then(() => messaging.getTokenInfo({ chainId, tick: ticker, demo: false, fresh: true }))
+                    .catch(() => ({ loadError: true })),
+                messaging.getIndexerWatermark({ chainId, fresh: true }),
             ]);
             const freshTick = String(freshInfo?.callbackTick || '').trim();
             const freshPayoutInfo = freshTick
-                ? await messaging.getTokenInfo({ chainId, tick: freshTick, demo: false })
+                ? await messaging.getTokenInfo({ chainId, tick: freshTick, demo: false, fresh: true })
                 : null;
             if (freshTick && !freshPayoutInfo) {
                 return 'Could not refresh the callback payout token. Try again.';
@@ -535,7 +575,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setCurrentHeight(height);
             const freshBlock = Number(freshInfo.callbackBlock);
             if (height < freshBlock) {
-                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The chain is at ${height.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The network is at ${height.toLocaleString('en-US')}.`;
             }
             if (typeof messaging?.tokenHolderSummary !== 'function') {
                 return 'Could not refresh the callback payout. Try again.';
@@ -551,7 +591,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     callbackAmount: freshInfo.callbackAmount,
                     callbackDecimals: freshDivisibility,
                 }),
-                messaging.getWalletBalances(walletId),
+                messaging.getWalletBalances(walletId, undefined, undefined, { fresh: true }),
             ]);
             if (!freshSummary || freshSummary.totalPayout == null) {
                 return 'Could not refresh the callback payout. Try again.';
@@ -572,6 +612,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             if (payoutComparison === 1) {
                 return `This address holds only ${formatWithThousands(payoutBalance)} ${freshInfo.callbackTick}. The current callback payout is ${formatWithThousands(freshSummary.totalPayout)} ${freshInfo.callbackTick}.`;
             }
+            // A capped holder page sums only the holders it lists, so its
+            // payout is a floor. The indexer refuses a CALLBACK whose full
+            // payout exceeds the owner's balance after the fee is spent, so a
+            // floor within balance proves nothing and Approve stops here.
+            if (freshSummary.partial !== false) {
+                setSummary(freshSummary);
+                return `The callback payout is at least ${formatWithThousands(freshSummary.totalPayout)} ${freshInfo.callbackTick}, and this wallet cannot read every holder, so it cannot confirm this address holds enough ${freshInfo.callbackTick} to cover it.`;
+            }
             setSummary(freshSummary);
             return null;
         } catch {
@@ -581,6 +629,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (refreshing || !guardBeforeSign()) return;
         setFormError(null);
         setRefreshing(true);
@@ -664,7 +714,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{form}</Screen>;
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -674,14 +724,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+                <ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
         }
         // Signed but not broadcast, so nothing is on its way to
         // confirming and no holder is being paid yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="callback" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="callback" unsaved={result?.unsaved} />,
             );
         }
         return wrap(
@@ -717,10 +767,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     if (stage === 'review' || stage === 'submitting') {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review callback"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -762,11 +813,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 {previewBlock}
                 {dustNote}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -794,7 +841,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 )}
                 <Input
                     label="Type CALLBACK to confirm"
-                    hint="This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone."
+                    hint={t('common.typedConfirmationCallbackHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -826,7 +873,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         {dustNote}
                         <Input
                             label='Type "CALLBACK" to confirm'
-                            hint="Recalls all supply and pays holders. Irreversible."
+                            hint={t('common.typedConfirmationCallbackReviewHint')}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"
@@ -862,10 +909,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label="Execute callback"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -873,6 +921,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     variant="primary"
                     loading={refreshing || confirmAction.composing}
                     disabled={!fromAddress
+                        || issuerEligibility.pending
+                        || !!issuerEligibility.error
                         || !configComplete
                         || !!memoTooLong
                         || refreshing
@@ -882,13 +932,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
-                    <strong>Callback recalls everything.</strong> Every unit of {ticker || 'this token'}
-                    {' '}returns to your address, and each holder is paid the configured amount. This
-                    cannot be undone.
-                </p>
-            </div>
+            <FormNotice variant="warning" role="alert" lead="Callback recalls everything.">
+                {`Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
+            </FormNotice>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
@@ -906,28 +952,22 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
-            {!configComplete ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        {ticker} has no callback configured. Set the callback token, payout, and
-                        block in Callback settings before you can recall.
-                    </p>
-                </div>
+            {termsUnread ? null : !configComplete ? (
+                <FormNotice variant="warning" role="alert">
+                    {`${ticker} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
+                </FormNotice>
             ) : !blockReached ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        Callback is not allowed yet. It becomes available at block{' '}
-                        {cbBlock?.toLocaleString('en-US')}
-                        {currentHeight != null ? ` (chain is at ${currentHeight.toLocaleString('en-US')})` : ''}.
-                    </p>
-                </div>
+                <FormNotice variant="warning" role="alert">
+                    {`Callback is not allowed yet. It becomes available at block ${cbBlock?.toLocaleString('en-US') ?? ''}`
+                        + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}
+                </FormNotice>
             ) : null}
             {dustNote}
 

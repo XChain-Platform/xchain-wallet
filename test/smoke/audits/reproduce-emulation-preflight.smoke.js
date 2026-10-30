@@ -54,6 +54,8 @@
 //  10. All three reproduce lanes call it, ahead of their first docker build.
 //  11. The published doc names the qemu limitation and the working routes,
 //      and no longer carries the retracted claim that emulation just works.
+//  12. A non-amd64 target the host would have to emulate exits 2, never an
+//      amd64 verdict; a non-amd64 target the host runs natively still passes.
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
@@ -265,6 +267,27 @@ check('11. the published doc names the trap and the routes that work', () => {
         /qemu/i.test(desktop),
         'the desktop section does not state the qemu limitation that killed its own lane',
     );
+});
+
+check('12. a non-amd64 target that needs emulation is a usage error, not an amd64 verdict', () => {
+    const cases = [
+        // qemu for the asked arch is registered; the amd64 table would say none is.
+        { arch: 'x86_64', platform: 'linux/arm64', binfmt: fakeBinfmt([{ name: 'qemu-aarch64' }]) },
+        // Rosetta translates x86_64 only, so it must not read as a route to riscv64.
+        { arch: 'aarch64', platform: 'linux/riscv64', binfmt: fakeBinfmt([{ name: 'RosettaLinux' }]) },
+        // Neither the override nor the macOS advisory may answer for a target they do not cover.
+        { arch: 'x86_64', platform: 'linux/arm64', binfmt: fakeBinfmt(), allow: '1' },
+        { arch: 'x86_64', os: 'Darwin', platform: 'linux/arm64', binfmt: fakeBinfmt() },
+    ];
+    for (const c of cases) {
+        const { code, out } = run(c);
+        assert.equal(code, 2, `${c.arch} asked for ${c.platform}: ${out}`);
+        assert.match(out, /only knows which emulators finish a linux\/amd64 build/);
+        assert.doesNotMatch(out, /REFUSING TO START|no amd64 emulation is registered|speed penalty/);
+    }
+    const native = run({ arch: 'aarch64', platform: 'linux/arm64', binfmt: fakeBinfmt() });
+    assert.equal(native.code, 0, native.out);
+    assert.match(native.out, /natively/);
 });
 
 let failed = 0;

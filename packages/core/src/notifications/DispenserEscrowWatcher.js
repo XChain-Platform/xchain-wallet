@@ -48,6 +48,7 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
 } from '../shared/utils/amountFormat.js';
+import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
@@ -105,6 +106,8 @@ export class DispenserEscrowWatcher {
 
         this._timer = null;
         this._ticking = false;
+        // Bumped by stop() so a tick still awaiting the network delivers nothing after a lock.
+        this._generation = 0;
         /** @type {Map<string, Set<string>>} chainId -> announced `actionIndex:bucket` keys */
         this._seen = new Map();
         this._seenLoaded = false;
@@ -124,6 +127,7 @@ export class DispenserEscrowWatcher {
 
     /** Stop polling and clear session state. */
     stop() {
+        this._generation += 1;
         if (this._timer) {
             clearInterval(this._timer);
             this._timer = null;
@@ -138,6 +142,7 @@ export class DispenserEscrowWatcher {
     async pollOnce() {
         if (this._ticking) return;
         this._ticking = true;
+        const generation = this._generation;
         try {
             let settings;
             try {
@@ -189,6 +194,8 @@ export class DispenserEscrowWatcher {
                     this._log.warn(`DispenserEscrowWatcher: chain ${chainId} tick failed`, e);
                 }
             }
+            // A lock cleared the seen-state; saving it would erase the stored one.
+            if (generation !== this._generation) return;
             if (changed && this._saveSeen) this._seenDirty = true;
             if (this._seenDirty && this._saveSeen) {
                 try {
@@ -207,6 +214,7 @@ export class DispenserEscrowWatcher {
 
     /** One chain's cycle. Returns true when the seen-set changed. */
     async _tickChain(chainId, chainLabel, addrs) {
+        const generation = this._generation;
         const sdk = this._getSdkForChain(chainId);
         if (!sdk || typeof sdk.getDispensers !== 'function' || typeof sdk.getAction !== 'function') return false;
 
@@ -248,7 +256,11 @@ export class DispenserEscrowWatcher {
         for (const d of budget) {
             let detail;
             try {
-                detail = await sdk.getAction(d.actionIndex, { noRetry: true });
+                detail = await explorerReadOnce(
+                    sdk,
+                    `/action/${encodeURIComponent(String(d.actionIndex))}`,
+                    () => sdk.getAction(d.actionIndex, { noRetry: true }),
+                );
             } catch (e) {
                 this._log.warn(`DispenserEscrowWatcher: getAction ${d.actionIndex} failed`, e);
                 continue;
@@ -284,6 +296,7 @@ export class DispenserEscrowWatcher {
 
         for (const d of fresh) {
             if (seen.size >= SEEN_CAP_PER_CHAIN) break;
+            if (generation !== this._generation) return changed;
             const empty = d.bucket === 'empty';
             try {
                 const delivered = await this._notify({

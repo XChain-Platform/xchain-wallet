@@ -1,9 +1,7 @@
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -23,9 +21,23 @@
 }
 
 /* The outer row carries the shared list-row inset, so the ListRow inside it
-   drops its own padding instead of doubling the inset. */
+   drops its own padding instead of doubling the inset.
+
+   The row may wrap: when the figures do not fit beside a name of at least
+   rowBody's floor (a large text size on a phone), they move to their own line
+   under the name instead of ending in an ellipsis. */
 .row > .rowContent {
     padding: 0;
+    flex-wrap: wrap;
+    row-gap: var(--xc-space-1);
+}
+
+/* The name column takes whatever the figures leave, down to a floor. The
+   floor is in rem so it grows with the text size, which is what makes the
+   figures wrap at large text and stay beside the name at the default size. */
+.rowBody.rowBody {
+    flex: 1 1 0;
+    min-width: 4rem;
 }
 
 .row:first-of-type {
@@ -158,12 +170,26 @@
     unicode-bidi: isolate;
 }
 
+/* The balance figures keep their width and the name gives way: a name
+   ends in an ellipsis and a number never does. On a wrapped row the figures
+   sit at the end of their own line. The doubled class outranks ListRow's own
+   trailing rule whatever order the sheets load in. */
+.amountsSlot.amountsSlot {
+    flex-shrink: 0;
+    max-width: 100%;
+    margin-inline-start: auto;
+}
+
+.qtyLong {
+    font-size: var(--xc-text-sm);
+}
+
+/* A figure is never cut. It keeps to one line whenever its row has room,
+   and only a figure wider than the whole row breaks onto a second line. */
 .amountFit {
     display: block;
     width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
@@ -201,7 +227,7 @@
     border: 0;
     background: transparent;
     padding: var(--xc-list-row-padding);
-    border-top: 1px dashed var(--xc-border);
+    border-top: 1px solid var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

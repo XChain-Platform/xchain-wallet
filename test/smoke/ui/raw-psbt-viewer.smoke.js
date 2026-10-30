@@ -67,15 +67,15 @@ assert.match(
 
 // --- 2. Sections + copy button ------------------------------------------
 
-assert.match(compSrc, /aria-label="Unsigned transaction hex"/);
-assert.match(compSrc, /aria-label="Action fields"/);
-assert.match(compSrc, /aria-label="Parsed inputs \/ outputs"/);
-assert.match(compSrc, /parser not wired yet/, 'placeholder is honest about the parser limit');
+assert.match(compSrc, /aria-label="Unsigned transaction code"|aria-label=\{t\('components\.watcherResultPanel\.unsignedTransactionHex2'\)\}/);
+assert.match(compSrc, /aria-label="Action fields"|aria-label=\{t\('components\.rawPsbtViewer\.actionFields'\)\}/);
+assert.match(compSrc, /aria-label="Parsed inputs \/ outputs"|aria-label=\{t\('components\.rawPsbtViewer\.parsedInputsOutputs'\)\}/);
+assert.match(compSrc, /parser not wired yet|t\('components\.rawPsbtViewer\.parserNotWiredYetSee'\)/, 'placeholder is honest about the parser limit');
 assert.match(compSrc, /copyText\(value\)/, 'copy uses the shared clipboard path');
 assert.match(compSrc, /Copy failed: clipboard unavailable/, 'copy failure is visible in plain words');
 assert.match(
     compSrc,
-    /copyLabel\('psbt', 'unsigned transaction hex'\)/,
+    /copyLabel\('psbt', 'unsigned transaction code'\)/,
     'PSBT copy button labels what it copies',
 );
 assert.match(

@@ -22,7 +22,7 @@
 // The per-form part stays in the form: which wire-format actionData to
 // compose, and which messaging method to dispatch on Approve.
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useSettings } from './useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from './useConfirmAction.js';
 import {
@@ -96,6 +96,9 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   exist once the host has built them (see `action.message.composeForConfirm`).
      *   Must resolve with the same tamper-verified envelope
      *   `action.composeForConfirm` returns. Defaults to the generic route.
+     * @param {() => Promise<Error | string | null>} [args.recheckBeforeSign]
+     *   the form's last re-check before signing (see useConfirmAction); a
+     *   non-null answer interrupts Approve with that message.
      * @param {(prebuiltPsbt: import('../../sdk/submitWithSigner.js').PrebuiltPsbt, composed: object) => Promise<any>} args.onApprove
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      * §5.4 opt-in. Supply it only when this form's Approve can be
@@ -106,10 +109,11 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const run = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume }) => (
+    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume, recheckBeforeSign }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
+            ...(typeof recheckBeforeSign === 'function' ? { recheckBeforeSign } : {}),
             preflightOpts: {
                 mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
             },
@@ -162,6 +166,20 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             onApprove: (_creds, composed) => onApprove(prebuiltPsbtFromComposed(composed), composed),
         })
     ), [confirmAction, messaging, settings, walletId]);
+
+    // A second submit while the first confirm is still composing or open (a
+    // double click, Enter pressed twice) joins the first run. Starting another
+    // would be refused as busy and surface as a failure of an action that is
+    // proceeding normally.
+    const inFlightRef = useRef(null);
+    const run = useCallback((args) => {
+        if (inFlightRef.current) return inFlightRef.current;
+        const pending = Promise.resolve(start(args)).finally(() => {
+            if (inFlightRef.current === pending) inFlightRef.current = null;
+        });
+        inFlightRef.current = pending;
+        return pending;
+    }, [start]);
 
     return {
         /** slice flag: is the single-encode confirm pipeline on for this surface? */

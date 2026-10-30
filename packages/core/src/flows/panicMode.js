@@ -26,6 +26,12 @@
 //     popup / approval / background contexts. When configured, an in-memory
 //     cache backs the synchronous reads and is hydrated at host boot; while
 //     hydration is pending, `assertSigningAllowed` fails closed.
+// Writes fail safe. Turning the freeze on takes effect in memory before the
+// store is asked, and a refused save leaves it on in memory with the save
+// status PANIC_SAVE_UNSAVED, so the screen can say it will not survive a
+// restart instead of claiming a saved freeze. Turning it off asks the store
+// first and lifts the freeze only once the store has taken the change; a
+// refused clear keeps it on (PANIC_SAVE_CLEAR_FAILED).
 // The schema preference `settings.panicMode.enabled` is independent; it
 // gates whether the feature is offered, not whether it is currently active.
 //
@@ -41,7 +47,7 @@
 //   - The duress passphrase + decoy wallet flow (Step 6) layers on
 //     top of this; neither is required for the freeze to work.
 
-import { logConsole } from '../shared/utils/logConsole.js';
+import { __resetGuardStorageFailureForTests, noteGuardStorageFailure } from '../shared/utils/storageFailureNote.js';
 
 const STORAGE_KEY = 'xchain-wallet:panic';
 
@@ -66,18 +72,11 @@ export const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;     // 7d cap
 
 let memoryFallback = null;
 let memoryFallbackActive = false;
-let storageFailureLogged = false;
 
 function keepMemoryFallback(state) {
     memoryFallback = state.expiresAt === 0 ? null : { ...state };
     memoryFallbackActive = true;
-    if (storageFailureLogged) return;
-    storageFailureLogged = true;
-    logConsole.record({
-        source: 'panic-mode',
-        level: 'warn',
-        message: 'local storage write failed; using in-memory state',
-    });
+    noteGuardStorageFailure();
 }
 
 // Injected async persistence (extension: chrome.storage.local). When set, it
@@ -98,6 +97,102 @@ function persistBestEffort(operation) {
     } catch (_err) { /* the synchronous cache remains authoritative */ }
 }
 
+/** Run a store write and hand back its outcome as a promise, whether it throws or rejects. */
+function runStoreWrite(operation) {
+    try {
+        return Promise.resolve(operation());
+    } catch (err) {
+        return Promise.reject(err);
+    }
+}
+
+// A freeze this context keeps in memory that the persistent store may not
+// hold: an activation whose save was refused, an active freeze whose clear was
+// refused, or a freeze another context handed over directly
+// (`holdPanicModeFreeze`, the extension popup telling the service worker).
+// Hydration and re-configuration never drop it, so a refused write cannot be
+// undone by the next read of the store. A deactivation, a cleared record
+// observed from the store, a wipe, or the timer ends it.
+/** @type {PanicModeState | null} */
+let heldFreeze = null;
+
+/** The last panic write reached its store (or there has been none). */
+export const PANIC_SAVE_OK = 'saved';
+/** Panic mode is on in memory, but the store refused the record: a restart loses it. */
+export const PANIC_SAVE_UNSAVED = 'unsaved';
+/** Turning panic mode off was refused by the store, so the freeze stays on. */
+export const PANIC_SAVE_CLEAR_FAILED = 'clear-failed';
+
+/** @type {'saved'|'unsaved'|'clear-failed'} */
+let saveStatus = PANIC_SAVE_OK;
+/** @type {Set<(status: string) => void>} */
+const saveStatusListeners = new Set();
+// Only the newest write may report its outcome; an older one settling late
+// must not overwrite the status of the write that replaced it.
+let writeToken = 0;
+
+function setSaveStatus(next) {
+    if (saveStatus === next) return;
+    saveStatus = next;
+    for (const listener of [...saveStatusListeners]) {
+        try { listener(next); } catch (_err) { /* a listener fault never blocks the others */ }
+    }
+}
+
+/**
+ * Whether the freeze this context shows is the one its store holds.
+ * @returns {'saved'|'unsaved'|'clear-failed'}
+ */
+export function getPanicModeSaveStatus() {
+    return saveStatus;
+}
+
+/**
+ * @param {(status: 'saved'|'unsaved'|'clear-failed') => void} listener
+ * @returns {() => void} unsubscribe
+ */
+export function subscribePanicModeSaveStatus(listener) {
+    saveStatusListeners.add(listener);
+    return () => { saveStatusListeners.delete(listener); };
+}
+
+/** @type {Set<() => void>} */
+const stateListeners = new Set();
+
+// Any change to the freeze this context enforces: a hydrate or store event, a
+// held freeze, an activation, a deactivation, an expiry or a wipe. A screen
+// that asks for a password re-reads on it, so a freeze that loads or arrives
+// after it opened replaces the field at once.
+function notifyStateChange() {
+    for (const listener of [...stateListeners]) {
+        try { listener(); } catch (_err) { /* a listener fault never blocks the others */ }
+    }
+}
+
+/**
+ * Called after any change to the freeze this context enforces. The listener
+ * reads the state itself with getPanicModeState().
+ *
+ * @param {() => void} listener
+ * @returns {() => void} unsubscribe
+ */
+export function subscribePanicModeState(listener) {
+    stateListeners.add(listener);
+    return () => { stateListeners.delete(listener); };
+}
+
+/**
+ * The stricter of two records: the one frozen for longer.
+ * @param {PanicModeState} base
+ * @param {PanicModeState | null} other
+ * @returns {PanicModeState}
+ */
+function stricterState(base, other) {
+    if (!other || other.expiresAt === 0) return base;
+    if (!base || base.expiresAt === 0 || other.expiresAt > base.expiresAt) return { ...other };
+    return base;
+}
+
 /**
  * @typedef {Object} PanicModeState
  * @property {number} activatedAt   epoch-ms; 0 when inactive
@@ -105,6 +200,24 @@ function persistBestEffort(operation) {
  * @property {number} durationMs    duration the user picked at activation
  * @property {'self'|'duress'} [armedBy]   present only while active
  */
+
+// The duress passphrase arms the freeze while someone may be watching, and
+// any party that asks this wallet to sign (a dApp page, an agent or partner
+// asking for a co-signature) can be watched too. A freeze this context cannot
+// positively read as armed in Settings answers them the way any other failed
+// request does: no PANIC_MODE code, no error name, no panic sentence, no time
+// left.
+export const PANIC_COVER_MESSAGE = 'The wallet could not complete this request.';
+
+/** @returns {Error} the plain failure a party outside the wallet sees for a freeze it may not name */
+export function panicCoverError() {
+    return new Error(PANIC_COVER_MESSAGE);
+}
+
+/** Whether an active freeze may be named outside the wallet: only one the user armed in Settings. */
+export function isPanicFreezeSelfArmed() {
+    return getPanicArmedBy() === PANIC_ARMED_SELF;
+}
 
 export class PanicModeActiveError extends Error {
     constructor(remainingMs, message) {
@@ -204,6 +317,11 @@ export function getPanicArmedBy(state = readState()) {
 
 /** @returns {PanicModeState} */
 function readState() {
+    return stricterState(readStoredState(), heldFreeze);
+}
+
+/** @returns {PanicModeState} */
+function readStoredState() {
     // Injected persistence is authoritative: serve from the sync cache that
     // hydration / onChanged keeps current. localStorage is bypassed so the
     // cache is the single cross-context source of truth.
@@ -224,33 +342,141 @@ function readState() {
     }
 }
 
-/** @param {PanicModeState} state */
-function writeState(state) {
+/**
+ * Turn a freeze on. Memory first, so this context refuses to sign from the
+ * moment of the call whatever the store does; the store write follows. A
+ * refused write keeps the freeze in memory (`heldFreeze`) and reports
+ * PANIC_SAVE_UNSAVED rather than claiming a saved freeze.
+ *
+ * @param {PanicModeState} state  an active record
+ * @returns {Promise<boolean>} whether the store took the record
+ */
+function writeActiveState(state) {
+    const token = ++writeToken;
     if (persistentStore) {
         persistenceGeneration += 1;
         awaitingHydration = false;
-        // Cache first so synchronous reads reflect the write immediately, then
-        // mirror to the async store (best-effort; the cache already holds it).
-        memoryFallback = state.expiresAt === 0 ? null : { ...state };
+        memoryFallback = { ...state };
         const store = persistentStore;
-        persistBestEffort(() => (state.expiresAt === 0 ? store.clear() : store.save({ ...state })));
-        return;
+        return runStoreWrite(() => store.save({ ...state })).then(
+            () => {
+                if (token === writeToken) setSaveStatus(PANIC_SAVE_OK);
+                return true;
+            },
+            () => {
+                if (token === writeToken) {
+                    heldFreeze = { ...state };
+                    setSaveStatus(PANIC_SAVE_UNSAVED);
+                    noteGuardStorageFailure();
+                }
+                return false;
+            },
+        );
     }
     const store = getStorage();
     if (!store) {
         keepMemoryFallback(state);
+        setSaveStatus(PANIC_SAVE_UNSAVED);
+        return Promise.resolve(false);
+    }
+    try {
+        store.setItem(STORAGE_KEY, JSON.stringify(state));
+        memoryFallback = null;
+        memoryFallbackActive = false;
+        setSaveStatus(PANIC_SAVE_OK);
+        return Promise.resolve(true);
+    } catch (_err) {
+        keepMemoryFallback(state);
+        setSaveStatus(PANIC_SAVE_UNSAVED);
+        return Promise.resolve(false);
+    }
+}
+
+/**
+ * Turn the freeze off at the user's request. The store goes first and memory
+ * follows only once it has taken the change: a refused clear leaves the
+ * record (and so the freeze) in place, so this context keeps refusing to sign
+ * and reports PANIC_SAVE_CLEAR_FAILED.
+ *
+ * @returns {Promise<boolean>} whether the freeze is now off
+ */
+function writeClearedState() {
+    const token = ++writeToken;
+    const prior = readState();
+    if (persistentStore) {
+        persistenceGeneration += 1;
+        awaitingHydration = false;
+        const store = persistentStore;
+        return runStoreWrite(() => store.clear()).then(
+            () => {
+                if (token === writeToken) {
+                    memoryFallback = null;
+                    heldFreeze = null;
+                    setSaveStatus(PANIC_SAVE_OK);
+                }
+                return true;
+            },
+            () => {
+                if (token === writeToken) {
+                    if (prior.expiresAt !== 0) heldFreeze = { ...prior };
+                    setSaveStatus(PANIC_SAVE_CLEAR_FAILED);
+                    noteGuardStorageFailure();
+                }
+                return false;
+            },
+        );
+    }
+    const store = getStorage();
+    if (!store) {
+        keepMemoryFallback(emptyPanicModeState());
+        heldFreeze = null;
+        setSaveStatus(PANIC_SAVE_OK);
+        return Promise.resolve(true);
+    }
+    try {
+        store.removeItem(STORAGE_KEY);
+        memoryFallback = null;
+        memoryFallbackActive = false;
+        heldFreeze = null;
+        setSaveStatus(PANIC_SAVE_OK);
+        return Promise.resolve(true);
+    } catch (_err) {
+        if (prior.expiresAt !== 0) heldFreeze = { ...prior };
+        setSaveStatus(PANIC_SAVE_CLEAR_FAILED);
+        return Promise.resolve(false);
+    }
+}
+
+/**
+ * Drop a freeze whose timer has run out. An expired record reads as no
+ * freeze whatever the store holds, so memory clears at once and the store
+ * clear is best-effort.
+ */
+function expireState() {
+    writeToken += 1;
+    heldFreeze = null;
+    setSaveStatus(PANIC_SAVE_OK);
+    // An expired record reads as no freeze whatever the store still holds.
+    notifyStateChange();
+    if (persistentStore) {
+        persistenceGeneration += 1;
+        awaitingHydration = false;
+        memoryFallback = null;
+        const store = persistentStore;
+        persistBestEffort(() => store.clear());
+        return;
+    }
+    const store = getStorage();
+    if (!store) {
+        keepMemoryFallback(emptyPanicModeState());
         return;
     }
     try {
-        if (state.expiresAt === 0) {
-            store.removeItem(STORAGE_KEY);
-        } else {
-            store.setItem(STORAGE_KEY, JSON.stringify(state));
-        }
+        store.removeItem(STORAGE_KEY);
         memoryFallback = null;
         memoryFallbackActive = false;
     } catch (_err) {
-        keepMemoryFallback(state);
+        keepMemoryFallback(emptyPanicModeState());
     }
 }
 
@@ -283,7 +509,7 @@ export async function configurePanicModePersistence(store) {
     try {
         const persisted = await configuredStore.load();
         if (generation === persistenceGeneration && persistentStore === configuredStore) {
-            applyExternalPanicModeState(persisted);
+            adoptStoredState(persisted);
         }
     } catch (_err) {
         // Load failed: leave the cache empty. A subsequent onChanged or write
@@ -300,11 +526,49 @@ export async function configurePanicModePersistence(store) {
  * @param {unknown} raw
  */
 export function applyExternalPanicModeState(raw) {
+    const state = adoptStoredState(raw);
+    // A record observed going away is a deactivation made elsewhere, so a
+    // freeze held in memory ends with it. The boot read of the store (below)
+    // is not: an empty store there may only mean a refused write.
+    if (state.expiresAt === 0) {
+        writeToken += 1;
+        heldFreeze = null;
+        setSaveStatus(PANIC_SAVE_OK);
+    }
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {PanicModeState}
+ */
+function adoptStoredState(raw) {
     persistenceGeneration += 1;
     awaitingHydration = false;
     const state = coercePanicState(raw);
     memoryFallback = state.expiresAt === 0 ? null : state;
     memoryFallbackActive = false;
+    notifyStateChange();
+    return state;
+}
+
+/**
+ * Hold a freeze another context reports, in memory, on top of whatever the
+ * store says. The extension service worker calls this when the popup or side
+ * panel turns panic mode on, so signing stops in the worker at once even if
+ * the store refuses the record. Only a freeze can be held; an inactive or
+ * expired record is ignored, and a shorter freeze never shortens a longer one.
+ *
+ * @param {unknown} raw
+ * @param {{ unsaved?: boolean }} [opts]  unsaved: the reporting context knows its store does not hold this record
+ * @returns {PanicModeState} the state this context now enforces
+ */
+export function holdPanicModeFreeze(raw, { unsaved = false } = {}) {
+    const state = coercePanicState(raw);
+    if (!isSigningFrozen(state)) return readState();
+    heldFreeze = stricterState(heldFreeze || emptyPanicModeState(), state);
+    if (unsaved) setSaveStatus(PANIC_SAVE_UNSAVED);
+    notifyStateChange();
+    return readState();
 }
 
 /** @param {number} durationMs @returns {number} clamped */
@@ -358,33 +622,45 @@ export function activatePanicMode({ durationMs, nowMs = Date.now(), armedBy } = 
         durationMs: dur,
         armedBy: normalizeArmedBy(armedBy),
     };
-    writeState(next);
+    void writeActiveState(next);
+    notifyStateChange();
     return next;
 }
 
 /**
  * Manually deactivate panic mode (Settings UX). The user has chosen to
- * exit the freeze before its timer expires.
+ * exit the freeze before its timer expires. Resolves true once the freeze is
+ * off; false when the store refused the change and the freeze stays on
+ * (see `getPanicModeSaveStatus`).
+ *
+ * @returns {Promise<boolean>}
  */
 export function deactivatePanicMode() {
-    writeState(emptyPanicModeState());
+    return writeClearedState().then((off) => {
+        notifyStateChange();
+        return off;
+    });
 }
 
 /** Clear the active freeze while keeping the configured persistence backend. */
 export function clearPanicModeState() {
+    writeToken += 1;
     memoryFallback = null;
     memoryFallbackActive = false;
     awaitingHydration = false;
+    heldFreeze = null;
+    setSaveStatus(PANIC_SAVE_OK);
     if (persistentStore) {
         persistenceGeneration += 1;
         const store = persistentStore;
         persistBestEffort(() => store.clear());
-        return;
+    } else {
+        const store = getStorage();
+        if (store) {
+            try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
+        }
     }
-    const store = getStorage();
-    if (store) {
-        try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
-    }
+    notifyStateChange();
 }
 
 /** Test seam: forget any injected persistence. */
@@ -393,8 +669,11 @@ export function __resetPanicModePersistenceForTests() {
     persistentStore = null;
     memoryFallback = null;
     memoryFallbackActive = false;
-    storageFailureLogged = false;
+    __resetGuardStorageFailureForTests();
     awaitingHydration = false;
+    heldFreeze = null;
+    saveStatus = PANIC_SAVE_OK;
+    writeToken += 1;
 }
 
 /**
@@ -416,7 +695,7 @@ export function assertSigningAllowed(nowMs = Date.now()) {
     if (state.expiresAt === 0) return;
     if (state.expiresAt <= nowMs) {
         // Timer expired. Auto-clear and let the call through.
-        writeState(emptyPanicModeState());
+        expireState();
         return;
     }
     throw new PanicModeActiveError(state.expiresAt - nowMs);

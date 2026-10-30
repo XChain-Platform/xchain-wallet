@@ -154,7 +154,7 @@ describe('dispenser async safety', () => {
         const first = mount();
         fireEvent.click(await screen.findByLabelText('A token'));
         fireEvent.change(screen.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(screen.getByLabelText('Payment amount (per fill)'), { target: { value: '4.5' } });
+        fireEvent.change(screen.getByLabelText('Payment amount per fill'), { target: { value: '4.5' } });
 
         const key = 'xc:formdraft:dispenser:wallet-draft';
         await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values).toMatchObject({
@@ -166,7 +166,63 @@ describe('dispenser async safety', () => {
 
         await waitFor(() => expect(screen.getByLabelText('A token')).toBeChecked());
         expect(screen.getByLabelText('Payment token')).toHaveValue('PAY');
-        expect(screen.getByLabelText('Payment amount (per fill)')).toHaveValue('4.5');
+        expect(screen.getByLabelText('Payment amount per fill')).toHaveValue('4.5');
+    });
+
+    it('stores no draft and offers no Restore for a form left on its defaults', async () => {
+        const messaging = commonMessaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC_CHAIN]: SOURCE }),
+        });
+        const key = 'xc:formdraft:dispenser:wallet-untouched';
+        const mount = () => render(provider(
+            <DispenserForm walletId="wallet-untouched" initialChainId={BTC_CHAIN} onBack={() => {}} />,
+            messaging,
+        ));
+        const first = mount();
+        await screen.findByLabelText('Give amount per fill');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(localStorage.getItem(key)).toBeNull();
+        first.unmount();
+
+        localStorage.setItem(key, JSON.stringify({
+            savedAt: Date.now(),
+            network: 'mainnet',
+            values: { chainId: BTC_CHAIN, fromAddressId: SOURCE.id, ticker: '', giveAmount: '', payWith: 'coin' },
+        }));
+        mount();
+        await screen.findByLabelText('Give amount per fill');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+        expect(localStorage.getItem(key)).toBeNull();
+    });
+
+    it('stores no draft and offers no Restore for a form opened with its token filled in', async () => {
+        const messaging = commonMessaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC_CHAIN]: SOURCE }),
+        });
+        const key = 'xc:formdraft:dispenser:wallet-prefilled';
+        const mount = () => render(provider(
+            <DispenserForm walletId="wallet-prefilled" initialChainId={BTC_CHAIN} initialTick="XCHAIN" onBack={() => {}} />,
+            messaging,
+        ));
+        const first = mount();
+        await screen.findByLabelText('A token');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(localStorage.getItem(key)).toBeNull();
+        first.unmount();
+
+        localStorage.setItem(key, JSON.stringify({
+            savedAt: Date.now(),
+            network: 'mainnet',
+            values: { chainId: BTC_CHAIN, fromAddressId: SOURCE.id, ticker: 'XCHAIN', giveAmount: '', payWith: 'coin' },
+        }));
+        mount();
+        await screen.findByLabelText('A token');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+        expect(localStorage.getItem(key)).toBeNull();
     });
 
     it('runs one identical explorer search while its request is pending', async () => {

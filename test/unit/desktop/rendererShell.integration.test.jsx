@@ -11,6 +11,8 @@ const boot = vi.hoisted(() => ({
     installErrorCapture: vi.fn(),
     installFiatRateSource: vi.fn(),
     setShellCapabilities: vi.fn(),
+    homeMounts: 0,
+    autoLockOpts: null,
 }));
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
@@ -40,7 +42,10 @@ vi.mock('@xchain-wallet/core/shared/hooks/useSettings.js', () => ({
     }),
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js', () => ({
-    useAutoLockPolicy: () => ({ armed: false, idleMs: 0, minutes: 0, checkNow: vi.fn() }),
+    useAutoLockPolicy: (opts) => {
+        boot.autoLockOpts = opts;
+        return { armed: false, idleMs: 0, minutes: 0, checkNow: vi.fn() };
+    },
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useLastView.js', () => ({ useLastView: () => {} }));
 vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
@@ -86,9 +91,16 @@ vi.mock('@xchain-wallet/core/shared/hooks/useCoinpayObligations.js', () => ({
 }));
 vi.mock('../../../packages/desktop/renderer/deepLinkRoute.js', () => ({ useDeepLinks: () => {} }));
 
-vi.mock('@xchain-wallet/core/shared/routes/Home.jsx', () => ({
-    Home: () => <h1>Home screen</h1>,
-}));
+// Count Home mounts so a test can tell a remount from a re-render.
+vi.mock('@xchain-wallet/core/shared/routes/Home.jsx', async () => {
+    const { useEffect } = await import('react');
+    return {
+        Home: () => {
+            useEffect(() => { boot.homeMounts += 1; }, []);
+            return <h1>Home screen</h1>;
+        },
+    };
+});
 vi.mock('@xchain-wallet/core/shared/routes/Settings.jsx', () => ({
     Settings: () => <h1>Settings screen</h1>,
 }));
@@ -199,6 +211,24 @@ describe('desktop renderer shell', () => {
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
 
+    it('leaves the unlocked screen at once when auto-lock fires, before main answers', async () => {
+        const bridge = createPreloadBridge();
+        window.xchainWalletBridge = bridge;
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        const hung = bridge.sendMessage.getMockImplementation();
+        bridge.sendMessage.mockImplementation((msg) => (msg.type === 'wallet.lock' ? new Promise(() => {}) : hung(msg)));
+        await act(async () => { void boot.autoLockOpts.lock(); });
+
+        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Home screen' })).toBeNull();
+        expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
+    });
+
     it('keeps the locked screen usable when the preload IPC call rejects', async () => {
         const bridge = createPreloadBridge();
         bridge.failures.set('wallet.unlock', new Error('IPC channel unavailable'));
@@ -263,5 +293,78 @@ describe('desktop renderer shell', () => {
                 request: { walletId: 'wallet-2' },
             });
         });
+    });
+
+    it('re-reads the wallet list when a sibling window adds a wallet, then follows its selection', async () => {
+        let wallets = [{ id: 'wallet-1', name: 'Primary wallet' }];
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return { ok: true, result: wallets };
+            if (type === 'account.list') return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-1' } });
+        });
+        const listCalls = () => sendMessage.mock.calls.filter(([m]) => m.type === 'wallet.list').length;
+        const before = listCalls();
+        const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+
+        // The sibling restored a wallet, then made it active there.
+        wallets = [...wallets, { id: 'wallet-2', name: 'Restored wallet' }];
+        act(() => {
+            onStateChange({ kind: 'wallets', change: 'added' });
+            onStateChange({ kind: 'active-wallet', walletId: 'wallet-2' });
+        });
+
+        await waitFor(() => { expect(listCalls()).toBe(before + 1); });
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-2' } });
+        });
+    });
+
+    it('folds a sibling window settings change into this window and remounts on a network change', async () => {
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return { ok: true, result: [{ id: 'wallet-1', name: 'Primary wallet' }] };
+            if (type === 'account.list') return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+        const seen = [];
+        const onSettings = (event) => { seen.push(event.detail); };
+        window.addEventListener('xc:settings-changed', onSettings);
+        try {
+            render(<App />);
+            await waitFor(() => {
+                expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-1' } });
+            });
+            await screen.findByRole('heading', { name: 'Home screen' });
+            await act(async () => {});
+            const mountsBefore = boot.homeMounts;
+            const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+
+            const themed = { theme: 'dark', activeNetwork: 'mainnet' };
+            act(() => { onStateChange({ kind: 'settings', settings: themed }); });
+            expect(seen).toEqual([themed]);
+            expect(boot.homeMounts).toBe(mountsBefore);
+
+            const moved = { theme: 'dark', activeNetwork: 'testnet' };
+            act(() => { onStateChange({ kind: 'network', settings: moved }); });
+            expect(seen).toEqual([themed, moved]);
+            await waitFor(() => { expect(boot.homeMounts).toBe(mountsBefore + 1); });
+
+            act(() => { onStateChange({ kind: 'settings', settings: [moved] }); });
+            expect(seen).toHaveLength(2);
+        } finally {
+            window.removeEventListener('xc:settings-changed', onSettings);
+        }
     });
 });

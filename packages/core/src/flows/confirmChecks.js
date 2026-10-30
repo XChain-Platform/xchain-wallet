@@ -206,6 +206,34 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
     return { ok: unexpected.length === 0 && missing.length === 0, unexpected, missing, carrierCount };
 }
 
+/**
+ * Every input the encoder funded the transaction with must pay an address the
+ * wallet holds. The encoder selects from the utxo-tracker's answer for the
+ * spender, and neither it nor the SDK compares a row's script with that
+ * address, so a tracker or replica answering with another address's rows
+ * (another chain's, a stale index, a wrong cache key) yields a PSBT the signer
+ * cannot sign for: the confirm screen showed it with a fee computed from coins
+ * the wallet does not hold, and Approve failed only inside the signer. An
+ * input whose script does not decode to an address is left to the signer.
+ *
+ * @param {Object} args
+ * @param {string} args.psbtHex
+ * @param {Iterable<string>} args.ownAddresses
+ * @param {(psbtHex: string) => { inputs?: Array<{ address?: string|null, prevTxHash?: string, prevTxIndex?: number }> }} args.decomposePsbt
+ * @returns {{ ok: boolean, foreign: Array<{ index: number, address: string, outpoint: string }> }}
+ */
+export function checkInputOwnership({ psbtHex, ownAddresses, decomposePsbt }) {
+    const own = new Set([...(ownAddresses || [])].map(String));
+    const inputs = decomposePsbt(psbtHex)?.inputs || [];
+    const foreign = [];
+    inputs.forEach((input, index) => {
+        const address = input?.address;
+        if (typeof address !== 'string' || !address || own.has(address)) return;
+        foreign.push({ index, address, outpoint: `${input.prevTxHash}:${input.prevTxIndex}` });
+    });
+    return { ok: foreign.length === 0, foreign };
+}
+
 function carrierAllowanceFor(encoding) {
     // Exactly one carrier leg per encoding (the inline OP_RETURN, or a
     // single P2SH/P2WSH/MULTISIGN commit output). Used only as the fallback
@@ -388,6 +416,12 @@ export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt,
         throw new TamperDetectedError(
             `The transaction is missing ${outputSet.missing.length} output(s) you approved.`,
             { missing: outputSet.missing, expected: expected.addressed });
+    }
+    const inputs = checkInputOwnership({ psbtHex, ownAddresses, decomposePsbt });
+    if (!inputs.ok) {
+        throw new TamperDetectedError(
+            `The transaction spends ${inputs.foreign.length} coin(s) this wallet does not hold.`,
+            { inputs: inputs.foreign, reason: 'foreign-input' });
     }
     const actionBytes = checkActionByteMatch({ psbtHex, actionString, encoding: expected.encoding, decodeActionFromPsbt });
     if (!actionBytes.ok) {

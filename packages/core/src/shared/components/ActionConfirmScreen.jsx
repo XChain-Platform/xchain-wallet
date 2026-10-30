@@ -23,11 +23,15 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -136,10 +140,11 @@ function useSourceIdentity(address, chainId, walletId) {
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
+ * @param {string} [props.totalText]             form-derived aggregate when the action decoder exposes only a per-unit amount
  */
 export function ActionConfirmScreen({
     confirmAction,
-    walletId = readActiveWallet(),
+    walletId: walletIdProp = null,
     screenVariant = 'small',
     chainLabel,
     feeText,
@@ -165,7 +170,13 @@ export function ActionConfirmScreen({
     outcomeLabels = null,
     formatNativeFee,
     formatProtocolFee,
+    totalText,
 }) {
+    // The popup and side panel share the stored active wallet, so a switch in
+    // one rewrites it under a review open in the other. The review names the
+    // wallet that was active when it opened, which is the wallet it signs for.
+    const [walletAtOpen] = useState(readActiveWallet);
+    const walletId = walletIdProp || walletAtOpen;
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
     // tick when the risk classifier demands one. Approve stays disabled until
@@ -202,6 +213,11 @@ export function ActionConfirmScreen({
         ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
             + ' is included in the network fee shown above.'
         : null;
+    // The caller's text is a rate-table figure, not the fee of these bytes, so it is
+    // marked as an estimate rather than passing for the amount that will be paid.
+    const estimatedFeeText = feeText && !/estimate/i.test(String(feeText))
+        ? `${feeText} (estimate)`
+        : feeText;
     const unavailableFeeText = ticker ? `Network fee estimate unavailable (${ticker}).` : null;
     const displayedFee = dustChangeText ? (
         <>
@@ -209,7 +225,7 @@ export function ActionConfirmScreen({
             <br />
             <span data-testid="confirm-dust-change">{dustChangeText}</span>
         </>
-    ) : (exactFeeText || feeText || unavailableFeeText);
+    ) : (exactFeeText || estimatedFeeText || unavailableFeeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index
@@ -275,7 +291,7 @@ export function ActionConfirmScreen({
             hardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
             feeText={displayedFee}
-            totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
+            totalText={totalText || (nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined)}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}
@@ -307,18 +323,20 @@ export function ActionConfirmScreen({
                         // a self-armed freeze.
                         <SigningReadyNote>
                             <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                             </p>
                         </SigningReadyNote>
                     ) : (
-                        <Input
-                            type="password"
-                            label="Password"
-                            hint="Required to sign."
-                            value={password}
-                            onChange={(e) => onPasswordChange(e.target.value)}
-                            autoComplete="current-password"
-                        />
+                        <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
+                            <Input
+                                type="password"
+                                label={t('common.password')}
+                                hint={t('components.messageConfirmScreen.requiredToSign')}
+                                value={password}
+                                onChange={(e) => onPasswordChange(e.target.value)}
+                                autoComplete="current-password"
+                            />
+                        </PanicPasswordGate>
                     )}
                 </>
             )}

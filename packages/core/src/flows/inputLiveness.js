@@ -30,6 +30,9 @@
 // unverified rather than as an interrupt. Only an outpoint whose OWN address
 // answered with a utxo set that does not contain it counts as spent.
 
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
+
 /**
  * @typedef {{ prevTxHash: string, prevTxIndex: number, address: string|null }} PsbtInputRef
  * @typedef {{ txid: string, vout: number }} Outpoint
@@ -103,6 +106,28 @@ export function inputAddresses(inputs) {
         if (input && typeof input.address === 'string' && input.address) out.add(input.address);
     }
     return [...out];
+}
+
+/**
+ * Error name for a send refused before signing because another send from this
+ * wallet is spending its inputs. Its message is the `livenessMessage` sentence.
+ */
+export const INPUTS_ALREADY_SPENT_NAME = 'InputsAlreadySpentError';
+
+/**
+ * Error name for a sale refused before signing because another sale from this
+ * wallet holds the same name. Its message is the `nameSaleInFlightMessage` sentence.
+ */
+export const NAME_SALE_IN_FLIGHT_NAME = 'NameSaleInFlightError';
+
+/**
+ * The sentence for a sale refused because the name is already listed from this wallet.
+ *
+ * @param {string} tick
+ * @returns {string}
+ */
+export function nameSaleInFlightMessage(tick) {
+    return t('flows.nameSale.alreadyListed', { tick: String(tick || '').trim() });
 }
 
 /**

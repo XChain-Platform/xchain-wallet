@@ -132,13 +132,12 @@ describe('Home desktop actions', () => {
             );
             expect(viewportWidth).toBeLessThan(1024);
         } else {
+            // The row reads the content width, not the window, so it stays one
+            // row of equal tiles only where the content beside the sidebar fits it.
             expect(homeStyles).toMatch(
-                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/,
+                /@container \(min-width: \d+px\)[\s\S]*\.actionsFull\s*\{[^}]*grid-auto-flow:\s*column;[^}]*grid-auto-columns:\s*minmax\(0, 1fr\);/,
             );
-            // Labels stay on one line; a full row wraps whole tiles instead.
-            expect(homeStyles).toMatch(
-                /@media \(min-width: 1024px\)[\s\S]*\.actionsFull > button\s*\{[^}]*white-space:\s*nowrap;/,
-            );
+            expect(homeStyles).toMatch(/\.actionsFullWrap\s*\{[^}]*container-type:\s*inline-size;/);
             expect(viewportWidth).toBeGreaterThanOrEqual(1024);
         }
     });
@@ -177,8 +176,10 @@ describe('Home quick-action policy', () => {
         fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
 
         expect(handlers.onSend).not.toHaveBeenCalled();
-        expect(screen.getByText("Demo wallets can't send. Create a real wallet to send."))
-            .toBeVisible();
+        const notice = screen.getByText("Demo wallets can't send. Create a real wallet to send.");
+        expect(notice).toBeVisible();
+        // The notice is the first item of the page content, above the controls that raised it.
+        expect(notice.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
         expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
             .toBeTruthy();

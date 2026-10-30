@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 let messaging;
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
@@ -176,12 +177,36 @@ describe.each([
     const source = readFileSync(path, 'utf8');
 
     it('updates wallet header state and refreshes account header state', () => {
-        expect(source).toContain('useAccountList(activeWalletId, accountRenameTarget)');
+        // The header account list reads again when a rename screen opens or closes.
+        expect(source).toMatch(/useAccountList\(activeWalletId, [^;]*accountRenameTarget/);
         expect(source).toMatch(/onRenamed=\{\(wallet\) => \{[\s\S]*?setWalletList/);
     });
 });
 
 describe('RenameWalletForm submission', () => {
+    it('updates the stored lock-screen name when the active wallet is renamed', async () => {
+        localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-1', name: 'Primary wallet' }));
+        mount({ initialName: 'Spending' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
+        expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-1', name: 'Spending' });
+    });
+
+    it('leaves the stored lock-screen name alone when another wallet is renamed', async () => {
+        localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-2', name: 'Savings' }));
+        mount({ initialName: 'Spending' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
+        expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-2', name: 'Savings' });
+    });
+
+
     it('trims a valid name, renames the wallet, and reports completion', async () => {
         const { props } = mount({ initialName: '  Spending  ' });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
@@ -240,6 +265,20 @@ describe('RenameWalletForm submission', () => {
 });
 
 describe('RenameWalletForm submission failures', () => {
+    it('explains a refused concurrent rename and keeps other errors unchanged', async () => {
+        messaging.renameWallet
+            .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
+            .mockRejectedValueOnce(new Error('Rename refused'));
+        mount();
+        const save = screen.getByRole('button', { name: 'Save' });
+        await waitFor(() => expect(save.disabled).toBe(false));
+
+        fireEvent.click(save);
+        expect(await screen.findByText(VAULT_CONFLICT_MESSAGE)).toBeTruthy();
+        fireEvent.click(save);
+        expect(await screen.findByText('Rename refused')).toBeTruthy();
+    });
+
     it.each([
         [new Error('Rename refused'), 'Rename refused'],
         [{}, 'Failed to rename wallet.'],

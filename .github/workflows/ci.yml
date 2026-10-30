@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [master, develop]
 concurrency:
-  # On a PROTECTED branch (master, develop), group per COMMIT. Elsewhere, group
+  # On a PROTECTED branch (master, develop), group per RUN. Elsewhere, group
   # per ref.
   #
   # `cancel-in-progress: false` below is necessary but NOT sufficient, which was
@@ -24,9 +24,9 @@ concurrency:
   # already carried the fix, while the in-progress run on bc58ff47 correctly
   # survived. Half the defect, half the fix.
   #
-  # Per-commit grouping removes the contention rather than arbitrating it: two
-  # master commits are never in the same group, so neither can evict the other
-  # and every commit reaches a verdict the release gate can read. Pull requests
+  # Per-run grouping removes the contention rather than arbitrating it: two
+  # master runs are never in the same group, so neither can evict the other
+  # and every run reaches a verdict the release gate can read. Pull requests
   # keep per-ref grouping, where superseding is the whole point.
   #
   # develop joins master here rather than inheriting the feature-branch shape.
@@ -35,7 +35,7 @@ concurrency:
   # measurement below, and it is the branch a release is frozen FROM: the
   # ceremony requires green CI on the specific develop SHA a release branch is
   # cut at, which a run evicted while queued can never provide.
-  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}
+  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.run_id || 'latest' }}
   # Cancel superseded runs on pull requests and feature branches, where only the
   # latest push matters and runner minutes are the only cost. NEVER cancel on a
   # protected branch: the release gate (tools/release/verify-validated-commit.mjs)
@@ -51,7 +51,7 @@ jobs:
   # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the
   # pre-push hook run, so local and CI cannot disagree about what "green" means.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Where the docs checkout below lands. _docs-repo.js honours this ahead of
       # its relative default, which it has to: actions/checkout refuses a path
@@ -145,7 +145,7 @@ jobs:
   # brings in at the version a release would sign, so the guard compares the
   # wallet against the SDK it actually ships.
   drift-guards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # No sibling checkout: since DD6 the shells consume the PUBLISHED
       # @dankest-llc/xchain-sdk, so `pnpm install --frozen-lockfile` below
@@ -192,7 +192,7 @@ jobs:
           XCHAIN_REQUIRE_SIBLINGS: "1"
         run: pnpm exec vitest run --config test/vitest/unit.config.js test/unit/components/PreflightPanel.tier1Notice.test.jsx
       # Wallet<->hub chain-registry guard. No hub checkout here, and
-      # that is the point: --check compares bin/chain-registry.sync.json against
+      # that is the point: --check compares tools/chain-registry.sync.json against
       # the bundled descriptors, so a descriptor fix that was never mirrored into
       # xchain-hub/src/chain-registry.json fails on THIS repo's push. Before this,
       # the only comparison lived in a hub test that skips without the wallet
@@ -200,7 +200,7 @@ jobs:
       # repos with every gate green. test/unit/chainRegistrySync.test.js holds the
       # same assertion inside the `test` job; this step names it in the output.
       - name: Wallet<->hub chain-registry snapshot guard
-        run: node bin/sync-chain-registry.mjs --check
+        run: node tools/sync-chain-registry.mjs --check
       # Assert the frozen install put the lockfile-pinned published SDK in every
       # shell; a mismatch or a missing SDK fails the job.
       - name: Installed SDK matches lockfile pin
@@ -209,7 +209,7 @@ jobs:
   # Build the shipped shells, then run the gates that can ONLY be checked against a
   # real build artifact. None of this can live in the `test` job: it has no dist/.
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -255,7 +255,7 @@ jobs:
   # The thresholds live in test/vitest/unit.config.js and sit just under today's
   # numbers, so this job goes red on a REGRESSION, not on an aspiration.
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -280,7 +280,7 @@ jobs:
   # a dev server, which the unit gate must not depend on -- so it gets its own
   # job here, and now every push proves it.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -319,13 +319,11 @@ jobs:
   # is not on GitHub's network. Without both, the job says in its summary that
   # the venue suite did NOT run, so a skipped gate is never read as a pass.
   e2e-regtest:
-    runs-on: ubuntu-latest
-    # One run at a time on the shared regtest venue: concurrent runs starve each other past the
-    # 6 h job limit, while a lone run takes about 65 minutes.
-    timeout-minutes: 150
-    concurrency:
-      group: wallet-regtest-venue
-      cancel-in-progress: false
+    name: e2e-regtest (rolling shard)
+    runs-on: ubuntu-24.04
+    # One run at a time on the shared regtest venue. Each run covers one rolling
+    # quarter of the suite, keeping the venue out of the main CI critical path.
+    timeout-minutes: 240
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
@@ -350,6 +348,13 @@ jobs:
         run: |
           pnpm exec playwright test --config test/e2e/playwright.regtest.config.js --list | tee regtest-list.txt
           grep -q 'regtest.spec' regtest-list.txt
+      - name: Select rolling shard
+        id: shard
+        run: |
+          currentMinutes=$(($(date -u +%s) / 60))
+          shardNumber=$((currentMinutes % 4 + 1))
+          echo "value=${shardNumber}/4" >> "$GITHUB_OUTPUT"
+          echo "Running regtest shard ${shardNumber}/4"
       - name: Check regtest venue access
         id: venue
         run: |
@@ -371,18 +376,47 @@ jobs:
           # so name the key in the ssh config for every host this job reaches.
           printf 'Host *\n  IdentityFile ~/.ssh/regtest_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
-          ssh -N -f -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
+
+          # The venue's forced command holds the shared venue lock for as long as
+          # this session's stdin stays open, and prints venue-lock-acquired once it
+          # has it, so every runner waits on one lock. Its -L ports bind on this
+          # runner, so the tunnel alone could never tell whether the venue is busy.
+          gateState="$RUNNER_TEMP/venue-gate-state"
+          sleep 14400 | ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 -i ~/.ssh/regtest_key "$XC_REGTEST_SSH_HOST" \
+            venue-lock > "$gateState" 2>&1 &
+          gatePid=$!
+          until grep -qx venue-lock-acquired "$gateState"; do
+            if ! kill -0 "$gatePid" 2>/dev/null; then
+              echo "::error::The regtest venue lock was not acquired: $(cat "$gateState")"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Opened only once the venue is ours: a tunnel opened before a long wait
+          # for the lock went idle and was gone by the time the suite started.
+          attempt=1
+          while ! ssh -N -f -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
             -L 18080:localhost:18080 -L 10000:localhost:10000 \
             -L 3023:localhost:3023 -L 3025:localhost:3025 \
             -L 3223:localhost:3223 -L 3225:localhost:3225 \
-            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
-      - name: Run regtest suite
-        if: steps.venue.outputs.configured == 'true'
-        run: pnpm test:e2e:regtest
+            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"; do
+            if [ "$attempt" -ge 10 ]; then
+              echo "::error::The regtest tunnel did not open after 10 attempts"
+              exit 1
+            fi
+            echo "The regtest tunnel did not open; retrying in 30 seconds (attempt $attempt/10)"
+            attempt=$((attempt + 1))
+            sleep 30
+          done
+          flock --exclusive "$RUNNER_TEMP/xchain-wallet-regtest.lock" \
+            pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-regtest
@@ -396,7 +430,7 @@ jobs:
   # never reach a user, and blocking every push on them trains people to ignore the
   # gate. Production deps currently carry no high/critical advisory.
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -434,7 +468,7 @@ jobs:
   # itself the account-level answer. A job that hit its time limit is red,
   # named by the step that hung.
   verdict:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, drift-guards, build, coverage, e2e, e2e-regtest, audit]
     # Runs whatever the others did. Gating it on success would silence it in
     # exactly the case it exists for.

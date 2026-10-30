@@ -78,8 +78,9 @@ function expectOnlyPageTitle(name) {
     expect(screen.getAllByRole('heading')).toHaveLength(1);
 }
 
-async function reachBackup(context) {
+async function reachBackup(context, { name } = {}) {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    if (name !== undefined) fireEvent.change(screen.getByLabelText('New wallet name'), { target: { value: name } });
     fireEvent.change(screen.getByLabelText('Password'), {
         target: { value: 'password1' },
     });
@@ -99,8 +100,8 @@ async function reachBackup(context) {
     expect(context.messaging.getAddressesByChain).not.toHaveBeenCalled();
 }
 
-async function reachVerify(context) {
-    await reachBackup(context);
+async function reachVerify(context, options) {
+    await reachBackup(context, options);
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
@@ -118,6 +119,44 @@ function answerQuiz({ wrongFirst = false } = {}) {
 }
 
 describe('MigrateToBip39 safety and completion', () => {
+    it('names the new wallet by its default when the name field is cleared or blank', async () => {
+        const context = renderMigration();
+        await reachVerify(context, { name: '   ' });
+        answerQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'XChain BIP39 Wallet' }),
+        ));
+    });
+
+    it('saves one wallet when the verify form is submitted twice in one event turn', async () => {
+        const context = renderMigration(makeMessaging({
+            addImportedWallet: vi.fn(() => new Promise(() => {})),
+        }));
+        await reachVerify(context);
+        answerQuiz();
+        const form = screen.getByRole('button', { name: 'Create BIP39 wallet' }).closest('form');
+        await act(async () => {
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+        });
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledTimes(1));
+    });
+
+    it('trims the typed name before saving', async () => {
+        const context = renderMigration();
+        await reachVerify(context, { name: '  Cold storage  ' });
+        answerQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'Cold storage' }),
+        ));
+    });
+
+
     it('shows and verifies the phrase before saving or reading the legacy wallet', async () => {
         let resolveCreate;
         const messaging = makeMessaging({
@@ -162,6 +201,28 @@ describe('MigrateToBip39 safety and completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(context.onMigrated).toHaveBeenCalledWith('wallet-new');
         expect(context.onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the word quiz without the Verify click submitting it', async () => {
+        const context = renderMigration();
+        await reachBackup(context);
+        fireEvent.click(screen.getByRole('checkbox'));
+        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const backupForm = verify.closest('form');
+        // A native click runs the button's own activation after the handlers,
+        // as a browser does; fireEvent.click inside act defers the re-render
+        // past it. Outside act, React flushes the stage change first.
+        const previous = globalThis.IS_REACT_ACT_ENVIRONMENT;
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        try {
+            verify.click();
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        } finally {
+            globalThis.IS_REACT_ACT_ENVIRONMENT = previous;
+        }
+        expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create BIP39 wallet' }).closest('form')).not.toBe(backupForm);
+        expect(screen.queryByText('Fill in every requested word.')).toBeNull();
     });
 
     it('blocks a bad quiz answer and lets every pre-save step unwind safely', async () => {
@@ -209,6 +270,42 @@ describe('MigrateToBip39 safety and completion', () => {
 
         expect(await screen.findByText('New BIP39 wallet ready')).toBeTruthy();
         expect(messaging.addImportedWallet).toHaveBeenCalledTimes(2);
+    });
+
+    it('replaces a developer error from the save with recovery copy', async () => {
+        const messaging = makeMessaging({
+            addImportedWallet: vi.fn().mockRejectedValue(new Error('wallet.addImported: password is required')),
+        });
+        const context = renderMigration(messaging);
+        await reachVerify(context);
+        answerQuiz();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/Your recovery phrase is still here/);
+        expect(document.body.textContent).not.toMatch(/wallet\.addImported/);
+    });
+
+    it('explains a shell that cannot add a second wallet in plain words', async () => {
+        const context = renderMigration();
+        await reachVerify(context);
+        answerQuiz();
+        context.messaging.addImportedWallet = undefined;
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/not supported in this version of the app/);
+        expect(alert.textContent).not.toMatch(/messaging\.|shell/);
+    });
+
+    it('asks the user to check the wallet list when the save returns no wallet id', async () => {
+        const context = renderMigration(makeMessaging({ addImportedWallet: vi.fn().mockResolvedValue({}) }));
+        await reachVerify(context);
+        answerQuiz();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(/Check your wallet list before trying again/);
+        expect(alert.textContent).not.toMatch(/walletId/);
     });
 
     it('reports address-loading failure and retries without recreating the wallet', async () => {

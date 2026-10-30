@@ -36,8 +36,8 @@ assert.ok(/recovery\.label/.test(statusSrc),
     'StatusMessage reads recovery.label');
 assert.ok(/recovery\.onAction/.test(statusSrc),
     'StatusMessage reads recovery.onAction');
-assert.ok(/<button[\s\S]*?type="button"[\s\S]*?aria-label/.test(statusSrc),
-    'StatusMessage recovery renders a real <button> with aria-label');
+assert.ok(/<Button[\s\S]*?type="button"[\s\S]*?aria-label/.test(statusSrc),
+    'StatusMessage recovery renders the shared Button with aria-label');
 assert.ok(/Promise\.resolve\(recovery\.onAction\(\)\)\.catch/.test(statusSrc),
     'StatusMessage swallows recovery.onAction rejections so the message stays visible');
 
@@ -56,7 +56,8 @@ assert.ok(/submitErrorCause\s*===\s*'insufficient_funds'/.test(sendSrc),
 // 3. PsbtSignForm offers a "Clear" recovery for unrecognized paste.
 assert.ok(/StatusMessage/.test(psbtSrc),
     'PsbtSignForm imports StatusMessage');
-assert.ok(/label: 'Clear'/.test(psbtSrc),
+// The paste error is a note under the field, with Clear as an ordinary button beside it.
+assert.ok(/setPasted\(''\); setError\(null\);[\s\S]{0,80}Clear/.test(psbtSrc),
     'PsbtSignForm wires a Clear recovery');
 assert.ok(/setPasted\(''\)/.test(psbtSrc),
     'PsbtSignForm Clear recovery wipes the textarea');

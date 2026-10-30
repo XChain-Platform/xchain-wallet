@@ -9,16 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { GatedPublishForm } from './GatedPublishForm.jsx';
 import {
@@ -26,13 +26,15 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
-import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -78,6 +80,7 @@ function latin1Of(bytes) {
  */
 export function PublishFileForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -139,7 +142,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
-                    setLoadError('No address on any chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on any network yet. Use Receive to generate one first.');
                 } else {
                     setChainId((prev) => prev || chains[0]);
                 }
@@ -154,6 +157,12 @@ export function PublishFileForm({ walletId, onBack }) {
     // switch to Encrypted mode (same aggregation MyTokens uses).
     useEffect(() => {
         if (mode !== 'gated' || ownedTokens !== null || !addressesByChain) return undefined;
+        // A demo wallet cannot publish, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (demoGuard.blocked) {
+            setOwnedTokens([]);
+            return undefined;
+        }
         if (typeof messaging.getOwnedTokens !== 'function') {
             setOwnedTokens([]);
             setOwnedTokensError('This wallet cannot look up tokens for gated publishing.');
@@ -200,7 +209,7 @@ export function PublishFileForm({ walletId, onBack }) {
             }
         });
         return () => { cancelled = true; };
-    }, [mode, ownedTokens, addressesByChain, messaging]);
+    }, [mode, ownedTokens, addressesByChain, messaging, demoGuard.blocked]);
 
     // Signing address on the picked chain: the same default as Send and
     // every other spend-from-balance form (any funded address can publish
@@ -291,6 +300,8 @@ export function PublishFileForm({ walletId, onBack }) {
         if (!file) return;
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
+        const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
+        if (fileNameError) { setFormError(fileNameError); return; }
         const { type, error: typeError } = publishFileType(file);
         if (typeError) { setFormError(typeError); return; }
         const cap = publicCapFor(file.name, type);
@@ -411,15 +422,18 @@ export function PublishFileForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+            || actionTextSafetyError(title, 'Title');
+        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
         const memoError = memoLengthError(memo);
         if (memoError) { setFormError(memoError); return; }
-        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
-        if (feeError) { setFormError(feeError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         // Re-check with the FINAL metadata: a title/memo typed after the
         // pick shrinks the byte budget.
         const cap = publicCapFor(fileMeta.name, fileMeta.type);
@@ -443,8 +457,12 @@ export function PublishFileForm({ walletId, onBack }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (!fileMeta || !fromAddress || stage === 'submitting') return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        // Sign only from the confirm screen, which signs the reviewed PSBT (a
+        // review stage left open across a switch out of watcher mode lands here).
+        if (!isWatcherMode) {
+            setSubmitError('Publishing is signed on the confirm screen. Go back and select Publish file again.');
+            return;
+        }
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -479,22 +497,6 @@ export function PublishFileForm({ walletId, onBack }) {
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
                 });
-            } else {
-                const base = {
-                    walletId,
-                    chainId,
-                    from,
-                    name: fileMeta.name,
-                    type: fileMeta.type,
-                    title: title.trim() || undefined,
-                    memo: memo.trim() || undefined,
-                    rawData,
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                };
-                r = hw
-                    ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
-                    : await messaging.fileAction({ ...base, password });
             }
             setResult(r);
             setPassword('');
@@ -545,7 +547,7 @@ export function PublishFileForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -585,7 +587,8 @@ export function PublishFileForm({ walletId, onBack }) {
         );
         if (result?.psbtHex && !result?.txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('compose'); }}
                     onDone={onBack}
@@ -598,7 +601,7 @@ export function PublishFileForm({ walletId, onBack }) {
         // published" would claim a permanent publish that never happened.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="file publish" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="file publish" unsaved={result.unsaved} />,
             );
         }
         return wrap(
@@ -632,10 +635,11 @@ export function PublishFileForm({ walletId, onBack }) {
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review publish"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -674,7 +678,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                         </>
                     ) : null}
@@ -735,10 +739,11 @@ export function PublishFileForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Publish file"
             onSubmit={handleReview}
             status={mode === 'public' && formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={mode === 'public' ? (
                 <Button
@@ -789,7 +794,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
                     ) : ownedTokensError && ownedTokens.length === 0 ? (
-                        <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                        <FieldNote variant="error">{ownedTokensError}</FieldNote>
                     ) : ownedTokens.length === 0 ? (
                         <EmptyState
                             title="No owned tokens"
@@ -799,7 +804,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     ) : (
                         <>
                             {ownedTokensError ? (
-                                <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                                <FieldNote variant="error">{ownedTokensError}</FieldNote>
                             ) : null}
                             <p className={styles.hint}>
                                 Pick the token whose holders can unlock the file:
@@ -833,7 +838,7 @@ export function PublishFileForm({ walletId, onBack }) {
             ) : (
                 <>
                     <ChainPicker
-                        label="Chain"
+                        label="Network"
                         value={chainId}
                         onChange={setChainId}
                         chainIds={chainIds}
@@ -886,7 +891,7 @@ export function PublishFileForm({ walletId, onBack }) {
                             upload: shorter names and titles leave a little more
                             room for the file itself.
                             {envelopeAvailable
-                                ? ' This chain and account support the compact Taproot'
+                                ? ' This network and account support the compact Taproot'
                                   + ' encoding, which is what makes the larger ceiling'
                                   + ' possible. Files are compressed automatically when'
                                   + ' that makes them smaller, so what lands on-chain is'

@@ -36,7 +36,8 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -50,6 +51,24 @@ import {
 } from '../../../flows/signThrottle.js';
 import local from './ConnectedSitesSection.module.css';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
+import { neutralizeControlText } from '../../utils/textHardening.js';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/accountPicker.js';
+import '../../../i18n/locales/en/extension.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+
+// A connected site names itself, so its name and origin are hostile input:
+// bidi overrides would reorder the name, and a 240-character host would run
+// past the card edge where the user cannot read the whole origin.
+const siteName = (site) => neutralizeControlText(site.appName || site.origin, { maxLength: 120 });
+const siteOrigin = (site) => neutralizeControlText(site.origin, { maxLength: 2048 });
+const SITE_ORIGIN_STYLE = { display: 'block', overflowWrap: 'anywhere', unicodeBidi: 'isolate' };
+
+// Each part of the page is one shared card, like the rows on every other Settings page.
+function SettingsCard({ children }) {
+    return <div className={cardStyles.card}>{children}</div>;
+}
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
@@ -111,9 +130,9 @@ export function ConnectedSitesSection() {
         const snapshot = sites ? sites.find((s) => s.id === id) : null;
         if (!snapshot) return;
         const confirmed = await confirmDialog.confirm({
-            title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
-            message: `${snapshot.origin} will lose access to the accounts you shared and will no longer be able to ask for signatures. You can reconnect the site later.`,
-            confirmLabel: 'Disconnect site',
+            title: t('settings.connectedSites.disconnectTitle', { name: siteName(snapshot) }),
+            message: t('settings.connectedSites.disconnectMessage', { origin: siteOrigin(snapshot) }),
+            confirmLabel: t('settings.connectedSites.disconnectSite'),
             danger: true,
         });
         if (!confirmed) return;
@@ -123,8 +142,8 @@ export function ConnectedSitesSection() {
             await reload();
             if (snapshot && typeof messaging.restoreConnectedSite === 'function') {
                 showToast({
-                    message: `Disconnected ${snapshot.appName || snapshot.origin}`,
-                    actionLabel: 'Undo',
+                    message: t('settings.connectedSites.disconnectedToast', { name: siteName(snapshot) }),
+                    actionLabel: t('settings.connectedSites.undo'),
                     onAction: async () => {
                         try {
                             await messaging.restoreConnectedSite({ site: snapshot });
@@ -145,9 +164,9 @@ export function ConnectedSitesSection() {
     const onBlock = async (origin, pendingKey = `block:${origin}`) => {
         if (pendingAction) return false;
         const confirmed = await confirmDialog.confirm({
-            title: `Block ${origin}?`,
-            message: 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
-            confirmLabel: 'Block site',
+            title: t('settings.connectedSites.blockTitle', { origin: neutralizeControlText(origin, { maxLength: 2048 }) }),
+            message: t('settings.connectedSites.blockMessage'),
+            confirmLabel: t('settings.connectedSites.blockSite'),
             danger: true,
         });
         if (!confirmed) return false;
@@ -187,34 +206,38 @@ export function ConnectedSitesSection() {
         }
     };
 
-    if (loading || loadedFrom.current !== messaging) return <Status text="Loading…" />;
-    if (error) return <Status text={`Connected sites unavailable: ${error}`} tone="error" />;
+    if (loading || loadedFrom.current !== messaging) return <Status text={t('common.loading')} />;
+    if (error) return <Status text={t('settings.connectedSites.connectedSitesUnavailable', { error })} tone="error" />;
 
     return (
-        <FormPage as="div" sectioned fullWidth label="Connected sites and dApp permissions">
+        <div role="group" aria-label={t('settings.connectedSites.connectedSitesAndDappPermissions')} style={STACK}>
             <FormSection
-                title="Connected sites"
-                description="Review dApp connections and control each site's permissions."
+                title={t('settings.connectedSites.allowedSites')}
+                description={t('settings.page.reviewDappConnectionsAndControl')}
             >
                 {(!sites || sites.length === 0) ? (
                     <EmptyState
-                        title="No sites connected yet"
-                        body="When a website asks to connect to this wallet and you allow it, it appears here."
+                        title={t('settings.connectedSites.noSitesConnectedYet')}
+                        body={t('settings.connectedSites.whenAWebsiteAsksTo')}
                         titleAs="p"
                     />
                 ) : (
-                    sites.map((site) => {
+                    <SettingsCard>{sites.map((site) => {
                         const isOpen = expanded.has(site.id);
                         return (
                             <FormSection
                                 key={site.id}
                                 headingLevel="h3"
-                                title={site.appName || site.origin}
+                                title={siteName(site)}
                                 description={(
                                     <>
-                                        <span style={{ display: 'block' }}>{site.origin}</span>
+                                        {/* A site with no app name is titled by its
+                                            origin, so the origin line would repeat it. */}
+                                        {site.appName && site.appName !== site.origin ? (
+                                            <span dir="ltr" style={SITE_ORIGIN_STYLE}>{siteOrigin(site)}</span>
+                                        ) : null}
                                         <span style={ROW_HINT}>
-                                            Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
+                                            {t('settings.connectedSites.lastUsed')} {formatLastUsed(site.lastUsedAt)} {t('settings.connectedSites.connected')} {formatLastUsed(site.connectedAt)}
                                         </span>
                                     </>
                                 )}
@@ -231,7 +254,7 @@ export function ConnectedSitesSection() {
                                         size="sm"
                                         variant="secondary"
                                     >
-                                        {isOpen ? 'Hide' : 'Permissions'}
+                                        {isOpen ? t('settings.developer.hide') : t('settings.connectedSites.permissions')}
                                     </Button>
                                     <Button
                                         size="sm"
@@ -240,7 +263,7 @@ export function ConnectedSitesSection() {
                                         loading={pendingAction === `disconnect:${site.id}`}
                                         disabled={pendingAction !== null}
                                     >
-                                        Disconnect
+                                        {t('settings.connectedSites.disconnect')}
                                     </Button>
                                     {blocklistWired ? (
                                         <Button
@@ -250,14 +273,14 @@ export function ConnectedSitesSection() {
                                             loading={pendingAction === `block:${site.origin}`}
                                             disabled={pendingAction !== null}
                                         >
-                                            Block
+                                            {t('settings.connectedSites.block')}
                                         </Button>
                                     ) : null}
                                 </div>
                                 {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
                             </FormSection>
                         );
-                    })
+                    })}</SettingsCard>
                 )}
             </FormSection>
             {blocklistWired ? (
@@ -282,7 +305,7 @@ export function ConnectedSitesSection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </FormPage>
+        </div>
     );
 }
 
@@ -317,9 +340,9 @@ function BlocklistAuditPanel({ confirm }) {
     const onClear = async () => {
         if (clearing) return;
         const confirmed = await confirm({
-            title: 'Clear site block history?',
-            message: 'This permanently deletes the record of sites you blocked or unblocked.',
-            confirmLabel: 'Clear history',
+            title: t('settings.connectedSites.clearHistoryTitle'),
+            message: t('settings.connectedSites.clearHistoryMessage'),
+            confirmLabel: t('settings.connectedSites.clearHistory'),
             danger: true,
         });
         if (!confirmed) return;
@@ -336,10 +359,11 @@ function BlocklistAuditPanel({ confirm }) {
 
     if (entries === null) return null;
     return (
+        <SettingsInlineForm error={error}>
         <FormSection
             headingLevel="h3"
-            title="Site block history"
-            description="Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly."
+            title={t('settings.connectedSites.siteBlockHistory')}
+            description={t('settings.connectedSites.showsThe50MostRecent')}
         >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -349,17 +373,17 @@ function BlocklistAuditPanel({ confirm }) {
                     size="sm"
                     variant="danger"
                 >
-                    {clearing ? 'Clearing…' : 'Clear history'}
+                    {clearing ? t('settings.connectedSites.clearing') : t('settings.connectedSites.clearHistory')}
                 </Button>
             </div>
             {entries.length === 0 ? (
                 <EmptyState
-                    title="No site block history"
-                    body="Sites you block or unblock appear here."
+                    title={t('settings.connectedSites.noSiteBlockHistory')}
+                    body={t('settings.connectedSites.sitesYouBlockOrUnblock')}
                     titleAs="p"
                 />
             ) : (
-                // The style guide has no compact audit-list primitive, so this remains a semantic list.
+                <SettingsCard>{/* The style guide has no compact audit-list primitive, so this remains a semantic list. */}
                 <ul
                     style={{
                         margin: 0,
@@ -387,23 +411,22 @@ function BlocklistAuditPanel({ confirm }) {
                                 {formatLastUsed(new Date(entry.at).toISOString())}
                             </span>
                             <span style={{ color: entry.action === 'add' ? 'var(--xc-danger-fg)' : 'var(--xc-text)' }}>
-                                {entry.action === 'add' ? 'blocked' : 'unblocked'}
+                                {entry.action === 'add' ? t('settings.connectedSites.blocked') : t('settings.connectedSites.unblocked')}
                             </span>
                             <span style={{ color: 'var(--xc-text)', flex: 1, wordBreak: 'break-all', textAlign: 'right' }}>
                                 {entry.entry}
                                 {Array.isArray(entry.evictedSiteIds) && entry.evictedSiteIds.length > 0 ? (
                                     <span style={{ color: 'var(--xc-text-muted)', marginLeft: 4 }}>
-                                        ({entry.evictedSiteIds.length} site connection
-                                        {entry.evictedSiteIds.length === 1 ? '' : 's'} removed)
+                                        {t('settings.connectedSites.evictedCount', { count: entry.evictedSiteIds.length })}
                                     </span>
                                 ) : null}
                             </span>
                         </li>
                     ))}
-                </ul>
+                </ul></SettingsCard>
             )}
-            {error ? <Status text={error} tone="error" /> : null}
         </FormSection>
+        </SettingsInlineForm>
     );
 }
 
@@ -412,7 +435,7 @@ function BlocklistAuditPanel({ confirm }) {
 // write the documented defaults because the settings patcher deep-merges
 // nested objects and cannot remove an existing nested key.
 function SignThrottlePanel() {
-    const { settings, update } = useSettings();
+    const { settings, update } = useSettings({ reportsOwnError: true });
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);
@@ -489,24 +512,28 @@ function SignThrottlePanel() {
             : undefined;
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
-        <FormSection
-            headingLevel="h3"
-            title="Sign-request throttle"
-            description={`Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: ${SIGN_THROTTLE_DEFAULT_BURST} per ${SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.`}
+        <SettingsInlineForm>
+        <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
+        <FormPage
+            onSubmit={onApply}
+            sectioned
+            submitFromAnyField
+            label={t('settings.connectedSites.signRequestThrottleControls')}
         >
+            <FormSection
+                headingLevel="h3"
+                title={t('settings.connectedSites.signRequestThrottle')}
+                description={t('settings.connectedSites.limitsHowManySigningRequests', { SIGN_THROTTLE_DEFAULT_BURST, value: SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000 })}
+            >
             <p style={ROW_HINT}>
-                Currently in effect: <strong>{effectiveBurst}</strong> per{' '}
+                {t('settings.connectedSites.currentlyInEffect')} <strong>{effectiveBurst}</strong> {t('settings.connectedSites.per')}{' '}
                 <strong>{effectiveWindowSec} s</strong>.
             </p>
-            <form
-                aria-label="Sign-request throttle controls"
-                onSubmit={onApply}
-                className={local.controlRow}
-            >
+            <div className={local.controlRow}>
                 <Input
                     id="sign-throttle-burst"
                     size="md"
-                    label="Burst"
+                    label={t('settings.connectedSites.burst')}
                     type="number"
                     inputMode="numeric"
                     enterKeyHint="next"
@@ -521,13 +548,13 @@ function SignThrottlePanel() {
                     }}
                     onWheel={blurNumberInputOnWheel}
                     placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
-                    aria-label="Sign-throttle burst (max requests per window)"
+                    aria-label={t('settings.connectedSites.signThrottleBurstMaxRequests')}
                     style={{ width: '5rem' }}
                 />
                 <Input
                     id="sign-throttle-window"
                     size="md"
-                    label="Window (seconds)"
+                    label={t('settings.connectedSites.windowSeconds')}
                     type="number"
                     inputMode="decimal"
                     enterKeyHint="go"
@@ -542,7 +569,7 @@ function SignThrottlePanel() {
                     }}
                     onWheel={blurNumberInputOnWheel}
                     placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
-                    aria-label="Sign-throttle window in seconds"
+                    aria-label={t('settings.connectedSites.signThrottleWindowInSeconds')}
                     style={{ width: '5rem' }}
                 />
                 <Button
@@ -551,11 +578,12 @@ function SignThrottlePanel() {
                     size="md"
                     variant="primary"
                 >
-                    {submitting ? 'Applying…' : 'Apply'}
+                    {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.apply')}
                 </Button>
-            </form>
-            <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
-        </FormSection>
+            </div>
+            </FormSection>
+        </FormPage>
+        </SettingsInlineForm>
     );
 }
 
@@ -563,26 +591,24 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
     return (
         <FormSection
             headingLevel="h3"
-            title="Blocked sites"
+            title={t('settings.connectedSites.blockedSites')}
             description={(
                 <>
-                    Blocked sites cannot connect or ask you to sign until you
-                    unblock them. To block every subdomain, use a pattern like{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
-                    and add{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}
-                    separately to block the main site too.
+                    {t('settings.connectedSites.blockPatternLead')}{' '}
+                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom')}</code>{' '}
+                    {t('settings.connectedSites.blockPatternJoin')}{' '}
+                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom2')}</code>.
                 </>
             )}
         >
                 {blocked.length === 0 ? (
                     <EmptyState
-                        title="No blocked sites"
-                        body="Sites you block appear here."
+                        title={t('settings.connectedSites.noBlockedSites')}
+                        body={t('settings.connectedSites.sitesYouBlockAppearHere')}
                         titleAs="p"
                     />
                 ) : (
-                    // The style guide has no compact origin-list primitive, so this remains a semantic list.
+                    <SettingsCard>{/* The style guide has no compact origin-list primitive, so this remains a semantic list. */}
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
                             <li
@@ -590,7 +616,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                 style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
                             >
                                 {/* Native list items preserve blocked-origin list semantics because the kit has no list primitive. */}
-                                <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{origin}</span>
+                                <span dir="ltr" style={{ color: 'var(--xc-text)', overflowWrap: 'anywhere', unicodeBidi: 'isolate' }}>{neutralizeControlText(origin, { maxLength: 2048 })}</span>
                                 <Button
                                     type="button"
                                     size="sm"
@@ -599,13 +625,18 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                     loading={pendingAction === `unblock:${origin}`}
                                     disabled={pendingAction !== null}
                                 >
-                                    Unblock
+                                    {t('settings.connectedSites.unblock')}
                                 </Button>
                             </li>
                         ))}
-                    </ul>
+                    </ul></SettingsCard>
                 )}
-                <form onSubmit={onSubmit} className={`${local.controlRow} ${local.blockRow}`}>
+                <FormPage
+                    onSubmit={onSubmit}
+                    submitFromAnyField
+                    label={t('settings.connectedSites.blockSite')}
+                >
+                    <div className={`${local.controlRow} ${local.blockRow}`}>
                     <Input
                         type="text"
                         size="md"
@@ -615,8 +646,8 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         spellCheck={false}
                         value={manualBlock}
                         onChange={(e) => setManualBlock(e.target.value)}
-                        placeholder="https://example.com or *.example.com"
-                        aria-label="Origin or wildcard to block"
+                        placeholder={t('settings.connectedSites.httpsExampleComOrExample')}
+                        aria-label={t('settings.connectedSites.originOrWildcardToBlock')}
                     />
                     <Button
                         type="submit"
@@ -625,33 +656,34 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         loading={pendingAction === 'block:manual'}
                         disabled={!manualBlock.trim() || pendingAction !== null}
                     >
-                        Block
+                        {t('settings.connectedSites.block')}
                     </Button>
-                </form>
+                    </div>
+                </FormPage>
         </FormSection>
     );
 }
 
 function PermissionsSummary({ permissions }) {
     if (!permissions) {
-        return <div style={ROW_HINT}>No permission record.</div>;
+        return <div style={ROW_HINT}>{t('settings.connectedSites.noPermissionRecord')}</div>;
     }
     const chains = permissions.chains || [];
     const accounts = permissions.accounts || [];
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label="Chains" text={chains.length === 0 ? 'None' : chains.join(', ')} />
-            <PermRow label="Accounts" text={accounts.length === 0 ? 'None' : accounts.join(', ')} />
+            <PermRow label={t('extension.connect.chains')} text={chains.length === 0 ? t('send.advanced.none') : chains.join(', ')} />
+            <PermRow label={t('accountPicker.title')} text={accounts.length === 0 ? t('send.advanced.none') : accounts.join(', ')} />
             <PermRow
-                label="Sign messages"
-                text={permissions.canSignMessage ? 'Always allow' : 'Ask every time'}
+                label={t('settings.connectedSites.signMessages')}
+                text={permissions.canSignMessage ? t('settings.connectedSites.alwaysAllow') : t('settings.connectedSites.askEveryTime')}
             />
             {Object.keys(actions).length === 0 ? (
-                <PermRow label="Sign actions" text="Ask every time" />
+                <PermRow label={t('settings.connectedSites.signActions')} text={t('settings.connectedSites.askEveryTime')} />
             ) : (
                 <div>
-                    <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
+                    <div style={{ color: 'var(--xc-text-muted)' }}>{t('settings.connectedSites.signActions')}</div>
                     {/* The style guide has no compact permission-list primitive, so this remains a semantic list. */}
                     <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
                         {Object.entries(actions).map(([action, perm]) => (
@@ -685,9 +717,9 @@ function permColor(perm) {
 }
 
 function permissionLabel(perm) {
-    if (perm === 'always') return 'Always allow';
-    if (perm === 'never') return 'Never allow';
-    return 'Ask every time';
+    if (perm === 'always') return t('settings.connectedSites.alwaysAllow');
+    if (perm === 'never') return t('settings.connectedSites.permNever');
+    return t('settings.connectedSites.askEveryTime');
 }
 
 function formatWindowSeconds(windowMs) {

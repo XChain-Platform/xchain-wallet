@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last thirty are component props: copy shipped through them
+// The last forty-one are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -70,7 +70,9 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
     'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
-    'feeText', 'emptyActionLabel', 'warningNoun',
+    'feeText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
+    'lead', 'legend', 'closeLabel', 'searchLabel', 'subtitle', 'chainLabel',
+    'accessibleLabel', 'visibleLabel', 'labelPrefix',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -388,7 +390,7 @@ for (const [name, copy] of [
 }
 
 // 19c. The three names admitted for copy the set had no word for.
-// QueuedResultPanel interpolates `what` into `Your ${what}` and nineteen
+// ResultScreen interpolates `what` into `Your ${what}` and nineteen
 // routes pass it as a literal; StalenessLabel ships `prefix = 'Last synced'`
 // as a default and renders it into `${prefix} … ago`; tickerGrammarError
 // defaults `{ noun = 'Ticker' }` into the validation line the user reads.
@@ -433,6 +435,81 @@ v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('Netwo
 assert.strictEqual(v.length, 0, 'only the three trim methods unwrap; another call stays a blind spot');
 v = findViolations(jsxAttr('feeText', jsxExpr(identifier('feeText'))));
 assert.strictEqual(v.length, 0, 'a runtime feeText value stays silent');
+
+// 19f. Dialog and section copy. ConfirmModal renders `message` as its body
+// and SectionHeader renders `description` under its title, so literals,
+// branch copy and templates there are flagged; runtime values stay silent.
+v = findViolations(jsxAttr('message', literal('This cannot be undone.')));
+assert.strictEqual(v.length, 1, 'flags a message literal');
+assert.match(v[0].message, /message/);
+v = findViolations(jsxAttr('message', jsxExpr(conditional(literal('Could not save quiet hours. Try again.'), literal(null)))));
+assert.strictEqual(v.length, 1, 'flags message branch copy with a null alternate');
+v = findViolations(jsxAttr('message', jsxExpr(identifier('deepLinkNotice'))));
+assert.strictEqual(v.length, 0, 'a runtime message value stays silent');
+const optionalMessage = {
+    type: 'ChainExpression',
+    expression: { type: 'MemberExpression', optional: true, computed: false, object: identifier('request'), property: identifier('message') },
+};
+v = findViolations(jsxAttr('message', jsxExpr(logical(optionalMessage, literal('')))));
+assert.strictEqual(v.length, 0, 'a request?.message || \'\' fallback stays silent');
+v = findViolations(jsxAttr('description', literal('Both swap legs settle on this chain.')));
+assert.strictEqual(v.length, 1, 'flags a description literal');
+assert.match(v[0].message, /description/);
+v = findViolations(jsxAttr('description', jsxExpr(template('Write it on paper or store it in a password manager. ', ''))));
+assert.strictEqual(v.length, 1, 'flags a description template with static copy');
+v = findViolations(jsxAttr('description', jsxExpr(identifier('hint'))));
+assert.strictEqual(v.length, 0, 'a runtime description value stays silent');
+
+// 19g. FormNotice's bold `lead`, RadioGroup's `legend` and OverlaySurface's
+// `closeLabel` all reach the user verbatim; runtime values stay silent.
+v = findViolations(jsxAttr('lead', literal('Destroy is irreversible.')));
+assert.strictEqual(v.length, 1, 'flags a lead literal');
+assert.match(v[0].message, /lead/);
+v = findViolations(jsxAttr('lead', jsxExpr(identifier('shownLead'))));
+assert.strictEqual(v.length, 0, 'a runtime lead value stays silent');
+v = findViolations(jsxAttr('legend', literal('Expiration')));
+assert.strictEqual(v.length, 1, 'flags a legend literal');
+assert.match(v[0].message, /legend/);
+v = findViolations(jsxAttr('legend', jsxExpr(conditional(literal('Pause setting'), literal('Lock duration')))));
+assert.strictEqual(v.length, 1, 'flags copy in a legend ternary, once');
+assert.match(v[0].message, /Pause setting/);
+v = findViolations(jsxAttr('closeLabel', literal('Close more navigation')));
+assert.strictEqual(v.length, 1, 'flags a closeLabel literal');
+assert.match(v[0].message, /closeLabel/);
+
+// 19h. ListToolbar's `searchLabel` aria-label, ListRow's `subtitle` line and
+// TickItemsEditor's `chainLabel` reach the user verbatim; runtime values and
+// elements, the shapes most call sites pass, stay silent.
+v = findViolations(jsxAttr('searchLabel', literal('Search contacts')));
+assert.strictEqual(v.length, 1, 'flags a searchLabel literal');
+assert.match(v[0].message, /searchLabel/);
+v = findViolations(jsxAttr('subtitle', jsxExpr(conditional(template('', ' remaining'), identifier('none')))));
+assert.strictEqual(v.length, 1, 'flags template copy in a subtitle ternary, once');
+assert.match(v[0].message, /remaining/);
+v = findViolations(jsxAttr('subtitle', jsxExpr(jsxElement())));
+assert.strictEqual(v.length, 0, 'an element subtitle stays silent');
+v = findViolations(jsxAttr('subtitle', jsxExpr(identifier('sendDisabledReason'))));
+assert.strictEqual(v.length, 0, 'a runtime subtitle value stays silent');
+v = findViolations(jsxAttr('chainLabel', literal('the selected network')));
+assert.strictEqual(v.length, 1, 'flags a chainLabel literal');
+assert.match(v[0].message, /chainLabel/);
+v = findViolations(jsxAttr('chainLabel', jsxExpr(logical(identifier('displayName'), identifier('chainId')))));
+assert.strictEqual(v.length, 0, 'a runtime chainLabel fallback stays silent');
+
+// 19i. A settings switch's `accessibleLabel` aria-label, a copy button's
+// `visibleLabel` text and a status pill's `labelPrefix` reach the user verbatim,
+// whether written at the call site or shipped as a prop default.
+v = findViolations(jsxAttr('accessibleLabel', jsxExpr(template('', ' allow fee bump (Replace-by-Fee)'))));
+assert.strictEqual(v.length, 1, 'flags template copy in an accessibleLabel');
+assert.match(v[0].message, /accessibleLabel/);
+v = findViolations(jsxAttr('visibleLabel', literal('Copy')));
+assert.strictEqual(v.length, 1, 'flags a visibleLabel literal');
+v = findViolations(jsxAttr('labelPrefix', jsxExpr(template('Row ', ' status'))));
+assert.strictEqual(v.length, 1, 'flags template copy in a labelPrefix');
+v = findViolations(fn([objectPattern(plainProp('status'), defaulted('labelPrefix', literal('Status')))]));
+assert.strictEqual(v.length, 1, 'flags a labelPrefix = "Status" prop default');
+v = findViolations(jsxAttr('accessibleLabel', jsxExpr({ type: 'CallExpression', callee: identifier('t'), arguments: [literal('k')] })));
+assert.strictEqual(v.length, 0, 'a translated accessibleLabel stays silent');
 
 // 19e. The style guide's note and kicker stay out of the set only while no
 // shipped file passes them as an attribute; this walk keeps that true.

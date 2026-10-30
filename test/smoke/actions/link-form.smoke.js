@@ -36,13 +36,13 @@ assert.ok(/export function LinkForm\b/.test(src),
     'LinkForm is a named export');
 
 // Two-panel composer: side panels carry chain picker + action_index.
-assert.ok(/Chain A/.test(src), 'LinkForm renders the Chain A panel');
-assert.ok(/Chain B/.test(src), 'LinkForm renders the Chain B panel');
+assert.ok(/Network A/.test(src), 'LinkForm renders the Network A panel');
+assert.ok(/Network B/.test(src), 'LinkForm renders the Network B panel');
 assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
 
 // Submit-on selector: defaults to chain A, can switch to chain B.
 assert.ok(/submitOn/.test(src),
-    'LinkForm tracks which chain the LINK is submitted on');
+    'LinkForm tracks which network the LINK is submitted on');
 assert.ok(/Submit the link on/.test(src),
     'LinkForm exposes a "Submit the link on" selector');
 
@@ -80,11 +80,15 @@ assert.ok(reviewFnStart !== -1 && submitFnStart !== -1 && reviewFnStart < submit
 const reviewFnBody = src.slice(reviewFnStart, submitFnStart);
 assert.ok(!reviewFnBody.includes('linkAction'),
     'handleReview body does not call linkAction (signing is gated by review)');
-// Review block renders decoded previews for both sides.
-assert.ok(/Side A decoded/.test(src),
-    'Review stage shows Side A decoded label');
-assert.ok(/Side B decoded/.test(src),
-    'Review stage shows Side B decoded label');
+// Review block renders a plain-language preview for both actions.
+assert.ok(/>First action</.test(src),
+    'Review stage shows the First action label');
+assert.ok(/>Second action</.test(src),
+    'Review stage shows the Second action label');
+assert.ok(!/Side [AB] decoded/.test(src),
+    'Review stage carries no decoder jargon in its labels');
+assert.ok(!/JSON\.stringify\(action\)/.test(src),
+    'decodePreview never falls back to raw action JSON');
 // Network fee row from estimateNativeSendFee.
 assert.ok(/estimateNativeSendFee/.test(src),
     'LinkForm imports and uses estimateNativeSendFee for the Network fee row');

@@ -17,7 +17,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -314,4 +314,37 @@ describe('sriPlugin import map warning', () => {
         expect(logger.info.mock.calls.some(([m]) => /1 script chunk\(s\) pinned in the import map/.test(m)))
             .toBe(true);
     });
+});
+
+describe('sriPlugin under a non-root base', () => {
+    const sri = (bytes) => `sha384-${createHash('sha384').update(bytes).digest('base64')}`;
+    const build = (base) => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-sri-base-'));
+        try {
+            mkdirSync(join(dir, 'assets'));
+            writeFileSync(join(dir, 'assets', 'app.js'), 'main()');
+            writeFileSync(join(dir, 'theme-init.js'), 'theme()');
+            writeFileSync(join(dir, 'index.html'), '<html><head><script src="/wallet/theme-init.js"></script>'
+                + '<script type="module" src="/wallet/assets/app.js"></script></head></html>');
+            const logger = { info: vi.fn(), warn: vi.fn() };
+            const plugin = sriPlugin();
+            plugin.configResolved({ logger, root: dir, base, build: { outDir: dir } });
+            plugin.writeBundle({}, { 'index.html': { type: 'asset' }, 'assets/app.js': { type: 'chunk' } });
+            return { logger, html: readFileSync(join(dir, 'index.html'), 'utf8') };
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    };
+
+    for (const base of ['/wallet/', '/wallet']) {
+        it(`hashes every base-prefixed tag and keys the import map by its URL (base ${base})`, () => {
+            const { logger, html } = build(base);
+            expect(html).toContain(`<script integrity="${sri('theme()')}" crossorigin="anonymous" `
+                + 'src="/wallet/theme-init.js">');
+            expect(html).toContain(`<script integrity="${sri('main()')}" crossorigin="anonymous" `
+                + 'type="module" src="/wallet/assets/app.js">');
+            expect(html).toContain(`"/wallet/assets/app.js":"${sri('main()')}"`);
+            expect(logger.warn.mock.calls.filter(([m]) => /could not be hashed/.test(m))).toEqual([]);
+        });
+    }
 });

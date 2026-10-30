@@ -40,7 +40,11 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
+// First import on purpose: the test network guard must be in place before
+// any other module evaluates (see networkGuardBoot.js). Off unless a test
+// harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
+import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
+import { app, BrowserWindow, dialog, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +61,9 @@ import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
+import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
+import { FileBroadcastQueueStorage, broadcastQueuePathFor } from './broadcastQueueStorage.js';
+import { applyScreenProtection, notifyWindowHidden } from './screenProtection.js';
 import {
     attachRendererCspHeaders,
     allowlistedExternalUrl,
@@ -65,7 +72,7 @@ import {
     normalizeOpenWindowArgs,
     shouldBlockNavigation,
     isTrustedSenderEvent,
-    isTrezorConnectBridgeWindowOpen,
+    shouldIgnoreBeforeUnload,
 } from './security.js';
 import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permissions.js';
 import {
@@ -75,8 +82,9 @@ import {
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
+import { createTrezorBridge } from './trezorBridgeWindow.js';
 import { attachUpdater } from './updater.js';
-import { applyTorRouting } from './torRouting.js';
+import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
     reportMainFailure,
@@ -84,6 +92,16 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
+import { saveBackupFile } from './backupSave.js';
+import { writeFile as writeFileAsync } from 'node:fs/promises';
+import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
+import {
+    applyTestMockKeychain,
+    applyTestNoFocusPolicy,
+    focusWindow,
+    noFocusEnabled,
+    showWindow,
+} from './testFocus.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -106,9 +124,11 @@ import {
     enforceSystemAutoLock,
     ensureHost,
     handleIpcMessage,
+    installPanicModePersistence,
     tearDownHost,
     wipeRuntimeStores,
 } from './runtime.js';
+import { createOsNotifier } from './osNotification.js';
 
 logConsole.attach();
 
@@ -152,6 +172,7 @@ let rememberedWindowBounds = /** @type {{ x?: number, y?: number, width: number,
 let windowBoundsSaveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 let isQuitting = false;
 let canCreateWindows = false;
+let tray = /** @type {Tray | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
@@ -161,6 +182,10 @@ const deepLinkSlot = createDeepLinkSlot();
 let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
+// Windows whose close is under way. Electron tears a closing window down
+// after its 'close' event, and showing it in that gap (a renderer load the
+// close aborted reports failure there) crashes the main process.
+const closingWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -219,9 +244,8 @@ function kickChainRegistrySync() {
 // refuses `<webview>` embedding. See security.js for the pure predicates.
 //
 // §40.12: dedicated, non-default Electron session for the
-// hosted Trezor Connect script (see
-// security.js#isTrezorConnectBridgeWindowOpen and
-// renderer/signerFactories/trezorFactory.js). Created lazily on first
+// hosted Trezor Connect script (see trezorBridgeWindow.js, the window
+// main builds on it). Created lazily on first
 // pairing/sign attempt and explicitly wired to `attachHidDenial` below -
 // never to `attachHidPermissions` - so `hid` is refused through every
 // handler Electron offers, regardless of what origin the hosted script
@@ -232,9 +256,24 @@ function getTrezorConnectSession() {
     if (!trezorConnectSession) {
         trezorConnectSession = session.fromPartition('trezor-connect-isolated');
         attachHidDenial(trezorConnectSession);
+        // The hosted script fetches from the internet, so it follows the Tor
+        // routing in force instead of connecting directly.
+        void applyProxyToSession(trezorConnectSession).catch((err) => reportMainFailure('trezor session proxy', err));
     }
     return trezorConnectSession;
 }
+
+// §40.12: the Trezor Connect bridge window. Main builds it itself on the
+// session above, because a window.open child keeps its opener's session,
+// and relays the app renderer's Connect calls to it (see
+// trezorBridgeWindow.js and the xchain:trezor-bridge-* handlers below).
+const trezorBridge = createTrezorBridge({
+    BrowserWindow,
+    getSession: getTrezorConnectSession,
+    preloadPath: join(here, 'trezorBridge', 'preload.cjs'),
+    documentPath: join(here, 'trezorBridge', 'connect.html'),
+    devTools: !app.isPackaged,
+});
 
 function hardenWebContents(contents) {
     if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
@@ -255,37 +294,9 @@ function hardenWebContents(contents) {
             window: BrowserWindow.fromWebContents(contents) ?? undefined,
         });
     });
-    contents.setWindowOpenHandler(({ url, frameName }) => {
-        // §40.12: the one narrow exception to "deny every
-        // window.open". Only the app's own trusted renderer (never the
-        // bridge window itself; see isTrezorConnectBridgeWindowOpen) may
-        // open the isolated Trezor Connect bridge, and only into the
-        // dedicated no-HID session above, with no preload attached.
-        if (isTrezorConnectBridgeWindowOpen(frameName, contents.getURL(), APP_ROOT)) {
-            return {
-                action: 'allow',
-                overrideBrowserWindowOptions: {
-                    width: 420,
-                    height: 640,
-                    title: 'Trezor Connect',
-                    autoHideMenuBar: true,
-                    webPreferences: {
-                        session: getTrezorConnectSession(),
-                        contextIsolation: true,
-                        nodeIntegration: false,
-                        sandbox: true,
-                        webSecurity: true,
-                        devTools: !app.isPackaged,
-                        // No `preload` key. The default window.open child
-                        // would otherwise inherit this app's preload (and
-                        // therefore xchainWalletBridge /
-                        // xchainWalletSignerBridge) the same way any other
-                        // window.open child does; the hosted Trezor Connect
-                        // script gets a DOM and nothing else.
-                    },
-                },
-            };
-        }
+    contents.setWindowOpenHandler(({ url }) => {
+        // Every window.open is denied, the Trezor Connect bridge included:
+        // main builds that window itself (trezorBridgeWindow.js).
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
         const externalUrl = allowlistedExternalUrl(url);
@@ -302,6 +313,28 @@ function hardenWebContents(contents) {
                 void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
+    });
+    // A form with unsent input registers a beforeunload handler. Without this
+    // listener Electron blocks the reload, the window close and the app quit
+    // it guards without a word, so quitting hangs behind an open form.
+    contents.on('will-prevent-unload', (event) => {
+        let ignore = false;
+        runMainCallback(() => {
+            ignore = shouldIgnoreBeforeUnload({
+                quitting: isQuitting,
+                testMode: noFocusEnabled(),
+                confirmLeave: () => dialog.showMessageBoxSync(BrowserWindow.fromWebContents(contents) ?? undefined, {
+                    type: 'question',
+                    buttons: ['Stay', 'Leave'],
+                    defaultId: 0,
+                    cancelId: 0,
+                    title: 'Leave this page?',
+                    message: 'Leave this page?',
+                    detail: 'Changes you made may not be saved.',
+                }) === 1,
+            });
+        }, 'unload guard');
+        if (ignore) event.preventDefault();
     });
     contents.on('will-attach-webview', (event) => {
         // The wallet never embeds a <webview>; refuse any attempt.
@@ -349,8 +382,8 @@ function windowToReveal() {
 export function revealWindow(win) {
     if (!win || win.isDestroyed()) return false;
     if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
+    if (!win.isVisible()) showWindow(win);
+    focusWindow(win);
     return true;
 }
 
@@ -360,19 +393,29 @@ function hasVisibleWindow() {
 
 /**
  * Apply the native close-button convention without interfering with an
- * explicit application quit.
+ * explicit application quit. Only the last visible primary window hides,
+ * which keeps the app in the dock or tray; any other window closes for
+ * real, because a hidden one would stay alive with its renderer running
+ * until quit and could later be revealed after the user dismissed it.
  *
  * @param {BrowserWindow} win
  * @param {{ preventDefault: () => void }} event
- * @param {{ platform?: string, quitting?: boolean }} [options]
+ * @param {{ platform?: string, quitting?: boolean, otherVisible?: boolean, detached?: boolean }} [options]
  * @returns {boolean} true when the close becomes a hide
  */
 export function applyWindowCloseConvention(win, event, options = {}) {
     const platform = options.platform ?? process.platform;
     const quitting = options.quitting ?? isQuitting;
-    if (platform !== 'darwin' || quitting) return false;
+    if (!['darwin', 'win32', 'linux'].includes(platform) || quitting) return false;
+    const otherVisible = options.otherVisible
+        ?? liveWindows().some((other) => other !== win && other.isVisible());
+    const detached = options.detached ?? detachedWindows.has(win);
+    if (otherVisible || detached) return false;
     event.preventDefault();
     win.hide();
+    // macOS hides the window without emitting 'hide', so the renderer hears
+    // about it here; a revealed key or phrase is covered before the next show.
+    notifyWindowHidden(win);
     return true;
 }
 
@@ -406,7 +449,26 @@ function forwardDeepLink(event) {
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
     // Only detached windows are open: a fresh window claims the link on mount
     if (!target) {
-        if (canCreateWindows) void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+        if (canCreateWindows) {
+            // A dock or tray restore already in flight owns the next window;
+            // hand the link to it instead of racing a second window open.
+            const pendingRestore = reopenInFlight;
+            if (!pendingRestore) {
+                void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+            } else {
+                void runMainTask(() => pendingRestore.then(() => {
+                    const current = pickDeepLinkTarget(
+                        liveWindows(),
+                        BrowserWindow.getFocusedWindow(),
+                        (w) => detachedWindows.has(w),
+                    );
+                    if (!current) return openWindowAfterIdleCheck();
+                    current.webContents.send('xchain:uri', event);
+                    revealWindow(current);
+                    return undefined;
+                }), 'deep-link window open');
+            }
+        }
         return;
     }
     deepLinkRecipient = target.webContents;
@@ -465,6 +527,9 @@ function buildRuntime() {
         // enforceLaunchAutoLock below reads it before the boot auto-unlock, so
         // the configured window bounds the cached key.
         autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
+        // The panic-mode freeze main's signers read (main/panicModeState.js).
+        panicModeStore: new FilePanicModeStore(panicModeStatePathFor(userData)),
+        broadcastQueueStorage: new FileBroadcastQueueStorage(broadcastQueuePathFor(userData), console),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
@@ -479,6 +544,7 @@ function buildRuntime() {
                 settings,
                 sdkRegistry,
                 session: session.defaultSession,
+                extraSessions: () => (trezorConnectSession ? [trezorConnectSession] : []),
                 log: (m) => console.info(m),
             });
             // Routing is now in force, so the first hub request may leave.
@@ -486,15 +552,7 @@ function buildRuntime() {
         },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
-        notify: ({ title, body }) => {
-            try {
-                if (Notification.isSupported && Notification.isSupported()) {
-                    new Notification({ title, body }).show();
-                }
-            } catch (err) {
-                reportMainFailure('desktop notification', err);
-            }
-        },
+        notify: createOsNotifier({ Notification, reportFailure: reportMainFailure }),
         // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
@@ -576,20 +634,30 @@ export function createWindow(opts = {}) {
     void runMainTask(
         () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
         'renderer load',
-        { recover: () => { if (!win.isDestroyed()) win.show(); } },
+        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); } },
     );
     win.once('ready-to-show', () => {
-        runMainCallback(() => { if (!win.isDestroyed()) win.show(); }, 'renderer reveal');
+        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); }, 'renderer reveal');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
+    win.on('minimize', () => {
+        runMainCallback(() => { notifyWindowHidden(win); }, 'window minimize secret hide');
+    });
+    win.on('hide', () => {
+        runMainCallback(() => { notifyWindowHidden(win); }, 'window hide secret hide');
+    });
     win.on('close', (event) => {
         runMainCallback(() => {
             rememberWindowBounds(win);
             // Synchronous: on quit the process can exit before an async write
             // lands, which left window-bounds.json holding stale values.
             flushWindowBoundsSync();
-            if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
+            if (!applyWindowCloseConvention(win, event)) closingWindows.add(win);
+            // Hidden or closing, this window no longer counts as one in use.
+            // A hidden window elsewhere keeps window-all-closed from firing,
+            // so the windowless idle check starts here.
+            if (!isQuitting && !liveWindows().some((other) => other !== win && other.isVisible())) {
                 startWindowlessIdleLock();
             }
         }, 'window close');
@@ -670,7 +738,13 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
-let activeWalletOperations = 0;
+// Sends that sign and then broadcast or persist; reads are never counted.
+let activeSendOperations = 0;
+let activeUpdateDownloads = 0;
+const quitDeferral = createQuitDeferral({
+    isBusy: () => activeSendOperations > 0 || activeUpdateDownloads > 0,
+    quit: () => app.quit(),
+});
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -776,6 +850,29 @@ function restoreWindowAfterIdleCheck() {
         if (target) revealWindow(target);
         else createWindow();
     }, 'restoring');
+}
+
+/**
+ * Keep a Windows or Linux app reachable after its last window is hidden.
+ * macOS uses the dock's activate event for the same transition.
+ *
+ * @param {{ platform?: string }} [options]
+ * @returns {Tray | null}
+ */
+export function installTray({ platform = process.platform } = {}) {
+    if (platform === 'darwin' || tray) return tray;
+    tray = new Tray(join(here, '..', 'build', 'icon.png'));
+    tray.setToolTip(DESKTOP_PRODUCT_NAME);
+    tray.setContextMenu(Menu.buildFromTemplate([
+        {
+            label: `Show ${DESKTOP_PRODUCT_NAME}`,
+            click: () => { void restoreWindowAfterIdleCheck(); },
+        },
+        { type: 'separator' },
+        { role: 'quit' },
+    ]));
+    tray.on('click', () => { void restoreWindowAfterIdleCheck(); });
+    return tray;
 }
 
 /**
@@ -915,6 +1012,9 @@ function buildApplicationMenu() {
 // no preload-bearing frame can be navigated to, or spawn a window loading,
 // remote content. Registered before whenReady so the very first window is
 // covered.
+// Test launches only: Chromium's mock keychain, set before app ready.
+applyTestMockKeychain(app);
+
 app.on('web-contents-created', (_event, contents) => {
     runMainCallback(() => hardenWebContents(contents), 'web contents hardening');
 });
@@ -945,11 +1045,21 @@ function ensureRendererCspHeaders() {
 
 void runMainTask(async () => {
     await app.whenReady();
+    applyTestNoFocusPolicy(app);
+    // Before anything in main can fetch or open a window.
+    networkGuard.attachSession(session.defaultSession, 'default session');
+    if (networkGuard.probe) {
+        await runNetworkGuardProbeAndExit();
+        return;
+    }
     ensureRendererCspHeaders();
 
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
     rememberedWindowBounds = await windowBoundsStore.load();
     runtime = buildRuntime();
+    // Before any window can send a signing message: main reads the freeze
+    // from its own file, never from renderer storage.
+    await installPanicModePersistence(runtime);
     app.setAboutPanelOptions(DESKTOP_ABOUT_PANEL_OPTIONS);
 
     // Best-effort auto-unlock. Failure here is logged but doesn't block
@@ -1024,7 +1134,7 @@ void runMainTask(async () => {
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
-            canRestart: () => activeWalletOperations === 0,
+            canRestart: () => activeSendOperations === 0,
         });
         downloadAndInstall = downloadUpdate;
         restartAndInstall = restart;
@@ -1066,7 +1176,15 @@ void runMainTask(async () => {
                 return { ok: true };
             }
             if (action === 'restart') return await restartAndInstall();
-            return await downloadAndInstall();
+            // Counted so a quit during the fetch or signature check waits
+            // for the verdict instead of cutting it off.
+            activeUpdateDownloads += 1;
+            try {
+                return await downloadAndInstall();
+            } finally {
+                activeUpdateDownloads -= 1;
+                quitDeferral.settle();
+            }
         } catch (error) {
             reportMainFailure('updater IPC action', error);
             return { ok: false, reason: 'desktop: update action failed' };
@@ -1094,7 +1212,8 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        activeWalletOperations += 1;
+        const holdsQuit = isQuitDeferringMessage(message);
+        if (holdsQuit) activeSendOperations += 1;
         try {
             const response = await handleIpcMessage(runtime, message);
             const change = stateChangeForMessage(message, response);
@@ -1107,7 +1226,10 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: message handling failed' },
             };
         } finally {
-            activeWalletOperations -= 1;
+            if (holdsQuit) {
+                activeSendOperations -= 1;
+                quitDeferral.settle();
+            }
         }
     });
 
@@ -1135,6 +1257,23 @@ void runMainTask(async () => {
         }
     });
 
+    // §1 / S4: screen capture protection while a screen shows key material.
+    // The renderer names only on or off; the target is the sender's own window.
+    ipcMain.handle('xchain:screen-protection', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'screen-protection: rejected from untrusted frame' };
+        }
+        try {
+            return applyScreenProtection(event, args, {
+                isTrustedSender,
+                windowFor: (sender) => BrowserWindow.fromWebContents(sender),
+            });
+        } catch (err) {
+            reportMainFailure('screen-protection IPC action', err);
+            return { ok: false, error: 'screen-protection: operation failed' };
+        }
+    });
+
     // Renderer-driven wipe of the shell's own stores. The
     // renderer's wipeWalletStorage clears localStorage + IndexedDB,
     // neither of which this shell uses, so without this channel both
@@ -1154,8 +1293,11 @@ void runMainTask(async () => {
         }
         try {
             const result = await wipeRuntimeStores(runtime);
+            // The host is torn down before any store is touched, so every
+            // other window re-reads its session whatever the stores did;
+            // otherwise a sibling keeps showing an unlocked wallet with no host.
+            broadcastToWindows('xchain:state-changed', { kind: 'session' }, event.sender);
             if (result.ok) {
-                broadcastToWindows('xchain:state-changed', { kind: 'session' }, event.sender);
                 return { ok: true, cleared: result.cleared };
             }
             return {
@@ -1166,6 +1308,30 @@ void runMainTask(async () => {
         } catch (err) {
             reportMainFailure('wipe-storage IPC action', err);
             return { ok: false, error: 'wipe-storage: operation failed' };
+        }
+    });
+
+    // Save an encrypted backup through the native dialog. The renderer hands
+    // the file and a suggested name; main picks nothing itself and answers
+    // with the written path or "not saved", which is what lets the backup
+    // reminder clear only for a file that exists. Same trusted-sender gate.
+    ipcMain.handle('xchain:save-backup', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'save-backup: rejected from untrusted frame' };
+        }
+        if (args.length !== 1) {
+            return { ok: false, error: 'save-backup: expected one argument' };
+        }
+        try {
+            return await saveBackupFile(args[0], {
+                dialog,
+                writeFile: writeFileAsync,
+                window: BrowserWindow.fromWebContents(event.sender) ?? undefined,
+                defaultDir: app.getPath('documents'),
+            });
+        } catch (err) {
+            reportMainFailure('save-backup IPC action', err);
+            return { ok: false, error: 'save-backup: the file could not be written' };
         }
     });
 
@@ -1192,6 +1358,29 @@ void runMainTask(async () => {
             reportMainFailure('chain-registry IPC action', error);
             return { ok: false, reason: 'registry sync failed' };
         }
+    });
+
+    // §40.12: the app renderer's half of the Trezor Connect relay. Only the
+    // app's own frames may drive the bridge window; trezorBridge checks the
+    // call against the Connect methods the signer uses and always answers
+    // with an envelope.
+    ipcMain.handle('xchain:trezor-bridge-call', async (event, message, ...extraArgs) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'trezor-bridge: rejected from untrusted frame' };
+        }
+        if (extraArgs.length !== 0) return { ok: false, error: 'trezor-bridge: takes one message' };
+        try {
+            return await trezorBridge.call(message);
+        } catch (error) {
+            reportMainFailure('trezor-bridge IPC action', error);
+            return { ok: false, error: 'trezor-bridge: operation failed' };
+        }
+    });
+
+    ipcMain.handle('xchain:trezor-bridge-close', async (event, ...args) => {
+        if (!isTrustedSender(event)) return { ok: false };
+        if (!hasNoIpcArguments(args)) return { ok: false };
+        return trezorBridge.close();
     });
 
     // Hand the parked deep link to its selected primary renderer once. Same
@@ -1225,6 +1414,7 @@ void runMainTask(async () => {
     // moment the renderer focuses.
     buildApplicationMenu();
     canCreateWindows = true;
+    installTray();
     createWindow();
 
     app.on('activate', () => {
@@ -1232,6 +1422,11 @@ void runMainTask(async () => {
     });
 }, 'desktop startup', {
     recover: () => {
+        networkGuard.attachSession(session.defaultSession, 'default session');
+        if (networkGuard.probe) {
+            app.exit(1);
+            return;
+        }
         ensureRendererCspHeaders();
         canCreateWindows = true;
         if (liveWindows().length === 0) createWindow();
@@ -1240,13 +1435,23 @@ void runMainTask(async () => {
 
 app.on('window-all-closed', () => {
     runMainCallback(() => {
-        if (process.platform !== 'darwin') { app.quit(); return; }
-        // macOS keeps the app, and with it the open vault, alive with no window.
+        // Keep the vault alive for dock, tray, or second-instance reopening.
         startWindowlessIdleLock();
     }, 'all windows closed');
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    // A send can be between signing and persistence, and an update download
+    // can be between its network fetch and signature verdict. Hold the quit
+    // until that work settles or the deadline passes, then quit on our own;
+    // a repeated quit request or SIGTERM during the wait rides the same
+    // clock, so quit always completes.
+    const deferral = quitDeferral.request();
+    if (deferral) {
+        event?.preventDefault();
+        if (deferral === 'defer') void restoreWindowAfterIdleCheck();
+        return;
+    }
     // Zero the master key + close the encrypted doc. The OS already
     // treats process-exit memory as freed, but explicit zeroing catches
     // cases where a GC'd buffer might otherwise linger until
@@ -1256,6 +1461,8 @@ app.on('before-quit', () => {
         isQuitting = true;
         stopWindowlessIdleLock();
         flushWindowBoundsSync();
+        tray?.destroy();
+        tray = null;
         if (runtime) tearDownHost(runtime);
     }, 'desktop shutdown');
 });

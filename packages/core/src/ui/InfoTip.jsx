@@ -28,6 +28,8 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import styles from './InfoTip.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 const VIEWPORT_MARGIN = 8;
 const BUBBLE_GAP = 6;
@@ -39,7 +41,7 @@ const BUBBLE_GAP = 6;
  * @param {'top' | 'bottom'} [props.placement]     bubble side; default 'top'
  * @param {string} [props.className]               extra classes appended to the wrapper
  */
-export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
+export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 'top', className }) {
     const [open, setOpen] = useState(false);
     const [side, setSide] = useState(placement);
     const [maxHeight, setMaxHeight] = useState(/** @type {number | null} */ (null));
@@ -178,7 +180,7 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                     maxHeight: maxHeight === null ? undefined : `${maxHeight}px`,
                     minWidth: maxWidth === null ? undefined : `${Math.min(180, maxWidth)}px`,
                     maxWidth: maxWidth === null ? undefined : `${maxWidth}px`,
-                    transform: `translateX(-50%) translateX(${horizontalOffset}px)`,
+                    transform: `translateX(var(--xc-tip-center, -50%)) translateX(${horizontalOffset}px)`,
                 }}
             >
                 {label}

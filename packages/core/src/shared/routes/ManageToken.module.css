@@ -11,15 +11,12 @@
 /* ───── Hero - token identity (no balance, this is the issuer view). ───── */
 
 .hero {
+    composes: card from '../../ui/Card.module.css';
     position: relative;
     display: flex;
     flex-direction: row;
     align-items: flex-start;
     gap: var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
 }
 
 .heroIconWrap {
@@ -50,10 +47,14 @@
     overflow-wrap: anywhere;
 }
 
+.heroBadges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+    margin-inline-start: auto;
+}
+
 .lockBadge {
-    position: absolute;
-    top: var(--xc-space-3);
-    inset-inline-end: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     display: inline-flex;
@@ -89,11 +90,6 @@
     gap: var(--xc-space-1);
 }
 
-.heroDot {
-    margin: 0 var(--xc-space-1);
-    color: var(--xc-text-muted);
-}
-
 .heroOwner {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
@@ -112,24 +108,33 @@
 /* ───── Market panel - stats strip + chart placeholder. ───── */
 
 .marketPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
 }
 
+/* Supply and holding are whole token quantities (up to 19 digits plus
+   separators and decimals). A quarter of the card is wide enough for them
+   only from 1024px; below that it broke the value mid-number, so the strip
+   goes two by two: quantities on the first row, the two counts on the second. */
 .statsStrip {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-3);
 }
 
-@media not all and (min-width: 600px) {
+@media (min-width: 1024px) {
     .statsStrip {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* Half a phone row is still too narrow: there each quantity takes a whole
+   row and the two small counts share the row below. */
+@media not all and (min-width: 600px) {
+    .stat:nth-child(-n + 2) {
+        grid-column: 1 / -1;
     }
 }
 
@@ -179,20 +184,6 @@
     background: var(--xc-accent-primary);
     border-radius: var(--xc-radius-pill);
     transition: width 0.2s ease-out;
-}
-
-/* Owner-mismatch banner above the action grid. Yellow / warning tone
-   so it reads as informational rather than error; sits flush above the
-   action buttons whose disabled-state it explains. */
-.ownerWarning {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #d99000) 40%, transparent);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
 }
 
 /* ───── Manage action grid (carried over). ───── */
@@ -300,6 +291,30 @@
     border-bottom-color: var(--xc-accent-primary);
 }
 
+/* Phones: all five panels fit a 360px screen on tighter spacing instead of
+   scrolling the last tab out of view. The tabs share the row's spare width so
+   the strip still spans the content. */
+@media not all and (min-width: 480px) {
+    .tabs {
+        gap: 0;
+    }
+
+    .tab {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding-inline: var(--xc-space-1);
+    }
+}
+
+/* Under 360px the five labels at the base size run 7px past a 320px strip, so the
+   last tab is cut off until the strip is scrolled. The smaller size keeps all five
+   in view; larger text sizes still scroll the strip. */
+@media not all and (min-width: 360px) {
+    .tab {
+        font-size: var(--xc-text-xs);
+    }
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;
@@ -319,16 +334,15 @@
 }
 
 .row {
+    composes: card from '../../ui/Card.module.css';
+    /* The tap floor the audit can read; the control-height min-height below wins. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: transparent;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
@@ -378,22 +392,13 @@ button.row:hover:not(:disabled) {
     unicode-bidi: isolate;
 }
 
-.error {
-    margin: 0;
-    color: var(--xc-status-error, var(--xc-danger, #DC2626));
-    font-size: var(--xc-text-sm);
-}
-
 /* ───── Genesis + subassets section - read-only metadata block at
    the bottom of the page. Two-column key/value list + chip-style
    subasset list so the bottom of the page has structured info
    without competing with the tabs above. ───── */
 
 .genesisPanel {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-4);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -457,15 +462,13 @@ button.row:hover:not(:disabled) {
    and don't need the full history-row chrome. ───── */
 
 .histRow {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
@@ -609,19 +612,9 @@ button.row:hover:not(:disabled) {
     text-transform: none;
 }
 
-/* ───── "Official token" banner - same treatment as TokenDetail's:
-   green = on a project registry's owner-attested current roster. ───── */
+/* ───── "Official token" notice - same treatment as TokenDetail's:
+   a project name inside the success message. ───── */
 
-.officialBanner {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-success, #14b86c) 40%, transparent);
-    color: var(--xc-text);
-    border-radius: var(--xc-radius-md);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-}
 .officialBannerProject {
     font-weight: 600;
 }

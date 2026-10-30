@@ -13,12 +13,13 @@ import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -28,11 +29,12 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { signingKeyRefusal } from '../../flows/signingKeyCheck.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -65,12 +67,14 @@ const PROTOCOL_COIN_TICKER = {
  * @param {'delegate' | 'revoke'} props.mode
  * @param {string} props.walletId
  * @param {string} props.chainId
+ * @param {string} [props.initialFromAddress]  the staking position's own address; acts from it when it is one of the wallet's on `chainId`
  * @param {() => void} props.onBack
  */
-export function DelegationActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+export function DelegationActionForm({ mode, walletId, chainId: initialChainId, initialFromAddress, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDelegate = mode === 'delegate';
@@ -83,6 +87,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [pubkey, setPubkey] = useState('');
+    // True while the key field holds the pre-filled delegation, not something the user typed.
+    const pubkeyPrefilledRef = useRef(false);
+    const pubkeyRef = useRef('');
+    pubkeyRef.current = pubkey;
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -94,6 +102,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -106,11 +115,16 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Act from the chain's active address (else newest HD
-                // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is still
+                // one of ours on this chain; otherwise act from the chain's active
+                // address (else newest HD external), matching Send.
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -126,11 +140,20 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // override to revoke an older key.
     useEffect(() => {
         if (isDelegate) return;
+        // A demo wallet cannot revoke, and a demo wallet's addresses never go to
+        // an explorer (issue #82).
+        if (demoGuard.blocked) return;
         if (!fromAddressId || !addressesByChain) return;
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
         let cancelled = false;
         setPrefillError(null);
+        // A key pre-filled for another address or network is not this one's.
+        if (pubkeyPrefilledRef.current) {
+            pubkeyPrefilledRef.current = false;
+            setPubkey('');
+            pubkeyRef.current = '';
+        }
         Promise.all([
             messaging.getDelegationsForAddress({ chainId, address: addr.address }),
             typeof messaging.getIndexerWatermark === 'function'
@@ -154,7 +177,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 const latest = latestEffectiveStakingRow(rows, height);
                 const pk = latest?.signing_pubkey || latest?.SIGNING_PUBKEY;
                 if (pk && typeof pk === 'string' && /^[0-9a-fA-F]{64}$/.test(pk)) {
-                    setPubkey((current) => current.trim() ? current : pk.toLowerCase());
+                    if (!pubkeyRef.current.trim()) {
+                        pubkeyPrefilledRef.current = true;
+                        setPubkey(pk.toLowerCase());
+                    }
                 }
             })
             .catch((err) => {
@@ -163,7 +189,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 );
             });
         return () => { cancelled = true; };
-    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging]);
+    }, [isDelegate, fromAddressId, addressesByChain, chainId, messaging, demoGuard.blocked]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -205,6 +231,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        // A second press while the confirm page is still composing is the same request.
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -239,6 +268,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -266,16 +297,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom network fee rate greater than zero.'
-            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
-                ? 'Custom network fee rate is above this network\'s supported maximum.'
-                : !feeCustomEstimate
-                    ? 'Custom network fee rate can have at most 8 decimal places.'
-                    : null;
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
@@ -309,10 +330,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
             return;
         }
-        if (customFeeRateError) {
-            setFormError(customFeeRateError);
-            return;
-        }
+        // A revoke names a key already on chain, whatever it is; a new delegation must be able to sign.
+        const keyStop = isDelegate ? signingKeyRefusal(pk) : null;
+        if (keyStop) { setFormError(keyStop); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -405,7 +427,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -416,10 +438,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -448,10 +471,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const shownPubkey = actionParams.NEW_SIGNING_PUBKEY || actionParams.SIGNING_PUBKEY;
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -480,7 +504,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -569,10 +593,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError || prefillError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError || prefillError}</StatusMessage>
+                <StatusMessage variant="error">{formError || prefillError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -614,6 +639,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
                 value={pubkey}
                 onChange={(e) => {
+                    pubkeyPrefilledRef.current = false;
                     setPubkey(e.target.value);
                     setFormError(null);
                     setPrefillError(null);

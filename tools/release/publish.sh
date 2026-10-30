@@ -452,9 +452,10 @@ if [[ "$STAGING" -eq 0 ]]; then
     # release is asked for a rehearsal record when any of its lanes has an
     # electron-updater feed OR ships a direct lane's artifact, so the
     # android partial, the one path that puts an APK on the feed, meets
-    # `rehearse.mjs assert` and its android-direct demand. Its record comes
-    # from staging this same signed set (`--staging`, above) and running
-    # `rehearse.mjs run --lane android-direct` against it.
+    # `rehearse.mjs assert` and its demand for every direct lane it carries.
+    # Its record comes from staging this same signed set (`--staging`,
+    # above) and running `rehearse.mjs run --lane android-direct` against
+    # it, which also probes android-full when the full APK is present.
     #
     # SAID OUT LOUD RATHER THAN SKIPPED. Waiving quietly here would turn
     # "not rehearsed" into "this release was rehearsed", which is the exact
@@ -647,7 +648,8 @@ if [[ ${#YMLS[@]} -gt 0 ]]; then
     if ! node "$HERE/pointer-gate.mjs" "$INPUT_DIR" --tag "$TAG" --manifest "$MANIFEST" \
             --channel "$EXPECT_CHANNEL" --lanes "$LANES" >&2; then
         echo "publish.sh: refusing to publish $TAG: the channel pointer(s) above are stale," >&2
-        echo "  uncovered, missing or unexpected. Nothing was uploaded. Collect exactly the" >&2
+        echo "  uncovered, hashed for another build, missing or unexpected, or the manifest was signed without the" >&2
+        echo "  dev-mock gate. Nothing was uploaded. Collect exactly the" >&2
         echo "  pointers this build emitted for $TAG and sign again if anything else changed." >&2
         exit 1
     fi
@@ -881,7 +883,14 @@ data = "{\"files\": [$purge_urls]}"
 EOF
     )" || purge_response=''
 
-    if printf '%s' "$purge_response" | grep -q '"success":[[:space:]]*true'; then
+    if node -e '
+        try {
+            const body = require("node:fs").readFileSync(0, "utf8");
+            process.exit(JSON.parse(body).success === true ? 0 : 1);
+        } catch {
+            process.exit(1);
+        }
+    ' <<< "$purge_response"; then
         echo "publish.sh: edge cache purged" >&2
     else
         # Not fatal: the release is published and correct. But it is not

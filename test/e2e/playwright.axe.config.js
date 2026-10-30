@@ -15,6 +15,7 @@
 //     LAYOUT_PORT=5442 ...   other port when 5441 is busy
 
 import { defineConfig } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 // strictPort below: a busy port fails the run instead of silently measuring
 // whichever tree's server already answers there.
@@ -23,6 +24,8 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 const phone = (browserName, width, height, deviceScaleFactor) => ({
     browserName,
+    // New headless for Chromium: the full browser, which renders like the headed one.
+    channel: browserName === 'chromium' ? 'chromium' : undefined,
     viewport: { width, height },
     deviceScaleFactor,
     isMobile: browserName === 'chromium' ? true : undefined,
@@ -45,9 +48,9 @@ export default defineConfig({
     },
     projects: [
         { name: 'android-lg-k51', use: phone('chromium', 411, 814, 1.75) },
-    ],
+    ].map((project) => withHostBlock(project)),
     webServer: {
-        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

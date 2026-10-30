@@ -25,6 +25,8 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from './ActionsMenu.module.css';
 import styles from './OperatorDashboard.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
+import { neutralizeControlText } from '../utils/textHardening.js';
+import { andList } from '../components/pageLoadFailures.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -48,6 +50,19 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  */
 export function OperatorDashboard({ walletId, chainId, address, onBack }) {
+    const scopeKey = JSON.stringify([walletId, chainId, address]);
+    return (
+        <OperatorDashboardView
+            key={scopeKey}
+            walletId={walletId}
+            chainId={chainId}
+            address={address}
+            onBack={onBack}
+        />
+    );
+}
+
+function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -60,9 +75,10 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const [broadcasts, setBroadcasts] = useState(/** @type {Section} */ (empty()));
     const [validators, setValidators] = useState(/** @type {Section} */ (empty()));
     const [height, setHeight] = useState(/** @type {number | null} */ (null));
-    const [latestFeed, setLatestFeed] = useState(null);
+    const [latestFeed, setLatestFeed] = useState({ loading: true, value: null, error: null });
     const [refreshing, setRefreshing] = useState(false);
     const refreshRef = useRef(/** @type {() => void} */ (() => {}));
+    const reloadRef = useRef(/** @type {() => void} */ (() => {}));
 
     useEffect(() => {
         let cancelled = false;
@@ -95,18 +111,24 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 setBroadcasts(empty());
                 setValidators(empty());
                 setHeight(null);
-                setLatestFeed(null);
+                setLatestFeed({ loading: true, value: null, error: null });
             }
 
             const tasks = [];
             if (isDemoWallet(walletId)) {
-                setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
+                // The demo story is one set of rows: the stake detail shows the same
+                // delegation and rewards, so this page does too.
+                const demo = synthesizeDemoStaking(chainId);
+                setStakes({ loading: false, rows: demo.stakes, error: null });
+                setDelegations({ loading: false, rows: demo.delegations, error: null });
+                setRewards({ loading: false, rows: demo.rewards, error: null });
+                setRewardClaims({ loading: false, rows: [], error: null });
             } else {
                 tasks.push(bind(setStakes, () => messaging.getStakesForAddress({ chainId, address }), background));
+                tasks.push(bind(setDelegations, () => messaging.getDelegationsForAddress({ chainId, address }), background));
+                tasks.push(bind(setRewards, () => messaging.getRewardsForAddress({ chainId, address }), background));
+                tasks.push(bind(setRewardClaims, () => messaging.getRewardClaimsForAddress({ chainId, address }), background));
             }
-            tasks.push(bind(setDelegations, () => messaging.getDelegationsForAddress({ chainId, address }), background));
-            tasks.push(bind(setRewards, () => messaging.getRewardsForAddress({ chainId, address }), background));
-            tasks.push(bind(setRewardClaims, () => messaging.getRewardClaimsForAddress({ chainId, address }), background));
             tasks.push(bind(setBroadcasts, () => messaging.getBroadcastsForAddress({ chainId, address }), background));
             tasks.push(bind(setValidators, () => messaging.getValidatorsForChain({ chainId }), background));
             if (typeof messaging.getIndexerWatermark === 'function') {
@@ -117,14 +139,24 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     .catch(() => { if (!cancelled && !background) setHeight(null); }));
             }
             tasks.push(latestFeedCreateForAddress({ messaging, chainId, address })
-                .then((feed) => { if (!cancelled) setLatestFeed(feed); })
-                .catch(() => { if (!cancelled && !background) setLatestFeed(null); }));
+                .then((feed) => {
+                    if (!cancelled) setLatestFeed({ loading: false, value: feed, error: null });
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    setLatestFeed((current) => ({
+                        loading: false,
+                        value: background ? current.value : null,
+                        error: userFacingMessage(err, "Couldn't load the latest feed. Try again."),
+                    }));
+                }));
             await Promise.allSettled(tasks);
             inFlight = false;
             if (!cancelled) setRefreshing(false);
         }
 
         refreshRef.current = () => { load(true); };
+        reloadRef.current = () => { load(false); };
         load(false);
         const timer = setInterval(() => load(true), 30_000);
         return () => {
@@ -144,11 +176,14 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const ownValidator = useMemo(() => {
         if (!activePubkey) return null;
         const pk = String(activePubkey).toLowerCase();
+        // A roster row is this operator's only when it names both the key and this
+        // address; a row pairing the key with another address is someone else's record.
         return validators.rows.find((v) => {
             const vk = String(v?.signing_pubkey || v?.SIGNING_PUBKEY || '').toLowerCase();
-            return vk === pk;
+            const source = v?.source ?? v?.SOURCE ?? v?.address ?? v?.ADDRESS;
+            return vk === pk && source === address;
         }) || null;
-    }, [validators.rows, activePubkey]);
+    }, [validators.rows, activePubkey, address]);
 
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards.rows, rewardClaims.rows),
@@ -169,6 +204,15 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         <PageHeader onBack={onBack} backLabel="Back to staking" title="Operator dashboard" />
     );
 
+    // One page error names every section that could not load; one Try again reloads them all.
+    const failedSections = [
+        ['staking status', stakes],
+        ['delegation chain', delegations],
+        ['validator performance', validators],
+        ['rewards trajectory', rewards.error ? rewards : rewardClaims],
+        ['publishing activity', broadcasts],
+    ].filter(([, section]) => !section.loading && section.error).map(([title]) => title);
+
     const allLoading = stakes.loading || delegations.loading || rewards.loading || rewardClaims.loading
         || broadcasts.loading || validators.loading;
 
@@ -179,6 +223,14 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     {refreshing ? 'Refreshing metrics…' : 'Refresh metrics'}
                 </Button>
             )}>
+                {failedSections.length > 0 ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => reloadRef.current() }}
+                    >
+                        {`Couldn't load ${andList(failedSections)}.`}
+                    </StatusMessage>
+                ) : null}
                 <header className={styles.identity}>
                     {descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
                     <AddressText address={address} />
@@ -191,9 +243,9 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 <Section title="Staking status" loading={stakes.loading} error={stakes.error} showContentOnError={!!primaryStake}>
                     {primaryStake ? (
                         <ul className={styles.metricList}>
-                            <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCP</li>
+                            <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCHAIN</li>
                             {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK ? (
-                                <li>Activation block: {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK}</li>
+                                <li>Activation block: {metricText(primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK)}</li>
                             ) : null}
                         </ul>
                     ) : (
@@ -213,7 +265,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                             {delegations.rows.slice(0, 10).map((d, i) => (
                                 <li key={i}>
                                     Signing key: {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)};
-                                    {' '}recorded at block {d.block_index || 'unknown'};
+                                    {' '}recorded at block {metricText(d.block_index)};
                                     {' '}status: {plainWords(stakingRowState(d, height))}
                                 </li>
                             ))}
@@ -224,11 +276,11 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 <Section title="Validator performance" loading={validators.loading} error={validators.error} showContentOnError={!!ownValidator}>
                     {ownValidator ? (
                         <ul className={styles.metricList}>
-                            {ownValidator.uptime !== undefined ? <li>Uptime: {String(ownValidator.uptime)}</li> : null}
-                            {ownValidator.score !== undefined ? <li>Validator score: {String(ownValidator.score)}</li> : null}
-                            {ownValidator.votes !== undefined ? <li>Votes recorded: {String(ownValidator.votes)}</li> : null}
-                            {ownValidator.missed !== undefined ? <li>Missed validations: {String(ownValidator.missed)}</li> : null}
-                            {ownValidator.last_seen_block ? <li>Last seen at block: {ownValidator.last_seen_block}</li> : null}
+                            {ownValidator.uptime !== undefined ? <li>Uptime: {metricText(ownValidator.uptime, 'unavailable')}</li> : null}
+                            {ownValidator.score !== undefined ? <li>Validator score: {metricText(ownValidator.score, 'unavailable')}</li> : null}
+                            {ownValidator.votes !== undefined ? <li>Votes recorded: {metricText(ownValidator.votes, 'unavailable')}</li> : null}
+                            {ownValidator.missed !== undefined ? <li>Missed validations: {metricText(ownValidator.missed, 'unavailable')}</li> : null}
+                            {ownValidator.last_seen_block ? <li>Last seen at block: {metricText(ownValidator.last_seen_block, 'unavailable')}</li> : null}
                         </ul>
                     ) : activePubkey ? (
                         <EmptyState
@@ -252,13 +304,13 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     showContentOnError={rewards.rows.length > 0 || rewardClaims.rows.length > 0}
                 >
                     <p className={dashStyles.entryDescription} style={{ margin: 0 }}>
-                        <strong>Unclaimed rewards:</strong> {pending} XCP; <strong>Total rewards earned:</strong> {lifetime} XCP
+                        <strong>Unclaimed rewards:</strong> {rewardClaims.error ? 'unavailable' : `${pending} XCHAIN`}; <strong>Total rewards earned:</strong> {lifetime} XCHAIN
                     </p>
                     {recentRewards.length > 0 ? (
                         <ul className={styles.metricList}>
                             {recentRewards.map((r, i) => (
                                 <li key={i} className={dashStyles.entryDescription}>
-                                    Reward amount: {formatRewardAmount(r)} XCP; earned at block {r.block_index || 'unknown'}
+                                    Reward amount: {formatRewardAmount(r)} XCHAIN; earned at block {metricText(r.block_index)}
                                     {r.status ? `; status: ${plainWords(r.status)}` : ''}
                                 </li>
                             ))}
@@ -282,10 +334,10 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                                     {b.message || b.MESSAGE
                                         ? <span title={String(b.message || b.MESSAGE)}>Message: "{truncate(b.message || b.MESSAGE, 32)}"</span>
                                         : (b.broadcast_action_index || b.BROADCAST_ACTION_INDEX
-                                            ? <>Feed reference number: {b.broadcast_action_index || b.BROADCAST_ACTION_INDEX}</>
+                                            ? <>Feed reference number: {metricText(b.broadcast_action_index || b.BROADCAST_ACTION_INDEX)}</>
                                             : 'Message or feed reference: none')}
-                                    {(b.value !== undefined && b.value !== null) ? <>; published value: {String(b.value)}</> : null}
-                                    {'; published at block: '}{b.block_index || 'unknown'}
+                                    {(b.value !== undefined && b.value !== null) ? <>; published value: {metricText(b.value, 'unavailable')}</> : null}
+                                    {'; published at block: '}{metricText(b.block_index)}
                                 </li>
                             ))}
                         </ul>
@@ -296,7 +348,9 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     walletId={walletId}
                     chainId={chainId}
                     address={address}
-                    feed={latestFeed}
+                    feed={latestFeed.value}
+                    feedLoading={latestFeed.loading}
+                    feedError={latestFeed.error}
                     messaging={messaging}
                     variant={variant}
                 />
@@ -317,11 +371,8 @@ function Section({ title, loading, error, showContentOnError = false, children }
                 <p className={dashStyles.entryDescription}>Loading…</p>
             ) : (
                 <>
-                    {error ? (
-                        <StatusMessage variant="error" className={dashStyles.entryDescription}>
-                            {showContentOnError ? "Couldn't refresh this section" : "Couldn't load this section"}: {error}
-                        </StatusMessage>
-                    ) : null}
+                    {/* The page names the failure once; a section with nothing to show says so plainly. */}
+                    {error && !showContentOnError ? <p className={dashStyles.entryDescription}>Not loaded.</p> : null}
                     {!error || showContentOnError ? children : null}
                 </>
             )}
@@ -338,7 +389,7 @@ function extractRows(resp) {
 }
 
 function formatAmount(stake) {
-    return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? 'N/A');
+    return metricText(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity, 'N/A');
 }
 
 export function splitRewards(rows, claims) {
@@ -347,7 +398,15 @@ export function splitRewards(rows, claims) {
 }
 
 function formatRewardAmount(row) {
-    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? 'N/A';
+    return metricText(row?.amount ?? row?.AMOUNT ?? row?.reward, 'N/A');
+}
+
+function metricText(value, fallback = 'unknown') {
+    const type = typeof value;
+    if (value === null || value === undefined
+        || !['string', 'number', 'bigint', 'boolean'].includes(type)
+        || (type === 'number' && !Number.isFinite(value))) return fallback;
+    return neutralizeControlText(value, { maxLength: 128 }) || fallback;
 }
 
 function shortPubkey(pk) {

@@ -78,9 +78,9 @@ async function pickTemplate(label) {
     await waitFor(() => expect(screen.getByLabelText('Token name (ticker)')).toBeTruthy());
 }
 
-function submit() {
+async function submit() {
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
 }
 
 async function composedParams() {
@@ -102,7 +102,7 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
         fireEvent.change(screen.getByLabelText('Image URL'), {
             target: { value: 'https://example.com/art.png' },
         });
-        submit();
+        await submit();
 
         expect(await composedParams()).toMatchObject({
             VERSION: '0',
@@ -125,7 +125,7 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
             target: { value: 'DANKCOIN' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '21000000' } });
-        submit();
+        await submit();
 
         expect(await composedParams()).toMatchObject({
             VERSION: '0',
@@ -154,7 +154,7 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
         fireEvent.change(screen.getByLabelText('Image URL'), {
             target: { value: 'https://example.com/prints.png' },
         });
-        submit();
+        await submit();
 
         const params = await composedParams();
         expect(params.LOCK_MAX_SUPPLY).toBe('1');
@@ -169,7 +169,7 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
             target: { value: 'UTIL' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        submit();
+        await submit();
 
         const params = await composedParams();
         expect(params.LOCK_MAX_SUPPLY).toBeUndefined();

@@ -2,41 +2,12 @@
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
-.search {
-    flex: 1 1 0;
-    min-width: 0;
-    height: var(--xc-control-h-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-control-font-md, var(--xc-control-font));
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-}
-
-.searchField {
-    flex: 1 1 12rem;
-    min-width: 0;
-}
-
-.searchField > div {
-    margin-bottom: 0;
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
-}
-
 .list {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
-    padding: 0;
     margin: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 
@@ -165,28 +136,6 @@
 .status_empty {
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
-}
-
-/* Circular header "+" button that opens the Create dispenser form
-   (same affordance as the messaging inbox's new-conversation button). */
-.addBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addBtn:hover {
-    background: var(--xc-bg-muted);
 }
 
 /* Right-hand column keeps the status chip aligned to the row's trailing edge. */

@@ -535,6 +535,29 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
+     * Hold a private key imported while this signer is unlocked, so its
+     * address signs in the same session. The imported-key map is read
+     * from the vault once at unlock; without this the new address fails
+     * every sign until the next relock. `lock()` zeroes the bytes with the
+     * rest of the map.
+     *
+     * @param {string} addressId
+     * @param {string} wif
+     */
+    addImportedWif(addressId, wif) {
+        this._assertUnlocked();
+        if (typeof addressId !== 'string' || addressId.length === 0) {
+            throw new Error('SoftwareSigner.addImportedWif: addressId is required');
+        }
+        if (typeof wif !== 'string' || wif.length === 0) {
+            throw new Error('SoftwareSigner.addImportedWif: wif is required');
+        }
+        const previous = this._unlocked.importedWifs.get(addressId);
+        if (previous) previous.fill(0);
+        this._unlocked.importedWifs.set(addressId, new TextEncoder().encode(wif));
+    }
+
+    /**
      * Internal: resolve the WIF for a signingPaths entry. Routes on
      * which field is present.
      *

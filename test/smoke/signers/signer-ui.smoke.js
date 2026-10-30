@@ -235,7 +235,8 @@ for (const [shell, appPath, offersTrezor] of [
     if (offersTrezor) {
         assert.ok(
             (/import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
-                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(/.test(app))
+                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(/.test(app)
+                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('trezor'\)/.test(app))
                 && /pairTrezor=\{pairTrezorSigner\}/.test(app),
             `${shell} App.jsx imports + injects the Trezor factory`,
         );

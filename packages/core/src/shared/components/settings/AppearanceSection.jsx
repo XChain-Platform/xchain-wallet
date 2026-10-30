@@ -24,11 +24,14 @@
 //   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
 import { useState } from 'react';
+import { Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import {
-    SELECT, STACK, SettingsFieldRow, SettingsLoadError, Status,
+    STACK, SettingsFieldRow, SettingsLoadError, Status,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -43,12 +46,12 @@ const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
 ]);
 
 export function AppearanceSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const onThemeChange = async (next) => {
         setSaveError(null);
@@ -75,32 +78,28 @@ export function AppearanceSection() {
         <div style={STACK}>
             {saveError ? <Status text={saveError} tone="error" /> : null}
             <SettingsFieldRow
-                label="Theme"
-                hint="Choose a light or dark wallet theme, or follow your device setting."
+                label={t('settings.appearance.theme')}
             >
-                <select
+                <Select
                     value={settings.theme}
                     onChange={(e) => onThemeChange(e.target.value)}
-                    style={SELECT}
                 >
                     {THEME_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
-                </select>
+                </Select>
             </SettingsFieldRow>
             <SettingsFieldRow
-                label="Reduced motion"
-                hint="Control interface animation, or follow your device accessibility setting."
+                label={t('settings.appearance.reducedMotion')}
             >
-                <select
+                <Select
                     value={settings.reducedMotion ?? 'auto'}
                     onChange={(e) => onReducedMotionChange(e.target.value)}
-                    style={SELECT}
                 >
                     {REDUCED_MOTION_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
-                </select>
+                </Select>
             </SettingsFieldRow>
         </div>
     );

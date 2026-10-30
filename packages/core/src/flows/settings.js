@@ -16,12 +16,14 @@
 // Patch model: deep merge.
 //   - Top-level scalars (theme, autolockMinutes, language, etc.) are
 //     replaced when the patch carries them.
-//   - Nested plain objects (privacy, notifications, grace, ads) merge
-//     one level deep; caller can flip a single sub-flag without
-//     restating the rest.
+//   - Nested plain objects (privacy, notifications, grace, ads) merge;
+//     caller can flip a single sub-flag without restating the rest.
 //   - Chain-keyed records (sdkEndpoints, fees, ads.perChain) merge by
 //     chainId; caller updating one chain's endpoint keeps the other
 //     chains untouched.
+//   - An empty object replaces the object at that path, which lets reset
+//     actions clear maps. Keyboard bindings are also replaced as one map
+//     so removing one override does not leave its persisted key behind.
 //   - Arrays / primitives / null in the patch always replace.
 //
 // Validation runs on the merged record before persistence; an invalid
@@ -61,6 +63,35 @@ export async function updateSettings(vault, patch) {
     if (patch === null || typeof patch !== 'object') {
         throw new Error('updateSettings: patch must be an object');
     }
+    // A patch is read, merged and written back. Two patches in flight would
+    // both read the same record and the later write would drop the earlier
+    // one's keys, so each vault takes its patches one at a time.
+    return serializeSettingsWrites(vault, () => applyPatch(vault, patch));
+}
+
+/** Tail of each vault's settings write queue; a failed write never blocks the next. */
+const writeQueues = new WeakMap();
+
+/**
+ * Run a read-modify-write of the Settings record after every earlier one on
+ * the same vault has finished. Any flow that reads the record and puts it
+ * back goes through here, or its write can erase a patch made in between.
+ * The task must not start another serialized write: it would wait on itself.
+ *
+ * @template T
+ * @param {object} vault
+ * @param {() => Promise<T>} task
+ * @returns {Promise<T>}
+ */
+export function serializeSettingsWrites(vault, task) {
+    if (vault === null || typeof vault !== 'object') return task();
+    const previous = writeQueues.get(vault) ?? Promise.resolve();
+    const run = previous.then(task);
+    writeQueues.set(vault, run.catch(() => {}));
+    return run;
+}
+
+async function applyPatch(vault, patch) {
     const current = await getSettings(vault);
     const merged = normalizeChainScopedDefaults(deepMerge(current, patch));
     const validation = validateSettings(merged);
@@ -81,14 +112,16 @@ function isPlainObject(v) {
     return proto === Object.prototype || proto === null;
 }
 
-function deepMerge(base, patch) {
+function deepMerge(base, patch, path = '') {
     if (!isPlainObject(patch)) return patch;
     if (!isPlainObject(base)) return { ...patch };
+    // Only a nested map is replaced; an empty top-level patch changes nothing.
+    if (path && (Object.keys(patch).length === 0 || path === 'keyboard.bindings')) return { ...patch };
     const out = { ...base };
     for (const [k, v] of Object.entries(patch)) {
         if (v === undefined) continue;
         if (isPlainObject(v) && isPlainObject(base[k])) {
-            out[k] = deepMerge(base[k], v);
+            out[k] = deepMerge(base[k], v, path ? `${path}.${k}` : k);
         } else {
             out[k] = v;
         }

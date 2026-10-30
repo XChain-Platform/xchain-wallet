@@ -30,6 +30,15 @@
  */
 export function wifFailureMessage(reason, code) {
     const hay = `${code || ''} ${reason || ''}`.toLowerCase();
+    if (/uncompressed_key_type/.test(hay)) {
+        // The key is good; only the address type picked for it is not. Name
+        // the one type an uncompressed key has so the user can pick it.
+        return 'This private key is uncompressed, so its address is a legacy (P2PKH) one. Pick P2PKH as the address type and import it again.';
+    }
+    if (/raw_hex_key/.test(hay)) {
+        // A good key in the wrong encoding: a typo hunt would never end.
+        return 'That looks like a raw hex private key. This wallet imports keys in WIF form, so export the key as WIF from your other wallet and paste that.';
+    }
     if (/network_mismatch|does not match configured network|invalid network/.test(hay)) {
         // The single most likely mistake, and the one worth naming: a mainnet
         // key pasted on a testnet or regtest chain, or the reverse. Without
@@ -43,4 +52,18 @@ export function wifFailureMessage(reason, code) {
         return 'Paste a WIF private key.';
     }
     return 'That private key could not be read. Paste the WIF exactly as your other wallet shows it.';
+}
+
+export const RAW_HEX_KEY = 'RAW_HEX_KEY';
+
+/**
+ * True for a bare 32-byte private key written as 64 hex characters (with or
+ * without a 0x prefix). Such a key carries no network or compression flag, so
+ * the import refuses it with its own copy rather than guess either one.
+ *
+ * @param {string} input  the trimmed field value
+ * @returns {boolean}
+ */
+export function isRawHexPrivateKey(input) {
+    return typeof input === 'string' && /^(?:0x)?[0-9a-fA-F]{64}$/.test(input);
 }

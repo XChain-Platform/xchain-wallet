@@ -32,6 +32,7 @@
 
 import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
 import { WIPE_STORAGE_MESSAGE_TYPE } from './wipeExtensionStorage.js';
+import { PANIC_STATE_MESSAGE_TYPES } from './panicModeStorage.js';
 import {
     isMessageAllowedFromSender,
     isTrustedExtensionSender,
@@ -47,14 +48,15 @@ import { serializeError } from './MessageHost.js';
  * @param {import('./MessageHost.js').MessageHost} host
  * @param {{ onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
  * @param {{
- *   onActivity?: () => void | (() => void),
+ *   onActivity?: (type: unknown) => void | (() => void),
  *   onWebSender?: (tabId: number, origin: string) => void,
  * }} [opts]   onActivity fires once per message from the trusted extension UI,
- *        feeding the background auto-lock backstop. It may return a completion
- *        callback so the backstop does not lock an active request. onWebSender
+ *        feeding the background auto-lock backstop. It receives the message
+ *        type and may return a completion callback so the backstop does not
+ *        lock an active signing request. onWebSender
  *        fires once per accepted `bridge.*` message from a web page, carrying
  *        the browser's own reading of which tab and which origin it came from.
- * @returns {() => void}                                                       detach fn
+ * @returns {(() => void) & { listener: Function }}                            detach fn, carrying the attached listener
  */
 export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     const runtime =
@@ -72,14 +74,16 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
         // before the MessageHost's vault-backed handlers are registered:
         // sessionMeta.js owns session/unlock/create/import, and
         // wipeExtensionStorage.js owns the wipe (reached from the Locked
-        // screen, i.e. with the vault shut). Skip those here so no message
+        // screen, i.e. with the vault shut), and panicModeStorage.js owns the
+        // direct panic-freeze channel. Skip those here so no message
         // ever sees two sendResponses.
         if (
             message &&
             typeof message === 'object' &&
             typeof message.type === 'string' &&
             (PRE_HOST_MESSAGE_TYPES.has(message.type)
-                || message.type === WIPE_STORAGE_MESSAGE_TYPE)
+                || message.type === WIPE_STORAGE_MESSAGE_TYPE
+                || PANIC_STATE_MESSAGE_TYPES.has(message.type))
         ) {
             return false;
         }
@@ -108,7 +112,7 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
         let finishActivity = null;
         if (onActivity && trusted) {
             try {
-                const finish = onActivity();
+                const finish = onActivity(type);
                 if (typeof finish === 'function') finishActivity = finish;
             } catch { /* best-effort */ }
         }
@@ -181,7 +185,10 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     };
 
     runtime.onMessage.addListener(listener);
-    return () => runtime.onMessage.removeListener(listener);
+    const detach = () => runtime.onMessage.removeListener(listener);
+    // The boot gate hands a message it held back to this listener once a host exists.
+    detach.listener = listener;
+    return detach;
 }
 
 /**

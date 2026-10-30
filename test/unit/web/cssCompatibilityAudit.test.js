@@ -63,6 +63,25 @@ describe('Chrome 102 CSS compatibility audit', () => {
         expect(audit(css)).toEqual([]);
     });
 
+    it('requires color-mix fallback declarations in the same rule and before the modern value', () => {
+        const css = `
+            .paired { color: red; color: color-mix(in srgb, red, blue); }
+            .late { color: color-mix(in srgb, red, blue); color: red; }
+            .guarded { color: color-mix(in srgb, red, blue); }
+            @supports not (color: color-mix(in srgb, red, blue)) {
+                .guarded { color: red; }
+            }
+            @supports (color: color-mix(in srgb, red, blue)) {
+                .positive-guard { color: color-mix(in srgb, red, blue); }
+            }
+        `;
+        expect(audit(css)).toEqual([
+            { feature: 'color-mix()', line: 3 },
+            { feature: 'color-mix()', line: 4 },
+            { feature: 'color-mix()', line: 9 },
+        ]);
+    });
+
     it('keeps Header settings backgrounds free of color-mix without build transforms', () => {
         const header = readFileSync(join(
             process.cwd(), 'packages', 'core', 'src', 'shared', 'components',

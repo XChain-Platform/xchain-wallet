@@ -46,7 +46,15 @@ import {
 import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
-const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
+// Bech32 shape per BIP173: a human-readable part, the last `1` as separator, then at
+// least six data characters from the Bech32 charset. Tested against the lowercased value.
+const BECH32_SHAPE = /^[0-9a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/;
+// An address reference: a caret, then an index with no leading zero, the same
+// canonical form the indexer accepts for a LIST address item. The wallet never
+// publishes one; it only names it so the form can say why it was skipped.
+const ADDRESS_REF = /^\^[1-9][0-9]*$/;
+// Human-readable prefixes of every bech32 address family the wallet pays.
+const BECH32_PREFIX = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i;
 
 /**
  * Split a paste-box string into raw candidate strings. Handles line-
@@ -130,8 +138,10 @@ export function isPlausibleAddress(addr) {
     const isBech32Len = len === 42 || (len >= 14 && len <= 74 && s.includes('1'));
     if (!isP2pkhLen && !isBech32Len) return false;
     // Bech32 addresses are all-lowercase (or all-uppercase; wallets
-    // emit lowercase). Try lowercase match first.
-    if (BECH32_ALPHABET.test(s.toLowerCase())) return true;
+    // emit lowercase). Mixed case is never Bech32 (BIP173), and a string
+    // without the HRP-separator-data shape falls through to the Base58 check.
+    const lower = s.toLowerCase();
+    if ((s === lower || s === s.toUpperCase()) && BECH32_SHAPE.test(lower)) return true;
     if (BASE58_ALPHABET.test(s)) return true;
     return false;
 }
@@ -175,7 +185,9 @@ export function isRecipientForChain(addr, chain) {
 /**
  * Split a raw candidate list into valid addresses, invalid entries, and
  * a duplicate count. Order-preserving; the first occurrence of a
- * duplicate wins.
+ * duplicate wins. A valid bech32 entry comes back lowercase, so the
+ * wallet never publishes an uppercase spelling; rejected entries stay
+ * as pasted so the user can find them.
  *
  * `wrongNetwork` is the subset of `invalid` that IS a real address, just
  * not one this chain can pay: those are the entries worth naming
@@ -183,23 +195,48 @@ export function isRecipientForChain(addr, chain) {
  * They stay inside `invalid` as well so every existing count ("N invalid
  * skipped") keeps totalling the entries that were actually dropped.
  *
+ * `addressRefs` is the subset of `invalid` written as an address reference
+ * (`^<index>`). The wallet does not resolve references, so they are still
+ * dropped, but they are not typos either and the form says so.
+ *
+ * `options.anyCoins` is the opt-in for address LISTs once token-policy
+ * inheritance is active: an address for any of those coins on the chain's own
+ * network counts as valid, the rule the indexer applies to LIST TYPE=2 items.
+ * Only the list create and fork forms pass it; AIRDROP and list transfers stay
+ * strict, because they pay or move on the list's own coin.
+ *
  * @param {string[]} candidates
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
- * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
+ * @param {{ anyCoins?: string[] }} [options]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
+ *   addressRefs: string[] }}
  */
-export function classifyRecipients(candidates, chain) {
-    const classifier = createRecipientClassifier(chain, false);
+export function classifyRecipients(candidates, chain, options = {}) {
+    const classifier = createRecipientClassifier(chain, false, options.anyCoins);
     for (const raw of candidates) classifier.add(raw);
     return classifier.result();
 }
 
-function createRecipientClassifier(chain, includeLines) {
+/**
+ * True when `candidate` is an address for one of `anyCoins` on the chain's
+ * own network. Never widens across networks, and without a known chain it
+ * never widens at all.
+ */
+function isOtherCoinItem(candidate, params, anyCoins) {
+    if (!params || !Array.isArray(anyCoins) || anyCoins.length === 0) return false;
+    return anyCoins.some((coin) => coin !== params.coin
+        && isValidAddressForChain(candidate, coin, params.network));
+}
+
+function createRecipientClassifier(chain, includeLines, anyCoins) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
     const invalid = [];
     /** @type {string[]} */
     const wrongNetwork = [];
+    /** @type {string[]} */
+    const addressRefs = [];
     const params = chainParams(chain);
     const seen = new Set();
     const invalidLines = [];
@@ -208,17 +245,15 @@ function createRecipientClassifier(chain, includeLines) {
     const add = (raw, line) => {
         const candidate = String(raw ?? '').trim();
         if (!candidate) return;
-        // Bech32 is case-insensitive when the whole address uses one case.
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i.test(candidate)
-            && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
-        const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
+        const duplicateKey = bech32IdentityKey(candidate);
         if (seen.has(duplicateKey)) {
             duplicates += 1;
             return;
         }
         seen.add(duplicateKey);
-        if (isRecipientForChain(candidate, chain)) {
-            valid.push(candidate);
+        if (isRecipientForChain(candidate, chain) || isOtherCoinItem(candidate, params, anyCoins)) {
+            // Publish the lowercase bech32 form, which every wallet emits (BIP173).
+            valid.push(duplicateKey);
             return;
         }
         invalid.push(candidate);
@@ -230,10 +265,12 @@ function createRecipientClassifier(chain, includeLines) {
             wrongNetwork.push(candidate);
             if (includeLines) wrongNetworkLines.push({ address: candidate, line });
         }
+        // Name an address reference, which is a real chain form and not a typo.
+        if (ADDRESS_REF.test(candidate)) addressRefs.push(candidate);
     };
     const result = () => includeLines
-        ? { valid, invalid, duplicates, wrongNetwork, invalidLines, wrongNetworkLines }
-        : { valid, invalid, duplicates, wrongNetwork };
+        ? { valid, invalid, duplicates, wrongNetwork, addressRefs, invalidLines, wrongNetworkLines }
+        : { valid, invalid, duplicates, wrongNetwork, addressRefs };
     return { add, result };
 }
 
@@ -244,12 +281,13 @@ function createRecipientClassifier(chain, includeLines) {
  *
  * @param {Array<{ value: string, line: number }>} entries
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ anyCoins?: string[] }} [options]  see classifyRecipients
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
- *   invalidLines: Array<{ address: string, line: number }>,
+ *   addressRefs: string[], invalidLines: Array<{ address: string, line: number }>,
  *   wrongNetworkLines: Array<{ address: string, line: number }> }}
  */
-export function classifyRecipientEntries(entries, chain) {
-    const classifier = createRecipientClassifier(chain, true);
+export function classifyRecipientEntries(entries, chain, options = {}) {
+    const classifier = createRecipientClassifier(chain, true, options.anyCoins);
     for (const entry of entries) classifier.add(entry?.value, entry?.line);
     return classifier.result();
 }
@@ -260,7 +298,8 @@ export function classifyRecipientEntries(entries, chain) {
  *
  * @param {Array<{ value: string, line: number }>} entries
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
- * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean }} [options]
+ * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean,
+ *   anyCoins?: string[] }} [options]
  * @returns {Promise<ReturnType<typeof classifyRecipientEntries> | null>}
  */
 export async function classifyRecipientEntriesAsync(entries, chain, options = {}) {
@@ -268,7 +307,7 @@ export async function classifyRecipientEntriesAsync(entries, chain, options = {}
     const chunkSize = Number.isInteger(rawChunkSize) && rawChunkSize > 0 ? rawChunkSize : 250;
     const yieldTask = options.yieldTask || (() => new Promise((resolve) => setTimeout(resolve, 0)));
     const shouldCancel = options.shouldCancel || (() => false);
-    const classifier = createRecipientClassifier(chain, true);
+    const classifier = createRecipientClassifier(chain, true, options.anyCoins);
 
     for (let index = 0; index < entries.length; index += 1) {
         if (index > 0 && index % chunkSize === 0) {
@@ -327,9 +366,69 @@ export function reconcileStoredList(expected, stored) {
 }
 
 function isValidBech32Address(address) {
-    const lower = address.toLowerCase();
-    return /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/.test(lower)
-        && isValidAddressAnyNetwork(address);
+    return BECH32_PREFIX.test(address) && isValidAddressAnyNetwork(address);
+}
+
+/**
+ * The key two spellings of one address share. Bech32 is case-insensitive
+ * when the whole address uses one case, so a single-case bech32 address
+ * folds to lowercase; mixed case and base58 come back unchanged.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function bech32IdentityKey(value) {
+    const s = String(value ?? '');
+    const singleCase = s === s.toLowerCase() || s === s.toUpperCase();
+    return singleCase && BECH32_PREFIX.test(s) ? s.toLowerCase() : s;
+}
+
+/**
+ * Split the addresses an AIRDROP reaches into the ones the network pays and
+ * the ones the dropped token's own access lists exclude. With an allow list
+ * only its members are paid, and an empty one pays nobody; a block-list
+ * member is never paid; a list given as null applies no filter.
+ *
+ * The network compares stored address strings, and case variants of one
+ * bech32 address share a single stored address, so membership here compares
+ * `bech32IdentityKey` values. Order is kept and repeats count once.
+ *
+ * @param {Array<string|{address?: string, item?: string}>} addresses
+ * @param {{ allow?: Array<string|{address?: string, item?: string}> | null,
+ *   block?: Array<string|{address?: string, item?: string}> | null }} [lists]
+ * @returns {{ approved: string[], excluded: string[] }}
+ */
+export function applyTokenAccessLists(addresses, lists = {}) {
+    const keyOf = (row) => bech32IdentityKey(listEntryText(row));
+    const allowKeys = Array.isArray(lists.allow) ? new Set(lists.allow.map(keyOf)) : null;
+    const blockKeys = Array.isArray(lists.block) ? new Set(lists.block.map(keyOf)) : null;
+    const approved = [];
+    const excluded = [];
+    const seen = new Set();
+    for (const row of Array.isArray(addresses) ? addresses : []) {
+        const address = listEntryText(row);
+        const key = bech32IdentityKey(address);
+        if (!address || seen.has(key)) continue;
+        seen.add(key);
+        // Skip an address missing from the token's allow list.
+        if (allowKeys && !allowKeys.has(key)) {
+            excluded.push(address);
+            continue;
+        }
+        // Skip an address on the token's block list.
+        if (blockKeys && blockKeys.has(key)) {
+            excluded.push(address);
+            continue;
+        }
+        approved.push(address);
+    }
+    return { approved, excluded };
+}
+
+// Read a list member that arrives as a bare string or as an `{ address }` / `{ item }` row.
+function listEntryText(row) {
+    const value = row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row;
+    return String(value ?? '').trim();
 }
 
 function stripWrappingQuotes(s) {

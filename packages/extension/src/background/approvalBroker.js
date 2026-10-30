@@ -35,9 +35,10 @@
 // rejection: the deferred resolves with `{ approved: false }`, which
 // the bridge surfaces as `USER_REJECTED` to the dApp.
 //
-// Multiple concurrent approvals are supported; each gets its own id
-// and its own popup window. The broker's map is keyed by id so a user
-// can triage them in any order.
+// Multiple concurrent approvals are supported; each gets its own id and popup
+// window. Concurrent connect requests from one origin share the pending choice
+// so a page cannot stack duplicate connection windows. Other requests remain
+// independently reviewable, and the map stays keyed by id for resolution.
 
 import { sessionRandomUUID } from './uuid.js';
 
@@ -120,7 +121,17 @@ export class ApprovalBroker {
     // -- Approvals interface (called by the bridge handlers) -------------
 
     /** @param {import('../bridge/Approvals.js').ConnectApprovalRequest} req */
-    connect(req) { return this._request('connect', req); }
+    connect(req) {
+        const origin = typeof req?.origin === 'string' ? req.origin : '';
+        if (origin) {
+            for (const entry of this._pending.values()) {
+                if (entry.kind === 'connect' && entry.payload?.origin === origin) {
+                    return entry.deferred.promise;
+                }
+            }
+        }
+        return this._request('connect', req);
+    }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
     signAction(req) { return this._request('signAction', req); }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
@@ -193,21 +204,26 @@ export class ApprovalBroker {
 
     /**
      * Reject every parked approval and clear the toolbar badge.
-     * Lock and wipe call this so requests from an ended session cannot remain
-     * actionable or restore attention state after teardown.
+     * Lock, wipe and a network switch call this so requests from an ended
+     * session or another network cannot remain actionable. The optional
+     * one-line reason travels on the rejection result.
+     *
+     * @param {string} [reason]
      */
-    async cancelAll() {
+    async cancelAll(reason) {
         const entries = [...this._pending.values()];
-        await this._cancelEntries(entries);
+        await this._cancelEntries(entries, reason);
     }
 
-    async _cancelEntries(entries) {
+    async _cancelEntries(entries, reason) {
         const cancelled = [];
         for (const entry of entries) {
             if (this._pending.get(entry.id) !== entry) continue;
             this._pending.delete(entry.id);
             this._clearTimer(entry.timeout);
-            entry.deferred.resolve({ approved: false });
+            entry.deferred.resolve(
+                typeof reason === 'string' && reason ? { approved: false, reason } : { approved: false },
+            );
             cancelled.push(entry);
         }
         if (cancelled.length === 0) return;

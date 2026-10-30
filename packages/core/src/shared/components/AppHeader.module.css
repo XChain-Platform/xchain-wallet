@@ -70,13 +70,28 @@
     inset-inline-end: 0;
     z-index: 20;
     width: min(280px, calc(100vw - (2 * var(--xc-space-2))));
-    max-height: min(70vh, 520px);
+    /* Sized by the viewport alone: a fixed pixel cap cut the last visible row
+       through its label on tall phones that had room for every row. */
+    max-height: 70vh;
     overflow-y: auto;
     padding: var(--xc-space-1);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
     background: var(--xc-surface);
     box-shadow: var(--xc-shadow-header-menu);
+}
+
+/* A phone can expose settings, route actions, and platform links together.
+   Two columns keep every 44px target visible without turning this transient
+   menu into a second scroll surface. */
+@media (max-width: 480px) {
+    .actionMenu {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: calc(100vw - (2 * var(--xc-space-2)));
+        max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-control-h-md) - var(--xc-space-5));
+        overflow-y: hidden;
+    }
 }
 
 .actionRow {
@@ -97,6 +112,13 @@
     text-align: start;
     text-decoration: none;
     cursor: pointer;
+}
+
+.actionMenu[data-overlay-open='true'] {
+    /* Not visibility or display: the Settings row inside stays the popover
+       anchor and keeps focus for its return. */
+    opacity: 0;
+    pointer-events: none;
 }
 
 .settingsWrap,
@@ -153,7 +175,7 @@
 
 /* Short landscape screens keep the persistent controls reachable while
    returning vertical space to the active route. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         gap: var(--xc-space-2);
         padding: var(--xc-space-1) var(--xc-space-2);

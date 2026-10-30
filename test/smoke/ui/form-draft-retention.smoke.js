@@ -146,7 +146,7 @@ assert.match(
 );
 assert.match(
     privacySrc,
-    /<select[\s\S]+?aria-label="Form draft retention"[\s\S]+?<option value=\{FORM_DRAFT_TTL_OFF\}>Off<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_7D\}>7 days<\/option>/,
+    /<Select[\s\S]+?aria-label=(?:\{t\('settings\.privacy\.formDraftRetention'\)\}|"Form draft retention")[\s\S]+?<option value=\{FORM_DRAFT_TTL_OFF\}>(?:\{t\('settings\.privacy\.off'\)\}|Off)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_1H\}>(?:\{t\('settings\.developer\.1Hour'\)\}|1 hour)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_24H\}>(?:\{t\('settings\.privacy\.24Hours'\)\}|24 hours)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_7D\}>(?:\{t\('history\.filters\.last7Days'\)\}|7 days)<\/option>[\s\S]+?<\/Select>/,
     'select renders all four options with the right labels',
 );
 assert.match(

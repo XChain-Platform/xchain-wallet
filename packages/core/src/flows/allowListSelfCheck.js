@@ -221,12 +221,12 @@ export function buyerListMessage(v) {
             return 'The selected paying address is not allowed to buy from this dispenser. '
                 + 'A payment from it would be refused and the coin or token is not returned.';
         }
-        return 'None of this wallet\'s addresses on this chain are allowed to buy from this '
+        return 'None of this wallet\'s addresses on this network are allowed to buy from this '
             + 'dispenser. A payment from here would be refused and the coin is not returned.';
     }
     if (v.verdict === 'partial') {
         return `Only ${v.accepted.length} of this wallet's ${v.accepted.length + v.refused.length} `
-            + 'addresses on this chain are allowed to buy from this dispenser. Pay from one of '
+            + 'addresses on this network are allowed to buy from this dispenser. Pay from one of '
             + 'those: a payment from any of the others is refused and the coin is not returned.';
     }
     return null;

@@ -55,7 +55,11 @@
 // invalidate already-persisted records; the registry's own validator
 // is the single source of truth for "is this descriptor usable?".
 
-import { validateChainDescriptor } from '../registry/validate.js';
+import { customChainReservedIdError, validateChainDescriptor } from '../registry/validate.js';
+
+// A pasted descriptor is stored in the vault settings and read on every boot,
+// so its serialized size is capped well above any real descriptor.
+export const MAX_CUSTOM_DESCRIPTOR_CHARS = 32768;
 
 async function readSettings(vault) {
     return vault.settings.get();
@@ -102,18 +106,25 @@ export async function listCustomChains({ vault }) {
  */
 export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry }) {
     if (!descriptor || typeof descriptor !== 'object') {
-        throw new Error('addCustomChain: descriptor must be an object');
+        throw new Error('The network description must be a JSON object.');
+    }
+    if (JSON.stringify(descriptor).length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
+        throw new Error('The network description is too large.');
     }
     const res = validateChainDescriptor(descriptor);
     if (!res.ok) {
-        throw new Error(`addCustomChain: invalid descriptor: ${res.errors.join('; ')}`);
+        throw new Error(`This network can't be added. ${res.errors.join('; ')}`);
+    }
+    const reserved = customChainReservedIdError(descriptor);
+    if (reserved) {
+        throw new Error(`This network can't be added. ${reserved}`);
     }
     if (chainRegistry?.has?.(descriptor.id)) {
-        throw new Error(`addCustomChain: chain "${descriptor.id}" is already registered`);
+        throw new Error(`The network "${descriptor.id}" is already registered.`);
     }
     const settings = await readSettings(vault);
     if (!settings) {
-        throw new Error('addCustomChain: settings store unavailable');
+        throw new Error('Settings are unavailable, so the network was not added.');
     }
     const list = asList(settings);
     const firstSameId = list.findIndex((d) => d?.id === descriptor.id);
@@ -218,6 +229,22 @@ function dropCachedSdk(sdkRegistry, chainId) {
 }
 
 /**
+ * Whether any stored address belongs to the descriptor's coin and network.
+ * A vault without an address store holds no wallet, so nothing is in use.
+ *
+ * @param {any} vault
+ * @param {{ coin?: string, networkKind?: string }} descriptor
+ * @returns {Promise<boolean>}
+ */
+async function networkHoldsAddresses(vault, descriptor) {
+    if (typeof vault?.addresses?.list !== 'function') return false;
+    const rows = await vault.addresses.list();
+    return Array.isArray(rows) && rows.some(
+        (a) => a?.chain === descriptor.coin && a?.network === descriptor.networkKind,
+    );
+}
+
+/**
  * @param {{ vault: any, chainRegistry: any, chainId: string, sdkRegistry?: any }} args
  * @returns {Promise<{ removed: boolean }>}
  */
@@ -233,6 +260,19 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     const next = list.filter((d) => d?.id !== chainId);
     const persistedRemoved = next.length !== list.length;
     const live = chainRegistry?.get?.(chainId);
+    // Address records name a chain by coin and network, not by id, so a
+    // removed network would leave a wallet's accounts holding addresses no
+    // registered chain can show or spend. Refuse before anything is written.
+    // A bundled chain under this id stays registered, so a stale row of its id
+    // takes no addresses with it.
+    const owned = live
+        ? (live.isUserAdded ? live : null)
+        : list.find((d) => d?.id === chainId);
+    if (owned && await networkHoldsAddresses(vault, owned)) {
+        throw new Error(
+            `removeCustomChain: "${chainId}" still holds addresses in a wallet account, so it can't be removed. Its funds stay reachable while the network is installed.`,
+        );
+    }
     let persisted = settings;
     if (persistedRemoved) {
         persisted = withoutEndpointOverride({ ...settings, customChains: next }, chainId);

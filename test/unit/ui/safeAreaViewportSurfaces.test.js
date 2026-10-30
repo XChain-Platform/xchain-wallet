@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -16,6 +16,10 @@ import bottomBarStyles from '../../../packages/core/src/shared/components/Bottom
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 import toastStyles from '../../../packages/core/src/shared/components/ToastHost.module.css';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHaptic: () => ({ error: vi.fn(), success: vi.fn(), tap: vi.fn() }),
@@ -117,7 +121,15 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         const sheetRules = computedClassRules(sheet, overlayStyles, overlayCss);
         const sheetSurfaceRules = computedClassRules(sheet.firstElementChild, overlayStyles, overlayCss);
         expect(sheetRules).toMatch(new RegExp(inset('right')));
-        expect(sheetSurfaceRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
+        // The inset pads the scrolling list, never the surface around it: a
+        // surface band under the scroller cut the last row above the home
+        // indicator, while padding inside the scroller lets the list reach the
+        // sheet edge and its end rest above the inset.
+        expect(sheetSurfaceRules).toMatch(/padding-bottom:\s*0\s*;/);
+        expect(sheetSurfaceRules).not.toMatch(/safe-area-inset-bottom/);
+        const sheetBody = sheet.querySelector(`.${overlayStyles.body}`);
+        const sheetBodyRules = computedClassRules(sheetBody, overlayStyles, overlayCss);
+        expect(sheetBodyRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
         expect(sheetRules).toMatch(new RegExp(inset('left')));
     });
 
@@ -147,12 +159,15 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it('keeps the bottom sheet above the home indicator and landscape cutouts', () => {
-        const css = read('packages/core/src/shared/components/BottomTabBar.module.css');
-        const sheet = css.match(/\.sheet\s*\{[^}]*\}/)[0];
+        // The More sheet is an OverlaySurface sheet: its overlay clears the side
+        // cutouts and its scrolling body ends above the home indicator.
+        const css = read('packages/core/src/shared/components/OverlaySurface.module.css');
+        const overlay = css.match(/\.sheetOverlay\s*\{[^}]*\}/)[0];
+        const body = css.match(/\.sheet \.body\s*\{[^}]*\}/)[0];
 
-        expect(sheet).toMatch(new RegExp(inset('right')));
-        expect(sheet).toMatch(/env\(safe-area-inset-bottom,\s*var\(--xc-space-3\)\)/);
-        expect(sheet).toMatch(new RegExp(inset('left')));
+        expect(overlay).toMatch(new RegExp(inset('right')));
+        expect(body).toMatch(new RegExp(inset('bottom')));
+        expect(overlay).toMatch(new RegExp(inset('left')));
     });
 
     it('fits toasts between both landscape safe-area edges', () => {
@@ -165,12 +180,12 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it('keeps the fixed undo action inside every adjacent device inset', () => {
+        // The undo countdown takes its position from the toast viewport,
+        // whose insets the test above pins.
         const css = read('packages/core/src/shared/components/UndoSendToast.module.css');
-        const toast = css.match(/\.toast\s*\{[^}]*\}/)[0];
+        const stack = css.match(/\.stack\s*\{[^}]*\}/)[0];
 
-        expect(toast).toMatch(new RegExp(`inset-inline-start:[^;]*${inset('left')}`));
-        expect(toast).toMatch(new RegExp(`inset-inline-end:[^;]*${inset('right')}`));
-        expect(toast).toMatch(new RegExp(`bottom:[^}]*${inset('bottom')}`));
+        expect(stack).toMatch(/composes:\s*viewport from '\.\/ToastHost\.module\.css'/);
     });
 
     it('pads the inline History export modal on every viewport edge', () => {

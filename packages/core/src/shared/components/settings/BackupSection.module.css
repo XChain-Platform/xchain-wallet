@@ -1,8 +1,5 @@
-.formSection > div:last-child {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
+/* Interactive forms use FormPage for the shared responsive form card. Result
+   rows use the shared card directly so both paths keep the same surface. */
 
 .actions {
     display: flex;

@@ -101,9 +101,6 @@ describe('DispenserForm numeric validation', () => {
         const give = utils.getByLabelText(/^Give amount/);
         give.focus();
 
-        // Each amount field carries its own paste control under it.
-        await user.tab();
-        expect(document.activeElement).toHaveAccessibleName('Paste from clipboard');
         await user.tab();
         const escrow = utils.getByLabelText(/^Escrow amount/);
         expect(document.activeElement).toBe(escrow);
@@ -180,7 +177,7 @@ describe('DispenserForm numeric validation', () => {
 
         fireEvent.click(utils.getByLabelText('A token'));
         fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(utils.getByLabelText('Payment amount (per fill)'), { target: { value: '1.1' } });
+        fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1.1' } });
         await waitFor(() => expect(utils.getByRole('button', { name: 'Create' })).toBeEnabled());
         fireEvent.click(utils.getByRole('button', { name: 'Create' }));
         expect(utils.getByRole('alert')).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
@@ -232,11 +229,16 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.click(utils.getByLabelText('A token'));
         fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'BAD/NAME' } });
-        fireEvent.change(utils.getByLabelText('Payment amount (per fill)'), { target: { value: '1' } });
+        fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent(/Payment token/i);
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('titles the screen in sentence case like every other form', async () => {
+        const utils = await mountForm();
+        expect(utils.getByRole('heading', { name: 'Create dispenser' })).toBeInTheDocument();
     });
 
     it('requires a currency for a fiat amount instead of silently dropping the field', async () => {
@@ -281,7 +283,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: 'not-a-price' } });
         fireEvent.click(utils.getByLabelText('A token'));
         fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(utils.getByLabelText('Payment amount (per fill)'), { target: { value: '2' } });
+        fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '2' } });
 
         await act(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Create' }));
@@ -308,8 +310,22 @@ describe('DispenserForm numeric validation', () => {
             resolveBuild({ psbtHex: '70736274ff', encoding: 'psbt', fromAddress: SOURCE.address });
             await drainMicrotasks();
         });
-        expect(utils.getByLabelText('Unsigned transaction hex')).toHaveValue('70736274ff');
+        expect(utils.getByLabelText('Unsigned transaction code')).toHaveValue('70736274ff');
         fireEvent.click(utils.getByRole('button', { name: 'Done' }));
         expect(onBack).toHaveBeenCalledOnce();
+    });
+});
+
+describe('DispenserForm per-fill labels', () => {
+    // AmountField appends the unit in brackets, so "Give amount (per fill)"
+    // read "Give amount (per fill) (JDOG)". Labels carry no brackets of their own.
+    it('reads "per fill" without a second set of brackets', async () => {
+        const utils = await mountForm();
+        expect(utils.getByLabelText('Give amount per fill (JDOG)')).toBeInTheDocument();
+        fireEvent.click(utils.getByRole('radio', { name: 'A token' }));
+        expect(utils.getByLabelText('Payment amount per fill')).toBeInTheDocument();
+        const labels = [...document.querySelectorAll('label')].map((label) => label.textContent || '');
+        expect(labels.filter((text) => /\)\s*\(/.test(text))).toEqual([]);
+        expect(labels.filter((text) => /\(per fill\)/.test(text))).toEqual([]);
     });
 });

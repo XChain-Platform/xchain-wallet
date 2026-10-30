@@ -103,7 +103,7 @@ function pointerYml(entries) {
 }
 
 /** A signed full release directory whose four pointers belong to `channel`. */
-function makeRelease(name, channel, extra = {}) {
+function makeRelease(name, channel, extra = {}, gate = 'enforced') {
     const dir = join(work, name);
     mkdirSync(dir, { recursive: true });
     const all = { ...ARTIFACTS, ...OTHER_DESKTOP, ...extra };
@@ -130,7 +130,7 @@ function makeRelease(name, channel, extra = {}) {
     execFileSync('bash', ['-c',
         `. "${join(root, 'tools/release/lib.sh')}" && `
         + `xr_write_manifest "${dir}" "${TAG}" "${'0'.repeat(40)}" `
-        + `"2026-07-31T00:00:00Z" "enforced" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
+        + `"2026-07-31T00:00:00Z" "${gate}" "${join(root, 'tools/release/expected-artifacts.txt')}"`],
     { env: process.env });
 
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
@@ -474,6 +474,29 @@ for (const [label, edit, reason] of [
     const r = await run(['--input', dir, '--tag', TAG, '--target', target]);
     assert.equal(r.status, 1, `${label} is refused:\n${r.out}`);
     assert.match(r.out, reason);
+    assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
+    assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        `${label}: the manifest was not uploaded either`);
+}
+
+// A release signed with the dev-mock gate skipped: every desktop client
+// refuses it, so publish.sh must refuse it before anything goes up, on the
+// production feed past a rehearsal record bound to its manifest and on the
+// staging feed, which no rehearsal record guards.
+for (const [label, channel, args, staging] of [
+    ['production', 'stable', [], false],
+    ['staging', 'staging', ['--staging'], true],
+]) {
+    const dir = makeRelease(`release-gate-skipped-${channel}`, channel, {}, 'SKIPPED');
+    assert.match(readFileSync(join(dir, 'RELEASE_HASHES.txt'), 'utf8'), /^# dev-mock-gate: SKIPPED$/m,
+        `${label}: the fixture manifest records the skipped gate`);
+    if (!staging) writeRehearsalRecord(dir);
+    const target = makeTarget(`feed-gate-skipped-${channel}`, { staging });
+    const r = await run(['--input', dir, '--tag', TAG, '--target', target, ...args]);
+    if (!staging) writeRehearsalRecord(prodRelease);
+    assert.equal(r.status, 1, `${label}: a SKIPPED-gate release is refused:\n${r.out}`);
+    assert.match(r.out, /POINTER-REFUSED\s+the signed manifest records the dev-mock gate as 'SKIPPED'/,
+        `${label}: the pointer gate names the skipped gate:\n${r.out}`);
     assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
     assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
         `${label}: the manifest was not uploaded either`);
@@ -919,6 +942,39 @@ function serveTls(dir) {
     const b = assertOn(k1Shaped);
     assert.equal(b.status, 0, `the staged observation covers the partial release:\n${b.stderr}`);
     assert.match(b.stdout, /^ok {3}rehearsal v0\.333\.1: 0 lane\(s\) probed \+ 1 direct/);
+}
+
+{
+    // The documented `--lane android-direct` still rehearses the full APK a two-APK partial carries.
+    const both = join(work, 'release-partial-both');
+    const keyFile = join(work, 'smoke-key-both.asc');
+    writeFileSync(keyFile, execFileSync('gpg', ['--armor', '--export', SMOKE_FPR],
+        { env: { ...process.env, GNUPGHOME: gnupg } }));
+    const out = join(work, 'REHEARSAL-staged-both.json');
+    const rehearse = join(root, 'tools', 'release', 'rehearse.mjs');
+    const tls = await serveTls(join(work, 'feed-partial-both-staging'));
+    assert.ok(tls, 'openssl is required to stand up the https staging feed this case reads');
+    const r = await runNode(rehearse, ['run', '--feed', `${tls.base}/`, '--tag', TAG,
+        '--channel', 'staging', '--prod-input', both, '--lane', 'android-direct',
+        '--previous-tag', 'v0.333.0', '--prod-feed', tls.base, '--repo', root,
+        '--pinned-key', keyFile, '--pinned-fingerprint', SMOKE_FPR, '--out', out],
+    { NODE_EXTRA_CA_CERTS: tls.cert });
+    tls.server.close();
+
+    const record = JSON.parse(readFileSync(out, 'utf8'));
+    assert.deepEqual(record.lanes, [], '--lane android-direct still probes no desktop lane');
+    assert.deepEqual(record['direct-lanes'].map((l) => l.id), ['android-direct', 'android-full'],
+        `every direct lane the release carries is probed, named or not:\n${r.out}`);
+    for (const direct of record['direct-lanes']) {
+        assert.ok(direct.ok, `${direct.id} passes: ${direct.failed} ${direct.reason}`);
+    }
+    assert.equal(r.status, 0, `the two-APK partial rehearses:\n${r.out}`);
+
+    const k1Shaped = join(work, 'REHEARSAL-staged-both-k1-shaped.json');
+    writeFileSync(k1Shaped, JSON.stringify({ ...record, 'pinned-key-override': null }));
+    const a = spawnSync(process.execPath, [rehearse, 'assert', '--record', k1Shaped,
+        '--tag', TAG, '--prod-input', both], { encoding: 'utf8' });
+    assert.equal(a.status, 0, `one documented command yields a record assert accepts:\n${a.stderr}`);
 }
 
 // ------------- one tag, two staged sets: desktop and APK keep their manifests

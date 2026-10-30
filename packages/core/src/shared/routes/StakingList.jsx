@@ -33,10 +33,13 @@ import {
     toBaseUnits,
     latestEffectiveStakingRow,
     isPendingContractUnstake,
+    scalarRows,
 } from '../../flows/stakingDashboard.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -125,6 +128,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
+    // Offline the explorer reads cannot finish, and each one waits out its
+    // client retries before failing, so the page would sit on a skeleton for
+    // a minute. It shows its offline state instead and reads once the
+    // connection returns.
+    const { offline, recheck } = useNetworkOffline({ walletId });
+
     useEffect(() => {
         let cancelled = false;
         setAddressesByChain(null);
@@ -191,6 +200,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             setStateByChain(demoState);
             return;
         }
+        if (offline) return;
 
         const initial = {};
         for (const cid of chainsWithAddresses) {
@@ -227,7 +237,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             .then((r) => { out.delegations = extractRows(r); })
                             .catch((e) => { out.errors.push(readFailureMessage(e, 'load delegations')); }),
                         messaging.getRewardsForAddress({ chainId: cid, address: addr })
-                            .then((r) => { out.rewards = extractRows(r); })
+                            .then((r) => { out.rewards = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
                             .catch((e) => { out.errors.push(readFailureMessage(e, 'load staking rewards')); }),
                         // PC-47: the claim side of the unclaimed sum. Best-effort:
                         // a build without the route degrades to "nothing claimed
@@ -237,7 +247,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         (typeof messaging.getRewardClaimsForAddress === 'function'
                             ? messaging.getRewardClaimsForAddress({ chainId: cid, address: addr })
                             : Promise.resolve(null))
-                            .then((r) => { out.rewardClaims = extractRows(r); })
+                            .then((r) => { out.rewardClaims = extractRows(r).map((row) => ({ ...row, _ownerAddress: addr })); })
                             .catch((e) => {
                                 out.rewardClaimsKnown = false;
                                 out.errors.push(readFailureMessage(e, 'load claimed staking rewards'));
@@ -300,7 +310,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 });
         }
         return () => { cancelled = true; };
-    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload]);
+    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload, offline]);
 
     // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
     // per chain; a failure leaves the height null and every countdown falls
@@ -331,6 +341,21 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         return unclaimedRewards({ rewards, claims });
     }, [stateByChain]);
 
+    // The Claim button opens the first address that really has rewards to
+    // collect, which need not be the newest stake row (or have a stake row at
+    // all: a fully unstaked validator can still be owed rewards).
+    const claimRef = useMemo(() => {
+        for (const [chainId, state] of Object.entries(stateByChain)) {
+            const owners = new Set((state.rewards || []).map((row) => String(row?._ownerAddress || '')).filter(Boolean));
+            for (const address of owners) {
+                const mine = (list) => (list || []).filter((row) => String(row?._ownerAddress || '') === address);
+                const { unclaimed } = unclaimedRewards({ rewards: mine(state.rewards), claims: mine(state.rewardClaims) });
+                if (unclaimed !== '0') return { kind: 'validator', chainId, address };
+            }
+        }
+        return null;
+    }, [stateByChain]);
+
     // Flatten every chain's rows into one list, newest first.
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -349,8 +374,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     // which already owns the COLLECT flow and its own preconditions. Picking a
     // surface rather than composing a claim here keeps one code path signing.
     const firstValidatorRef = useMemo(
-        () => allRows.find((row) => row.kind === 'validator')?.ref || null,
-        [allRows],
+        () => claimRef || allRows.find((row) => row.kind === 'validator')?.ref || null,
+        [claimRef, allRows],
     );
 
     const anyLoading = useMemo(() => {
@@ -374,50 +399,55 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         });
     }, [allRows, query, network]);
 
+    // A second line that two rows share (one owner address under every
+    // position) is shown nowhere; the position detail names the address.
+    const repeatedSecondLines = useMemo(() => repeatedSecondLinesOf(visibleRows), [visibleRows]);
+
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.StakeIcon />}
             title="Staking"
-            trailing={onNewStake ? (
-                <Button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onNewStake()}
-                    aria-label="New stake"
-                    title="New stake"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
-    const wrap = (children, toolbar) => (
+    // The page header holds only the title and Back, so New stake sits in the
+    // content's actions row. An empty list offers it from its EmptyState
+    // instead, so the screen never shows it twice.
+    const wrap = (children, { toolbar, notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage
+                notices={notices}
+                actions={onNewStake && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
+                        New stake
+                    </Button>
+                ) : null}
+                toolbar={toolbar}
+            >
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
+            ),
+        });
     }
     if (!addressesByChain) {
         return wrap(
@@ -433,6 +463,14 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 body="Contract staking supports Bitcoin, Litecoin, and Dogecoin; validator staking supports Bitcoin."
                 titleAs="p"
             />,
+        );
+    }
+
+    // Offline with nothing loaded, the page says so once in place of a
+    // skeleton waiting on reads that cannot run.
+    if (offline && allRows.length === 0) {
+        return wrap(
+            <OfflineEmptyState body="Staking positions load when the connection returns." onRetry={recheck} />,
         );
     }
 
@@ -457,12 +495,29 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         </div>
     );
 
+    const loadErrorNotice = loadErrors.length > 0 ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setStateByChain({});
+                    setStakingReload((value) => value + 1);
+                },
+            }}
+        >
+            Couldn't load some staking data. {loadErrors.join('; ')}
+        </StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && allRows.length === 0 && loadErrors.length === 0 && Boolean(onNewStake);
+
     return wrap(
         <>
             {Number(claimable.unclaimed) > 0 ? (
-                <div className={local.claimable} role="status">
+                <div className={local.claimable}>
                     <div>
-                        <strong>{formatWithThousands(claimable.unclaimed)} XCHAIN</strong>
+                        <strong><bdi dir="ltr">{formatWithThousands(claimable.unclaimed)} XCHAIN</bdi></strong>
                         {' '}ready to claim
                         <div className={styles.entryDescription}>
                             Rewards you have earned and not yet collected.
@@ -476,21 +531,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <Button variant="primary" onClick={() => onOpenStake(firstValidatorRef)}>Claim</Button>
                     ) : null}
                 </div>
-            ) : null}
-            {loadErrors.length > 0 ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setStateByChain({});
-                            setStakingReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    Couldn't load some staking data. {loadErrors.join('; ')}
-                </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading staking positions">
@@ -520,6 +560,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <StakeRow
                             key={row.key}
                             row={row}
+                            hideSecondLine={repeatedSecondLines.has(row.subtitle2)}
                             period={row.cooldownEndBlock != null
                                 ? cooldownText(cooldownStatus({
                                     unstake: { cooldown_end_block: row.cooldownEndBlock },
@@ -537,55 +578,81 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             )}
         </>,
-        toolbar,
+        { toolbar, notices: loadErrorNotice, emptyOffersCreate },
     );
 }
 
-function StakeRow({ row, period, onSelect }) {
+/**
+ * The second-line texts that more than one row carries.
+ *
+ * @param {Array<{ subtitle2?: string | null }>} rows
+ * @returns {Set<string>}
+ */
+export function repeatedSecondLinesOf(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        if (row.subtitle2) counts.set(row.subtitle2, (counts.get(row.subtitle2) || 0) + 1);
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([text]) => text));
+}
+
+/**
+ * The accessible name of a stake row: the position, its amount and its
+ * owner, so two positions under one validator or contract read apart.
+ *
+ * @param {{ name: string, subtitle?: string | null, subtitle2?: string | null }} row
+ * @returns {string}
+ */
+export function stakeRowLabel(row) {
+    return ['Open ' + row.name, row.subtitle, row.subtitle2].filter(Boolean).join(', ');
+}
+
+function StakeRow({ row, period, hideSecondLine = false, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     return (
-        /* Stake entries stay native buttons because each control is the complete clickable row. */
-        <button
-            type="button"
-            className={local.row}
-            role="listitem"
-            onClick={onSelect}
-            aria-label={`Open ${row.name}`}
-        >
-            <div className={local.iconWrap}>
-                <span
-                    className={local.iconLetter}
-                    style={{ background: tickerColor(row.asset || '?') }}
-                    aria-hidden="true"
-                >
-                    {(row.asset || '?').slice(0, 1)}
-                </span>
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
+        /* The list item holds one native button, which is the complete clickable row. */
+        <div role="listitem" className={local.rowItem}>
+            <button
+                type="button"
+                className={local.row}
+                onClick={onSelect}
+                aria-label={stakeRowLabel(row)}
+            >
+                <div className={local.iconWrap}>
+                    <span
+                        className={local.iconLetter}
+                        style={{ background: tickerColor(row.asset || '?') }}
                         aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>{row.name}</div>
-                <div className={local.subtitle}>{row.subtitle}</div>
-                {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
-            </div>
-            <div className={local.trailing}>
-                <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
-                    {row.status}
-                </span>
-                <span className={local.amount}>{row.amountLabel}</span>
-                {period ? <span className={local.duration}>{period}</span> : null}
-                {row.rewardLabel ? (
-                    <span className={local.rewardChip}>{row.rewardLabel}</span>
-                ) : null}
-            </div>
-        </button>
+                    >
+                        {(row.asset || '?').slice(0, 1)}
+                    </span>
+                    {chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={chainRegistry.get(row.chainId)?.displayName}
+                            className={local.chainOverlay}
+                        />
+                    ) : null}
+                </div>
+                <div className={local.body}>
+                    <div className={local.name}>{row.name}</div>
+                    <div className={local.subtitle}><bdi dir="ltr">{row.subtitle}</bdi></div>
+                    {row.subtitle2 && !hideSecondLine ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
+                </div>
+                <div className={local.trailing}>
+                    <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
+                        {row.status}
+                    </span>
+                    <span className={local.amount}>{row.amountLabel}</span>
+                    {period ? <span className={local.duration}>{period}</span> : null}
+                    {row.rewardLabel ? (
+                        <span className={local.rewardChip}>{row.rewardLabel}</span>
+                    ) : null}
+                </div>
+            </button>
+        </div>
     );
 }
 
@@ -607,25 +674,37 @@ export function buildRows({
     /** @type {any[]} */
     const rows = [];
 
-    // Pending (unclaimed) rewards surface as a per-row chip on the
-    // validator rows they belong to; rewards are validator-specific so
-    // the list root itself stays kind-neutral.
-    const { unclaimed: pendingRewards } = unclaimedRewards({
-        rewards,
-        claims: rewardClaims,
-    });
-    const rewardLabel = pendingRewards !== '0'
-        ? `+${formatWithThousands(String(pendingRewards))} XCHAIN reward`
-        : null;
+    // Pending (unclaimed) rewards surface as a chip on the validator row of
+    // the address they belong to, once per address; rewards are
+    // validator-specific so the list root itself stays kind-neutral. Rows
+    // that carry no owner (the demo fixtures) all belong to one address.
+    const pendingByAddress = new Map();
+    const pendingFor = (addr) => {
+        if (!pendingByAddress.has(addr)) {
+            const owned = (list) => (Array.isArray(list) ? list : [])
+                .filter((row) => !row?._ownerAddress || String(row._ownerAddress) === addr);
+            pendingByAddress.set(addr, unclaimedRewards({
+                rewards: owned(rewards),
+                claims: owned(rewardClaims),
+            }).unclaimed);
+        }
+        return pendingByAddress.get(addr);
+    };
+    const labelledAddresses = new Set();
 
     const primaryDelegation = latestEffectiveStakingRow(delegations, height);
     for (const s of visibleStakingRows(stakes, height)) {
         const amt = fmtAmount(s.amount ?? s.AMOUNT ?? s.quantity);
-        const asset = s.asset ?? s.ASSET ?? 'XCHAIN';
+        const asset = tickText(s.asset ?? s.ASSET, 'XCHAIN');
         const label = s.capability_label || s.capability || 'Validator stake';
         const state = stakingRowState(s, height);
         const status = state === 'pending' ? 'locked' : normalizeStatus(s.status ?? s.STATUS) || 'active';
         const addr = String(s._ownerAddress || '');
+        const pendingRewards = pendingFor(addr);
+        const rewardLabel = pendingRewards !== '0' && !labelledAddresses.has(addr)
+            ? `+${formatWithThousands(String(pendingRewards))} XCHAIN reward`
+            : null;
+        labelledAddresses.add(addr);
         rows.push({
             key: `v:${chainId}:${String(s.stake_id ?? s.action_index ?? addr)}`,
             kind: 'validator',
@@ -652,7 +731,7 @@ export function buildRows({
     for (const s of activeContractStakes) {
         const idx = String(s.target_contract_index ?? '?');
         const addr = String(s._ownerAddress || '');
-        const tick = s.tick || '?';
+        const tick = tickText(s.tick, '?');
         const matchingUnstakes = (contractUnstakes || []).filter(
             (u) => String(u.target_contract_index ?? '') === idx,
         );
@@ -719,7 +798,7 @@ export function buildRows({
         );
         if (hasStakeRow) continue;
         const addr = String(u._ownerAddress || '');
-        const tick = u.tick || '?';
+        const tick = tickText(u.tick, '?');
         rows.push({
             key: `u:${chainId}:${idx}:${String(u.action_index ?? addr)}`,
             kind: 'contract',
@@ -787,6 +866,12 @@ function coversWholeStake(completed, stakeAmount) {
     return sum >= staked;
 }
 
+// A token ticker from the explorer, or the fallback when it is missing or not
+// text (a row of the wrong shape must not take the whole list down).
+function tickText(value, fallback) {
+    return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
 // Comma-grouped display amount; non-numeric input (missing amounts)
 // falls back to "?".
 function fmtAmount(value) {
@@ -805,9 +890,9 @@ function normalizeStatus(status) {
 
 function extractRows(resp) {
     if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
+    if (Array.isArray(resp)) return scalarRows(resp);
+    if (Array.isArray(resp.data)) return scalarRows(resp.data);
+    if (Array.isArray(resp.rows)) return scalarRows(resp.rows);
     return [];
 }
 

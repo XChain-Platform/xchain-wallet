@@ -23,14 +23,14 @@ const formSrc = readFileSync(
 );
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
-assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
+assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(
     formSrc,
     /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'BROADCAST'/,
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
-assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
 assert.match(formSrc, /Create unsigned transaction/);
 console.log('broadcast-watcher-mode smoke OK');

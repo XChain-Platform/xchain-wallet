@@ -14,13 +14,21 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import pngjs from 'pngjs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     pruneReportRows, VISUAL_REPORT_GENERATOR,
-} from '../../scripts/visual-report-files.mjs';
+} from '../../tools/visual-report-files.mjs';
 
-const SCRIPT = join(process.cwd(), 'scripts', 'visual-clean.mjs');
+const SCRIPT = join(process.cwd(), 'tools', 'visual-clean.mjs');
 const fixtures = [];
+const { PNG } = pngjs;
+
+function pngBuffer() {
+    const png = new PNG({ width: 1, height: 1 });
+    png.data.set([20, 40, 60, 255]);
+    return PNG.sync.write(png);
+}
 
 function fixture() {
     const dir = mkdtempSync(join(tmpdir(), 'visual-clean-'));
@@ -41,7 +49,7 @@ function metrics(overrides = {}) {
 function makeReport(root, name, { marker = true, ageHours = 48 } = {}) {
     const dir = join(root, name);
     mkdirSync(join(dir, 'shots'), { recursive: true });
-    writeFileSync(join(dir, 'shots', 'capture.png'), 'fixture png bytes');
+    writeFileSync(join(dir, 'shots', 'capture.png'), pngBuffer());
     writeFileSync(join(dir, 'index.json'), JSON.stringify({
         generator: marker ? VISUAL_REPORT_GENERATOR : 'some-other-tool',
         finishedAt: new Date(Date.now() - ageHours * 60 * 60 * 1000).toISOString(),
@@ -59,11 +67,11 @@ describe('visual report pruning', () => {
     it('deletes only below-threshold rows with matching layout metrics', () => {
         const root = fixture();
         const files = ['baseline.png', 'candidate.png', 'diff.png'].map((name) => join(root, name));
-        for (const file of files) writeFileSync(file, 'png');
+        for (const file of files) writeFileSync(file, pngBuffer());
         const mismatch = join(root, 'mismatch.png');
         const atThreshold = join(root, 'at-threshold.png');
-        writeFileSync(mismatch, 'png');
-        writeFileSync(atThreshold, 'png');
+        writeFileSync(mismatch, pngBuffer());
+        writeFileSync(atThreshold, pngBuffer());
         const rows = [
             {
                 percent: 0.499, baseline: files[0], candidate: files[1], diff: files[2],
@@ -94,7 +102,7 @@ describe('visual report pruning', () => {
     it('retains below-threshold rows when keep-all is set', () => {
         const root = fixture();
         const file = join(root, 'kept.png');
-        writeFileSync(file, 'png');
+        writeFileSync(file, pngBuffer());
         const rows = [{
             percent: 0, baseline: file,
             baselineMetrics: metrics(), candidateMetrics: metrics(),

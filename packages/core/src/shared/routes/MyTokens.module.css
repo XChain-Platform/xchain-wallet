@@ -1,31 +1,3 @@
-.issueButton {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid var(--xc-border);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-accent-text);
-    cursor: pointer;
-}
-
-.issueButton:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.issueButton:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.issueButton > span {
-    display: contents;
-}
-
 .search {
     flex: 1 1 auto;
     min-width: 160px;
@@ -119,14 +91,25 @@
 }
 
 .rowTick {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-md);
     font-weight: 600;
 }
 
+/* A ticker may run to 250 characters with no space to wrap at; it ends in
+   an ellipsis before the lock mark instead of running under it. */
+.rowTickName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .lockedBadge {
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;

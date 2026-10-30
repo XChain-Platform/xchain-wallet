@@ -36,6 +36,7 @@ function makeHarness({ encoding = 'P2SH', requiredFeeSats = FEE_SATS } = {}) {
         actionString: `DEPLOY|0|${'Q'.repeat(400)}|100000`, action: 'DEPLOY', version: 0,
     }));
     const sdk = {
+        options: { network: 'litecoin-regtest' },
         encoder: { createTx, spendP2sh, broadcastTx },
         actions: { createAction },
         // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.

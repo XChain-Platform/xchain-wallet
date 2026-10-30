@@ -13,14 +13,20 @@
 // random text in a form we validate the address ourselves against the
 // target network: a base58check checksum + version byte for legacy
 // (P2PKH / P2SH) addresses, or a bech32/bech32m decode + human-readable
-// prefix for segwit. Mirrors the indexer's `isCryptoAddress` table so the
-// wallet and the chain agree on what a valid address looks like.
+// prefix for segwit. Mirrors the indexer's `isCryptoAddress` table and its
+// segwit witness rules so the wallet and the chain agree on what a valid
+// address looks like.
 
 import { base58check, bech32, bech32m } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
 import { isDevMockAddress } from '../../sdk/devMockAddresses.js';
 
 const bsc = base58check(sha256);
+// The BIP173 cap, and the longest string any supported address encoding can take
+// (base58check addresses are at most 35 characters). Base58 decoding is quadratic
+// in its input, so a pasted blob well past this length would otherwise freeze the
+// page for minutes before being refused.
+const MAX_ADDRESS_LENGTH = 90;
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
 
 // Address version bytes (P2PKH / P2SH) + segwit prefix (HRP) per coin and
@@ -57,9 +63,34 @@ export const ADDRESS_PARAMS = {
 // full generated shape (known prefix + up to 24 lowercase hex chars, anchored),
 // which no pasted text reaches by accident and no real address can match.
 
+// True when the lower-cased `lower` is a segwit address for `hrp` under the same rules the
+// indexer's bech32Decode applies, so the wallet never calls valid what the chain drops.
+function isSegwitAddress(lower, hrp) {
+    for (const codec of [bech32, bech32m]) {
+        let decoded;
+        // Decode under the BIP173 90-character cap; a checksum for the other constant throws.
+        try { decoded = codec.decode(lower, 90); } catch { continue; }
+        if (decoded.prefix !== hrp || decoded.words.length < 1) return false;
+        const version = decoded.words[0];
+        // Witness version is at most 16 (BIP141).
+        if (version > 16) return false;
+        // Version 0 must use the bech32 checksum and versions 1-16 bech32m (BIP350).
+        if ((version === 0) !== (codec === bech32)) return false;
+        let program;
+        // Convert the program to bytes; fromWords throws on excess or non-zero padding.
+        try { program = codec.fromWords(decoded.words.slice(1)); } catch { return false; }
+        // Program is 2-40 bytes, and exactly 20 or 32 bytes for version 0 (BIP141).
+        if (program.length < 2 || program.length > 40) return false;
+        if (version === 0 && program.length !== 20 && program.length !== 32) return false;
+        return true;
+    }
+    return false;
+}
+
 // True when `address` is well-formed for one specific coin+network's params.
 function matchesParams(address, params) {
     if (!params) return false;
+    if (address.length > MAX_ADDRESS_LENGTH) return false;
     // Segwit (bech32 / bech32m) when the coin has an HRP and the address looks
     // like a bech32 string for this network.
     if (params.hrp && address.toLowerCase().startsWith(`${params.hrp}1`)) {
@@ -67,13 +98,7 @@ function matchesParams(address, params) {
         // normalized form only after enforcing that rule so case folding does
         // not turn a malformed address into a valid destination.
         if (address !== address.toLowerCase() && address !== address.toUpperCase()) return false;
-        const lower = address.toLowerCase();
-        for (const codec of [bech32, bech32m]) {
-            try {
-                if (codec.decode(lower, 1023).prefix === params.hrp) return true;
-            } catch { /* try the other encoding */ }
-        }
-        return false;
+        return isSegwitAddress(address.toLowerCase(), params.hrp);
     }
     // Legacy base58check (P2PKH / P2SH): 1 version byte + 20-byte hash160.
     try {
@@ -135,7 +160,7 @@ export function detectAddressCoin(address) {
  */
 export function detectAddressChain(address) {
     const a = String(address || '').trim();
-    if (!a) return null;
+    if (!a || a.length > MAX_ADDRESS_LENGTH) return null;
     const lower = a.toLowerCase();
     for (const coin of Object.keys(ADDRESS_PARAMS)) {
         for (const network of Object.keys(ADDRESS_PARAMS[coin])) {
@@ -202,9 +227,22 @@ function chainLabel(coin, network) {
     return `${name} ${network}`;
 }
 
+// The shape of an address a person could have mistyped: a base58 string of
+// address length, or a string under one of the supported bech32 prefixes.
+// Anything else is not an address attempt at all.
+const BASE58_SHAPE_RE = /^[1-9A-HJ-NP-Za-km-z]{25,36}$/;
+const BECH32_SHAPE_RE = /^(?:bc|tb|bcrt|ltc|tltc|rltc)1[a-z0-9]{6,87}$/i;
+
+function looksLikeAddress(address) {
+    return BASE58_SHAPE_RE.test(address) || BECH32_SHAPE_RE.test(address);
+}
+
+const PAYMENT_LINK_RE = /^(?:bitcoin|litecoin|dogecoin|xchain|web\+xchain):/i;
+
 /**
  * Plain-language validation copy for an address field tied to one chain.
- * A checksum failure is presented as a typo. A well-formed address for a
+ * A checksum failure on an address-shaped string is presented as a typo; any
+ * other text is called not a valid address. A well-formed address for a
  * different chain names the network encoded in that address instead.
  *
  * Shared legacy version bytes cannot distinguish Bitcoin, Litecoin, and
@@ -222,6 +260,10 @@ export function addressValidationError(address, descriptor) {
     if (!a || !coin || !network) return null;
     if (isValidAddressForChain(a, coin, network)) return null;
 
+    // A payment link in an address field is not a typo; say what it is.
+    if (PAYMENT_LINK_RE.test(a)) {
+        return 'This is a payment link, not an address. Paste the whole link into this field to fill in the payment.';
+    }
     const target = chainLabel(coin, network);
     const detected = detectAddressChain(a);
     if (detected?.coin && detected.network) {
@@ -230,7 +272,10 @@ export function addressValidationError(address, descriptor) {
     if (detected && detected.network === null) {
         return `This address belongs to testnet or regtest, not ${target}.`;
     }
-    return 'This address has a typo. Check it and try again.';
+    // A near-miss (address-shaped, bad checksum) is a typo; anything else is
+    // not an address.
+    if (looksLikeAddress(a)) return 'This address has a typo. Check it and try again.';
+    return 'This is not a valid address.';
 }
 
 /**

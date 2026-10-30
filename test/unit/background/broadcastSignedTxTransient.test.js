@@ -9,11 +9,16 @@
 // contact legal@dankest.llc.
 
 import { describe, expect, it, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const WALLET = 'wallet-1';
 const CHAIN = 'bitcoin-regtest';
-const TX_HEX = '020000000001';
+// Real signed bytes whose coin the tracker stand-in lists, since the route
+// verifies every signature before it records or broadcasts anything.
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const TX_HEX = SIGNED.txHex;
 const TXID = 'signed-txid';
 
 function memCollection() {
@@ -39,7 +44,11 @@ function makeHost(broadcastTx) {
         save: vi.fn(async (snapshot) => { snapshots.push(JSON.parse(JSON.stringify(snapshot))); }),
         clear: async () => {},
     };
-    const sdk = { encoder: { broadcastTx } };
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault: {
             pendingTxs,
@@ -138,5 +147,20 @@ describe('broadcast.signedTx transient handoff', () => {
             error: 'bad-txns-inputs-missingorspent',
         });
         expect((await h.listQueue()).result).toEqual([]);
+    });
+});
+
+describe('broadcast.signedTx with a pasted raw transaction', () => {
+    const RAW = TX_HEX;
+
+    it('records the txid derived from the bytes when the caller sends none', async () => {
+        const h = makeHost(vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+
+        const response = await h.call('broadcast.signedTx', { walletId: WALLET, chainId: CHAIN, txHex: RAW });
+
+        expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
+        const [record] = await h.pendingTxs.list();
+        expect(record.txid).toMatch(/^[0-9a-f]{64}$/);
+        expect(record).toMatchObject({ status: 'queued', fromAddress: 'unknown' });
     });
 });

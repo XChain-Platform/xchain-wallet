@@ -276,9 +276,47 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
         expect(Number(second.args.deadline)).toBe(DEADLINE_UNIX);
         expect(utils.container.textContent).toContain('0.16500000');
     });
+
+    it('says plainly that the estimate is unavailable and keeps the host error text off the screen', async () => {
+        const { messaging } = harness({
+            betProjectFeedCreateFee: () => Promise.reject(
+                new Error('projectBetFeedCreateFee: sdk.betting.projectFeedCreateFee is unavailable'),
+            ),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        expect(utils.getByText("The cost estimate isn't available right now.")).toBeTruthy();
+        expect(utils.container.textContent).not.toMatch(/projectFeedCreateFee|sdk\.|unavailable:/);
+    });
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
+    it.each([
+        ['What is being bet on', 'safe\u202eunsafe', /Title cannot contain text-direction/],
+        ['Outcome 0', 'safe\u200bunsafe', /Outcome cannot contain zero-width/],
+    ])('refuses hostile %s text before compose', async (label, value, message) => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            typeIn(utils, label, value);
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+
+        expect(utils.container.textContent).toMatch(message);
+        expect(calls.find((call) => call.method === 'composeBetForConfirm')).toBeUndefined();
+    });
+
     it.each([
         ['1,5', '1.5'],
         ['1.5', '1.5'],
@@ -332,7 +370,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
@@ -525,6 +563,26 @@ describe('CreateBetFeedForm: compose and submit', () => {
         expect(utils.container.textContent).toMatch(/between one hour and one year/i);
     });
 
+    it.each([
+        ['1.0000000000000000001', /at most 18 decimal places/i],
+        ['1'.repeat(48), /too large/i],
+    ])('refuses an unsupported minimum bet %s before composing', async (minimum, message) => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            typeIn(utils, 'Smallest bet allowed (optional)', minimum);
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(message);
+    });
+
     it('accepts an ordinary multi-word outcome label (the separator check is not a space check)', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -646,6 +704,15 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(utils.queryByTestId('bet-projection')).toBeNull();
     });
 
+    it('neutralizes hostile outcome text on the choice that controls the bet', async () => {
+        const { messaging } = harness({
+            betFeed: () => Promise.resolve({ data: [{ ...FEED, outcomes: 'Home\u202Eevil,Away' }] }),
+        });
+        const utils = await openMarket(messaging);
+        expect(utils.container.textContent).not.toContain('\u202E');
+        expect(utils.container.textContent).toContain('Home\u2426evil');
+    });
+
     it('stays quiet rather than erroring when the projection is unavailable', async () => {
         // A host that predates the projection, and a half-typed stake, are both
         // normal. Neither is something to shout at the user about, and neither
@@ -698,6 +765,22 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(utils.container.textContent).toMatch(/minimum bet of 10/i);
     });
 
+    it('does not trust a malformed minimum amount from the explorer', async () => {
+        const { messaging, calls } = harness({
+            betFeed: () => Promise.resolve({ data: [{ ...FEED, min_amount: '1'.repeat(1_000) }] }),
+        });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+        expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review bet/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(/invalid minimum bet amount/i);
+    });
+
     it('refuses exponent notation before projection or compose', async () => {
         const { messaging, calls } = harness();
         const utils = await openMarket(messaging);
@@ -711,6 +794,24 @@ describe('BetFeedDetail states what a win would pay', () => {
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
         expect(utils.container.textContent).toMatch(/digits and an optional decimal point/i);
+    });
+
+    it.each([
+        ['1.0000000000000000001', /at most 18 decimal places/i],
+        ['1'.repeat(48), /too large/i],
+    ])('refuses an unsupported stake %s before projection or compose', async (stake, message) => {
+        const { messaging, calls } = harness();
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', stake);
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+        expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review bet/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(message);
     });
 });
 
@@ -735,6 +836,8 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.builder).toBe('placeBetParams');
+        expect(calls.find((c) => c.method === 'composeBetForConfirm').args.params.outcomes)
+            .toEqual(['Home', 'Away']);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
         expect(utils.getByTestId('confirm-approve')).toBeTruthy();
 
@@ -751,6 +854,7 @@ describe('every BET surface renders the confirm page it opens', () => {
         const submit = calls.find((c) => c.method === 'placeBetAction');
         expect(submit).toBeTruthy();
         expect(submit.args.password).toBe('hunter2');
+        expect(submit.args.params.outcomes).toEqual(['Home', 'Away']);
     });
 
     it('OracleConsole: reviewing a resolve draws the confirm page rather than stranding it', async () => {
@@ -786,7 +890,9 @@ describe('every BET surface renders the confirm page it opens', () => {
         const submit = calls.find((c) => c.method === 'resolveMarketAction');
         expect(submit).toBeTruthy();
         expect(submit.args.password).toBe('hunter2');
-        expect(submit.args.params).toMatchObject({ feedActionIndex: '2343', outcome: 0 });
+        expect(submit.args.params).toMatchObject({
+            feedActionIndex: '2343', outcome: 0, outcomes: ['Yes', 'No'],
+        });
     });
 });
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
@@ -9,7 +10,7 @@ import { MessagingContext } from '../../../packages/core/src/shared/MessagingCon
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 
 function source(path) {
-    return readFileSync(path, 'utf8');
+    return withEnglishCopy(readFileSync(path, 'utf8'));
 }
 
 function rule(css, selector) {
@@ -26,9 +27,13 @@ describe('K51 small-screen UI', () => {
         const ads = source('packages/core/src/shared/components/settings/AdsSection.jsx');
         const inputCss = source('packages/core/src/ui/Input.module.css');
 
-        expect(ads).toMatch(/import \{ InfoTip, Input \} from '@xchain-wallet\/core\/ui'/);
-        expect(ads.match(/<Input\s/g)).toHaveLength(2);
-        expect(ads).toMatch(/const PLACEHOLDER_BOX = \{[\s\S]*?wordBreak: 'normal',[\s\S]*?overflowWrap: 'break-word'/);
+        expect(ads).toMatch(/import \{ (?:EmptyState, )?InfoTip, Input, Select \} from '@xchain-wallet\/core\/ui'/);
+        // The amount fields share one AmountField, the donation address is a
+        // read-only kit Input and the recipient picker is the kit Select, which
+        // wears Input's control class, so every field takes the kit heights.
+        expect(ads.match(/<Input\s/g)).toHaveLength(3);
+        expect(ads.match(/<Select\s/g)).toHaveLength(1);
+        expect(source('packages/core/src/ui/Select.jsx')).toMatch(/import styles from '\.\/Input\.module\.css'/);
         expect(rule(inputCss, '.input:not(textarea)')).toMatch(/height:\s*var\(--xc-control-height\)/);
     });
 

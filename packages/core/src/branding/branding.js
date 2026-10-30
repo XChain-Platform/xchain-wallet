@@ -68,23 +68,18 @@ export const DEFAULT_MINER_URL = 'http://localhost:3005';
 export const EXTERNAL_EXPLORERS = Object.freeze({
     mempool: Object.freeze({
         baseUrl: 'https://mempool.space',
-        iconUrl: 'https://mempool.space/resources/favicons/favicon.ico',
     }),
     blockstream: Object.freeze({
         baseUrl: 'https://blockstream.info',
-        iconUrl: 'https://blockstream.info/favicon.ico',
     }),
     litecoinSpace: Object.freeze({
         baseUrl: 'https://litecoinspace.org',
-        iconUrl: 'https://litecoinspace.org/favicon.ico',
     }),
     blockchair: Object.freeze({
         baseUrl: 'https://blockchair.com',
-        iconUrl: 'https://blockchair.com/favicon.ico',
     }),
     blockcypher: Object.freeze({
         baseUrl: 'https://live.blockcypher.com',
-        iconUrl: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
     }),
 });
 

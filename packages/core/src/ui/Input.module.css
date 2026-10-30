@@ -53,9 +53,35 @@
 }
 
 .input:not(textarea) {
+    text-overflow: ellipsis;
     height: var(--xc-control-height);
     padding-block: 0;
     padding-inline: var(--xc-control-padding-x, 12px);
+}
+
+/* The browser's own file button is a grey default-styled box; it takes the
+   outlined secondary button look so a file field reads like every other
+   control. The button takes the small control height, which fits inside the
+   field's inset. */
+.input[type='file'] {
+    padding-block: var(--xc-space-1);
+    padding-inline: var(--xc-space-1);
+    color: var(--xc-text-muted);
+}
+
+.input[type='file']::file-selector-button {
+    box-sizing: border-box;
+    height: var(--xc-control-h-sm);
+    margin-inline-end: var(--xc-space-2);
+    padding-inline: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius, 8px);
+    background: transparent;
+    color: var(--xc-accent-text);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    cursor: pointer;
 }
 
 .input:is([type='number'], [inputmode='decimal'], [inputmode='numeric']) {
@@ -72,6 +98,52 @@
    button) must keep painting above the input's opaque background. */
 .controlHitArea > .input {
     position: relative;
+}
+
+/* A revealable password field keeps its show and hide button inside the
+   border, so the text stops short of the button instead of running under it. */
+.controlHitArea > .revealableInput {
+    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
+}
+
+.revealToggle {
+    --xc-icon-size: var(--xc-icon-md);
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    /* This half-grid inset keeps the toggle centered inside the input border. */
+    inset-inline-end: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
+    min-height: var(--xc-control-h-sm);
+    padding: 0;
+    color: var(--xc-text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+}
+
+.revealToggle:hover {
+    color: var(--xc-text);
+}
+
+.revealToggle:focus-visible {
+    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
+    outline-offset: 0;
+}
+
+/* A disabled field draws the shared disabled colours, like a disabled Button. */
+.input:disabled {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
+    cursor: not-allowed;
+    -webkit-text-fill-color: var(--xc-control-disabled-text);
 }
 
 .input:focus {
@@ -127,6 +199,39 @@
         height: max(100%, var(--xc-control-hit-min, 24px));
         transform: translateY(-50%);
     }
+}
+
+/* Textarea with in-field actions: the buttons sit in the box's bottom end
+   corner, inset from the border, and the text keeps a strip of block-end
+   padding one small control tall (plus the same inset above and below) so
+   it never runs under them. Textarea grows with its content, so that strip
+   is never scrolled through. */
+.textareaControl {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+}
+
+.textareaWithActions {
+    padding-block-end: calc(var(--xc-control-h-sm) + var(--xc-space-1) * 2);
+}
+
+.textareaActions {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-end: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: calc(100% - var(--xc-space-2));
+}
+
+.textareaActions button {
+    flex: none;
+    white-space: nowrap;
 }
 
 .invalid {

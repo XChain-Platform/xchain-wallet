@@ -19,6 +19,7 @@ import {
 } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
+import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 // coinTypeFor's SLIP-44 slots (bitcoin-mainnet=0', litecoin-mainnet=2',
 // dogecoin-mainnet=3') are a second, independently-hardcoded copy of the same
@@ -57,11 +58,21 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
 });
 
 // What a Ledger returns for the PSBT decomposition SIGNPSBT_DECOMPOSED below
-// describes: one input spending aaaa…:0, one 900-sat p2wpkh output. A real
-// device's reply is a real transaction, and signPsbt now compares it back to
-// the approved PSBT, so a placeholder string here would only be testing the
+// describes: one input spending aaaa…:0, one 900-sat p2wpkh output, signed with
+// a real key. signPsbt compares a device reply back to the approved PSBT and
+// verifies its signatures, so a placeholder here would only be testing the
 // refusal path by accident.
-const DEVICE_REPLY = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+const SIGNPSBT_DECOMPOSED = decomposedFor({
+    inputs: [{ scriptType: 'p2wpkh', txid: 'a'.repeat(64), value: 1000, sequence: 0xffffffff }],
+    outputs: [{ scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+});
+const KEY_SCRIPT = SIGNPSBT_DECOMPOSED.inputs[0].scriptPubKeyHex;
+const DEVICE_REPLY = signedReplyFor(SIGNPSBT_DECOMPOSED);
+// The same spend from the key's wrapped-segwit (p2sh-p2wpkh) address.
+const WRAPPED_DECOMPOSED = decomposedFor({
+    inputs: [{ scriptType: 'p2sh-p2wpkh', txid: 'a'.repeat(64), value: 1000, sequence: 0xffffffff }],
+    outputs: [{ scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+});
 
 function makeApp(overrides = {}) {
     // Only methods the real hw-app-btc `Btc` class ships. The device's
@@ -331,6 +342,8 @@ describe('LedgerSigner.signMessage', () => {
         ['device not found', new Error('No device selected'), 'disconnected', 'HW_DEVICE_NOT_FOUND', /No Ledger was found/],
         ['locked', Object.assign(new Error('Device is locked'), { name: 'LockedDeviceError' }), 'locked', 'HW_LOCKED', /Ledger is locked/],
         ['wrong app', Object.assign(new Error('UNKNOWN_ERROR'), { statusCode: 0x6a82 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['dashboard open (instruction not supported)', Object.assign(new Error('INS_NOT_SUPPORTED'), { statusCode: 0x6d00 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['no app open', Object.assign(new Error('UNKNOWN_ERROR'), { statusCode: 0x6511 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
         ['user rejected', Object.assign(new Error('Condition of use not satisfied'), { statusCode: 0x6985 }), 'cancelled', 'HW_CANCELLED', /Nothing was signed/],
         ['cable unplugged', Object.assign(new Error('Device disconnected'), { name: 'DisconnectedDeviceDuringOperation' }), 'disconnected', 'HW_DISCONNECTED', /disconnected before signing finished/],
         ['old firmware', new Error('Device firmware is too old'), 'firmware', 'HW_FIRMWARE', /firmware is too old/],
@@ -340,7 +353,7 @@ describe('LedgerSigner.signMessage', () => {
 
         expect(err).toMatchObject({ status, code });
         expect(err.message).toMatch(copy);
-        expect(err.message).not.toMatch(/UNKNOWN_ERROR|0x6a82|Condition of use/);
+        expect(err.message).not.toMatch(/UNKNOWN_ERROR|INS_NOT_SUPPORTED|0x6a82|0x6d00|0x6511|Condition of use/);
     });
 });
 
@@ -364,7 +377,7 @@ describe('LedgerSigner.signPsbt', () => {
     // which blew up inside the library as `additionals.includes is not a
     // function` on the first real signing attempt.
     const PREV_TX_HEX = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
-        + '00000000160014' + 'bb'.repeat(20) + '00000000';
+        + '0000000016' + KEY_SCRIPT + '00000000';
 
     /** The PSBT the user approved, as decomposePsbt reports it. */
     const signPsbtSdk = () => ({
@@ -376,7 +389,7 @@ describe('LedgerSigner.signPsbt', () => {
                     prevTxIndex: 0,
                     value: 1000,
                     sequence: 0xffffffff,
-                    witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                    witnessUtxoScriptHex: KEY_SCRIPT,
                     nonWitnessUtxoHex: PREV_TX_HEX,
                     redeemScriptHex: null,
                 }],
@@ -398,12 +411,19 @@ describe('LedgerSigner.signPsbt', () => {
         const mockSdk = signPsbtSdk();
         const [inp] = mockSdk.wallet.decomposePsbt().inputs;
         mockSdk.wallet.decomposePsbt.mockReturnValue({
-            inputs: [{ ...inp, scriptType: 'p2sh-p2wpkh', redeemScriptHex: '0014' + 'bb'.repeat(20) }],
+            inputs: [{
+                ...inp,
+                scriptType: 'p2sh-p2wpkh',
+                witnessUtxoScriptHex: WRAPPED_DECOMPOSED.inputs[0].scriptPubKeyHex,
+                redeemScriptHex: WRAPPED_DECOMPOSED.inputs[0].redeemScriptHex,
+            }],
             outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
             locktime: 0,
             txVersion: 2,
         });
-        const app = makeApp();
+        const app = makeApp({
+            createPaymentTransaction: vi.fn().mockResolvedValue(signedReplyFor(WRAPPED_DECOMPOSED)),
+        });
         const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
         await s.signPsbt({
             psbtHex: 'cafe',
@@ -473,6 +493,55 @@ describe('LedgerSigner.signPsbt', () => {
         });
         await expect(signIt(s)).rejects.toMatchObject({ name: 'SignerStatusError', status: 'wrong-app' });
         expect(app.createPaymentTransaction).not.toHaveBeenCalled();
+    });
+
+    // The device transport carries one exchange at a time and rejects a second
+    // that arrives while the user is answering a prompt. The status poll keeps
+    // running behind the sign screen, so it must not touch the transport then.
+    describe('with a transport that refuses overlapping exchanges', () => {
+        function singleExchangeTransport() {
+            let busy = false;
+            const send = vi.fn(async () => {
+                if (busy) throw Object.assign(new Error('An action was already pending on the Ledger device.'), { name: 'TransportRaceCondition' });
+                busy = true;
+                await Promise.resolve();
+                busy = false;
+                return appInfoBytes('Bitcoin');
+            });
+            return { send };
+        }
+
+        it('keeps reporting the device available while a signing prompt is open', async () => {
+            const mockSdk = signPsbtSdk();
+            let release;
+            const app = makeApp({
+                createPaymentTransaction: vi.fn(() => new Promise((resolve) => { release = () => resolve(DEVICE_REPLY); })),
+            });
+            const transport = singleExchangeTransport();
+            const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk }, transport });
+            const signing = signIt(s);
+            await vi.waitFor(() => expect(app.createPaymentTransaction).toHaveBeenCalled());
+            const probesBefore = transport.send.mock.calls.length;
+
+            await expect(s.getStatus({ chainId: 'bitcoin-mainnet' })).resolves.toBe('available');
+            expect(transport.send.mock.calls.length).toBe(probesBefore);
+
+            release();
+            await signing;
+        });
+
+        it('lets a status read that is already in flight finish before the signing read starts', async () => {
+            const mockSdk = signPsbtSdk();
+            const app = makeApp();
+            const transport = singleExchangeTransport();
+            const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk }, transport });
+            const [status, signed] = await Promise.all([
+                s.getStatus({ chainId: 'bitcoin-mainnet' }),
+                signIt(s),
+            ]);
+            expect(status).toBe('available');
+            expect(signed.txid).toBe('deadbeef');
+        });
     });
 
     it('signs with a fresh client for the chain currency when getApp is given', async () => {

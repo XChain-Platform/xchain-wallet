@@ -425,10 +425,6 @@ describe('shared network filter surfaces', () => {
             process.cwd(),
             'packages/core/src/shared/components/NetworkFilter.module.css',
         ), 'utf8');
-        const contactsCss = readFileSync(resolve(
-            process.cwd(),
-            'packages/core/src/shared/routes/ContactsList.module.css',
-        ), 'utf8');
         const contactsSource = readFileSync(resolve(
             process.cwd(),
             'packages/core/src/shared/routes/ContactsList.jsx',
@@ -436,6 +432,10 @@ describe('shared network filter surfaces', () => {
         const dispensersSource = readFileSync(resolve(
             process.cwd(),
             'packages/core/src/shared/routes/DispensersList.jsx',
+        ), 'utf8');
+        const toolbarCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/ListToolbar.module.css',
         ), 'utf8');
 
         expect(window.innerWidth).toBe(411);
@@ -445,10 +445,10 @@ describe('shared network filter surfaces', () => {
         // The kit Chip owns the trigger height; the filter only lets it fill and shrink.
         expect(filterCss).toMatch(/\.trigger\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/s);
         expect(filterCss).toMatch(/\.triggerLabel\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
-        expect(contactsCss).toMatch(/\.toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
-        expect(contactsSource).toMatch(/<div className=\{picker\.toolbar\}>[\s\S]*announceNetworkCount/);
-        expect(dispensersSource).toMatch(/<div className=\{local\.toolbar\} style=\{\{ flexWrap: 'wrap' \}\}>/);
-        expect(dispensersSource).toMatch(/<div className=\{local\.searchField\}>\s*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+        // Both screens share the ListToolbar, whose class must exist: an undefined one left the controls stacked.
+        expect(toolbarCss).toMatch(/\.toolbar\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
+        expect(contactsSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+        expect(dispensersSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
     });
 });
 

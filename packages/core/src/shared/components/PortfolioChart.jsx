@@ -23,6 +23,9 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './PortfolioChart.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
 // so 24h slices the tail of that real series and 7d uses it as-is.
@@ -181,7 +184,7 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
     return (
         <section
             className={styles.wrap}
-            aria-label="Portfolio performance"
+            aria-label={t('components.portfolioChart.portfolioPerformance')}
             aria-busy={priceLoading || undefined}
         >
             <div
@@ -192,14 +195,16 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                 {hasData && delta != null && !hidden ? (
                     <div
                         className={`${styles.change} ${tone}`}
-                        aria-label={`${range.label} change. ${pctDisplay?.label ?? 'Change unavailable'}; ${formatFiat(Math.abs(delta), fiatCurrency)}`}
+                        aria-label={t('components.portfolioChart.change', { label: range.label, value: pctDisplay?.label ?? 'Change unavailable', formatFiatValue: formatFiat(Math.abs(delta), fiatCurrency) })}
                     >
-                        {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                        {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
+                        <bdi dir="ltr">
+                            {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
+                            {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
+                        </bdi>
                     </div>
                 ) : null}
                 {priceLoading ? (
-                    <StatusMessage variant="status">Loading price history…</StatusMessage>
+                    <StatusMessage variant="status">{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
                 ) : priceError ? (
                     <StatusMessage variant="error">{priceError}</StatusMessage>
                 ) : hasData ? (
@@ -207,16 +212,16 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                         <Sparkline
                             series={series}
                             height={40}
-                            label="Portfolio performance chart"
+                            label={t('components.portfolioChart.portfolioPerformanceChart')}
                             rangeLabel={range.label}
                             formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
                         />
                     </div>
                 ) : (
-                    <div className={styles.placeholder}>No price history for this range yet.</div>
+                    <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
                 )}
             </div>
-            <div className={styles.ranges} role="tablist" aria-label="Chart range">
+            <div className={styles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
                 {ranges.map((r) => (
                     <button
                         key={r.id}

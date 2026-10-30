@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
-import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 
 const componentCss = (name) => readFileSync(join(
     process.cwd(),
@@ -25,7 +25,7 @@ const componentCss = (name) => readFileSync(join(
 const timelineCss = componentCss('TxStatusTimeline');
 const queuedCss = readFileSync(join(
     process.cwd(),
-    'packages/core/src/shared/components/QueuedResultPanel.module.css',
+    'packages/core/src/shared/components/ResultScreen.module.css',
 ), 'utf8');
 
 // The component uses ● for done stages and ○ for pending. Helper: map each
@@ -152,7 +152,7 @@ describe('<TxStatusTimeline>', () => {
     });
 
     it('states the queued current step and its required next action', () => {
-        render(<QueuedResultPanel onDone={vi.fn()} />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={vi.fn()} />);
         expect(screen.getByText('Current stage: Waiting to broadcast')).toBeInTheDocument();
         expect(screen.getByText(/only goes out when you broadcast it from there/i)).toBeInTheDocument();
     });
@@ -161,7 +161,7 @@ describe('<TxStatusTimeline>', () => {
         expect(timelineCss).toMatch(/grid-template-columns:\s*var\(--xc-icon-lg\) minmax\(0, 1fr\)/);
         expect(timelineCss).toMatch(/@media \(max-width: 360px\)/);
         expect(timelineCss).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(queuedCss).toMatch(/box-sizing:\s*border-box/);
+        expect(queuedCss).toMatch(/min-width:\s*0/);
         expect(queuedCss).toMatch(/width:\s*100%/);
         expect(queuedCss).toMatch(/@media \(max-width: 360px\)/);
         expect(queuedCss).toMatch(/overflow-wrap:\s*anywhere/);
@@ -169,7 +169,7 @@ describe('<TxStatusTimeline>', () => {
 
     it('uses shared tokens for the cleaned component geometry', () => {
         const routeErrorCss = componentCss('RouteErrorBoundary');
-        const toastCss = componentCss('ToastHost');
+        const toastCss = componentCss('ToastStack');
         const tokenFieldCss = componentCss('TokenField');
         const heroCss = componentCss('TotalBalanceHero');
         const undoToastCss = componentCss('UndoSendToast');
@@ -189,7 +189,8 @@ describe('<TxStatusTimeline>', () => {
         expect(timelineCss).toContain('width: var(--xc-icon-md);');
         expect(timelineCss).toContain('font-size: var(--xc-text-lg);');
         expect(timelineCss).not.toMatch(/(?:width|height):\s*18px/);
-        expect(undoToastCss).toContain('transform: translateY(var(--xc-space-2));');
+        // The undo countdown composes the host toast, so it carries no motion of its own.
+        expect(undoToastCss).toMatch(/composes:\s*toast variant_info from '\.\/ToastStack\.module\.css'/);
         expect(undoToastCss).not.toContain('translateY(8px)');
     });
 });

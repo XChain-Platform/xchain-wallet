@@ -117,6 +117,46 @@ describe('createHoldBeforeBroadcast', () => {
     await expect(p).resolves.toBeUndefined()
   })
 
+  it('uses monotonic time when the wall clock jumps forward during signing', async () => {
+    const { t, sendHold } = setup()
+    let wallNow = 10_000
+    let monotonicNow = 1_000
+    const fn = createHoldBeforeBroadcast({
+      sendHold,
+      holdId: 'a',
+      undoSeconds: 5,
+      now: () => wallNow,
+      monotonicNow: () => monotonicNow,
+    })
+    wallNow += 3_600_000
+    monotonicNow += 1_000
+
+    const p = fn()
+    expect([...t.timers.values()][0].ms).toBe(4000)
+    expect(sendHold.cancel('a')).toBe(true)
+    await expect(p).rejects.toBeInstanceOf(SendHoldCancelledError)
+  })
+
+  it('uses monotonic time when the wall clock jumps back during signing', async () => {
+    const { t, sendHold } = setup()
+    let wallNow = 10_000
+    let monotonicNow = 1_000
+    const fn = createHoldBeforeBroadcast({
+      sendHold,
+      holdId: 'a',
+      undoSeconds: 5,
+      now: () => wallNow,
+      monotonicNow: () => monotonicNow,
+    })
+    wallNow -= 3_600_000
+    monotonicNow += 2_000
+
+    const p = fn()
+    expect([...t.timers.values()][0].ms).toBe(3000)
+    expect(sendHold.cancel('a')).toBe(true)
+    await expect(p).rejects.toBeInstanceOf(SendHoldCancelledError)
+  })
+
   it('still consumes a cancellation when signing outlasts the window', async () => {
     const { t, sendHold } = setup()
     let now = 10_000

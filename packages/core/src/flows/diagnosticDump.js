@@ -108,7 +108,7 @@ const MNEMONIC_LENGTHS = [24, 21, 18, 15, 12];
  * @property {{ version: string | null, platform: string | null, os: string | null, browser: string | null }} wallet
  * @property {{ version: string | null }} sdk
  * @property {Array<{ id: string, coin: string, networkKind: string, isUserAdded: boolean }>} chains
- * @property {Array<{ chainId: string, explorerUrl: string, encoderUrl: string, hubUrl: string, custom: boolean }>} endpoints
+ * @property {Array<{ chainId: string, explorerUrl: string, encoderUrl: string, hubUrl?: string, custom: boolean }>} endpoints
  * @property {DiagnosticSignerSummary[]} signers
  * @property {Record<string, unknown>} settings
  * @property {DiagnosticError[]} recent_errors
@@ -169,7 +169,7 @@ export async function diagnosticDump(opts = {}) {
                   chainId: d.id,
                   explorerUrl: joinEndpoint(d.explorer),
                   encoderUrl: joinEndpoint(d.encoder),
-                  hubUrl: joinEndpoint(d.hub),
+                  ...(d.hub ? { hubUrl: joinEndpoint(d.hub) } : {}),
                   custom: false,
               };
           })
@@ -324,6 +324,9 @@ function sanitizeSettings(settings) {
         };
     }
     return {
+        activeNetwork: ['mainnet', 'testnet', 'regtest'].includes(settings.activeNetwork)
+            ? settings.activeNetwork
+            : 'mainnet',
         theme: settings.theme,
         autolockMinutes: settings.autolockMinutes,
         fiatCurrency: settings.fiatCurrency,
@@ -438,7 +441,7 @@ function sanitizeErrorPhase(value) {
 function sanitizeBuild(build) {
     if (!build || typeof build !== 'object') return null;
     const out = {};
-    for (const key of ['buildId', 'buildDate', 'gitCommit', 'walletVersion', 'target']) {
+    for (const key of ['buildId', 'buildDate', 'gitCommit', 'walletVersion', 'target', 'profile']) {
         if (typeof build[key] === 'string') out[key] = redactDiagnosticText(build[key]).slice(0, 200);
     }
     return out;
@@ -494,11 +497,15 @@ function redactLabeledValues(text, labelSource) {
  */
 export function sanitizeDiagnosticValue(value, key = '') {
     const normalizedKey = key.replace(/[_\s-]/g, '').toLowerCase();
-    if ([
+    const secretKey = [
         'password', 'passphrase', 'mnemonic', 'seedphrase', 'recoveryphrase',
         'privatekey', 'secret', 'secretkey', 'wif', 'xprv', 'xpriv', 'key',
-        'keys', 'balance', 'balances',
-    ].includes(normalizedKey)) return REDACTED;
+        'keys', 'credential', 'credentials',
+    ].includes(normalizedKey)
+        || normalizedKey.includes('balance')
+        || normalizedKey.endsWith('token');
+    const addressValue = normalizedKey.includes('address') && typeof value !== 'number';
+    if (secretKey || addressValue) return REDACTED;
     if (typeof value === 'string') return redactDiagnosticText(value);
     if (typeof value === 'bigint') return value.toString();
     if (Array.isArray(value)) return value.map((item) => sanitizeDiagnosticValue(item));

@@ -156,8 +156,8 @@ for (const [label, needle] of [
     assert.ok(needle.test(panel), `advanced panel renders the ${label} control`);
 }
 assert.ok(
-    /advancedIssueWarnings\(advanced\)/.test(src) && /warnings\.map\(\(w\) =>/.test(panel),
-    'permanent-choice warnings are surfaced next to the fields',
+    /advancedIssueWarnings\(advanced\)/.test(src) && /<FormNotice variant="warning" role="alert" lines=\{warnings\} \/>/.test(panel),
+    'permanent-choice warnings are surfaced as one form notice',
 );
 
 // --- 6. No two controls for one wire field -----------------------------

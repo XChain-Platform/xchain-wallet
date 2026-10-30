@@ -25,8 +25,8 @@
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    FieldNote,
     FormPage,
-    Icon,
     PageHeader,
     QrScanner,
     Screen,
@@ -34,53 +34,20 @@ import {
     Textarea,
 } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
+import { resolvePaymentChain } from '../../uri/paymentChain.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
-import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
+import { isValidAddressAnyNetwork } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
-const LOCALLY_VALIDATED_COINS = new Set(['bitcoin', 'litecoin', 'dogecoin']);
-
-function descriptorAcceptsAddress(descriptor, address) {
-    if (!LOCALLY_VALIDATED_COINS.has(descriptor.coin)) return true;
-    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
-}
-
-function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
-    if (chainId !== undefined) {
-        const descriptor = chainRegistry.get(chainId);
-        if (!descriptor || (scheme && descriptor.uriScheme.toLowerCase() !== scheme)) {
-            return { valid: false };
-        }
-        return descriptorAcceptsAddress(descriptor, address)
-            ? { valid: true, chainId }
-            : { valid: false };
-    }
-
-    const eligible = chainRegistry.supportedChains().filter((descriptor) => (
-        !scheme || descriptor.uriScheme.toLowerCase() === scheme
-    ));
-    const locallyValidated = eligible.filter((descriptor) => (
-        LOCALLY_VALIDATED_COINS.has(descriptor.coin)
-    ));
-    if (locallyValidated.length === 0) {
-        return { valid: eligible.length > 0 };
-    }
-    const descriptors = locallyValidated.filter((descriptor) => (
-        descriptorAcceptsAddress(descriptor, address)
-    ));
-    if (descriptors.length === 0) return { valid: false };
-    return {
-        valid: true,
-        chainId: descriptors.length === 1 ? descriptors[0].id : undefined,
-    };
-}
 
 /**
  * @typedef {(
- *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }
+ *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string, feePriority?: 'low' | 'normal' | 'fast' }
  *   | { kind: 'receive' }
  *   | { kind: 'psbt', psbtHex: string }
  * )} ScanRouteOutcome
@@ -92,9 +59,11 @@ function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {boolean} [props.embedded]
+ * @param {boolean} [props.nested] the scanner opens inside another screen (a
+ *   contact form), so its Back stays even under a nav-linked route
  * @param {string} [props.titleId]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, titleId }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, nested = false, titleId }) {
     const generatedHeadingId = useId();
     const headingId = titleId || generatedHeadingId;
     const [paste, setPaste] = useState('');
@@ -125,6 +94,11 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 return;
             }
             if (intent.kind === 'send') {
+                // The same token-name grammar the deep-link route applies.
+                if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
+                    setStatus(t('scan.error.paymentRequest'));
+                    return;
+                }
                 let resolvedChainId = intent.chainId;
                 if (intent.address) {
                     const resolved = resolvePaymentChain({
@@ -147,6 +121,9 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     tick: intent.tick,
                     chainId: resolvedChainId,
                     memo: intent.memo,
+                    // The request's own message, shown above the form as an opened
+                    // link shows it.
+                    requestMessage: intent.message ?? intent.label,
                     feePriority: intent.feePriority,
                 });
                 return;
@@ -166,6 +143,12 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
             const chainId = safeChainIdParam(chainParam);
             if (detected.parts.required.length > 0
                 || (chainParam !== undefined && chainId === undefined)) {
+                setStatus(t('scan.error.paymentRequest'));
+                return;
+            }
+            const requestedTick = detected.parts.params?.tick;
+            if (typeof requestedTick === 'string' && requestedTick.length > 0
+                && tickerReferenceError(neutralizeControlText(requestedTick).toUpperCase(), { allowRef: true })) {
                 setStatus(t('scan.error.paymentRequest'));
                 return;
             }
@@ -282,13 +265,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const header = useMemo(() => (
         <PageHeader
+            nested={nested || embedded}
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
             titleId={headingId}
-            titleIcon={<Icon.CameraIcon />}
         />
-    ), [headingId, onBack]);
+    ), [headingId, onBack, nested, embedded]);
 
     return (
         <Screen
@@ -313,15 +296,13 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                         {t('scan.classifyPaste')}
                     </Button>
                 )}
+                status={status ? <StatusMessage variant="error">{status}</StatusMessage> : undefined}
             >
                 {!stopped ? (
                     <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
-                    <StatusMessage variant="success">{t('scan.routing')}</StatusMessage>
+                    <FieldNote variant="success">{t('scan.routing')}</FieldNote>
                 )}
-                {status ? (
-                    <StatusMessage variant="error">{status}</StatusMessage>
-                ) : null}
                 <Textarea
                     label={t('scan.pasteLabel')}
                     value={paste}

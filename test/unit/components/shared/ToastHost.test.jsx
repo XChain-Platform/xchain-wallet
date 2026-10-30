@@ -1,10 +1,10 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import toastStyles from '../../../../packages/core/src/shared/components/ToastHost.module.css';
+import toastStyles from '../../../../packages/core/src/shared/components/ToastStack.module.css';
 
 const mocks = vi.hoisted(() => ({
     haptic: {
@@ -19,7 +19,10 @@ vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     HapticProvider: ({ children }) => children,
 }));
 
-import { ToastHost, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
+import {
+    SPAM_TOKEN_TOAST_KIND, ToastHost, preloadToastStack, useClearToastsOnLock,
+    useSuppressSpamToastsOnConfirm, useToast,
+} from '../../../../packages/core/src/shared/components/ToastHost.jsx';
 
 let toastApi;
 
@@ -37,19 +40,26 @@ function setup() {
 }
 
 function show(input) {
+    let id;
     act(() => {
-        toastApi.showToast(input);
+        id = toastApi.showToast(input);
     });
+    return id;
 }
+
+// The app loads the toast cards on idle after first paint; load them up front here.
+beforeAll(() => preloadToastStack());
 
 beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T12:00:00.000Z'));
     vi.clearAllMocks();
 });
 
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
 });
 
 describe('ToastHost', () => {
@@ -76,6 +86,28 @@ describe('ToastHost', () => {
         act(() => toastApi.announce('Saved'));
         expect(region).toHaveTextContent('Saved');
         expect(region).not.toHaveTextContent('Copied');
+    });
+
+    it('generates bounded unique ids without overflowing the visible stack', () => {
+        let state = 0x5eed1234;
+        vi.spyOn(Math, 'random').mockImplementation(() => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return state / 0x1_0000_0000;
+        });
+        setup();
+
+        const ids = Array.from({ length: 8 }, (_, index) => show({
+            message: `Generated toast ${index}`,
+            durationMs: 0,
+        }));
+
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const id of ids) {
+            expect(id).toMatch(/^toast-\d{13}-\d{1,6}$/);
+            expect(id.length).toBeLessThanOrEqual(33);
+        }
+        expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(3);
+        expect(screen.getByText('+5 more')).toBeInTheDocument();
     });
 
     it('gives queued toasts their full timeout after they become visible', () => {
@@ -167,11 +199,135 @@ describe('ToastHost', () => {
             .toHaveClass(toastStyles.dismissBtn);
 
         const css = readFileSync(
-            'packages/core/src/shared/components/ToastHost.module.css',
+            'packages/core/src/shared/components/ToastStack.module.css',
             'utf8',
         );
         expect(css).toMatch(/\.toast\s*\{[^}]*padding:\s*var\(--xc-card-pad\)/s);
         expect(css).toMatch(/\.toast\s*\{[^}]*border-radius:\s*var\(--xc-card-radius\)/s);
         expect(css).toMatch(/\.dismissBtn\s*\{[^}]*min-width:\s*var\(--xc-control-h-sm\)[^}]*min-height:\s*var\(--xc-control-h-sm\)/s);
+    });
+
+    it('lays every tone tint over the opaque raised surface', () => {
+        // The tone tints are 10 to 14 percent alpha; on their own they let the
+        // page text show through a floating toast (Receive at 360 wide).
+        const css = readFileSync('packages/core/src/shared/components/ToastStack.module.css', 'utf8');
+        for (const tone of ['info', 'warning', 'success', 'error']) {
+            const block = css.match(new RegExp(`\\.variant_${tone}\\s*\\{([^}]*)\\}`));
+            expect(block, tone).not.toBeNull();
+            expect(block[1], tone).toMatch(/background:\s*linear-gradient\([^;]*\),\s*var\(--xc-surface-raised\);/);
+        }
+    });
+
+    it('clamps a runaway message so the card and its dismiss button stay on screen', () => {
+        const css = readFileSync('packages/core/src/shared/components/ToastStack.module.css', 'utf8');
+        const block = css.match(/\.message\s*\{([^}]*)\}/);
+        expect(block).not.toBeNull();
+        expect(block[1]).toMatch(/-webkit-line-clamp:\s*6;/);
+        expect(block[1]).toMatch(/overflow:\s*hidden;/);
+    });
+
+    it('renders broadcast notifications containing markup as text', () => {
+        const message = '<script>globalThis.notificationExecuted = true</script>';
+        setup();
+        show({ id: 'broadcast', message, durationMs: 0 });
+
+        const notification = screen.getByText(message);
+        expect(notification).toBeInTheDocument();
+        expect(notification.closest('[aria-label="Notifications"]').querySelector('script')).toBeNull();
+        expect(globalThis.notificationExecuted).toBeUndefined();
+    });
+});
+
+describe('useClearToastsOnLock', () => {
+    function Probe({ state }) {
+        useClearToastsOnLock(state);
+        return null;
+    }
+
+    it('removes every toast, action toasts included, when the session locks', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="unlocked" />
+            </ToastHost>,
+        );
+        show({ id: 'a', message: 'Sent 1.5 TICK', durationMs: 0 });
+        show({ id: 'b', message: 'Undo send', actionLabel: 'Undo', onAction: () => {}, durationMs: 0 });
+        expect(screen.getByText('Sent 1.5 TICK')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="locked" />
+            </ToastHost>,
+        );
+        expect(screen.queryByText('Sent 1.5 TICK')).toBeNull();
+        expect(screen.queryByText('Undo send')).toBeNull();
+    });
+
+    it('keeps toasts shown through a status refresh and when the session unlocks', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="locked" />
+            </ToastHost>,
+        );
+        show({ id: 'a', message: 'Lock screen notice', durationMs: 0 });
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="unlocked" />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Lock screen notice')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="loading" />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Lock screen notice')).toBeInTheDocument();
+    });
+});
+
+describe('useSuppressSpamToastsOnConfirm', () => {
+    function ConfirmProbe({ open }) {
+        useSuppressSpamToastsOnConfirm(open);
+        return null;
+    }
+
+    it('queues the spam-token nudge until the confirm screen closes', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open={false} />
+            </ToastHost>,
+        );
+        show({ id: 'spam', kind: SPAM_TOKEN_TOAST_KIND, message: 'Likely-spam token detected', durationMs: 1000 });
+        show({ id: 'ordinary', message: 'Connection restored', durationMs: 0 });
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open />
+            </ToastHost>,
+        );
+        expect(screen.queryByText('Likely-spam token detected')).toBeNull();
+        expect(screen.getByText('Connection restored')).toBeInTheDocument();
+
+        act(() => vi.advanceTimersByTime(1000));
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open={false} />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+        act(() => vi.advanceTimersByTime(999));
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+        act(() => vi.advanceTimersByTime(1));
+        expect(screen.queryByText('Likely-spam token detected')).toBeNull();
     });
 });

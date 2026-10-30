@@ -171,9 +171,16 @@ assert.ok(
     'a reuse window is exactly the per-use authorization rule SSC-3 forbids',
 );
 // The theatre check: a Bool from evaluatePolicy gates nothing, because the
-// secret it guards was readable the whole time.
+// secret it guards was readable the whole time. Enrolment asks for a match
+// before it writes the wrap, which guards no secret, so the check reads every
+// function except enroll.
+const sidecarOutsideEnroll = sidecar.replace(
+    /func enroll\(secret:[\s\S]*?\n {4}\}\n/,
+    '',
+);
+assert.ok(sidecarOutsideEnroll.length < sidecar.length, 'the sidecar defines enroll(secret:...)');
 assert.ok(
-    !/evaluatePolicy\(\s*\.deviceOwnerAuthentication[A-Za-z]*\s*,\s*localizedReason/.test(sidecar),
+    !/evaluatePolicy\(\s*\.deviceOwnerAuthentication[A-Za-z]*\s*,\s*localizedReason/.test(sidecarOutsideEnroll),
     'the wrap must be released by the Keychain ACL, never by branching on an evaluatePolicy result',
 );
 
@@ -312,7 +319,7 @@ console.log(
     + ' the detection probe exists; MainViewController registers the plugin from capacitorDidLoad and the'
     + ' storyboard instantiates it, without which the app silently falls back to WebView storage;'
     + ' vault key pinned WhenUnlockedThisDeviceOnly + non-synchronizable with no weaker class present;'
-    + ' biometric wrap uses biometryCurrentSet, no biometryAny, no reuse window, no evaluatePolicy gate.'
+    + ' biometric wrap uses biometryCurrentSet, no biometryAny, no reuse window, no evaluatePolicy gate outside enrolment.'
     + ' the shared SPA refuses to boot a native shell whose plugin never registered, checked'
     + ' before React mounts, and the backend factory throws rather than downgrading to IndexedDB.'
     + ' QR: qrScanStart/qrScanStop declared, events qrFrame and qrScanClosed with reasons cancelled,'

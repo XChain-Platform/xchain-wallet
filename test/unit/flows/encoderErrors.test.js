@@ -174,8 +174,6 @@ describe('encoderErrorMessage', () => {
         'Payload too large: compiled size 9000 bytes exceeds maximum 8192 bytes (compiled on-chain ACTION push)',
         'Transaction would burn significant satoshis as fees. Please provide a change address.',
         'Node did not report a positive relayfee; transaction fee safety cannot be verified',
-        'fee 19 is below the node relay minimum 20 base units for a ~190-byte transaction',
-        'feePerKb 100 base units/kB produces fee 19, below the node relay minimum 20 base units for a ~190-byte transaction',
         'fee 90000 exceeds the maximum allowed 20000 satoshis for a ~200-byte transaction (fee-rate cap)',
         'fee 90000 exceeds 100x the estimated fair fee (800 satoshis) for a ~200-byte transaction',
         'selected input count (701) exceeds the maximum (700) inputs for a single transaction',
@@ -271,6 +269,24 @@ describe('encoderErrorMessage', () => {
         expect(copy).not.toContain('Encoder RPC error:');
     });
 
+    it('closes the fee and shortfall refusals in plain words with the pre-signature reassurance', () => {
+        const refusals = [
+            'insufficient funds: selected inputs total 1000 but 3438 is required (outputs 2232 + fee 1206)',
+            'insufficient funds: selected inputs total 1000 but 2206 is required (outputs 0 + fee 1206)',
+            'fee 19 is below the node relay minimum 20 base units for a ~190-byte transaction',
+            'feePerKb 100 base units/kB produces fee 19, below the node relay minimum 20 base units for a ~190-byte transaction',
+        ];
+        for (const reason of refusals) {
+            const err = sdkEncoderError('ENCODER_RPC_ERROR', `Encoder RPC error: ${reason}`);
+            for (const wire of [err, acrossBoundary(err)]) {
+                const copy = encoderErrorMessage(wire, { coinTicker: 'BTC' });
+                expect(copy, reason).toMatch(/Lower|Raise/);
+                expect(copy, reason).toMatch(/Nothing was signed or sent, so nothing was spent\.$/);
+                expect(copy, reason).not.toContain('Encoder RPC error:');
+            }
+        }
+    });
+
     it('uses safe generic copy for an unknown RPC refusal and unknown SDK message', () => {
         const rpc = encoderErrorMessage(
             sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: future internal refusal'), {});
@@ -288,6 +304,32 @@ describe('encoderErrorMessage', () => {
         const copy = encoderErrorMessage(sdkEncoderError('ENCODER_RPC_ERROR', raw), {});
         expect(copy).toBe('This transaction could not be built. Nothing was signed or sent, so nothing was spent.');
         expect(copy).not.toContain('Internal encoder error');
+    });
+
+    it('maps JSON-RPC server failures to temporary copy while preserving real protocol refusals', () => {
+        const failures = [
+            sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: Internal error: upstream node timed out', {
+                rpcError: { code: -32603, message: 'Internal error', data: null },
+            }),
+            acrossBoundary(sdkEncoderError(
+                'ENCODER_RPC_ERROR',
+                'Encoder RPC error: Internal error: upstream node timed out',
+                { rpcError: { code: -32603, message: 'Internal error', data: null } },
+            )),
+            sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: upstream node timed out', {
+                rpcError: { code: -32000, message: 'upstream node timed out', data: null },
+            }),
+        ];
+        for (const failure of failures) {
+            const copy = submitFailureMessage(failure, { verb: 'sweep' });
+            expect(copy).toMatch(/transaction service could not complete this request/i);
+            expect(copy).toMatch(/nothing was signed or sent/i);
+            expect(copy).not.toContain('upstream node timed out');
+        }
+
+        const refusal = encoderRpcError('TOKEN_ALREADY_REGISTERED', 'This token symbol is already registered.');
+        expect(submitFailureMessage(refusal, { verb: 'sweep' }))
+            .toBe('This token symbol is already registered.');
     });
 
     it('has a safe answer for an ENCODER_* code minted after this mapper', () => {
@@ -353,12 +395,18 @@ describe('submitFailureMessage adopts the encoder mapper', () => {
     });
 
     it('does not relabel a permanent broadcast failure that quotes an encoder message', () => {
-        // The signed transaction is dead; the form's own re-compose copy must win,
-        // and it must not be reworded as "nothing was signed or sent".
+        // The signed transaction is dead because its coins are spent: the sentence
+        // says so and that nothing was sent, never that nothing was signed, and the
+        // encoder mapper does not reword it as a build failure.
         const dead = new Error('broadcast failed: Encoder RPC error: bad-txns-inputs-missingorspent');
         dead.name = BROADCAST_FAILED_PERMANENT_NAME;
         const copy = submitFailureMessage(dead, { coinTicker: 'BTC', fallback: 'Send failed.' });
-        expect(copy).toBe('Send failed.');
+        expect(copy).toBe('One of the coins this transaction spends was already used by another transaction. Nothing was sent.');
+        expect(copy).not.toMatch(/signed/i);
+
+        const dust = new Error('broadcast failed: Encoder RPC error: dust');
+        dust.name = BROADCAST_FAILED_PERMANENT_NAME;
+        expect(submitFailureMessage(dust, { coinTicker: 'BTC', fallback: 'Send failed.' })).toBe('Send failed.');
     });
 
     it('still falls through to the caller copy for an unrelated error', () => {

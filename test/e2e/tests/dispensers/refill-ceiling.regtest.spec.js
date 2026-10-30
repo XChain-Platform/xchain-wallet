@@ -43,7 +43,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/refill-ceiling.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -58,6 +58,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -67,7 +68,8 @@ const TICK = 'XCHAIN';
 const MINT = 1000;
 const GIVE_PER_FILL = 25;
 const ESCROW = 100;
-const REFILL = 20;
+/** The refill form refuses anything under one fill, so each refill is exactly one fill. */
+const REFILL = GIVE_PER_FILL;
 /** The consensus cap (xchain-indexer config.js MAX_REFILLS). */
 const MAX_REFILLS = 5;
 /** What a buyer would have to pay for one fill. Not exercised here. */
@@ -121,19 +123,6 @@ async function waitForEscrow(index, expected, timeoutMs = 240_000) {
     throw new Error(`dispenser #${index} escrow never reached ${expected} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * The shared reader, plus this lane's own checks.
  *
@@ -184,7 +173,7 @@ async function signedTxid(page) {
  * doing this five times actually does.
  */
 async function openDispenserDetail(page, index) {
-    await gotoPalette(page, 'Dispensers');
+    await openPaletteCommand(page, 'Dispensers');
     const main = page.getByRole('main');
     // The owner's list labels a row rather than printing the index in its text:
     // "Open XCHAIN dispenser #1699". Filtering on the visible text finds nothing
@@ -212,9 +201,9 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Refill Owner' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -227,13 +216,13 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForTokenBalance(owner, TICK, MINT);
             await seedPrices();
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await selectPickerAsset(page, TICK);
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 

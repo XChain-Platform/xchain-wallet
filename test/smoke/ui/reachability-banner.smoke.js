@@ -54,23 +54,26 @@ const cssPath = join(core, 'src', 'shared', 'components', 'ReachabilityBanner.mo
 assert.ok(existsSync(bannerPath), 'ReachabilityBanner.jsx exists');
 assert.ok(existsSync(cssPath), 'ReachabilityBanner.module.css exists');
 const banner = readFileSync(bannerPath, 'utf8');
+// The message line (with its Details control) lives in ReachabilityLine, which the banner and a form's merged notice share.
+const line = readFileSync(join(core, 'src', 'shared', 'components', 'ReachabilityLine.jsx'), 'utf8');
 assert.ok(/export function ReachabilityBanner\b/.test(banner),
     'ReachabilityBanner is a named export');
 assert.ok(/useReachability/.test(banner),
     'ReachabilityBanner consumes useReachability');
 // Must hide when overall is normal: otherwise normal users see a banner forever.
-assert.ok(/overall !== ['"]degraded['"] && overall !== ['"]offline['"]/.test(banner),
+assert.ok(/overall === ['"]degraded['"] \|\| overall === ['"]offline['"]/.test(banner) && /!unreachable\) return null/.test(banner),
     'ReachabilityBanner hides when overall is normal');
-assert.ok(/role="status"/.test(banner),
-    'ReachabilityBanner uses role="status" for screen readers');
+assert.ok(/<StatusMessage\b/.test(banner) && /<ReachabilityLine\b/.test(banner) && /role="status"/.test(line),
+    'ReachabilityBanner renders through StatusMessage with role="status" for screen readers');
+assert.ok(/aria-atomic="true"/.test(line),
+    'ReachabilityBanner announces each complete state message');
 assert.ok(/Try again/.test(banner),
     'ReachabilityBanner exposes a plain-language retry button');
-assert.ok(/aria-atomic="true"/.test(banner),
-    'ReachabilityBanner announces each complete state message');
+assert.ok(/const variant = overall === 'offline' \? 'error' : 'warning'/.test(banner) && /variant=\{variant\}/.test(banner),
+    'ReachabilityBanner takes its tone from the shared StatusMessage variants');
 
 const css = readFileSync(cssPath, 'utf8');
-assert.ok(/\.degraded\b/.test(css), 'CSS defines a .degraded variant');
-assert.ok(/\.offline\b/.test(css), 'CSS defines an .offline variant');
+assert.ok(!/\.degraded\b|\.offline\b/.test(css), 'CSS leaves the tone styles to StatusMessage');
 assert.ok(/prefers-reduced-motion/.test(css),
     'CSS respects prefers-reduced-motion');
 

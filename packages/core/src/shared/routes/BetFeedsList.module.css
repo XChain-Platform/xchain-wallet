@@ -37,6 +37,23 @@
     gap: var(--xc-space-2);
 }
 
+.marketCard {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: start;
+    color: var(--xc-text);
+    box-shadow: var(--xc-list-shadow);
+    cursor: pointer;
+}
+
+.marketCard:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .marketDetail {
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);

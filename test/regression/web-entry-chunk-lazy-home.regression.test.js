@@ -37,8 +37,8 @@ const lazyRoutes = [
 ];
 
 const lazySignerFactories = [
-    ['pairTrezorSigner', './signers/trezorFactory.js'],
-    ['pairLedgerSigner', './signers/ledgerFactory.js'],
+    ['pairTrezorSigner', 'trezor', './signers/trezorFactory.js'],
+    ['pairLedgerSigner', 'ledger', './signers/ledgerFactory.js'],
 ];
 
 describe('regression/web-entry-chunk-lazy-home', () => {
@@ -58,10 +58,13 @@ describe('regression/web-entry-chunk-lazy-home', () => {
             `const ${routeName} = lazyRoute(() => import('${routePath}'), '${routeName}');`,
         );
 
-        for (const [factoryName, modulePath] of lazySignerFactories) {
+        // Each factory is imported on first pairing through the tracker that
+        // resets the loaded ones on lock, never from the entry chunk.
+        for (const [factoryName, vendor, modulePath] of lazySignerFactories) {
             expect(eagerImports).not.toContain(modulePath);
+            expect(appSource).toContain(`    ${vendor}: () => import('${modulePath}'),`);
             expect(appSource).toContain(
-                `const ${factoryName} = (...args) => import('${modulePath}')`,
+                `const ${factoryName} = (...args) => hardwareFactories.load('${vendor}')`,
             );
         }
     });

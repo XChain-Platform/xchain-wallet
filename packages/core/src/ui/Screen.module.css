@@ -37,6 +37,9 @@
     flex: 0 0 auto;
     padding-block: var(--xc-space-3);
     padding-inline: var(--xc-page-gutter);
+    /* The sibling body owns the scrollbar. Match its usable inline-end edge
+       without clipping header menus or popovers. */
+    padding-inline-end: calc(var(--xc-page-gutter) + var(--xc-frame-scrollbar, 0rem));
     border-bottom: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }
@@ -69,12 +72,25 @@
 
 .body {
     composes: scrollArea;
+    /* Contains absolutely positioned descendants (visually hidden text,
+       hit areas) so the scroller clips them; otherwise the route container
+       counts them as overflow below the viewport. */
+    position: relative;
     flex: 1 1 auto;
     min-height: 0;
     padding: var(--xc-page-top) var(--xc-page-gutter);
     overflow-y: auto;
     overflow-x: hidden;
     scroll-padding-block: var(--xc-space-3);
+}
+
+/* Scroll room under the last row while a toast shows (toastPlacement.js sets
+   the variable to the toast stack's height), so a control the stack sits over
+   can always be scrolled clear of it. Zero height otherwise. */
+.body::after {
+    content: '';
+    display: block;
+    height: var(--xc-toast-room, 0px);
 }
 
 /* The shared scroll class reserves the scrollbar lane on the end edge only,
@@ -112,7 +128,7 @@
 }
 
 /* Route chrome and camera previews yield vertical space on landscape phones. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .screen {
         /* The screen scrolls just far enough to move the title row away and
            expose the content floor; longer route content still scrolls in body. */
@@ -138,6 +154,15 @@
         min-height: 220px;
     }
 
+    /* A footer row is route content too, so a body followed by one keeps a
+       smaller floor. With the full floor a 360px-tall phone overflowed by a
+       few pixels on footer routes (Wallets, Accounts) and the screen scrolled
+       a sliver of the title row away with nothing left to reveal. */
+    .body:not(:last-child) {
+        flex-basis: 160px;
+        min-height: 160px;
+    }
+
     .footer {
         padding-block: var(--xc-space-1);
         padding-bottom: calc(var(--xc-space-1) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
@@ -147,4 +172,15 @@
         width: auto;
         max-height: min(40vh, 160px);
     }
+}
+
+/* The shell's fallback notices slot, for a route with no Screen, takes the
+   same page gutter and top inset as the body. */
+.noticesFallback {
+    flex: 0 0 auto;
+    padding-inline: var(--xc-page-gutter);
+}
+
+.noticesFallback > :not(:empty) {
+    margin-top: var(--xc-page-top);
 }

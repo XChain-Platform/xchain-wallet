@@ -47,6 +47,22 @@ describe('useFormLeaveGuard in-app navigation', () => {
         expect(onLeave).not.toHaveBeenCalled();
     });
 
+    it('names the rows a part-way run has not sent', async () => {
+        const { result, onLeave } = mountGuard({ unsentRows: 2 });
+        let pending;
+
+        act(() => { pending = result.current.guardedOnBack(); });
+        expect(result.current.confirmation.props.message).toBe('2 rows have not been sent. Leave anyway?');
+        expect(result.current.confirmation.props.confirmLabel).toBe('Leave anyway');
+        act(() => result.current.confirmation.props.onConfirm());
+        await pending;
+        expect(onLeave).toHaveBeenCalledOnce();
+
+        const single = mountGuard({ unsentRows: 1 });
+        act(() => { single.result.current.guardedOnBack(); });
+        expect(single.result.current.confirmation.props.message).toBe('1 row has not been sent. Leave anyway?');
+    });
+
     it('uses transaction safety copy for an unsaved signed result', async () => {
         const { result, onLeave } = mountGuard({ signedUnbroadcast: true });
         let pending;
@@ -58,6 +74,61 @@ describe('useFormLeaveGuard in-app navigation', () => {
         await pending;
 
         expect(onLeave).toHaveBeenCalledOnce();
+    });
+});
+
+describe('useFormLeaveGuard discard callback', () => {
+    it('runs onDiscard before onLeave when the user confirms Discard and leave', async () => {
+        const calls = [];
+        const onDiscard = vi.fn(() => calls.push('discard'));
+        const onLeave = vi.fn(() => calls.push('leave'));
+        const { result } = mountGuard({ dirty: true, onDiscard, onLeave });
+        let pending;
+
+        act(() => { pending = result.current.guardedOnBack(); });
+        act(() => result.current.confirmation.props.onConfirm());
+        await pending;
+
+        expect(calls).toEqual(['discard', 'leave']);
+    });
+
+    it('keeps the draft when the user cancels the discard', async () => {
+        const onDiscard = vi.fn();
+        const { result, onLeave } = mountGuard({ dirty: true, onDiscard });
+        let pending;
+
+        act(() => { pending = result.current.guardedOnBack(); });
+        act(() => result.current.confirmation.props.onCancel());
+        await pending;
+
+        expect(onDiscard).not.toHaveBeenCalled();
+        expect(onLeave).not.toHaveBeenCalled();
+    });
+
+    it('does not discard on a clean exit', async () => {
+        const onDiscard = vi.fn();
+        const { result, onLeave } = mountGuard({ onDiscard });
+
+        await act(() => result.current.guardedOnBack());
+
+        expect(onLeave).toHaveBeenCalledOnce();
+        expect(onDiscard).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['an in-flight transaction', { submitting: true }],
+        ['an unsaved signed transaction', { signedUnbroadcast: true }],
+    ])('does not discard when leaving %s', async (_label, flags) => {
+        const onDiscard = vi.fn();
+        const { result, onLeave } = mountGuard({ dirty: true, ...flags, onDiscard });
+        let pending;
+
+        act(() => { pending = result.current.guardedOnBack(); });
+        act(() => result.current.confirmation.props.onConfirm());
+        await pending;
+
+        expect(onLeave).toHaveBeenCalledOnce();
+        expect(onDiscard).not.toHaveBeenCalled();
     });
 });
 

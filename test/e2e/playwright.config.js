@@ -20,34 +20,70 @@
 // tests without reloading the tab. One worker + one tab + one IDB =
 // linear, easy-to-reason-about runs.
 //
-// The `webServer` spawns `pnpm -C packages/web dev`. On CI this gets
-// the `CI=1` + `reuseExistingServer: false` path so each job starts
-// from a clean port. Locally we reuse if already running.
+// The `webServer` spawns `pnpm -C packages/web dev` on a port this suite owns
+// (E2E_DEV_PORT, default 5473) with --strictPort and never reuses a listener:
+// a listener another session leaves on a shared port serves that session's
+// tree, so a busy port fails the run loudly instead.
 //
-// The timeouts are NOT constants. This suite shares a machine
-// with whatever else is on it, and on a busy one it used to fail a
-// different spec each run while every one of them passed in isolation.
-// `timeout-budget.js` sizes the budget from the measured load; see its
-// header for why a single number could not be right for both an idle and
-// a contended box. Pin `PW_TIMEOUT_SCALE=1` to reproduce the old numbers.
+// The timeouts are NOT constants. This suite shares a machine with whatever
+// else is on it, and a fixed budget on a busy one fails a different spec each
+// run while every one of them passes in isolation. `timeout-budget.js` sizes
+// the budget from the measured load; see its header for why a single number
+// cannot be right for both an idle and a contended box. Pin
+// `PW_TIMEOUT_SCALE=1` for the unscaled budget.
 
 import { defineConfig, devices } from '@playwright/test';
 
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
+import { desktopUserAgentForHost } from './host-user-agent.js';
 
-export function desktopUserAgentForHost(
-    platform = process.platform,
-    desktopUserAgent = devices['Desktop Chrome'].userAgent,
-) {
-    const platformToken = {
-        darwin: 'Macintosh; Intel Mac OS X 10_15_7',
-        linux: 'X11; Linux x86_64',
-        win32: 'Windows NT 10.0; Win64; x64',
-    }[platform];
-    return platformToken
-        ? desktopUserAgent.replace(/\([^)]*\)/, `(${platformToken})`)
-        : desktopUserAgent;
-}
+export { desktopUserAgentForHost };
+
+const CHROMIUM = {
+    ...devices['Desktop Chrome'],
+    // Playwright derives navigator.platform from this user agent,
+    // keeping ControlOrMeta aligned with the app's host shortcut gate.
+    userAgent: desktopUserAgentForHost(),
+    // New headless: the full browser, which renders like the headed one users run.
+    channel: 'chromium',
+    launchOptions: {
+        // The dev-mock suite reaches only loopback. Route handlers do not
+        // cover WebSockets, so the resolver refuses every other host, which
+        // keeps a spec from reaching a live explorer by any transport.
+        args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'],
+    },
+};
+
+// The dark-mode field-token gate under ./layout (field-tokens.spec.js),
+// one project per size it walks; playwright.field-tokens.config.js runs the
+// same spec on its own.
+const LAYOUT_GATES = [
+    {
+        name: 'dark-1440',
+        testDir: './layout',
+        testMatch: /field-tokens\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width: 1440, height: 900 }, colorScheme: 'dark' },
+    },
+    {
+        name: 'dark-360',
+        testDir: './layout',
+        testMatch: /field-tokens\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true },
+    },
+    // The control-row gate (ruling U07) under ./layout, at the widths and
+    // project names playwright.control-rows.config.js uses, so the keys in
+    // control-rows.allowlist.json match either run.
+    ...[360, 768, 1280].map((width) => ({
+        name: `control-rows-${width}`,
+        testDir: './layout',
+        testMatch: /control-rows\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width, height: 900 } },
+    })),
+];
+
+// Not 5173: that is the port every other dev server and sweep config defaults to.
+const PORT = Number(process.env.E2E_DEV_PORT) || 5473;
+const BASE_URL = `http://localhost:${PORT}`;
 
 const budget = timeoutBudget();
 // Named in the run's own output, so a red run is self-describing: the
@@ -67,6 +103,9 @@ export default defineConfig({
         '**/*.regtest.spec.js',
         '**/*.testnet.spec.js',
         '**/*.extension.spec.js',
+        // On demand through playwright.a11y-sweep.config.js: about a hundred
+        // screens per theme and size is too long for the default run.
+        '**/demo-axe-sweep.spec.js',
     ],
     outputDir: './test-results',
     fullyParallel: false,
@@ -91,26 +130,21 @@ export default defineConfig({
         ? [['github'], ['html', { open: 'never' }]]
         : 'list',
     use: {
-        baseURL: 'http://localhost:5173',
+        baseURL: BASE_URL,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
     },
     projects: [
-        {
-            name: 'chromium',
-            use: {
-                ...devices['Desktop Chrome'],
-                // Playwright derives navigator.platform from this user agent,
-                // keeping ControlOrMeta aligned with the app's host shortcut gate.
-                userAgent: desktopUserAgentForHost(),
-            },
-        },
+        { name: 'chromium', use: CHROMIUM },
+        ...LAYOUT_GATES,
     ],
-    webServer: {
-        command: 'pnpm -C ../../packages/web dev',
-        url: 'http://localhost:5173',
-        reuseExistingServer: !process.env.CI,
+    // The sweep runner owns and records its server process group, so Playwright
+    // connects to that listener instead of starting an untracked second server.
+    webServer: process.env.XCHAIN_SWEEP_EXTERNAL_SERVER === '1' ? undefined : {
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
+        url: BASE_URL,
+        reuseExistingServer: false,
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',

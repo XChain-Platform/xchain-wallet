@@ -44,7 +44,7 @@ describe('Receive form spacing', () => {
             .toMatch(/margin-bottom:\s*var\(--xc-space-3\)/);
     });
 
-    it('uses one responsive frame rule across static, animated, and receive QRs', () => {
+    it('uses one responsive frame rule across standalone static and animated QRs', () => {
         expect(rule(qrCss, '.frame')).toMatch(/width:\s*100%/);
         expect(rule(qrCss, '.frame')).toMatch(/max-width:\s*var\(--xc-qr-frame-size\)/);
         expect(rule(qrCss, '.frame')).toMatch(/box-sizing:\s*border-box/);
@@ -55,10 +55,16 @@ describe('Receive form spacing', () => {
 
         expect(keyQr).toMatch(/className=\{qrStyles\.frame\}/);
         expect(animatedQr).toMatch(/className=\{qrStyles\.frame\}/);
-        expect(receive).toMatch(/className=\{`\$\{qrStyles\.frame\} \$\{styles\.qrBox\}`\}/);
         for (const source of [keyQr, animatedQr, receive]) {
             expect(source).toMatch(/margin:\s*4/);
         }
+    });
+
+    it('draws no extra frame around a QR already inside Receive content', () => {
+        expect(receive).not.toContain('qrStyles.frame');
+        expect(receive).not.toContain('styles.qrBox');
+        expect(css).not.toMatch(/\.qrBox\s*\{/);
+        expect(receive.match(/className=\{styles\.qrSurface\}/g)).toHaveLength(3);
     });
 
     it('caps receive QRs inside a 360px phone gutter and keeps labels and actions below', () => {
@@ -68,7 +74,7 @@ describe('Receive form spacing', () => {
         expect(css.match(/\.receiveQrBox\s*\{/g)).toBeNull();
 
         expect(receive).toMatch(
-            /qrStyles\.frame[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
+            /styles\.qrSurface[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
         );
         expect(receive).toMatch(/className=\{`\$\{qrStyles\.actions\} \$\{styles\.qrActions\}`\}/);
         expect(animatedQr).toMatch(

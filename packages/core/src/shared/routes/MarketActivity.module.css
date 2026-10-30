@@ -1,22 +1,22 @@
 /* Tappable market header - shows the selected coin/token and opens the
    shared picker to switch markets (mirrors the DEX market header). */
 .marketSelector {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
     cursor: pointer;
 }
 
-.marketSelector:hover {
+/* Doubled class: the Button kit's own hover fill (an accent block) has the
+   same specificity as a single class and would otherwise win. */
+.marketSelector.marketSelector:hover:not(:disabled) {
     background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
 }
@@ -58,12 +58,12 @@
     transform: scaleX(-1);
 }
 
-.section {
-    margin-top: var(--xc-space-4);
-}
-
-.section + .section {
-    margin-top: var(--xc-space-6);
+/* The activity sections stack at the same section gap as the page's own
+   children, since this region sits between them and the page column. */
+.activity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
 }
 
 .count {
@@ -82,15 +82,12 @@
 }
 
 .row {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;

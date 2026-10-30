@@ -51,7 +51,7 @@ const ICONS = {
  * @property {string} [iconLabel]
  * @property {boolean} [wrapReadOnlyAddress]
  */
-export const AddressField = forwardRef(function AddressField(
+export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
     {
         icon,
         onIconClick,
@@ -64,12 +64,14 @@ export const AddressField = forwardRef(function AddressField(
         value,
         onChange,
         onPaste,
+        error,
         ...rest
     },
     ref,
 ) {
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
+
     const wrapClass = [
         styles.wrap,
         styles[size] || '',
@@ -77,6 +79,10 @@ export const AddressField = forwardRef(function AddressField(
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
     ].filter(Boolean).join(' ');
+
+    const endRoom = IconComponent
+        ? 'calc(var(--address-control-height) + var(--xc-space-2))'
+        : null;
 
     const handlePaste = (event) => {
         onPaste?.(event);
@@ -106,8 +112,8 @@ export const AddressField = forwardRef(function AddressField(
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={IconComponent ? {
-                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                style={endRoom ? {
+                    '--address-end-room': endRoom,
                     ...style,
                 } : style}
                 title={showReadOnlyAddress ? value : undefined}
@@ -115,6 +121,7 @@ export const AddressField = forwardRef(function AddressField(
                 onChange={onChange}
                 onPaste={handlePaste}
                 pasteGuard
+                error={error}
                 {...rest}
                 dir="ltr"
             />

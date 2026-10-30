@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -86,6 +84,27 @@ async function installBetFixture(page) {
                 let result = null;
                 if (type === 'addresses.byChain') result = { [chain]: [address] };
                 if (type === 'addresses.active') result = { [chain]: address };
+                // The market token picker reads the wallet's balances; a created
+                // wallet holds no EXAMPLE, so the fixture address holds 100.
+                if (type === 'balances.wallet') {
+                    result = {
+                        [chain]: [{
+                            address: address.address,
+                            label: address.label,
+                            addressType: 'p2wpkh',
+                            derivationPath: address.derivationPath,
+                            balances: {
+                                native: { tick: 'BTC', divisibility: 8, quantity: '12345678' },
+                                tokens: [{
+                                    tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000',
+                                }],
+                            },
+                            error: null,
+                            errorCode: null,
+                            retryAfterSeconds: null,
+                        }],
+                    };
+                }
                 if (type === 'settings.get') {
                     result = {
                         walletMode: 'full',
@@ -252,7 +271,9 @@ async function openCreateReview(page) {
 for (const viewport of VIEWPORTS) {
     test(`bets flow renders at ${viewport.width} by ${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // A created wallet, not the demo one: a demo wallet keeps every compose
+        // submit disabled behind its demo note, so it can never reach a review.
+        await createWallet(page);
         await installBetFixture(page);
 
         await gotoPalette(page, 'Betting');

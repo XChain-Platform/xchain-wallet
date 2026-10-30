@@ -38,12 +38,15 @@ const NON_SATS_VALUES = [
 ];
 
 function nativePreflight(requiredFeeSats) {
+    // The pre-flight pays only the fee address pinned for the SDK's own chain and
+    // network, so the double names both and the amount checks below are reached.
     const sdk = {
+        options: { network: 'bitcoin-mainnet' },
         wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
         quoteNativeFee: async () => ({
             supported: true,
             valid: true,
-            feeDestination: 'fee',
+            feeDestination: '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
             requiredFeeSats,
         }),
     };

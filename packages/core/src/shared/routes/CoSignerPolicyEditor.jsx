@@ -23,6 +23,10 @@ import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
+import cardStyles from '../../ui/Card.module.css';
+
+// One year: the longest rolling-limit window the editor accepts.
+const MAX_WINDOW_HOURS = 8760;
 
 /**
  * @typedef {Object} PolicyDraft
@@ -171,14 +175,22 @@ export function buildPolicyDraft(draft) {
     // maxPerWindow: only when explicitly enabled and given a positive window.
     let maxPerWindow = null;
     if (draft.windowEnabled) {
-        const hours = Number(draft.windowHours);
-        if (!Number.isFinite(hours) || hours <= 0) {
+        // Plain decimal text only: Number() also reads "0x10" and "1e1" as 16 and 10.
+        const hoursText = String(draft.windowHours ?? '').trim();
+        const hours = /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(hoursText) ? Number(hoursText) : NaN;
+        if (Number.isNaN(hours) || hours <= 0) {
             return { error: 'The rolling limit needs a window length in hours greater than zero.' };
+        }
+        // A window past one year never lets old activity expire in practice,
+        // so the typed length would not describe a rolling limit. A digit string
+        // too long for a double reads as Infinity and gets the same answer.
+        if (hours > MAX_WINDOW_HOURS) {
+            return { error: `The rolling limit window can be at most ${MAX_WINDOW_HOURS} hours (one year).` };
         }
         maxPerWindow = { hours };
         const maxActions = String(draft.windowMaxActions || '').trim();
         if (maxActions) {
-            const n = Number(maxActions);
+            const n = /^\d+$/.test(maxActions) ? Number(maxActions) : NaN;
             if (!Number.isSafeInteger(n) || n <= 0) return { error: 'Max actions per window must be a positive whole number.' };
             maxPerWindow.maxActions = n;
         }
@@ -230,16 +242,26 @@ export function buildPolicyDraft(draft) {
 
     // allowedOutputs (anti-drain). Stored address-form; the schema accepts
     // either address or script and the SDK output gate resolves as needed.
+    // The co-signer matches each output to the first entry with its script, so a
+    // second entry for the same address carries a cap that is never enforced.
     const allowedOutputs = [];
+    const seenOutputs = new Set();
     for (const row of draft.allowedOutputs) {
         const address = String(row.address || '').trim();
         const mv = String(row.maxValue || '').trim();
         if (!address && !mv) continue;
         if (!address) return { error: 'An allowed-output max value is missing its address.' };
+        // Bech32 addresses are case-insensitive; base58 addresses are not.
+        const outputKey = /^(?:bc|tb|bcrt)1/i.test(address) ? address.toLowerCase() : address;
+        if (seenOutputs.has(outputKey)) {
+            return { error: `Allowed output ${address} is listed more than once. Keep one row with the max value you want.` };
+        }
+        seenOutputs.add(outputKey);
         const out = { address };
         if (mv) {
-            const n = Number(mv);
-            if (!Number.isFinite(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a non-negative number.` };
+            const n = /^\d+$/.test(mv) ? Number(mv) : NaN;
+            // Beyond 2^53 the number stored is not the number typed, so refuse it.
+            if (!Number.isSafeInteger(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a whole number no greater than ${Number.MAX_SAFE_INTEGER}.` };
             out.maxValue = n;
         }
         allowedOutputs.push(out);
@@ -258,11 +280,7 @@ export function buildPolicyDraft(draft) {
 }
 
 const fieldsetStyle = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-3)',
     margin: '0 0 var(--xc-space-3) 0',
-    background: 'var(--xc-bg-muted)',
 };
 
 // The stored policy keys are the protocol's own wire names, and they must stay
@@ -343,7 +361,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     return (
         <FormPage as="div" sectioned label="Agent spending policy">
             <FormSection title="Policy rules">
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
                     Which actions may the agent sign? Tick each one. The agent can never
@@ -388,7 +406,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Per-action amount limits</legend>
                 <p style={helpStyle}>
                     Cap how much the agent may move in a single action, per token. Pick
@@ -447,7 +465,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Rolling limit</legend>
                 <p style={helpStyle}>
                     Cap total activity over a rolling time window (for example, at most
@@ -501,7 +519,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Extra-confirmation threshold</legend>
                 <p style={helpStyle}>
                     Flag requests above this amount with a warning on the approval
@@ -531,7 +549,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed recipients</legend>
                 <p style={helpStyle}>
                     Restrict the agent to paying only these addresses. Leave empty to
@@ -554,7 +572,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed transaction outputs</legend>
                 <p style={helpStyle}>
                     Anti-drain guard: the signed transaction may only pay these

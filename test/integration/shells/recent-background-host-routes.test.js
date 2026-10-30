@@ -586,4 +586,23 @@ describe('recent background host routes across extension, web, and desktop shell
         });
         expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('sdk.addressTypes reports only the address types the SDK can generate', async () => {
+        const refuse = (type) => Object.assign(new Error(`Unknown address type: "${type}"`), { code: 'INVALID_ADDRESS_TYPE' });
+        const sdk = { wallet: { deriveAddress: (_pub, { type }) => { if (type === 'p2tr') throw refuse(type); return 'addr'; } } };
+        const descriptor = { id: CHAIN, addressTypes: ['p2pkh', 'p2wpkh', 'p2tr'] };
+        const host = makeHost({
+            chainRegistry: { get: (id) => (id === CHAIN ? descriptor : null), list: () => [descriptor], supportedChains: () => [] },
+            sdkRegistry: { get: () => sdk, for: () => sdk },
+        });
+        expect(await call(host, 'sdk.addressTypes', { chainId: CHAIN }))
+            .toEqual({ ok: true, result: { supported: ['p2pkh', 'p2wpkh'] } });
+
+        const loading = makeHost({
+            chainRegistry: { get: () => descriptor, list: () => [descriptor], supportedChains: () => [] },
+            sdkRegistry: { get: () => { throw new Error('not loaded'); } },
+        });
+        expect(await call(loading, 'sdk.addressTypes', { chainId: CHAIN }))
+            .toEqual({ ok: true, result: { supported: null } });
+    });
 });

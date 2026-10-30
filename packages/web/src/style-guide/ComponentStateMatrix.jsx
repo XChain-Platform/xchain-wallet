@@ -21,6 +21,8 @@ const componentSizes = {
     PageHeader: FIXED_SIZE,
     FormPage: FIXED_SIZE,
     FormErrorSummary: FIXED_SIZE,
+    FormNotice: FIXED_SIZE,
+    FieldNote: FIXED_SIZE,
     FormSection: FIXED_SIZE,
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
@@ -114,6 +116,10 @@ function ComponentPreview({ name, size, state }) {
         return <UI.FormPage as="div" intro="Form introduction" actions={<UI.Button size="sm">Continue</UI.Button>}>Form body</UI.FormPage>;
     case 'FormErrorSummary':
         return <UI.FormErrorSummary errors={[{ message: 'Check this value' }]} />;
+    case 'FormNotice':
+        return <UI.FormNotice variant={statusVariant === 'error' ? 'error' : 'warning'}>Check the fee before you continue.</UI.FormNotice>;
+    case 'FieldNote':
+        return <UI.FieldNote variant={statusVariant === 'error' ? 'error' : 'warning'}>This address looks like one of your contacts.</UI.FieldNote>;
     case 'FormSection':
         return <UI.FormSection title="Details" description="Supporting information">Section body</UI.FormSection>;
     case 'ListPage':
@@ -177,7 +183,7 @@ function ComponentPreview({ name, size, state }) {
     case 'QrScanner':
         return <UI.QrScanner previewState={state === 'error' ? 'denied' : 'unsupported'} onFrame={noop} alt="QR scanner preview" />;
     case 'ChainPicker':
-        return <UI.ChainPicker label="Chain" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
+        return <UI.ChainPicker label="Network" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'NetworkField':
         return <UI.NetworkField value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'Skeleton':

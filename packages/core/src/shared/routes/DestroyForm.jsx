@@ -8,13 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -24,9 +27,10 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useSourceTickBalance } from '../hooks/useSourceTickBalance.js';
+import { recheckSourceTickBalance } from '../../flows/sourceTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
@@ -34,7 +38,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import {
@@ -43,13 +47,17 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** The refusal raised at Approve when the source balance falls short of the amount or cannot be read. */
+const DESTROY_BALANCE_REFUSED = 'DESTROY_BALANCE_REFUSED';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -76,6 +84,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function DestroyForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -105,7 +114,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before destroying.',
+            'No addresses on any network yet. Use Receive to generate one before destroying.',
     });
 
 
@@ -115,18 +124,26 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // confirmation can't carry forward from a previously-cancelled
     // review.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'DESTROY';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'DESTROY');
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || '');
 
     // Balance of the amount tick at the source address (Max + "available").
-    const tickAmtBalance = useTickBalance({
+    // A failed or unparseable read is unknown, never zero. An Approve refusal
+    // bumps the key, so the footer and Max show the balance that refused it.
+    const [balanceReadKey, setBalanceReadKey] = useState(0);
+    const sourceBalance = useSourceTickBalance({
         messaging,
         walletId,
         chainId,
         address: fromAddress?.address,
         tick: ticker,
+        refreshKey: balanceReadKey,
     });
+    const tickAmtBalance = sourceBalance.amount;
+    // Review waits on a balance read when the debounced one has not landed.
+    const [checkingBalance, setCheckingBalance] = useState(false);
+    const checkingBalanceRef = useRef(false);
     const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
@@ -165,6 +182,15 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // An amount refusal shows under the Amount field, which takes focus, so a
+    // phone shows it beside the value to fix instead of above the fold.
+    const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const refuseAmount = (message) => {
+        setFormError(null);
+        setAmountError(message);
+        amountInputRef.current?.focus();
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -191,7 +217,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     const actionParams = useMemo(() => ({
         VERSION: '0',
-        TICK: ticker.trim().toUpperCase(),
+        TICK: ticker.trim(),
         AMOUNT: String(amount).trim(),
     }), [ticker, amount]);
 
@@ -211,6 +237,17 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             chainRegistry,
         });
     }, [stage, confirmModalOpen, actionParams, chainId]);
+
+    // A refusal before signing hands the composed inputs back to the encoder,
+    // so the next compose is not refused over coins this one still holds.
+    function releaseComposedInputs(composed) {
+        const release = composed?.releaseEncoderInputs;
+        const token = composed?.releaseEncoderInputsToken;
+        const pending = typeof release === 'function'
+            ? release()
+            : (typeof token === 'string' && token ? messaging.releaseEncoderInputs?.({ token }) : null);
+        Promise.resolve(pending).catch(() => {});
+    }
 
     // Single-encode confirm (mirrors Send slice 1): compose + tamper-check +
     // pre-flight run HOST-side; Approve signs the byte-identical prebuilt
@@ -259,22 +296,51 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: {
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                        // The shared mapping, envelope and deferred outputs included.
-                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
-                    },
-                }),
+                onApprove: async (_creds, composed) => {
+                    // The burn is checked against a balance read at Approve, not the
+                    // one from Review: another surface or a send can spend it while
+                    // the confirm page is open, and a destroy is never undone.
+                    const recheck = await recheckSourceTickBalance({
+                        messaging, walletId, chainId, address: from.address,
+                        tick: actionParams.TICK, amount: actionParams.AMOUNT,
+                    });
+                    if (!recheck.ok) {
+                        releaseComposedInputs(composed);
+                        const refusal = new Error(recheck.reason === 'short'
+                            ? t('send.destroy.balanceShort', {
+                                balance: formatWithThousands(recheck.balance),
+                                amount: formatWithThousands(actionParams.AMOUNT),
+                                tick: actionParams.TICK,
+                            })
+                            : t('send.destroy.balanceUnread', { tick: actionParams.TICK }));
+                        refusal.code = DESTROY_BALANCE_REFUSED;
+                        refusal.reason = recheck.reason;
+                        throw refusal;
+                    }
+                    return submit({
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        extraBase: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                            // The shared mapping, envelope and deferred outputs included.
+                            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+                        },
+                    });
+                },
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
+            if (err && err.code === DESTROY_BALANCE_REFUSED) {
+                setPassword('');
+                setBalanceReadKey((n) => n + 1);
+                if (err.reason === 'short') refuseAmount(err.message);
+                else setFormError(err.message);
+                return;
+            }
             console.error('Destroy (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
                 chainId,
@@ -285,8 +351,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         }
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (checkingBalanceRef.current) return;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -301,8 +370,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
-            setFormError('Amount must be a positive number.');
+        // Digits, not a float: Number('.') is NaN and slips past a <= 0 test.
+        const amountProblem = amountEntryProblem(amt);
+        if (amountProblem === 'shape') {
+            refuseAmount('Write the amount with digits on both sides of the decimal point, such as 0.5.');
+            return;
+        }
+        if (amountProblem) {
+            refuseAmount('Amount must be a positive number.');
             return;
         }
         // Keep the burn within the token's on-chain decimal scale.
@@ -311,14 +386,36 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             tick: ticker,
         });
         if (precisionError) {
-            setFormError(precisionError);
+            refuseAmount(precisionError);
             return;
         }
+        setAmountError(null);
+        const TICK = ticker.trim();
+        // A burn is judged only against a balance the wallet read and parsed:
+        // one still loading is read here, and one that cannot be read stops it.
+        let balance = tickAmtBalance;
+        if (balance == null) {
+            checkingBalanceRef.current = true;
+            setCheckingBalance(true);
+            let read;
+            try {
+                read = await recheckSourceTickBalance({
+                    messaging, walletId, chainId, address: fromAddress.address, tick: TICK, amount: amt,
+                });
+            } finally {
+                checkingBalanceRef.current = false;
+                setCheckingBalance(false);
+            }
+            if (read.reason === 'unread') {
+                setFormError(t('send.destroy.balanceUnread', { tick: TICK }));
+                return;
+            }
+            balance = read.balance;
+        }
         // Refuse a burn the selected source address cannot fund.
-        if (exceedsBalance(amt, tickAmtBalance)) {
-            const TICK = ticker.trim().toUpperCase();
-            setFormError(
-                `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
+        if (exceedsBalance(amt, balance)) {
+            refuseAmount(
+                `This address holds only ${formatWithThousands(balance)} ${TICK}. `
                 + 'Enter an amount at or below that balance.',
             );
             return;
@@ -409,21 +506,23 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (loadError) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy token"
-                status={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
             />,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<FormPage label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
+        return wrap(<FormPage demoGuard={demoGuard} label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <FormPage label="Unsigned destroy transaction">
-                    <WatcherResultPanel
+                <FormPage demoGuard={demoGuard} label="Unsigned destroy transaction">
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={handleBuildAnother}
                         onDone={onBack}
@@ -434,13 +533,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
             return wrap(
-                <FormPage label="Queued destroy transaction">
-                    <QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />
+                <FormPage demoGuard={demoGuard} label="Queued destroy transaction">
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="destroy" unsaved={result.unsaved} />
                 </FormPage>,
             );
         }
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Destroy result"
                 actions={<Button variant="primary" onClick={onBack}>Done</Button>}
             >
@@ -460,10 +560,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review destroy"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -492,7 +593,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -511,11 +612,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -543,7 +640,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 )}
                 <Input
                     label="Type DESTROY to confirm"
-                    hint="This burns the amount above and cannot be undone."
+                    hint={t('common.typedConfirmationDestroyHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -580,7 +677,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 extraCredentials={(
                     <Input
                         label='Type "DESTROY" to confirm'
-                        hint="Destroying tokens is irreversible."
+                        hint={t('common.typedConfirmationDestroyReviewHint')}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -619,7 +716,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -630,27 +727,26 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Destroy token"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
+                    loading={confirmAction.composing || checkingBalance}
+                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing || checkingBalance}
                 >
                     {!isWatcherMode ? 'Destroy' : 'Preview'}
                 </Button>
             )}
         >
-            <div role="alert" className={styles.warnings}>
-                <p className={styles.warning}>
-                    <strong>Destroy is irreversible.</strong> The burned amount cannot be recovered.
-                </p>
-            </div>
+            <FormNotice variant="warning" role="alert" lead="Destroy is irreversible.">
+                The burned amount cannot be recovered.
+            </FormNotice>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
@@ -669,9 +765,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             {lockedToken ? null : (
@@ -686,18 +782,21 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 hint="How much to destroy."
                 amount={amount}
                 tick={ticker}
+                inputRef={amountInputRef}
+                error={amountError || undefined}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
+                    setAmountError(null);
                 }}
                 onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                    ? () => setAmount(tickAmtBalance)
+                    ? () => { setAmount(tickAmtBalance); setAmountError(null); }
                     : undefined}
                 maxDisabled={!tickAmtBalance}
                 balanceText={tickAmtBalance != null && (ticker)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker).toUpperCase()} available`
-                    : null}
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker)} available`
+                    : (sourceBalance.unreadable && ticker ? t('send.balance.unknown') : null)}
             />
 
             {feeTiers ? (

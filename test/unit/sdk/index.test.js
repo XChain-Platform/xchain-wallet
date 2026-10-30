@@ -20,15 +20,18 @@ import {
 } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { adaptXChainSDK } from '../../../packages/core/src/sdk/defaultFactory.js';
 import { isDevMockAddress, mockDeriveAddress } from '../../../packages/core/src/sdk/devMockAddresses.js';
+import { DEV_MOCK_SIGNING_UNAVAILABLE, devMockSigningError } from '../../../packages/core/src/sdk/devMockErrors.js';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
 describe('sdk public barrel', () => {
     it('exports the supported SDK integration surface', () => {
         const expected = {
             DEFAULT_SDK_NETWORK_OPTIONS,
+            DEV_MOCK_SIGNING_UNAVAILABLE,
             SDKRegistry,
             UnknownChainError,
             adaptXChainSDK,
+            devMockSigningError,
             endpointOverridesFromSettings,
             isDevMockAddress,
             joinEndpoint,

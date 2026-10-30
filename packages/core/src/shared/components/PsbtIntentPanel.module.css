@@ -83,14 +83,11 @@
 }
 
 .totals {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
     gap: 0;
     margin: 0;
-    padding: var(--xc-space-1);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
 }
 
@@ -110,19 +107,6 @@
 .totalsLabel ~ .totalsLabel,
 .totalsValue ~ .totalsValue {
     border-top: var(--xc-table-row-divider);
-}
-
-/* Loud partial/failed decode. Not a soft hint: an undecodable
-   transaction is exactly when the user most needs to be cautious. */
-.undecoded {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-warning);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
 }
 
 .actionIntent {

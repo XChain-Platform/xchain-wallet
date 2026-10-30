@@ -65,7 +65,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/utility-divisible-send.regtest.spec.js
 
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -73,17 +74,27 @@ import {
     REGTEST_COIN,
     fundAddress,
     minerRpc,
+    mintXchain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    selectVenueSendAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The ISSUE pays a real coin fee; the sends are free. */
 const FUNDING = 3;
+/**
+ * XCHAIN held for protocol fees on Bitcoin, where ISSUE and the other paid
+ * actions here charge theirs in XCHAIN rather than in the coin, and the review
+ * refuses a wallet holding none. Off Bitcoin the fee rides the coin lane and
+ * FUNDING covers it.
+ */
+const MINT_XCHAIN = 20;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `UTL${STAMP}`;
 const SUPPLY = 1000;
@@ -169,21 +180,8 @@ async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never reached ${want} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -212,10 +210,13 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -227,7 +228,7 @@ async function approveAndGetTxid(page) {
  * these venues (§3.5). The modal has its OWN coin picker, labelled "Coin".
  */
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const listed = async () => {
         const rows = page.getByRole('button', { name: /^View address / });
         await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -251,13 +252,10 @@ async function generateVenueAddress(page) {
 async function fillSend(page, amount) {
     await reloadToHome(page);
     await gotoSection(page, 'Send');
-    // The form opens on BITCOIN with the native coin selected ("Token: BTC on
-    // Bitcoin"), and the token search lives BEHIND that button - it is not on
-    // the form. Picking the token is also what retargets the form's chain,
-    // which is why no separate network step is needed here (§3.5 bullet 2).
-    await page.getByRole('button', { name: /^Token:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill(TICK);
-    await page.getByLabel(new RegExp(`Open ${TICK} details`, 'i')).first().click();
+    // The token search lives behind the Change asset button, not on the form.
+    // Picking the token is also what retargets the form's chain, which is why
+    // no separate network step is needed here (§3.5 bullet 2).
+    await selectVenueSendAsset(page, TICK);
     await page.getByLabel('To', { exact: true }).fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);
     await mainButton(page, 'Send').click();
@@ -274,7 +272,7 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Utility Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -285,9 +283,15 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             await fundAddress(owner, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+            if (REGTEST_COIN === 'RBTC') {
+                await mintXchain(page, MINT_XCHAIN);
+                await waitForTokenBalance(owner, 'XCHAIN', MINT_XCHAIN);
+                await page.reload();
+                await unlockAfterReload(page, PASSWORD);
+            }
             await seedPrices();
 
-            await gotoPalette(page, 'Create a token');
+            await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: /^Utility/ }).click();
             await selectVenueChain(main);
@@ -302,8 +306,7 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // The two fields only this template and Custom expose.
             await main.getByLabel('Divisible (8 decimal places)').check();
             await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await expectConfirmScreen(page);
             const action = await waitForIndexedAction(await approveAndGetTxid(page));

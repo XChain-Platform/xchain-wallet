@@ -52,7 +52,12 @@
     width: 100%;
     max-width: 35rem;
     max-height: min(70vh, var(--xc-viewport-h, 100vh));
-    padding-bottom: calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px));
+    /* The bottom inset is padding on the scrolling body, not on the surface:
+       padding on the surface left a dead band under the list, so the scroller
+       stopped short of the edge and the last row was cut above the home
+       indicator. Now the list scrolls to the edge and its end rests above
+       the inset. A sheet has no footer; one would need the same padding. */
+    padding-bottom: 0;
     border-end-start-radius: 0;
     border-end-end-radius: 0;
     box-shadow: var(--xc-shadow-bottom-sheet);
@@ -93,6 +98,7 @@
 }
 
 .popover .title {
+    grid-column: 1;
     text-align: start;
 }
 
@@ -129,6 +135,18 @@
     justify-content: center;
 }
 
+/* A popover's title is start-aligned, so it needs no centring spacer cell;
+   with one it sat indented a control's width past the rows below it. The
+   inline inset matches the one popover sections carry inside the surface. */
+.popover .header {
+    grid-template-columns: minmax(0, 1fr) var(--xc-control-h-md);
+    padding-inline: var(--xc-space-2);
+}
+
+.popover .close {
+    grid-column: 2;
+}
+
 .body {
     composes: scrollArea from '../../ui/Screen.module.css';
     flex: 1 1 auto;
@@ -144,6 +162,10 @@
 
 .body > :last-child {
     margin-block-end: 0;
+}
+
+.sheet .body {
+    padding-bottom: calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px));
 }
 
 .popover .body {
@@ -172,7 +194,7 @@
     }
 }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .dialogOverlay {
         padding: var(--xc-space-2);
     }

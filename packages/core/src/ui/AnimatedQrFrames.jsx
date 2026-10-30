@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useReducedMotion } from './reducedMotion.js';
 import qrStyles from './QrDisplay.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Render a sequence of strings as animated QR codes; frames advance
@@ -41,7 +43,7 @@ export function AnimatedQrFrames({
     frames,
     fps = 3,
     size = 240,
-    alt = 'Animated QR',
+    alt = t('ui.animatedQrFrames.animatedQr'),
     announceLoading = true,
 }) {
     const [index, setIndex] = useState(0);
@@ -171,7 +173,7 @@ export function AnimatedQrFrames({
                 ) : (
                     <div
                         role={announceLoading ? 'status' : undefined}
-                        aria-label={announceLoading ? `Preparing ${qrAlt}` : undefined}
+                        aria-label={announceLoading ? t('ui.animatedQrFrames.preparing', { qrAlt }) : undefined}
                         style={{
                             width: '100%',
                             maxWidth: normalizedSize,
@@ -183,7 +185,7 @@ export function AnimatedQrFrames({
                 )}
             </div>
             <span className={qrStyles.caption}>
-                Frame {safeIndex + 1} / {frameCount}
+                {t('ui.animatedQrFrames.frame')} {safeIndex + 1} / {frameCount}
                 {cadenceLabel ? ` · ${cadenceLabel}` : ''}
             </span>
             {multiFrame ? (
@@ -191,31 +193,31 @@ export function AnimatedQrFrames({
                     {!reducedMotion ? (
                         <button
                             type="button"
-                            aria-label={paused ? 'Resume animation' : 'Pause animation'}
+                            aria-label={paused ? t('ui.animatedQrFrames.resumeAnimation') : t('ui.animatedQrFrames.pauseAnimation')}
                             aria-pressed={paused}
                             onClick={() => setPaused((value) => !value)}
                             style={controlStyle}
                         >
-                            {paused ? 'Resume' : 'Pause'}
+                            {paused ? t('ui.animatedQrFrames.resume') : t('ui.animatedQrFrames.pause')}
                         </button>
                     ) : null}
                     {manual ? (
                         <>
                             <button
                                 type="button"
-                                aria-label="Previous frame"
+                                aria-label={t('ui.animatedQrFrames.previousFrame')}
                                 onClick={() => step(-1)}
                                 style={controlStyle}
                             >
-                                Prev
+                                {t('ui.animatedQrFrames.prev')}
                             </button>
                             <button
                                 type="button"
-                                aria-label="Next frame"
+                                aria-label={t('ui.animatedQrFrames.nextFrame')}
                                 onClick={() => step(1)}
                                 style={controlStyle}
                             >
-                                Next
+                                {t('onboarding.carousel.next')}
                             </button>
                         </>
                     ) : null}

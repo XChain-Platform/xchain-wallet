@@ -59,6 +59,16 @@
     border-bottom: 0;
 }
 
+/*
+ * A short all-numeric table (an order book, a trade tape) stays a table at
+ * every width: stacked label rows made each price level four lines tall and
+ * a phone's order book thousands of pixels long, while three or four short
+ * numbers fit a 336px row side by side.
+ */
+.keepColumns {
+    font-variant-numeric: tabular-nums;
+}
+
 .mono {
     font-family: var(--xc-font-mono, monospace);
     direction: ltr;
@@ -86,7 +96,19 @@
 }
 
 @media not all and (min-width: 600px) {
-    .table thead {
+    /* Narrow: columns size to their values and a number never breaks. */
+    .keepColumns {
+        table-layout: auto;
+    }
+
+    .keepColumns .headerCell,
+    .keepColumns .cell,
+    .keepColumns .cellButton {
+        overflow-wrap: normal;
+        white-space: nowrap;
+    }
+
+    .table:not(.keepColumns) thead {
         position: absolute;
         /* One physical pixel is the standard visually hidden clipping box. */
         width: 1px;
@@ -98,18 +120,18 @@
         border: 0;
     }
 
-    .table tbody,
-    .table tr,
-    .table td {
+    .table:not(.keepColumns) tbody,
+    .table:not(.keepColumns) tr,
+    .table:not(.keepColumns) td {
         display: block;
         width: 100%;
     }
 
-    .table tr {
+    .table:not(.keepColumns) tr {
         padding: var(--xc-space-1) 0;
     }
 
-    .table .cell {
+    .table:not(.keepColumns) .cell {
         display: grid;
         grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
         gap: var(--xc-space-2);
@@ -117,7 +139,7 @@
         text-align: end;
     }
 
-    .table .cell::before {
+    .table:not(.keepColumns) .cell::before {
         color: var(--xc-text-muted);
         font-size: var(--xc-text-xs, 0.75rem);
         font-weight: 600;
@@ -125,19 +147,19 @@
         content: attr(data-label);
     }
 
-    .table .cellButton {
+    .table:not(.keepColumns) .cellButton {
         justify-self: end;
     }
 }
 
 @media not all and (min-width: 400px) {
-    .table .cell {
+    .table:not(.keepColumns) .cell {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--xc-space-1);
         text-align: start;
     }
 
-    .table .cellButton {
+    .table:not(.keepColumns) .cellButton {
         justify-self: start;
     }
 }

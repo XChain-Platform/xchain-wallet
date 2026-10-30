@@ -44,13 +44,16 @@ export async function pollsForChain({ sdkRegistry, chainId, query, type, opts })
 
 /**
  * Fetch a single poll definition + finalization summary by its id (creating action_index).
- * @param {{ sdkRegistry: object, chainId: string, pollIndex: string | number, opts?: object }} params
+ * A caller that guards a ballot signature passes `fresh`, so the poll read
+ * goes past the explorer wrapper's read reuse and the HTTP cache.
+ *
+ * @param {{ sdkRegistry: object, chainId: string, pollIndex: string | number, opts?: object, fresh?: boolean }} params
  */
-export async function pollDetail({ sdkRegistry, chainId, pollIndex, opts }) {
+export async function pollDetail({ sdkRegistry, chainId, pollIndex, opts, fresh = false }) {
     const sdk = requireSdk({ sdkRegistry, chainId }, 'pollDetail');
     if (pollIndex === undefined || pollIndex === null) throw new Error('pollDetail: pollIndex is required');
     if (typeof sdk.getPoll !== 'function') throw new Error('pollDetail: sdk.getPoll is unavailable');
-    return sdk.getPoll(pollIndex, opts);
+    return sdk.getPoll(pollIndex, fresh ? { ...(opts || {}), fresh: true } : opts);
 }
 
 /**

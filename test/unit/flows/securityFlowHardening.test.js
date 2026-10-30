@@ -80,7 +80,7 @@ describe('security flow persistence hardening', () => {
 
         expect(getPanicModeState()).toEqual(second);
         expect(getPanicModeState()).not.toEqual(first);
-        expect(logConsole.entries().filter((entry) => entry.source === 'panic-mode'))
+        expect(logConsole.entries().filter((entry) => entry.source === 'storage'))
             .toHaveLength(1);
     });
 
@@ -95,7 +95,7 @@ describe('security flow persistence hardening', () => {
 
         expect(isDuressMatch('first emergency phrase')).toBe(false);
         expect(isDuressMatch('replacement emergency phrase')).toBe(true);
-        expect(logConsole.entries().filter((entry) => entry.source === 'duress-passphrase'))
+        expect(logConsole.entries().filter((entry) => entry.source === 'storage'))
             .toHaveLength(1);
     });
 

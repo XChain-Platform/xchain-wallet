@@ -191,13 +191,21 @@ describe('flows/pairPartner collectPairingKeys', () => {
     });
 
     it('leaves xpub null for a signer that cannot produce one (hardware)', async () => {
-        const keys = await collectPairingKeys({
-            signer: mkSigner(SEED_A, { withXpub: false }),
-            chainRegistry: registry,
-            chainIds: ['bitcoin-mainnet'],
-        });
-        expect(keys[0].xpub).toBeNull();
+        // Hardware-shaped: no getAccountXpub, and getPublicKey refuses a missing
+        // chainId the way TrezorSigner.getPublicKey does.
+        const soft = mkSigner(SEED_A, { withXpub: false });
+        const calls = [];
+        const signer = {
+            async getPublicKey(params) {
+                calls.push(params);
+                if (!params?.chainId) throw new Error(`unsupported chainId "${params?.chainId}"`);
+                return soft.getPublicKey(params);
+            },
+        };
+        const keys = await collectPairingKeys({ signer, chainRegistry: registry, chainIds: ALL_CHAINS });
+        expect(keys.map((k) => k.xpub)).toEqual([null, null, null]);
         expect(keys[0].keyId).toMatch(/^[0-9a-f]{64}$/);
+        expect(calls).toEqual(keys.map((k) => ({ chainId: k.chainId, path: k.path })));
     });
 
     it('skips chains the registry does not know', async () => {

@@ -26,12 +26,12 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(
     src,
-    /import \{ ADS_DONATION_ADDRESS_PLACEHOLDER \}/,
-    'imports placeholder sentinel',
+    /\bisDonationAddressConfigured,[\s\S]*?\} from '\.\.\/\.\.\/\.\.\/registry\/validate\.js'/,
+    'imports the configured-address check that treats the placeholder sentinel as absent',
 );
 
 // Master toggle
-assert.match(src, /label="Automatic Donation System"/, 'master ON/OFF toggle present');
+assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\{t\('settings\.ads\.switchAccessibleLabel'\)\}/, 'master ON/OFF toggle present');
 assert.match(
     src,
     /update\(\{\s*ads:\s*\{\s*enabled:\s*next\s*\}\s*\}\)/,
@@ -40,7 +40,7 @@ assert.match(
 
 // Per-chain numeric edits
 for (const field of ['perTxAmountSats', 'triggerAmountSats']) {
-    const re = new RegExp(`onChainPatch\\(chainId,\\s*\\{\\s*${field}:\\s*n\\s*\\}\\)`);
+    const re = new RegExp(`onChainPatch\\(chainId,\\s*\\{\\s*${field}:\\s*value\\s*\\}\\)`);
     assert.match(src, re, `chain patch carries ${field}`);
 }
 assert.match(
@@ -57,10 +57,12 @@ for (const field of ['lifetimeDonatedSats', 'lifetimeTxCount', 'accumulatedSats'
     );
 }
 
-// Donation address: placeholder vs real
-assert.match(src, /isPlaceholder\b/, 'placeholder branch present');
-assert.match(src, /Not available yet\./, 'short placeholder copy present');
-assert.match(src, /aria-description=\{placeholderDescription\}/, 'full placeholder description remains accessible');
+// Donation address: a per-chain role picker, then the chosen address or the placeholder
+assert.match(src, /onChainPatch\(id,\s*\{\s*donationAddressRole:\s*role\s*\}\)/, 'picker writes donationAddressRole');
+assert.match(src, /const configured = isDonationAddressConfigured\(descriptor, role\)/, 'placeholder branch present');
+// The smoke runner inlines argument-free t() calls as their English copy; a direct run reads the key.
+assert.match(src, /value=(?:"Not available yet\."|\{t\('settings\.ads\.notAvailableYet'\)\})/, 'short placeholder copy present');
+assert.match(src, /aria-description=\{t\('settings\.ads\.donationAddressArrivesLater', \{ displayName \}\)\}/, 'full placeholder description remains accessible');
 
 // Inputs disable when ADS is off so the user can't poke them
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');

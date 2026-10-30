@@ -62,6 +62,42 @@ describe('signMessageFlow', () => {
         expect(signer.lock).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['a null', 'a\u0000b'],
+        ['an escape', 'x\u001b[2Jy'],
+        ['a carriage return', 'line\rover'],
+        ['an unpaired surrogate', 'a\ud800b'],
+    ])('refuses a message with %s before the signer is called', async (_name, message) => {
+        const signer = mockSigner();
+
+        await expect(signMessageFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0", message, signer, ...registries,
+        })).rejects.toThrow(/control characters/);
+        expect(signer.signMessage).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a musical beam control', 'pay\u{1D173} 1 unit'],
+        ['a Mongolian variation selector', 'pay᠋ 1 unit'],
+        ['a Syriac abbreviation mark', 'pay܏ 1 unit'],
+    ])('refuses a message with %s as deceptive before the signer is called', async (_name, message) => {
+        const signer = mockSigner();
+
+        await expect(signMessageFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0", message, signer, ...registries,
+        })).rejects.toThrow(/deceptive characters/);
+        expect(signer.signMessage).not.toHaveBeenCalled();
+    });
+
+    it('signs a message with tabs, line feeds and paired surrogates', async () => {
+        const signer = mockSigner();
+
+        await signMessageFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0", message: 'a\tb\nc 🚀', signer, ...registries,
+        });
+        expect(signer.signMessage).toHaveBeenCalledTimes(1);
+    });
+
     it('refuses to sign in panic mode without calling the signer', async () => {
         const signer = mockSigner();
         activatePanicMode();

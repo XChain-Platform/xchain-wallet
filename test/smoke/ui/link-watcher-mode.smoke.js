@@ -23,7 +23,7 @@ const formSrc = readFileSync(
 );
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
-assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
+assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(
     formSrc,
@@ -32,6 +32,6 @@ assert.match(
 assert.match(formSrc, /COIN1: String\(ticker1\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN2: String\(ticker2\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN1_ACTION_INDEX: actionIndex1/);
-assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
 assert.match(formSrc, /Create unsigned transaction/);
 console.log('link-watcher-mode smoke OK');

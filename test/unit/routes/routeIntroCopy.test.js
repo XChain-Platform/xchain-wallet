@@ -37,14 +37,16 @@ describe('route intro copy', () => {
         expect(oracle).toContain('<InfoTip label={`Dispensers can use an oracle');
         expect(pairing).toContain('hint={lane.help}');
         expect(pairing).toContain('<InfoTip label="Pairing codes contain public keys only');
-        expect(roster).toContain('<InfoTip label={`Tokens on ${tick}');
+        expect(roster).toContain('official-token list show an "Official" badge in explorers and wallets');
         expect(signer).toContain('<InfoTip label={t(\'signerSelect.intro\')} />');
     });
 
     it('retains irreversible-action and fee safety copy', () => {
         expect(readRoute('ParallelComposer.jsx')).toContain('<strong>No rollback:</strong>');
         expect(readRoute('PublishFileForm.jsx')).toContain('Permanent: the published bytes live on-chain forever');
-        expect(readRoute('OracleForm.jsx')).toContain('cannot be undone for 24 hours');
+        expect(readRoute('OracleForm.jsx')).toContain('typedConfirmationCopy.oracle(');
+        expect(readFileSync('packages/core/src/i18n/locales/en/common.js', 'utf8'))
+            .toContain("can't be undone for 24 hours");
         expect(readRoute('SellOwnershipForm.jsx')).toContain('label="Network fee"');
     });
 });

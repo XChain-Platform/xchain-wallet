@@ -29,7 +29,7 @@
 // lookup would leak every destination while looking like it worked),
 // and a missing proxy FAILS instead of quietly going direct.
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 
@@ -43,6 +43,7 @@ import {
 } from '../../../packages/desktop/main/socksAgent.js';
 import {
     applyTorRouting,
+    applyProxyToSession,
     readTorSettings,
     resetTorRoutingState,
 } from '../../../packages/desktop/main/torRouting.js';
@@ -291,6 +292,55 @@ describe('applyTorRouting', () => {
         expect(proxySaw).toEqual([]);
     }, 20_000);
 
+    it('retries the same proxy after a partition rejects turning routing on', async () => {
+        const registry = makeRegistry();
+        const setProxy = vi.fn()
+            .mockRejectedValueOnce(new Error('setProxy rejected the proxy'))
+            .mockResolvedValue(undefined);
+        const partition = { setProxy };
+        const settings = {
+            privacy: { torRouting: true, socksProxyAddress: `127.0.0.1:${proxyPort}` },
+        };
+        const params = { settings, sdkRegistry: registry, extraSessions: () => [partition] };
+
+        await expect(applyTorRouting(params))
+            .rejects.toThrow('setProxy rejected the proxy');
+        const laterSession = { setProxy: vi.fn() };
+        await applyProxyToSession(laterSession);
+        expect(laterSession.setProxy).toHaveBeenCalledWith({ mode: 'direct' });
+
+        const retried = await applyTorRouting(params);
+        expect(retried.on).toBe(true);
+        expect(setProxy).toHaveBeenCalledTimes(2);
+        expect(setProxy.mock.calls[1][0].proxyRules).toBe(`socks5://127.0.0.1:${proxyPort}`);
+
+        await applyTorRouting({ settings: {}, sdkRegistry: registry, extraSessions: () => [partition] });
+    });
+
+    it('keeps a failed turn-off retryable while reporting later sessions direct', async () => {
+        const registry = makeRegistry();
+        const setProxy = vi.fn().mockResolvedValue(undefined);
+        const partition = { setProxy };
+        const onSettings = {
+            privacy: { torRouting: true, socksProxyAddress: `127.0.0.1:${proxyPort}` },
+        };
+        const extraSessions = () => [partition];
+        await applyTorRouting({ settings: onSettings, sdkRegistry: registry, extraSessions });
+        setProxy.mockRejectedValueOnce(new Error('setProxy rejected direct mode'));
+
+        await expect(applyTorRouting({ settings: {}, sdkRegistry: registry, extraSessions }))
+            .rejects.toThrow('setProxy rejected direct mode');
+        const laterSession = { setProxy: vi.fn() };
+        await applyProxyToSession(laterSession);
+        expect(laterSession.setProxy).toHaveBeenCalledWith({ mode: 'direct' });
+
+        const retried = await applyTorRouting({ settings: {}, sdkRegistry: registry, extraSessions });
+        expect(retried).toEqual({ on: false });
+        expect(setProxy).toHaveBeenCalledTimes(3);
+        expect(setProxy.mock.calls[1][0]).toEqual({ mode: 'direct' });
+        expect(setProxy.mock.calls[2][0]).toEqual({ mode: 'direct' });
+    });
+
     it('still applies routing when the proxy is unreachable, and says so', async () => {
         // Refusing to apply would mean the toggle reads on while traffic
         // goes direct, which is exactly the bug being fixed. Apply, and
@@ -305,5 +355,48 @@ describe('applyTorRouting', () => {
         expect(result.reason).toMatch(/cannot reach the SOCKS proxy/);
         expect(registry.pools).toEqual(['SOCKS']);
         await applyTorRouting({ settings: {}, sdkRegistry: registry });
+    });
+
+    it('ends off when the toggle is switched off while the proxy probe is still running', async () => {
+        const stalled = net.createServer(() => {});
+        await new Promise((r) => stalled.listen(0, '127.0.0.1', r));
+        const address = `127.0.0.1:${stalled.address().port}`;
+        const registry = { pools: [], setPool(p) { this.pools.push(p ? 'SOCKS' : 'CLEARED'); } };
+        const proxyCalls = [];
+        const session = { setProxy: async (cfg) => { proxyCalls.push(cfg); } };
+        try {
+            const on = applyTorRouting({
+                settings: { privacy: { torRouting: true, socksProxyAddress: address } },
+                sdkRegistry: registry,
+                session,
+            });
+            await new Promise((r) => setTimeout(r, 50));
+            const off = applyTorRouting({ settings: { privacy: { torRouting: false } }, sdkRegistry: registry, session });
+            await Promise.all([on, off]);
+            expect(registry.pools.at(-1)).toBe('CLEARED');
+            expect(proxyCalls.at(-1).mode).toBe('direct');
+        } finally {
+            stalled.close();
+        }
+    }, 20_000);
+
+    it('puts a later session on the routing in force and leaves it direct when off', async () => {
+        const later = [];
+        const laterSession = { setProxy: async (cfg) => { later.push(cfg); } };
+        await applyProxyToSession(laterSession);
+        expect(later.at(-1)).toEqual({ mode: 'direct' });
+
+        const registry = { setPool() {} };
+        await applyTorRouting({
+            settings: { privacy: { torRouting: true, socksProxyAddress: `127.0.0.1:${proxyPort}` } },
+            sdkRegistry: registry,
+            extraSessions: () => [laterSession],
+        });
+        expect(later.at(-1).proxyRules).toBe(`socks5://127.0.0.1:${proxyPort}`);
+        await applyProxyToSession(laterSession);
+        expect(later.at(-1).proxyBypassRules).toBe('<-loopback>');
+
+        await applyTorRouting({ settings: {}, sdkRegistry: registry, extraSessions: () => [laterSession] });
+        expect(later.at(-1)).toEqual({ mode: 'direct' });
     });
 });

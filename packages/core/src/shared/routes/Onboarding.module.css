@@ -12,6 +12,47 @@
     margin-bottom: var(--xc-space-4);
 }
 
+.welcomeHeader {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    text-align: start;
+}
+
+.welcomeHeader > .logoPopup,
+.welcomeHeader > .logoFull {
+    width: min(40%, 140px);
+    margin: 0;
+    flex: 0 1 auto;
+}
+
+.welcomeCopy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.welcomeTitle {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.welcomeTagline {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+}
+
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {
@@ -53,11 +94,8 @@
 /* The add-a-wallet lane, entered from inside the demo, explains
    why the demo has to be cleared before a real wallet can be made. */
 .demoGraduateNotice {
+    composes: card from '../../ui/Card.module.css';
     margin: 0 var(--xc-space-3) var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
 }
@@ -88,6 +126,7 @@
 }
 
 .licenseScroll {
+    composes: card from '../../ui/Card.module.css';
     /* The terms take every pixel the screen has left (FormPage fill), so
        Accept and continue sits at the bottom of the phone, and the panel
        keeps its own scroll: reaching its end unlocks the acknowledgement. */
@@ -95,10 +134,6 @@
     /* Retain enough initial license text to identify the scroll region. */
     min-height: 160px;
     overflow-y: auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     /* Padding and border sit inside the full width, so the terms never push
        the page sideways. */
     box-sizing: border-box;
@@ -175,7 +210,7 @@
 
 /* Short landscape screens retain every onboarding action while trimming
    decorative height around the brand and license gate. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .logoPopup,
     .logoFull {
         /* Preserve the compact landscape artwork width, which has no size token. */

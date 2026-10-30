@@ -49,7 +49,7 @@ const sectionSrc = readFileSync(
 
 const idx = hostSrc.indexOf("host.register('sites.restore'");
 assert.notEqual(idx, -1, 'sites.restore handler registered');
-const block = hostSrc.slice(idx, idx + 800);
+const block = hostSrc.slice(idx, idx + 1400);
 assert.match(block, /site is required/, 'validates site presence');
 assert.match(block, /site\.id is required/, 'validates site.id');
 assert.match(block, /site\.origin is required/, 'validates site.origin');

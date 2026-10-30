@@ -8,19 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -32,18 +35,22 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -67,10 +74,11 @@ const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 
 function normalizeRawTransaction(raw) {
-    const compact = String(raw || '').replace(/\s+/g, '');
+    // A 0x prefix is the usual way to write hex; it is not part of the bytes.
+    const compact = String(raw || '').replace(/\s+/g, '').replace(/^0x/i, '');
     if (!compact) throw new Error('Paste a signed transaction first.');
-    if (!HEX_ONLY.test(compact)) throw new Error('Transaction data must contain hexadecimal characters only.');
-    if (compact.length % 2 !== 0) throw new Error('Transaction data must contain complete bytes (two hexadecimal characters per byte).');
+    if (!HEX_ONLY.test(compact)) throw new Error('Transaction code must contain only the digits 0 to 9 and the letters a to f.');
+    if (compact.length % 2 !== 0) throw new Error('Transaction code must contain complete bytes (two characters per byte).');
     try {
         return { txHex: compact.toLowerCase(), decoded: parseRawTx(compact) };
     } catch {
@@ -144,8 +152,11 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
+// A pasted transaction can hold thousands of outputs; drawing every one freezes the tab.
+const MAX_PREVIEW_OUTPUTS = 50;
+
 function RawTransactionBroadcast({
-    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone,
+    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
 }) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
@@ -158,6 +169,8 @@ function RawTransactionBroadcast({
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
     const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
+    // Two submits in one event turn both read state 'preview'; the ref closes that gap.
+    const sendingRef = useRef(false);
 
     function review(event) {
         event.preventDefault();
@@ -177,32 +190,46 @@ function RawTransactionBroadcast({
 
     async function broadcast(event) {
         event.preventDefault();
-        if (!preview || !chainId || mismatch || state === 'submitting') return;
+        if (!preview || !chainId || mismatch || state === 'submitting' || sendingRef.current) return;
+        sendingRef.current = true;
         setState('submitting');
         onBusyChange(true);
         setError(null);
         try {
-            const response = await messaging.broadcastSignedTxRequest({
+            const response = await withAutoLockHold(() => messaging.broadcastSignedTxRequest({
                 walletId,
                 chainId,
                 txHex: preview.txHex,
-            });
+            }));
             setResult(response);
             setState('done');
         } catch (err) {
             setError(rawBroadcastFailure(err));
             setState('preview');
         } finally {
+            sendingRef.current = false;
             onBusyChange(false);
         }
     }
 
     if (state === 'done') {
         const txid = result?.txid || result?.broadcast?.txid || '';
+        // A node that already holds these exact bytes answers with no new txid; that is not a queued send.
+        const alreadyOnNetwork = result?.alreadyOnNetwork === true;
         // A relay that queued the transaction instead of broadcasting it is
         // not a broadcast; say so before any success copy can render.
         if (result?.queued) {
-            return <QueuedResultPanel onDone={() => setState('form')} what="broadcast" unsaved={result?.unsaved} />;
+            // Map the host's `persisted` reply to a definite boolean: this lane
+            // never goes through useConfirmAction, so the panel's handoff fallback
+            // would show another action's leftover warning, or none at all.
+            return (
+                <ResultScreen
+                    state="signed-not-broadcast"
+                    onDone={onDone}
+                    what="broadcast"
+                    unsaved={result?.persisted === false}
+                />
+            );
         }
         const explorerBase = descriptor?.explorer?.defaultUrl;
         const explorerUrl = txid && explorerBase ? explorerPageUrl({
@@ -214,7 +241,7 @@ function RawTransactionBroadcast({
         return (
             <div>
                 <div role="status" aria-live="polite" aria-atomic="true">
-                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : 'Transaction queued'}</h2>
+                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : alreadyOnNetwork ? 'Already on the network' : 'Transaction queued'}</h2>
                     {txid ? (
                         <p className={styles.hint}>
                             The transaction was broadcast but is not confirmed yet.
@@ -234,7 +261,11 @@ function RawTransactionBroadcast({
                         ) : null}
                     </>
                 ) : (
-                    <p>The signed transaction is saved in the broadcast queue. Send it from there when the network is available.</p>
+                    <p>
+                        {alreadyOnNetwork
+                            ? 'The network already has this transaction, so there is nothing more to send.'
+                            : 'The signed transaction is saved in the broadcast queue. Send it from there when the network is available.'}
+                    </p>
                 )}
                 <div className={styles.actions}>
                     <Button type="button" onClick={() => {
@@ -254,14 +285,17 @@ function RawTransactionBroadcast({
     if (state === 'preview' || state === 'submitting') {
         return (
             <FormPage
+                demoGuard={demoGuard}
                 label="Review signed transaction"
                 onSubmit={broadcast}
                 status={error || mismatch ? (
-                    <StatusMessage variant="error" className={styles.error}>{error || mismatch}</StatusMessage>
+                    <StatusMessage variant="error">{error || mismatch}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
+                        {/* Keyed so the Back button and the form's Preview button are different nodes: they share a slot, and a reused node would turn Back into a submit mid-click. */}
                         <Button
+                            key="back"
                             type="button"
                             variant="ghost"
                             onClick={() => setState('form')}
@@ -269,7 +303,7 @@ function RawTransactionBroadcast({
                         >
                             Back
                         </Button>
-                        <Button type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
+                        <Button key="broadcast" type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
                             Broadcast transaction
                         </Button>
                     </>
@@ -281,13 +315,19 @@ function RawTransactionBroadcast({
                     {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
                 </p>
                 <dl className={styles.detailsList}>
-                    {preview.decoded.outputs.map((output, index) => (
+                    {preview.decoded.outputs.slice(0, MAX_PREVIEW_OUTPUTS).map((output, index) => (
                         <DetailRow
                             key={`${output.scriptPubKeyHex}-${index}`}
                             label={`Output ${index + 1}`}
                             value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
                         />
                     ))}
+                    {preview.decoded.outputs.length > MAX_PREVIEW_OUTPUTS ? (
+                        <DetailRow
+                            label="More outputs"
+                            value={`${preview.decoded.outputs.length - MAX_PREVIEW_OUTPUTS} further outputs are not listed.`}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value="Cannot be calculated from raw transaction data because it does not include the amounts of the spent inputs."
@@ -302,9 +342,9 @@ function RawTransactionBroadcast({
                     </p>
                 ) : null}
                 {broadcastTime.timedOut ? (
-                    <StatusMessage variant="error" className={styles.error}>
+                    <FormNotice variant="error">
                         The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
-                    </StatusMessage>
+                    </FormNotice>
                 ) : null}
             </FormPage>
         );
@@ -312,16 +352,17 @@ function RawTransactionBroadcast({
 
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast signed transaction"
             onSubmit={review}
-            status={error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            actions={<Button type="submit" variant="primary">Preview transaction</Button>}
+            status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+            actions={<Button key="preview" type="submit" variant="primary">Preview transaction</Button>}
         >
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
             <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
             <Textarea
-                label="Signed transaction hex"
-                hint="Spaces and line breaks are ignored. Only complete hexadecimal bytes are accepted."
+                label="Signed transaction code"
+                hint="Spaces and line breaks are ignored. The code uses only the digits 0 to 9 and the letters a to f, two characters per byte."
                 value={raw}
                 onChange={(event) => {
                     setRaw(event.target.value);
@@ -369,6 +410,7 @@ function RawTransactionBroadcast({
  */
 export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -428,7 +470,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
                     );
                     return;
                 }
@@ -475,6 +517,18 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const tokenInfo = useTokenInfo({
+        chainId,
+        tick: initialTick,
+        skip: !lockedToken,
+    });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: lockedToken ? tokenInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick: initialTick,
+        sourceAddress: fromAddress?.address,
+    });
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = tickerForDescriptor(descriptor);
@@ -543,9 +597,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     const messageBytes = utf8ByteLength(actionParams.MESSAGE);
     const memoBytes = utf8ByteLength(actionParams.MEMO);
-    const messageLengthError = messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
+    const messageLengthError = actionTextSafetyError(actionParams.MESSAGE, 'Message') || (messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
         ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
-        : null;
+        : null);
     const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
     const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
 
@@ -575,8 +629,18 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
+            return;
+        }
+        if (lockedToken && issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${initialTick}.`);
+            return;
+        }
+        if (lockedToken && issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!feedName.trim() && !text.trim()) {
@@ -779,6 +843,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return wrap(
             <RawTransactionBroadcast
                 walletId={walletId}
+                demoGuard={demoGuard}
                 chainId={chainId}
                 setChainId={setChainId}
                 messaging={messaging}
@@ -794,7 +859,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 {!lockedToken ? (
                     <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
                 ) : null}
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -806,7 +871,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onDone || onBack}
@@ -818,7 +884,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
             );
         }
         const explorerUrl = txid ? explorerPageUrl({
@@ -861,10 +927,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review broadcast"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -904,11 +971,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -982,10 +1045,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            status={formError || (lockedToken && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -993,6 +1057,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     variant="primary"
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
+                        || (lockedToken && (issuerEligibility.pending || !!issuerEligibility.error))
                         || (!feedName.trim() && !text.trim())
                         || !!broadcastLengthError
                         || actionConfirm.composing}
@@ -1023,9 +1088,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             <Input

@@ -12,12 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { TokenField } from '../components/TokenField.jsx';
@@ -31,8 +32,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
@@ -72,6 +73,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     // Delegate and clear share this component; the user can flip between them on
@@ -114,7 +116,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -244,16 +246,6 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom network fee rate greater than zero.'
-            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
-                ? 'Custom network fee rate is above this network\'s supported maximum.'
-                : !feeCustomEstimate
-                    ? 'Custom network fee rate can have at most 8 decimal places.'
-                    : null;
 
     useEffect(() => {
         let cancelled = false;
@@ -290,7 +282,8 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        if (customFeeRateError) { setFormError(customFeeRateError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -366,7 +359,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -377,9 +370,9 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         return wrap(
             <>
@@ -400,10 +393,11 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -422,7 +416,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -532,10 +526,11 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

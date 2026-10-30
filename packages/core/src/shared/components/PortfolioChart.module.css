@@ -1,14 +1,9 @@
 .wrap {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    background: var(--xc-surface);
-    /* Blue accent border so the chart pops against neutral surface, the
-       same visual cue the quick-action buttons use beneath it. */
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
     /* The halo overlap has no spacing-token equivalent. */
     margin-top: -6px;
     min-width: 0;
@@ -46,28 +41,45 @@
 }
 
 .range {
+    position: relative;
     appearance: none;
     background: transparent;
-    border: none;
-    padding: var(--xc-space-1) var(--xc-control-pad-x);
-    /* The tap-min floor keeps the compact uppercase pill accessible. */
+    /* A visible boundary so an unselected range is recognisably a button. */
+    border: 1px solid var(--xc-control-border);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    height: var(--xc-control-h-sm);
+    font-size: var(--xc-control-font-sm);
+    font-weight: 600;
     text-transform: uppercase;
     color: var(--xc-text-muted);
     cursor: pointer;
-    border-radius: var(--xc-radius-pill);
+    border-radius: var(--xc-control-radius);
     transition: color var(--xc-transition), background var(--xc-transition);
 }
 
 .range:hover {
     color: var(--xc-text);
+}
+
+/* The painted pill stays compact; on a touch screen a transparent layer
+   gives it a 44px target (the Button .sm pattern). The card clips at its
+   bottom padding, so the layer ends there and grows upward over the chart
+   instead of being centred. */
+@media (pointer: coarse), (hover: none) {
+    .range::before {
+        content: '';
+        position: absolute;
+        inset-block-end: calc(-1 * var(--xc-space-2));
+        inset-inline-start: min(0%, calc(50% - var(--xc-control-hit-min) / 2));
+        width: max(100%, var(--xc-control-hit-min));
+        height: max(calc(100% + var(--xc-space-2)), var(--xc-control-hit-min));
+    }
 }
 
 .range:focus-visible {
@@ -78,6 +90,7 @@
 
 .rangeActive {
     background: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
 

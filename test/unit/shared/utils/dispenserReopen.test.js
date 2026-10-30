@@ -10,7 +10,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    dispenserStatusLabel,
     isTerminalDispenserStatus,
+    ownerActionRefusal,
     reopenTermsFrom,
     terminalDispenserNotice,
 } from '../../../../packages/core/src/shared/utils/dispenserReopen.js';
@@ -55,6 +57,42 @@ describe('terminalDispenserNotice', () => {
 
     it.each(['open', 'unknown'])('returns null for status %s', (status) => {
         expect(terminalDispenserNotice(status, { canReopen: true })).toBeNull();
+    });
+});
+
+describe('dispenserStatusLabel', () => {
+    it.each([
+        ['open', 'Open'],
+        ['cancelling', 'Closing'],
+        ['empty', 'Sold out'],
+        ['complete', 'Sold out'],
+        ['max_dispenses_reached', 'Limit reached'],
+        ['cancelled', 'Closed'],
+        ['closed', 'Closed'],
+        ['expired', 'Expired'],
+        ['valid', 'Unknown'],
+        ['some_new_status', 'Unknown'],
+        ['constructor', 'Unknown'],
+        ['', ''],
+        [null, ''],
+    ])('labels status %s as "%s"', (status, label) => {
+        expect(dispenserStatusLabel(status)).toBe(label);
+    });
+});
+
+describe('ownerActionRefusal', () => {
+    it.each([
+        ['max_dispenses_reached', 'close',
+            "This dispenser reached its 1,000-dispense limit and closed. Any escrow left went back to the owner. It can't be closed."],
+        ['empty', 'refill', "This dispenser sold out. It can't be refilled."],
+        ['cancelling', 'close', 'This dispenser is already closing.'],
+        ['cancelling', 'refill', "This dispenser is closing, so it can't be refilled."],
+        ['', 'refill', "This dispenser isn't open, so it can't be refilled."],
+        ['valid', 'close', "This dispenser isn't open, so it can't be closed."],
+    ])('explains a refused %s %s without the raw status', (status, action, text) => {
+        const refusal = ownerActionRefusal(status, action);
+        expect(refusal).toBe(text);
+        expect(refusal).not.toMatch(/max_dispenses_reached|cancelling|another (close|refill)/);
     });
 });
 

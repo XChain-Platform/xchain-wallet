@@ -7,6 +7,8 @@ import * as airdrop from '../../../packages/core/src/airdrop/index.js';
 describe('airdrop public exports', () => {
     it('exposes every recipient-list helper', () => {
         expect(Object.keys(airdrop).sort()).toEqual([
+            'applyTokenAccessLists',
+            'bech32IdentityKey',
             'classifyRecipients',
             'isPlausibleAddress',
             'isRecipientForChain',

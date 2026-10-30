@@ -12,8 +12,10 @@ import {
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 
 const ACTION = { action: 'DEPLOY', params: {} };
+const BTC_FEE_DESTINATION = '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL';
 
 const sdkWithQuote = (quote) => ({
+    options: { network: 'bitcoin-mainnet' },
     wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
     quoteNativeFee: vi.fn(async () => quote),
 });
@@ -50,7 +52,7 @@ describe('native fee preflight edge branches', () => {
             staticQuote: true,
             requiredFeeSats: '546',
             requiredFeeNative: '0.00000546',
-            feeDestination: 'fee-destination',
+            feeDestination: BTC_FEE_DESTINATION,
         };
         const sdk = sdkWithQuote(quote);
         const onProgress = vi.fn();
@@ -72,7 +74,9 @@ describe('native fee preflight edge branches', () => {
             'quoting_native_fee', 'native_fee_quoted',
         ]);
         expect(result.quote).toBe(quote);
-        expect(result.encoderOpts.customOutputs).toEqual([{ address: 'fee-destination', value: 546 }]);
+        expect(result.encoderOpts.customOutputs).toEqual([{
+            address: BTC_FEE_DESTINATION, value: 546,
+        }]);
     });
 
     it('preserves the most useful forfeit detail in each constructor branch', () => {

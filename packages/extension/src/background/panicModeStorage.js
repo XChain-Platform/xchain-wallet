@@ -23,11 +23,33 @@
 // expects ({ load, save, clear }) and adds `watch` to relay cross-context
 // updates via chrome.storage.onChanged.
 //
+// Storage alone is not enough to stop signing: when chrome.storage.local
+// refuses a write (quota, a storage fault) no onChanged event fires, and the
+// worker, which does the signing, would never hear of a freeze the popup
+// shows. So a renderer also tells the worker directly (`panic.state.hold`),
+// the worker holds that freeze in memory, and a refused write rejects so core
+// can say the freeze is not saved.
+//
 // Mirrors signThrottleStorage / broadcastQueueStorage:
 //   - Extension (SW or page) → chrome.storage.local
 //   - No chrome.storage       → null (core falls back to localStorage)
 
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+
 const STORAGE_KEY = 'xchain.panicMode';
+
+/** Popup and side panel to service worker: hold this freeze in memory now. */
+export const PANIC_HOLD_MESSAGE_TYPE = 'panic.state.hold';
+/** Any extension page to service worker: answer the freeze the worker enforces. */
+export const PANIC_LOAD_MESSAGE_TYPE = 'panic.state.load';
+/** After a deactivation reached storage: re-read storage and enforce what it holds. */
+export const PANIC_RESYNC_MESSAGE_TYPE = 'panic.state.resync';
+
+export const PANIC_STATE_MESSAGE_TYPES = new Set([
+    PANIC_HOLD_MESSAGE_TYPE,
+    PANIC_LOAD_MESSAGE_TYPE,
+    PANIC_RESYNC_MESSAGE_TYPE,
+]);
 
 /**
  * @typedef {Object} PanicModeStorage
@@ -38,10 +60,42 @@ const STORAGE_KEY = 'xchain.panicMode';
  */
 
 /**
+ * chrome.storage reports a refused write (quota, a storage fault) through
+ * `runtime.lastError` inside the callback, not by throwing. A write counts as
+ * done only when the callback runs with no lastError.
+ *
+ * @param {(done: () => void) => void} start
+ * @returns {Promise<void>}
+ */
+function storageWrite(start) {
+    return new Promise((resolve, reject) => {
+        try {
+            start(() => {
+                const lastError = chrome.runtime?.lastError;
+                if (lastError) {
+                    reject(new Error(lastError.message || 'chrome.storage.local write failed'));
+                    return;
+                }
+                resolve();
+            });
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+/**
+ * @param {{ notifyWorker?: ((type: string, request?: unknown) => Promise<unknown>) | null }} [opts]
  * @returns {PanicModeStorage | null}
  */
-function createPanicModeStorage() {
+function createPanicModeStorage({ notifyWorker = null } = {}) {
     if (typeof chrome === 'undefined' || !chrome?.storage?.local) return null;
+    const tellWorker = (type, request) => {
+        if (!notifyWorker) return;
+        Promise.resolve()
+            .then(() => notifyWorker(type, request))
+            .catch(() => { /* the worker reads storage when it wakes */ });
+    };
     return {
         async load() {
             return new Promise((resolve) => {
@@ -54,23 +108,25 @@ function createPanicModeStorage() {
                 }
             });
         },
+        // The worker signs, so it hears of a freeze directly and at once; the
+        // storage write that follows is what lets the freeze outlive it.
         async save(state) {
-            return new Promise((resolve) => {
-                try {
-                    chrome.storage.local.set({ [STORAGE_KEY]: state }, () => resolve());
-                } catch (_e) {
-                    resolve();
-                }
-            });
+            tellWorker(PANIC_HOLD_MESSAGE_TYPE, state);
+            try {
+                await storageWrite((done) => chrome.storage.local.set({ [STORAGE_KEY]: state }, done));
+            } catch (err) {
+                // The first hold goes out before the write settles; a second
+                // hold carrying the flag tells every other extension page
+                // that the record is not stored.
+                tellWorker(PANIC_HOLD_MESSAGE_TYPE, { ...(state && typeof state === 'object' ? state : {}), unsaved: true });
+                throw err;
+            }
         },
+        // Removing a key that was never stored raises no onChanged event, so a
+        // worker holding a freeze whose save was refused is told to re-read.
         async clear() {
-            return new Promise((resolve) => {
-                try {
-                    chrome.storage.local.remove(STORAGE_KEY, () => resolve());
-                } catch (_e) {
-                    resolve();
-                }
-            });
+            await storageWrite((done) => chrome.storage.local.remove(STORAGE_KEY, done));
+            tellWorker(PANIC_RESYNC_MESSAGE_TYPE);
         },
         watch(onChange) {
             try {
@@ -90,15 +146,131 @@ function createPanicModeStorage() {
 /**
  * Wire panic-mode persistence into the core flow for the current extension
  * context and relay cross-context updates. Safe to call in the background
- * worker and in every renderer entry (popup, approval). A no-op where
- * chrome.storage is unavailable.
+ * worker and in every renderer entry (popup, side panel, approval). A no-op
+ * where chrome.storage is unavailable.
  *
- * @param {{ configurePanicModePersistence: (s: unknown) => Promise<void>, applyExternalPanicModeState: (raw: unknown) => void }} flows
+ * A renderer passes `notifyWorker` (its runtime sendMessage). Its writes then
+ * reach the service worker directly as well as through storage, and at boot it
+ * adopts any freeze the worker holds that storage does not, so a page opened
+ * after a refused save still shows the freeze the worker enforces. The worker
+ * itself passes nothing and reads storage alone.
+ *
+ * A renderer also follows the hold and resync messages another page sends the
+ * worker (chrome.runtime.sendMessage reaches every extension page), so an
+ * approval window already open when panic mode is armed elsewhere shows the
+ * freeze even when storage refused it and no storage event fired.
+ *
+ * @param {{ configurePanicModePersistence: (s: unknown) => Promise<void>, applyExternalPanicModeState: (raw: unknown) => void, holdPanicModeFreeze?: (raw: unknown, opts?: { unsaved?: boolean }) => unknown, isSigningFrozen?: (state?: any) => boolean }} flows
+ * @param {{ notifyWorker?: ((type: string, request?: unknown) => Promise<unknown>) | null }} [opts]
  * @returns {Promise<void>}
  */
-export async function initPanicModePersistence(flows) {
-    const store = createPanicModeStorage();
+export async function initPanicModePersistence(flows, { notifyWorker = null } = {}) {
+    const store = createPanicModeStorage({ notifyWorker });
     if (!store) return;
     store.watch((state) => flows.applyExternalPanicModeState(state));
     await flows.configurePanicModePersistence(store);
+    if (!notifyWorker || typeof flows.holdPanicModeFreeze !== 'function') return;
+    followPeerPanicMessages(flows, store);
+    let held = null;
+    try {
+        held = await notifyWorker(PANIC_LOAD_MESSAGE_TYPE);
+    } catch (_err) {
+        return;
+    }
+    const stored = await store.load();
+    const heldExpiry = Number(/** @type {any} */ (held)?.expiresAt) || 0;
+    const storedExpiry = Number(/** @type {any} */ (stored)?.expiresAt) || 0;
+    if (heldExpiry > storedExpiry && heldExpiry > Date.now()) {
+        flows.holdPanicModeFreeze(held, { unsaved: true });
+    }
+}
+
+/**
+ * A renderer's view of the direct channel: the worker answers every message,
+ * and this page only mirrors what it implies. A hold is held here too; a
+ * resync re-reads storage, which is how a deactivation that reached storage
+ * lifts a freeze this page holds only from a hold message. Extension pages
+ * only, as on the worker's side.
+ *
+ * @param {{ holdPanicModeFreeze: (raw: unknown, opts?: { unsaved?: boolean }) => unknown, applyExternalPanicModeState: (raw: unknown) => void }} flows
+ * @param {PanicModeStorage} store
+ */
+function followPeerPanicMessages(flows, store) {
+    const runtime = /** @type {any} */ (globalThis.chrome?.runtime);
+    if (!runtime?.onMessage?.addListener) return;
+    runtime.onMessage.addListener((message, sender) => {
+        if (!message || typeof message !== 'object') return false;
+        if (message.type !== PANIC_HOLD_MESSAGE_TYPE && message.type !== PANIC_RESYNC_MESSAGE_TYPE) return false;
+        if (!isTrustedExtensionSender(sender, runtime.id)) return false;
+        if (message.type === PANIC_HOLD_MESSAGE_TYPE) {
+            flows.holdPanicModeFreeze(message.request, { unsaved: message.request?.unsaved === true });
+        } else {
+            store.load()
+                .then((stored) => flows.applyExternalPanicModeState(stored))
+                .catch(() => { /* the next storage event or reopen corrects it */ });
+        }
+        // Never answers: the worker's reply is the one the sender reads.
+        return false;
+    });
+}
+
+/**
+ * The service worker's side of the direct channel. Attached at worker start,
+ * ahead of the vault, because the duress passphrase arms panic mode from the
+ * Locked screen. Extension pages only: a web page reaching the content-script
+ * relay gets FORBIDDEN_SENDER.
+ *
+ *   hold    hold the given freeze in memory (core never lets it shorten or
+ *           lift one), answer the freeze now enforced
+ *   load    answer the freeze now enforced
+ *   resync  re-read storage and enforce exactly what it holds; this is how a
+ *           deactivation that reached storage lifts a held freeze, and it
+ *           cannot lift one storage still records
+ *
+ * @param {{ flows: { holdPanicModeFreeze: (raw: unknown) => unknown, getPanicModeState: () => unknown, applyExternalPanicModeState: (raw: unknown) => void }, isTrustedSender: (sender: unknown, runtimeId: string | undefined) => boolean }} deps
+ * @param {{ id?: string, onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
+ * @returns {() => void} detach fn
+ */
+export function attachPanicStateListener({ flows, isTrustedSender }, chromeRuntime) {
+    const runtime = chromeRuntime ?? /** @type {any} */ (globalThis.chrome?.runtime);
+    if (!runtime || !runtime.onMessage) return () => {};
+    const store = createPanicModeStorage();
+
+    const listener = (message, sender, sendResponse) => {
+        if (!message || typeof message !== 'object') return false;
+        if (!PANIC_STATE_MESSAGE_TYPES.has(message.type)) return false;
+        const respond = (response) => {
+            try { sendResponse(response); } catch (_err) { /* caller is gone */ }
+        };
+        if (!isTrustedSender(sender, runtime.id)) {
+            respond({
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    code: 'FORBIDDEN_SENDER',
+                    message: 'this message type is not available to web origins',
+                },
+            });
+            return true;
+        }
+        if (message.type === PANIC_HOLD_MESSAGE_TYPE) {
+            respond({ ok: true, result: flows.holdPanicModeFreeze(message.request, { unsaved: message.request?.unsaved === true }) });
+            return true;
+        }
+        if (message.type === PANIC_LOAD_MESSAGE_TYPE) {
+            respond({ ok: true, result: flows.getPanicModeState() });
+            return true;
+        }
+        (async () => {
+            const stored = store ? await store.load() : null;
+            flows.applyExternalPanicModeState(stored);
+            respond({ ok: true, result: flows.getPanicModeState() });
+        })().catch((err) => {
+            respond({ ok: false, error: { name: 'Error', message: String(err?.message || err) } });
+        });
+        return true;
+    };
+
+    runtime.onMessage.addListener(listener);
+    return () => runtime.onMessage.removeListener(listener);
 }

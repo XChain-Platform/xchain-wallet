@@ -43,7 +43,7 @@ const ledgerSrc = readFileSync(ledgerPath, 'utf8');
 
 assert.match(
     hostSrc,
-    /import \{\s*createConfirmActionSessionStorage,\s*reservationStoreFrom,\s*\} from '\.\/confirmActionSessionStorage\.js'/,
+    /import \{[^}]*\bcreateConfirmActionSessionStorage,[^}]*\breservationStoreFrom,[^}]*\} from '\.\/confirmActionSessionStorage\.js'/,
     'createBackgroundHost imports the session-storage adapter',
 );
 

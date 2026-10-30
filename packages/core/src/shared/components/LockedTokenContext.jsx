@@ -11,6 +11,9 @@
 import { registry as registryLib } from '@xchain-wallet/core';
 import { TickerIcon } from './TickerIcon.jsx';
 import styles from './LockedTokenContext.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -30,7 +33,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.tick
  * @param {string} [props.label]    optional header above the chip (e.g. "Token")
  */
-export function LockedTokenContext({ chainId, tick, label = 'Token' }) {
+export function LockedTokenContext({ chainId, tick, label = t('send.fields.token') }) {
     const descriptor = chainRegistry.get(chainId);
     return (
         <div className={styles.wrap}>
@@ -41,7 +44,7 @@ export function LockedTokenContext({ chainId, tick, label = 'Token' }) {
                     <span className={styles.tick}>{tick}</span>
                     {descriptor ? (
                         <span className={styles.chain}>
-                            on {descriptor.displayName || chainId}
+                            {t('components.lockedTokenContext.on')} {descriptor.displayName || chainId}
                         </span>
                     ) : null}
                 </div>

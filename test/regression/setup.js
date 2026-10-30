@@ -10,4 +10,9 @@
 
 import '@testing-library/jest-dom/vitest';
 import { webcrypto } from 'node:crypto';
+import { approveSettle } from '../../packages/core/src/shared/utils/approveSettle.js';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+// Suites click Approve the instant a review renders; the settle window has its
+// own regression test (confirmApproveSettle) that restores the real value.
+approveSettle.ms = 0;

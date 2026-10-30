@@ -147,8 +147,9 @@ export function CheckIcon() {
     );
 }
 
+// The paper plane points the way the payment travels, so it turns with the reading direction.
 export function SendIcon() {
-    return <LucideSend {...LUCIDE_PROPS} />;
+    return <LucideSend {...LUCIDE_PROPS} data-xc-directional="" />;
 }
 
 export function ReceiveIcon() {

@@ -180,7 +180,9 @@ assert.ok(
     // reached it and the record is delivered. Everything else stays queued.
     const catchBlock = broadcastBlock.slice(
         broadcastBlock.indexOf('} catch (err)'),
-        broadcastBlock.indexOf('throw err;'),
+        // The catch can rethrow early (a freeze refusal), so the block ends at
+        // its final rethrow, after every removal branch.
+        broadcastBlock.lastIndexOf('throw err;'),
     );
     const splices = (catchBlock.match(/q\.splice/g) || []).length;
     assert.equal(splices, 2,

@@ -172,7 +172,8 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
             from: { address: BUYER },
         });
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
-        expect(screen.getByText('Review purchase')).toBeInTheDocument();
+        // The confirm screen's own title is the only review heading.
+        expect(screen.queryByText('Review purchase')).toBeNull();
         const review = screen.getByTestId('buy-review-summary');
         expect(review).toHaveTextContent('Price per fill2.00000000 DOGE');
         expect(review).toHaveTextContent('Fills3');
@@ -273,7 +274,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(await screen.findByText('Unsigned transaction, ready for signing'))
             .toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Buy submitted' })).toBeNull();
     });
@@ -306,11 +307,11 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     });
 
     it.each([
-        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }],
-        ['empty', { current_status: 'open', escrow_remaining: '0' }],
-    ])('does not offer payment controls for a %s dispenser', async (_name, state) => {
+        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }, 'Closed'],
+        ['empty', { current_status: 'open', escrow_remaining: '0' }, 'Open'],
+    ])('does not offer payment controls for a %s dispenser', async (_name, state, statusText) => {
         await mount({ ...COIN_PAID, ...state });
-        await screen.findByText(state.current_status, { selector: 'dd' });
+        await screen.findByText(statusText, { selector: 'dd' });
         expect(noBuyButton()).toBeNull();
         expect(screen.queryByText('Pay to buy')).toBeNull();
         if (state.escrow_remaining === '0') {

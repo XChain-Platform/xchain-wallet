@@ -590,3 +590,60 @@ describe('failed local records in the merged list', () => {
         expect(merged.pending).toHaveLength(0);
     });
 });
+
+describe('malformed mempool rows', () => {
+    const own = new Set(['mine']);
+    const entry = (row) => mempoolRowToEntry({
+        chainId: 'c', address: 'mine', row, ownAddresses: own, observedAtMs: 1234,
+    });
+
+    it('falls back to the first sighting for a stamp no Date can hold', () => {
+        expect(firstSeenToMs(1e30)).toBeNull();
+        expect(entry({ tx_hash: 'ab', first_seen: 1e30 }).timestamp).toBe(1234);
+    });
+
+    it('refuses a transaction hash that is not text', () => {
+        expect(entry({ tx_hash: {} })).toBeNull();
+        expect(entry({ tx_hash: ['ab'] })).toBeNull();
+    });
+});
+
+describe('a send another transaction spent around', () => {
+    const spentAround = (over = {}) => fromLocal({ replacedElsewhere: true, ...over });
+
+    it('carries the host verdict onto the entry, and an older host reads as not replaced', () => {
+        expect(spentAround().pending.replacedElsewhere).toBe(true);
+        expect(fromLocal().pending.replacedElsewhere).toBe(false);
+    });
+
+    it('reads as replaced, not pending and not the unseen timeout', () => {
+        const later = NOW + NETWORK_SEEN_WINDOW_MS * 4;
+        expect(pendingDisplayState(spentAround(), later)).toBe('replaced-elsewhere');
+        expect(pendingDisplayState(fromLocal(), later)).toBe('not-seen');
+    });
+
+    it('still reads as seen while a mempool lists it', () => {
+        const { pending } = mergePendingEntries({
+            confirmed: [],
+            pending: [fromMempool({ tx_hash: 'DDEEFF' }), spentAround()],
+        });
+        expect(pending).toHaveLength(1);
+        expect(pending[0].pending.replacedElsewhere).toBe(true);
+        expect(pendingDisplayState(pending[0], NOW)).toBe('seen');
+    });
+
+    it('offers no speed up', () => {
+        const descriptor = { coin: 'litecoin', networkKind: 'regtest', rbf: true };
+        expect(isEntryReplaceable(spentAround({ rbf: true }), { descriptor }).ok).toBe(false);
+    });
+
+    it('says plainly that another transaction spent the same coins', async () => {
+        const { pendingCopyFor, PENDING_WARNING_STATES } = await import('../../../packages/core/src/shared/routes/HistoryShared.jsx');
+        const { t } = await import('../../../packages/core/src/i18n/index.js');
+        const copy = pendingCopyFor('replaced-elsewhere', spentAround());
+        expect(t(copy.row)).toBe('replaced');
+        expect(t(copy.headline)).toBe('Replaced');
+        expect(t(copy.help)).toBe("Another transaction spent the same coins. This one won't confirm.");
+        expect(PENDING_WARNING_STATES.has('replaced-elsewhere')).toBe(true);
+    });
+});

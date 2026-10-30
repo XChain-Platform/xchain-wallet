@@ -100,30 +100,27 @@
     background: var(--xc-surface);
 }
 
-/* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
-   the header row. They are the part that can grow, so the cap lives here
-   rather than on .header. */
+/* The notices host (QueuedBroadcastBanner, ReachabilityBanner, ...). It is
+   page content, not toolbar: the route's Screen moves it to the top of its
+   scrolling body, so it takes the body's gutter and full content width and
+   scrolls with the page. Empty when no notice is showing. */
 .notices {
-    composes: scrollArea from '../../ui/Screen.module.css';
-    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    /* Each tier publishes a notice inset beside its page gutter, so stacked
-       notices line up with route content; compact keeps the base gutter. */
-    padding-block: var(--xc-space-2);
-    padding-inline: calc(var(--xc-notice-inset, var(--xc-space-3)) + var(--xc-scrollbar-lane, 0px));
+    min-width: 0;
+}
+
+.notices:empty {
+    display: none;
+}
+
+.notices:not(:empty) {
+    margin-bottom: var(--xc-space-3);
 }
 
 .notices > * {
     margin: 0;
-}
-
-/* Keep stacked notices from consuming the route on phone-sized layouts. */
-.layout[data-xc-tier='compact'] .notices {
-    max-height: 45%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .mainBody {
@@ -181,7 +178,7 @@
 
 /* Match the short-landscape tab row so an invisible 12px spacer does not
    remain below the route after the visible bar becomes shorter. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layoutWithBottomBar > .main {
         padding-bottom: calc(44px + env(safe-area-inset-bottom, 0));
     }
@@ -236,7 +233,8 @@
     width: 100%;
     padding: var(--xc-space-2) var(--xc-space-4);
     background: transparent;
-    border: 0;
+    /* A transparent 1px edge on every row keeps the active row, which colours it, from shifting the list. */
+    border: 1px solid transparent;
     border-radius: 0;
     color: var(--xc-text);
     font: inherit;
@@ -278,6 +276,7 @@
 }
 
 .itemActive {
+    border: 1px solid var(--xc-control-border);
     background: var(--xc-surface);
     font-weight: 600;
     color: var(--xc-accent-text, var(--xc-text));
@@ -302,10 +301,18 @@
     white-space: nowrap;
 }
 
-/* Unread/attention count pill pinned to the right of a nav row. */
+/* Unread/attention count pill pinned to the right of a nav row. Its block
+   margin cancels the pill's height beyond the icon's, so a row showing the
+   pill keeps the height of every other row. */
 .badge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
     box-sizing: border-box;
+    margin-block: calc((var(--xc-icon-md) - var(--xc-badge-height-sm)) / 2);
     min-width: var(--xc-badge-height-sm);
     height: var(--xc-badge-height-sm);
     padding: 0 var(--xc-badge-padding-inline-sm);
@@ -342,6 +349,19 @@
     }
 }
 
+/* Forced colors paints a transparent border in CanvasText, which would outline
+   every row. Idle rows take the canvas colour and the active row takes the
+   selection colour, so only the current destination shows an edge. */
+@media (forced-colors: active) {
+    .item {
+        border-color: Canvas;
+    }
+
+    .itemActive {
+        border-color: Highlight;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .sidebar {
         transition: none;
@@ -367,16 +387,6 @@
 
 .layout[data-xc-tier='full'] {
     --xc-page-top: var(--xc-space-4);
-}
-
-/* Notices sit above Screen, so they take the tier's gutter value here
-   rather than reading the Screen-owned page gutter. */
-.layout[data-xc-tier='rail'] .notices {
-    --xc-notice-inset: var(--xc-space-4);
-}
-
-.layout[data-xc-tier='full'] .notices {
-    --xc-notice-inset: var(--xc-space-6);
 }
 
 /* The brand wordmark has no icon-only form. The app header keeps the
@@ -421,6 +431,7 @@
    to sit beside. Kept as a readable number, not a bare dot. */
 .layout[data-xc-tier='rail'] .badge {
     position: absolute;
+    margin-block: 0;
     top: 2px;
     inset-inline-end: 6px;
     min-width: var(--xc-badge-height-sm);
@@ -431,7 +442,7 @@
     margin-inline: var(--xc-space-2);
 }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layout[data-xc-tier] {
         --xc-page-top: var(--xc-space-2);
     }

@@ -60,6 +60,13 @@ const DEDUP_CAP = 200;
 const ANNOUNCED_TTL_MS = 60 * 60_000;
 const ANNOUNCED_CAP = 500;
 const SUB_WARN_THRESHOLD = 20; // explorer caps a connection at 25 subscriptions
+// An unreachable socket endpoint gets a few spaced attempts per chain, then
+// stays quiet until the chain leaves the active set or the service restarts.
+const WS_CONNECT_MAX_ATTEMPTS = 3;
+const WS_CONNECT_RETRY_BASE_MS = 1_000;
+const WS_CONNECT_RETRY_MAX_MS = 2_000;
+// Returned by _connectChain when a newer sync superseded the one that asked.
+const SYNC_SUPERSEDED = Symbol('sync-superseded');
 
 /** Fund movement kinds that must not double up per transaction. */
 const TX_DEDUP_KINDS = new Set(['incoming-pending', 'incoming-receipt', 'tx-confirmed']);
@@ -192,10 +199,15 @@ export class NotificationService {
 
         this._started = false;
         this._syncGeneration = 0;
+        // Bumped by every stop(): an event already past its first await when the
+        // wallet locks must not deliver a notification that names an amount.
+        this._stopEpoch = 0;
         /** @type {Map<string, { unsub: () => void, chainId: string }>} subKey -> entry */
         this._subs = new Map();
         /** @type {Map<string, import('../sdk/SDKRegistry.js').XChainSDKLike>} chainId -> connected sdk */
         this._conns = new Map();
+        /** @type {Map<string, { sdk: any, attempts: number, retryAt: number, timer: any, logged: boolean }>} chainId -> failed connect state */
+        this._connectFailures = new Map();
         /** @type {Map<string, number>} dedup key -> expiry ms */
         this._recent = new Map();
         /** @type {Map<string, number>} `${chainId}:${tx_hash}` already announced -> expiry ms */
@@ -222,6 +234,7 @@ export class NotificationService {
     /** Tear everything down. */
     stop() {
         this._syncGeneration += 1;
+        this._stopEpoch += 1;
         for (const { unsub } of this._subs.values()) {
             try { unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
         }
@@ -230,6 +243,7 @@ export class NotificationService {
             try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch (e) { this._log.warn('NotificationService: disconnect failed', e); }
         }
         this._conns.clear();
+        this._clearConnectFailures();
         this._recent.clear();
         this._announced.clear();
         this._started = false;
@@ -252,6 +266,15 @@ export class NotificationService {
             if (!a || !a.address || !a.chainId) continue;
             desired.set(`${a.chainId}|${a.address}`, a);
         }
+        const desiredChains = new Set(Array.from(desired.values()).map((a) => a.chainId));
+
+        // A network switch retires a chain's pending retry with its socket;
+        // returning to that network starts a fresh bounded attempt set.
+        for (const [chainId, state] of Array.from(this._connectFailures.entries())) {
+            if (desiredChains.has(chainId)) continue;
+            this._retireConnectFailure(state);
+            this._connectFailures.delete(chainId);
+        }
 
         // Drop subscriptions no longer wanted.
         for (const [key, entry] of Array.from(this._subs.entries())) {
@@ -266,18 +289,10 @@ export class NotificationService {
             if (this._subs.has(key)) continue;
             let sdk = this._conns.get(a.chainId);
             if (!sdk) {
-                try {
-                    sdk = this._getSdkForChain(a.chainId);
-                    await sdk.connectWs();
-                    if (!this._started || generation !== this._syncGeneration) {
-                        try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch { /* best-effort */ }
-                        return;
-                    }
-                    this._conns.set(a.chainId, sdk);
-                } catch (e) {
-                    this._log.error(`NotificationService: connectWs failed for ${a.chainId}`, e);
-                    continue;
-                }
+                const connected = await this._connectChain(a.chainId, generation);
+                if (connected === SYNC_SUPERSEDED) return;
+                if (!connected) continue;
+                sdk = connected;
             }
             const perChain = Array.from(this._subs.values()).filter((s) => s.chainId === a.chainId).length;
             if (perChain >= SUB_WARN_THRESHOLD) {
@@ -301,6 +316,72 @@ export class NotificationService {
         }
     }
 
+    /**
+     * Open one chain socket under a bounded retry policy: a failed connect is
+     * retried after 1s, then 2s, and after the third failure the chain logs
+     * one warning and is skipped. A newer sync landing while the connect is
+     * in flight closes the socket and yields SYNC_SUPERSEDED.
+     */
+    async _connectChain(chainId, generation) {
+        const state = this._connectFailures.get(chainId);
+        if (state && (state.attempts >= WS_CONNECT_MAX_ATTEMPTS || this._now() < state.retryAt)) return null;
+        if (state?.timer) clearTimeout(state.timer);
+
+        let sdk = state?.sdk;
+        try {
+            sdk = sdk || this._getSdkForChain(chainId);
+            if (typeof sdk?.connectWs !== 'function' || typeof sdk?.onAddress !== 'function') {
+                if (!state?.logged) this._log.warn(`NotificationService: WebSocket unavailable for ${chainId}; notifications skipped`);
+                this._connectFailures.set(chainId, {
+                    sdk, attempts: WS_CONNECT_MAX_ATTEMPTS, retryAt: Infinity, timer: null, logged: true,
+                });
+                return null;
+            }
+            await sdk.connectWs();
+            if (!this._started || generation !== this._syncGeneration) {
+                try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch { /* best-effort */ }
+                return SYNC_SUPERSEDED;
+            }
+            this._connectFailures.delete(chainId);
+            this._conns.set(chainId, sdk);
+            return sdk;
+        } catch (e) {
+            const attempts = (state?.attempts || 0) + 1;
+            const next = { sdk, attempts, retryAt: Infinity, timer: null, logged: state?.logged || false };
+            if (attempts < WS_CONNECT_MAX_ATTEMPTS) {
+                const delay = Math.min(WS_CONNECT_RETRY_BASE_MS * (2 ** (attempts - 1)), WS_CONNECT_RETRY_MAX_MS);
+                next.retryAt = this._now() + delay;
+                next.timer = setTimeout(() => {
+                    next.timer = null;
+                    next.retryAt = this._now();
+                    if (this._started) {
+                        this.refresh().catch((err) => this._log.error('NotificationService: retry refresh failed', err));
+                    }
+                }, delay);
+                if (typeof next.timer?.unref === 'function') next.timer.unref();
+            } else if (!next.logged) {
+                this._log.warn(
+                    `NotificationService: WebSocket unavailable for ${chainId} after ${attempts} attempts; notifications skipped`,
+                    e,
+                );
+                next.logged = true;
+            }
+            this._connectFailures.set(chainId, next);
+            return null;
+        }
+    }
+
+    /** Cancel a failed chain's retry timer and close its half-open socket. */
+    _retireConnectFailure(state) {
+        if (state.timer) clearTimeout(state.timer);
+        try { if (state.sdk?.disconnectWs) state.sdk.disconnectWs(); } catch (e) { this._log.warn('NotificationService: disconnect failed', e); }
+    }
+
+    _clearConnectFailures() {
+        for (const state of this._connectFailures.values()) this._retireConnectFailure(state);
+        this._connectFailures.clear();
+    }
+
     /** @param {import('./getActiveAddresses.js').ActiveAddress} addr */
     _makeHandler(addr) {
         return (msg) => {
@@ -314,6 +395,7 @@ export class NotificationService {
      */
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
+        const epoch = this._stopEpoch;
 
         let settings = null;
         let settingsReadable = true;
@@ -323,6 +405,7 @@ export class NotificationService {
             this._log.error('NotificationService: getSettings failed', e);
             settingsReadable = false;
         }
+        if (epoch !== this._stopEpoch) return;
         if (settings?.activeNetwork && addr.network
             && settings.activeNetwork !== addr.network) return;
 
@@ -347,6 +430,7 @@ export class NotificationService {
         // below needs, so the pending-set lookup happens exactly once.
         let confirmedOwnSend = false;
         if (msg.type === 'NEW_ACTION') confirmedOwnSend = await this._recordConfirmedOwnSend(addr, msg);
+        if (epoch !== this._stopEpoch) return;
 
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
@@ -412,8 +496,12 @@ export class NotificationService {
             }
             case 'ORDER_MATCH':
             case 'SWAP_MATCH':
+                // Swaps and orders live on separate screens (My swaps, My
+                // orders), so name the one that matched; both share one toggle.
                 if (flags.orderFills) {
-                    plan = { kind: 'order-fill', title: 'Order matched', body: `Your order on ${addr.label} was matched.` };
+                    plan = msg.type === 'SWAP_MATCH'
+                        ? { kind: 'order-fill', title: 'Swap matched', body: `Your swap on ${addr.label} was matched.` }
+                        : { kind: 'order-fill', title: 'Order matched', body: `Your order on ${addr.label} was matched.` };
                 }
                 break;
             case 'DISPENSE':
@@ -424,8 +512,18 @@ export class NotificationService {
             case 'COINPAY_REQUIRED':
                 // BTCPAY-style obligation. No dedicated v1 toggle; gate under
                 // incomingReceipts (it's an inbound-settlement prompt).
+                //
+                // Only a matched ORDER on a coin pair owes a coin payment. The
+                // event reaches both the payer and the payee address, so each
+                // side is told its own part; an event naming neither stays neutral.
                 if (flags.incomingReceipts) {
-                    plan = { kind: 'coinpay-required', title: 'CoinPay payment required', body: `Complete the payment for your swap on ${addr.label}.` };
+                    if (data.payer_address === addr.address) {
+                        plan = { kind: 'coinpay-required', title: 'Payment due for a matched order', body: `One of your orders on ${addr.label} was matched. Send the coin payment before the payment window closes, or the match expires.` };
+                    } else if (data.payee_address === addr.address) {
+                        plan = { kind: 'coinpay-required', title: 'Order matched, awaiting payment', body: `One of your orders on ${addr.label} was matched. The buyer has until the payment window closes to send the coin payment.` };
+                    } else {
+                        plan = { kind: 'coinpay-required', title: 'Coin payment due', body: `An order on ${addr.label} was matched and needs a coin payment before the payment window closes.` };
+                    }
                 }
                 break;
             // priceAlerts has no client event source in v1 (no alert-threshold
@@ -453,6 +551,7 @@ export class NotificationService {
             : data.action_index != null
                 ? String(data.action_index)
                 : String(msg.timestamp || this._now());
+        if (epoch !== this._stopEpoch) return;
         if (this._isDuplicate(`${plan.kind}:${addr.address}:${ident}`)) return;
 
         const transactionKey = TX_DEDUP_KINDS.has(plan.kind) && txHash ? `${addr.chainId}:${txHash}` : null;

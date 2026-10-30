@@ -51,7 +51,7 @@
 // meaning something different each time. Both refs are recorded.
 //
 // THE PIN IS AN OBSERVATION, NEVER AN ASSERTION - the convention
-// docs/release-key-pin.json and docs/privacy-deploy-pin.json already set here.
+// tools/release/pins/release-key-pin.json and tools/release/pins/privacy-deploy-pin.json already set here.
 // `pin` refuses to write anything it did not just watch happen, and it records
 // the deepest step REACHED rather than a pass, because a Phase 4 rehearsal
 // that stops short is the normal case: the signature itself needs K1's
@@ -65,7 +65,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WALLET_ROOT = resolve(HERE, '..', '..');
-export const PIN_PATH = join(WALLET_ROOT, 'docs', 'phase4-rehearsal-pin.json');
+export const PIN_PATH = join(WALLET_ROOT, 'tools', 'release', 'pins', 'phase4-rehearsal-pin.json');
 
 // The files a Phase 4 run's behaviour actually depends on, split by which tree
 // supplies them. Anything left out is drift nobody will see. The script side
@@ -245,6 +245,13 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
 // unrecognised failure reports the step BEFORE the shallowest thing it could
 // be, never a deeper one.
 export function classify(output) {
+    // Match the pristine-clone and ceremony-record refusals first: they run after the GPG key is named and
+    // before the dev-mock gate, sign.sh exits right after each, and the free text they echo (absent-field
+    // 'missing', marker bodies, porcelain paths) is indented, so only sign.sh itself can start these lines.
+    if (/^sign\.sh: ceremony record refuses this signing: /m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: .* has uncommitted changes; refusing to sign\.$/m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: .* is not checked out at /m.test(output)) return 'gpg-key-named';
+    if (/^sign\.sh: tag '[^']*' does not exist in /m.test(output)) return 'gpg-key-named';
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
     // Match sign.sh's own dev-mock refusal before any vocabulary test: sign.sh exits right after it,
@@ -311,6 +318,30 @@ export function scopeMismatch({ output, lane }) {
 }
 
 /**
+ * Flag combinations sign.sh refuses, checked before any work so `pin` never records a run the ceremony rejects.
+ * (sign.sh refuses `--staging` with `--lane` only after its dev-mock gate, too late for the pin's own refusals.)
+ *
+ * @param {{ lane?: string | null, staging?: boolean }} args
+ * @returns {string[]} reasons, empty when the combination is one sign.sh accepts
+ */
+export function argConflicts({ lane, staging }) {
+    const reasons = [];
+    // Refuse --lane with --staging, mirroring sign.sh: the rehearsal set is defined by which formats auto-update.
+    if (lane && staging) {
+        reasons.push('--staging cannot be combined with --lane: the rehearsal set is defined by which formats '
+            + 'can auto-update, not by which store lane shipped, and sign.sh refuses the pair');
+    }
+    return reasons;
+}
+
+// Print each argument conflict and report whether any was found.
+function refuseConflicts(args) {
+    const reasons = argConflicts(args);
+    for (const reason of reasons) console.error(`[phase4-rehearsal] refusing: ${reason}`);
+    return reasons.length > 0;
+}
+
+/**
  * Drive sign.sh's preconditions and report how deep they got.
  * Never writes anything; `pin` is what records an observation.
  */
@@ -346,13 +377,34 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
         env: probeEnv(process.env, env),
     });
     const output = `${r.stdout || ''}${r.stderr || ''}`;
+    // A run the timeout killed stopped mid-step, so its last line is progress rather than a refusal
+    // and its depth is not an observation; report the kill and claim no step.
+    const timedOut = r.error?.code === 'ETIMEDOUT';
+    if (timedOut || r.signal) {
+        return {
+            reached: null,
+            exitCode: r.status,
+            killed: timedOut ? `timed out after ${timeoutMs / 1000}s` : `killed by ${r.signal}`,
+            blocker: null,
+            output,
+        };
+    }
     const reached = r.status === 0 ? 'signature' : classify(output);
     return {
         reached,
         exitCode: r.status,
+        killed: null,
         blocker: r.status === 0 ? null : firstRefusal(output),
         output,
     };
+}
+
+/** The probe timeout in milliseconds from `--timeout <seconds>`, 120 s when absent, or null when malformed. */
+export function timeoutFromArgs(argv) {
+    const i = argv.indexOf('--timeout');
+    if (i === -1) return 120000;
+    const seconds = Number(argv[i + 1]);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null;
 }
 
 // The refusal line itself, so the pin carries the tooling's own words rather
@@ -367,24 +419,28 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
 // gpg's own `gpg:` line counts as well: sign.sh runs gpg under set -e and prints
 // nothing after a gpg failure, so its last `sign.sh:` line there is the "signing manifest" progress line.
 export function firstRefusal(output) {
-    const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = output.split('\n').filter((l) => l.trim());
+    // Match the prefix on the untrimmed line: sign.sh indents the free text it echoes (marker bodies,
+    // porcelain paths), so an indented `gpg: ...` inside a ceremony record is never the blocker.
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i];
+        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i].trim();
     }
-    return lines[lines.length - 1] || null;
+    return lines.length ? lines[lines.length - 1].trim() : null;
 }
 
 function usage() {
     console.log(`usage: phase4-rehearsal.mjs <command> [args]
 
-  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
+  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging] [--timeout <seconds>]
       Drive ceremony Phase 4's signing preconditions and report the
-      deepest step reached. Writes nothing.
+      deepest step reached. Writes nothing. --lane and --staging are
+      mutually exclusive, as sign.sh makes them. --timeout bounds the
+      sign.sh run (default 120); a run it kills reached no step.
 
-  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
+  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging] [--timeout <seconds>]
       Run probe, then record what it observed in
-      docs/phase4-rehearsal-pin.json. Refuses to write a pin for a run
-      it did not just watch.
+      tools/release/pins/phase4-rehearsal-pin.json. Refuses to write a pin for a run
+      it did not just watch, or for one the timeout killed.
 
   check [--against <ref>] [--pin <file>]
       Has the script side of the signing path moved since the pinned
@@ -406,7 +462,9 @@ function cmdPin(argv) {
     const input = arg(argv, '--input');
     const lane = arg(argv, '--lane');
     const staging = argv.includes('--staging');
-    if (!repo || !tag || !input) { usage(); process.exit(2); }
+    const timeoutMs = timeoutFromArgs(argv);
+    if (!repo || !tag || !input || timeoutMs === null) { usage(); process.exit(2); }
+    if (refuseConflicts({ lane, staging })) return 2;
     // Decide before the dirty check, so a fallback gate with uncommitted edits blocks the pin.
     const gateFallback = gateFallbackFor(repo);
     const files = signingPathFiles(staging ? 'staging' : 'release', PIN_FORMAT, { gateFallback });
@@ -421,7 +479,12 @@ function cmdPin(argv) {
         return 1;
     }
 
-    const result = probe({ repo, tag, input, lane, staging });
+    const result = probe({ repo, tag, input, lane, staging, timeoutMs });
+    if (result.killed) {
+        console.error(`[phase4-rehearsal] refusing to pin: the sign.sh run ${result.killed}, so it stopped `
+            + 'mid-step and observed no depth. Re-drive with a longer --timeout <seconds>.');
+        return 1;
+    }
     // Refuse when sign.sh announces a control tree this mapping does not expect, so a pin never hashes the wrong copy.
     const announced = /signing controls come from the (tag|tool) tree/.exec(result.output)?.[1];
     const expectedTree = staging ? 'tool' : 'tag';
@@ -638,8 +701,16 @@ function main() {
         const tag = arg(argv, '--tag');
         const input = arg(argv, '--input');
         if (!repo || !tag || !input) { usage(); return 2; }
-        const r = probe({ repo, tag, input, lane: arg(argv, '--lane'),
-            staging: argv.includes('--staging') });
+        const lane = arg(argv, '--lane');
+        const staging = argv.includes('--staging');
+        const timeoutMs = timeoutFromArgs(argv);
+        if (timeoutMs === null) { usage(); return 2; }
+        if (refuseConflicts({ lane, staging })) return 2;
+        const r = probe({ repo, tag, input, lane, staging, timeoutMs });
+        if (r.killed) {
+            console.log(`[phase4-rehearsal] reached no step: the sign.sh run ${r.killed}`);
+            return 1;
+        }
         console.log(`[phase4-rehearsal] reached: ${r.reached} (exit ${r.exitCode})`);
         if (r.blocker) console.log(`[phase4-rehearsal] blocker: ${r.blocker}`);
         return r.reached === 'signature' ? 0 : 1;

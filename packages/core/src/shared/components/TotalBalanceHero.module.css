@@ -152,7 +152,10 @@
     direction: ltr;
     unicode-bidi: isolate;
     min-width: 0;
-    font-family: var(--xc-font-mono);
+    /* Proportional face with tabular digits: a monospace face gives the
+       separators a full digit cell, which WebKit shows as "15 , 858 . 71". */
+    font-family: var(--xc-font-sans);
+    font-variant-numeric: tabular-nums;
     /* Keep the untokenized 32px headline above the body type scale. */
     font-size: 32px;
     font-weight: 800;
@@ -243,6 +246,10 @@
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
+    /* A signed percent and a fiat delta keep their left-to-right order inside a
+       right-to-left page: bidi reordering would otherwise print "13.38%-". */
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .changePositive {

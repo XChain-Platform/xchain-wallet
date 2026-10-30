@@ -2,7 +2,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    margin-top: var(--xc-space-4);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input. */
+    margin: 0;
 }
 
 .header {
@@ -42,7 +44,9 @@
 
 .etaNormal {
     background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
-    color: var(--xc-warning);
+    /* The warning text token, not the warning accent: the accent is 4.49:1 on
+       its own tint in the light theme, just under the 4.5:1 floor. */
+    color: var(--xc-warning-text);
 }
 
 .etaFast {
@@ -69,6 +73,9 @@
 
 .slider {
     width: 100%;
+    /* The browser's default 2px side margin on a range input pushed a
+       full-width slider 2px past the page gutter. */
+    margin-inline: 0;
     accent-color: var(--xc-accent-primary);
     cursor: pointer;
     /* slice 2: the native range input is drawn ~16px tall, which
@@ -97,11 +104,18 @@
 
 .sliderTick {
     position: absolute;
+    inset-block-start: 0;
+    block-size: 100%;
     /* `left` is set inline per stop to the thumb-center position; the
        transform centers the label on it. First/last clamp to the edges
        so they don't overflow the track. */
     transform: translateX(-50%);
-    white-space: nowrap;
+    /* A longer translation wraps inside its own stop of the track instead of
+       running into the neighbouring stop; English never reaches the cap. */
+    width: max-content;
+    max-width: 28%;
+    white-space: normal;
+    overflow-wrap: anywhere;
     background: transparent;
     border: none;
     padding: 0 var(--xc-space-1);
@@ -110,18 +124,19 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-align: center;
-    /* Fee tier stops are the quickest way to set a fee. Flex centering keeps
-       each label on its nub while the button meets the pointer-target floor. */
+    /* Fee tier stops are the quickest way to set a fee. Labels hang from one
+       top edge, so a one-line stop (Custom) lines up with the two-line ones,
+       while the button still meets the pointer-target floor. */
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
 }
 
 .sliderTickEta {
-    font-size: 0.6875rem;
+    font-size: var(--xc-text-xs);
     font-weight: 400;
     color: var(--xc-text-muted);
 }
@@ -131,12 +146,26 @@
 
 .sliderTick:disabled { cursor: not-allowed; }
 
+/* The tier label stays compact; on a touch screen a transparent layer
+   gives it a 44px target, centred on the control (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .sliderTick::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
+}
+
 .sliderTickActive {
     color: var(--xc-text);
     font-weight: 600;
 }
 
 .sliderReadout {
+    font-size: var(--xc-text-sm);
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -157,6 +186,9 @@
 
 .sliderReadoutFiat {
     margin-inline-start: var(--xc-space-2);
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
     background: color-mix(in srgb, var(--xc-success) 14%, transparent);
     color: var(--xc-success);
     border-radius: 999px;
@@ -178,12 +210,15 @@
 
 .customInput {
     width: 6ch;
-    padding: 1px 4px;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
+    box-sizing: border-box;
+    height: var(--xc-control-h-sm);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-sm);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius);
+    background: var(--xc-surface);
     color: var(--xc-text);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-control-font-sm);
     text-align: end;
     direction: ltr;
 }
@@ -199,20 +234,39 @@
 }
 
 /* Click-to-edit readout figures (fee amount, tier rate). Rendered as
-   buttons so they're keyboard-reachable; the dashed underline appears on
+   buttons so they're keyboard-reachable; the underline appears on
    hover/focus as the "this is editable" affordance without adding visual
    noise to the resting readout. */
 .readoutEdit {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
     background: transparent;
     border: none;
-    /* slice 2: block padding lifts a 17px-tall text button to the
-       24px target floor without moving the figure it underlines. */
-    padding: var(--xc-space-1) 0;
-    min-height: var(--xc-tap-min);
+    /* The figure is as tall as the custom input that replaces it, so the
+       readout row keeps its height when editing starts and an edit figure
+       beside an open input lines up with it. */
+    padding: 0;
+    min-height: var(--xc-control-h-sm);
     font: inherit;
     color: inherit;
     cursor: text;
-    border-bottom: 1px dashed transparent;
+    border-bottom: 1px solid transparent;
+    position: relative;
+}
+
+/* The editable fee figures keep their size. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .readoutEdit::before {
+        content: '';
+        position: absolute;
+        /* Grows downward only: the tier stops above already reach into this
+           row, and two grown areas must not overlap. */
+        inset-block-start: 0;
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .readoutEdit:hover:not(:disabled),
@@ -234,7 +288,6 @@
    coin-scale decimal (e.g. 0.02500000). */
 .feeInput {
     width: 12ch;
-    font-size: var(--xc-text-sm);
 }
 
 .customUnit {

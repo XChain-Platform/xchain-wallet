@@ -94,3 +94,21 @@ export function isKnownCoinCode(code) {
     }
     return false;
 }
+
+/**
+ * The coin and network a short coin code names, without a registry. Used to
+ * check an address in a link against the chain the link claims.
+ *
+ * @param {string} code            e.g. 'TBTC'
+ * @returns {{ coin: string, networkKind: string } | null}
+ */
+export function coinNetworkForCoinCode(code) {
+    if (typeof code !== 'string') return null;
+    const up = code.toUpperCase();
+    if (COIN_BY_TICKER[up]) return { coin: COIN_BY_TICKER[up], networkKind: 'mainnet' };
+    if (up.length > 1 && COIN_BY_TICKER[up.slice(1)]) {
+        if (up[0] === 'T') return { coin: COIN_BY_TICKER[up.slice(1)], networkKind: 'testnet' };
+        if (up[0] === 'R') return { coin: COIN_BY_TICKER[up.slice(1)], networkKind: 'regtest' };
+    }
+    return null;
+}

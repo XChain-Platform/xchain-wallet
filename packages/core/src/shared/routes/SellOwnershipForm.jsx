@@ -12,9 +12,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -27,6 +28,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
@@ -35,8 +37,15 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { salePriceLimitError } from '../utils/salePriceLimit.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince, tokenRecordsDiffer,
+} from '../utils/tokenRecordDrift.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tokenIssuerEligibility, UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,13 +80,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressLoad, setAddressLoad] = useState({
+        walletId: null,
+        chainId: null,
+        addressesByChain: null,
+        error: null,
+    });
+    const addressLoadMatches = addressLoad.walletId === walletId
+        && addressLoad.chainId === chainId;
+    const addressesByChain = addressLoadMatches ? addressLoad.addressesByChain : null;
+    const loadError = addressLoadMatches ? addressLoad.error : null;
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
     // 'order' → open ORDER (matched offer); 'dispenser' → DISPENSER (instant
@@ -103,6 +119,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     useEffect(() => {
         let cancelled = false;
+        const pendingLoad = {
+            walletId,
+            chainId,
+            addressesByChain: null,
+            error: null,
+        };
+        setAddressLoad(pendingLoad);
+        setFromAddressId(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -111,12 +135,17 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         ])
             .then(([byChain, active]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain || {});
-                const all = (byChain || {})[chainId] || [];
+                const nextByChain = byChain || {};
+                const all = nextByChain[chainId] || [];
                 if (all.length === 0) {
-                    setLoadError(`No address on this chain to sign from. Use Receive to generate one first.`);
+                    setAddressLoad({
+                        ...pendingLoad,
+                        addressesByChain: nextByChain,
+                        error: 'No address on this network can sign the sale. Use Receive to create one first.',
+                    });
                     return;
                 }
+                setAddressLoad({ ...pendingLoad, addressesByChain: nextByChain });
                 if (initialFromAddress) {
                     const match = all.find((a) => a.address === initialFromAddress);
                     if (match) { setFromAddressId(match.id); return; }
@@ -125,8 +154,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 const pool = hd.length > 0 ? hd : all;
                 setFromAddressId(preferredSourceId(pool, active?.[chainId]) || pool[0].id);
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) {
+                    setAddressLoad({
+                        ...pendingLoad,
+                        error: 'Could not load your addresses. Check your connection and try again.',
+                    });
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging, initialFromAddress]);
@@ -156,30 +190,47 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const hwSignerInfo = useSignerInfo({ walletId, signerId: hw ? fromAddress?.signerId : null });
     const { isWatcherMode } = useWalletMode();
 
-    const tokenUpper = (tick || '').toUpperCase();
-    const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim().toUpperCase() || 'token');
+    const tokenTick = String(tick || '');
+    const ownershipTokenInfo = useTokenInfo({ chainId, tick: tokenTick, skip: !tokenTick });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: ownershipTokenInfo,
+        addressesByChain,
+        chainId,
+        tick: tokenTick,
+        sourceAddress: fromAddress?.address,
+    });
+    const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim() || 'token');
 
     const validationError = useMemo(() => {
         if (getMode === 'token') {
-            const gt = getTick.trim().toUpperCase();
+            const gt = getTick.trim();
+            if (gt) {
+                const tickError = tickerReferenceError(gt, { noun: 'Price token', allowRef: true });
+                if (tickError) return tickError;
+            }
             if (gt && gt === coinTicker) {
                 return `Pick "Native coin" to sell for ${coinTicker}. The token field is for selling against another token.`;
             }
-            if (gt && gt === tokenUpper) {
+            if (gt && gt === tokenTick) {
                 return 'The price token must differ from the token being sold.';
             }
         }
         if (expiration.trim() && !/^[0-9]+$/.test(expiration.trim())) {
             return 'Expiration must be a whole number of blocks.';
         }
+        if (memo.includes('|') || memo.includes(';')) {
+            return 'Memo cannot contain "|" or ";".';
+        }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) return memoError;
         return null;
-    }, [getMode, getTick, coinTicker, tokenUpper, expiration]);
+    }, [getMode, getTick, coinTicker, tokenTick, expiration, memo]);
 
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
     const priceTokenInfo = useTokenInfo({
         chainId,
-        tick: getTick.trim().toUpperCase(),
+        tick: getTick.trim(),
         skip: getMode !== 'token' || !getTick.trim(),
     });
 
@@ -215,14 +266,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const saleParams = useMemo(() => ({
         VERSION: '0',
         GIVE_COIN: coinTicker,
-        GIVE_TICK: tokenUpper,
+        GIVE_TICK: tokenTick,
         GIVE_OWNERSHIP: '1',
         GET_COIN: coinTicker,
-        ...(getMode === 'token' ? { GET_TICK: getTick.trim().toUpperCase() } : {}),
+        ...(getMode === 'token' ? { GET_TICK: getTick.trim() } : {}),
         GET_AMOUNT: String(price).trim(),
         ...(expiration.trim() ? { EXPIRATION: expiration.trim() } : {}),
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-    }), [coinTicker, tokenUpper, getMode, getTick, price, expiration, memo]);
+    }), [coinTicker, tokenTick, getMode, getTick, price, expiration, memo]);
 
     // §5.6: the signing lanes compose ONE PSBT host-side and approve it on
     // the shared confirm page; watcher keeps the legacy review stage.
@@ -261,12 +312,38 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             signerId: fromAddress.signerId,
         };
         setSubmitError(null);
+        // The record the user reviewed the sale against.
+        const reviewedRecord = ownershipTokenInfo;
         try {
             const dispatch = mechanism === 'dispenser' ? submitDispenser : submitOrder;
             const r = await actionConfirm.run({
                 chainId,
                 from,
                 actionData: { action: saleAction, params: saleParams },
+                // Read the owner once more at Approve. A sale signed by an
+                // address that no longer owns the name pays its fees for a
+                // refusal, so a moved name stops here, and so does an owner
+                // the explorer cannot confirm, as it does when the form opens.
+                recheckBeforeSign: async () => {
+                    let fresh = null;
+                    try {
+                        // Fresh: the review read this record moments ago, and a
+                        // reused or HTTP-cached answer would be that same record.
+                        fresh = await messaging.getTokenInfo({ chainId, tick: tokenTick, demo: false, fresh: true });
+                    } catch {
+                        fresh = null;
+                    }
+                    const owner = fresh && !fresh.loadError && typeof fresh.creator === 'string'
+                        ? fresh.creator.trim()
+                        : '';
+                    if (!owner) return UNKNOWN_TOKEN_ISSUER_MESSAGE;
+                    if (owner.toLowerCase() !== String(from.address || '').toLowerCase()
+                        || tokenRecordsDiffer(reviewedRecord, fresh, TOKEN_RECORD_GATE_KEYS)) {
+                        invalidateTokenInfo(chainId, tokenTick);
+                        return tokenRecordChangedMessage(tokenTick);
+                    }
+                    return null;
+                },
                 encoderOpts: {
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
@@ -299,10 +376,25 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     // Validate form fields and advance to the review stage; real signing
     // happens only after the user confirms on the review screen.
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (submitPendingRef.current) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tokenTick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
+            return;
+        }
+        if (getMode === 'token' && !getTick.trim()) {
+            setFormError('Select a price token.');
             return;
         }
         if (validationError) return;
@@ -320,13 +412,38 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError(precisionError);
             return;
         }
+        // A price the network refuses spends the fees for nothing, and one above
+        // the price token's maximum supply is a sale no buyer can ever take.
+        const limitError = salePriceLimitError(price, getMode === 'token'
+            ? { supplyCap: priceTokenInfo?.maxSupply, tick: getTick }
+            : {});
+        if (limitError) {
+            setFormError(limitError);
+            return;
+        }
+        // The owner check came from the record read when the form opened; a
+        // sale or transfer of the name since then makes it stale. The pending
+        // flag also holds a second press while the record is re-read.
+        submitPendingRef.current = true;
+        let moved = false;
+        try {
+            moved = await tokenRecordChangedSince({
+                messaging, chainId, tick: tokenTick, current: ownershipTokenInfo, keys: TOKEN_RECORD_GATE_KEYS,
+            });
+        } catch {
+            moved = false;
+        }
+        if (moved) {
+            submitPendingRef.current = false;
+            setFormError(tokenRecordChangedMessage(tokenTick));
+            return;
+        }
         setFormError(null);
         if (singleEncode) {
-            if (submitPendingRef.current) return;
-            submitPendingRef.current = true;
             void openConfirmScreen();
             return;
         }
+        submitPendingRef.current = false;
         setStage('review');
     }
 
@@ -419,7 +536,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Header title switches to "Review sale" once the user leaves the form stage.
     const headerTitle = (stage === 'review' || stage === 'submitting')
         ? 'Review sale'
-        : `Sell ${tokenUpper} name`;
+        : `Sell ${tokenTick} name`;
     const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -440,17 +557,17 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     );
 
     if (loadError) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+        return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(<ListPage><p className={styles.hint}>Loading your addresses.</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ListPage><WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>,
+                <ListPage><ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>,
             );
         }
         // A queued result is SIGNED and not broadcast: the confirm lane
@@ -459,7 +576,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         // is not.
         if (result?.queued) {
             return wrap(
-                <ListPage><QueuedResultPanel onDone={onBack} what="ownership sale" unsaved={result.unsaved} /></ListPage>,
+                <ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} what="ownership sale" unsaved={result.unsaved} /></ListPage>,
             );
         }
         return wrap(
@@ -467,7 +584,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Name listed for sale</p>
                 {txid ? <p style={{ margin: '0 0 0.5rem' }}>Transaction: <code>{txid}</code></p> : null}
                 <p className={styles.hint}>
-                    Your {mechanism === 'dispenser' ? 'dispenser' : 'offer'} to sell ownership of {tokenUpper} for {price} {wantLabel} is open.
+                    Your {mechanism === 'dispenser' ? 'dispenser' : 'offer'} to sell ownership of {tokenTick} for {price} {wantLabel} is open.
                     {mechanism === 'dispenser'
                         ? ' A buyer can purchase it instantly at this price; close the dispenser to reclaim ownership.'
                         : ' Ownership is escrowed until a buyer matches; cancel before then to reclaim it.'}
@@ -481,17 +598,18 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     if (stage === 'review' || stage === 'submitting') {
         const mechanismLabel = mechanism === 'dispenser' ? 'Dispenser (instant buy)' : 'Open order';
-        const priceLabel = `${price} ${wantLabel}`;
+        const priceLabel = `${saleParams.GET_AMOUNT} ${wantLabel}`;
         const feeRow = feeEstimate
             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
             : 'Estimate unavailable';
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review ownership sale"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -515,12 +633,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 )}
             >
                 <p className={styles.summary}>
-                    Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
+                    Sell ownership of {tokenTick} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    {descriptor ? <DetailRow label="Chain" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
+                    {descriptor ? <DetailRow label="Network" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
+                    <DetailRow label="Selling" value={`${tokenTick} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
                     <DetailRow label="Price" value={priceLabel} />
                     {expiration.trim() ? (
@@ -530,6 +648,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                         <DetailRow label="Memo" value={memo.trim()} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeRow} />
+                    <DetailRow
+                        label="Protocol fee"
+                        value={`If charged, paid in ${nativeFee.flag ? coinTicker : 'XCHAIN'}; the network fee is separate.`}
+                    />
                 </dl>
 
                 {isWatcherMode ? (
@@ -590,7 +712,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 walletId={walletId}
                 title="Select price token"
                 networkFilter={coinFromChainId(chainId)}
-                onSelect={(sel) => { setGetTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
+                chainIdFilter={chainId}
+                onSelect={(sel) => {
+                    if (sel.chainId !== chainId) return;
+                    setGetTick(String(sel.tick || ''));
+                    setTokenPickerOpen(false);
+                }}
                 onBack={() => setTokenPickerOpen(false)}
             />
         );
@@ -598,18 +725,22 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     return wrap(
         <FormPage
-            label={`Sell ${tokenUpper} name`}
+            demoGuard={demoGuard}
+            label={`Sell ${tokenTick} name`}
             onSubmit={handleReview}
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || formError ? (
+            status={validationError || formError || issuerEligibility.error ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                        <StatusMessage variant="error">{validationError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
+                    ) : null}
+                    {!formError && issuerEligibility.error ? (
+                        <StatusMessage variant="error">{issuerEligibility.error}</StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -618,7 +749,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error || actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
@@ -637,7 +768,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
-                <dd className={styles.detailsValue} style={{ fontWeight: 700 }}>{tokenUpper}</dd>
+                <dd className={styles.detailsValue} style={{ fontWeight: 700 }}>{tokenTick}</dd>
                 {fromAddress ? (
                     <>
                         <dt className={styles.detailsLabel}>From</dt>

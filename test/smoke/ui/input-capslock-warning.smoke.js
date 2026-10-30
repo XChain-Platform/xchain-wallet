@@ -27,6 +27,11 @@ const cssSrc = readFileSync(
     'utf8',
 );
 
+const firstPaintSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'firstPaint.js'),
+    'utf8',
+);
+
 // --- caps-lock state hooks --------------------------------------------
 
 assert.match(inputSrc, /useState/, 'imports useState for capsLock state');
@@ -89,8 +94,13 @@ assert.match(
 );
 assert.match(
     inputSrc,
-    /Caps Lock is on/,
-    'warning copy present',
+    /t\('ui\.input\.capsLockIsOn'\)/,
+    'warning copy comes from the ui.input.capsLockIsOn key',
+);
+assert.match(
+    firstPaintSrc,
+    /'ui\.input\.capsLockIsOn': 'Caps Lock is on'/,
+    'English dictionary carries the warning copy',
 );
 
 // --- aria-describedby includes capsLockId when shown -----------------

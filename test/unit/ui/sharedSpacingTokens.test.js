@@ -20,10 +20,7 @@ const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.
 const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'HwFirmwareBanner.module.css',
-    'OwnerWithdrawWarning.module.css',
     'QueuedBroadcastBanner.module.css',
-    'QueuedResultPanel.module.css',
     'TotalBalanceHero.module.css',
 ];
 const routeModules = [
@@ -68,13 +65,12 @@ const pixelTokenModules = [
     'PreflightPanel.module.css',
     'PsbtIntentPanel.module.css',
     'QueuedBroadcastBanner.module.css',
-    'QueuedResultPanel.module.css',
     'RawPsbtViewer.module.css',
     'ReachabilityBanner.module.css',
 ];
 const settingsGeometryModules = [
     'WalletIdentity.module.css',
-    'WatcherResultPanel.module.css',
+    'WatcherExport.module.css',
     'settings/BackupSection.module.css',
     'settings/DeveloperModeSection.module.css',
     'settings/ThisWalletSection.module.css',
@@ -280,7 +276,6 @@ it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale inset
     });
 
     expect(rawPixelDeclarations.map(({ declaration }) => declaration)).toEqual([
-        'border: 1px solid var(--xc-border)',
         'padding: 2px var(--xc-space-1)',
         'border: 1px solid var(--xc-border)',
         'border: 1px solid var(--xc-border)',
@@ -327,9 +322,7 @@ it('uses shared dimension tokens across the empty, gated, menu, hardware, and la
     expect(modules['HeaderActionMenu.module.css']).toMatch(
         /\.rowChevron\s*\{[^}]*width:\s*var\(--xc-icon-sm\);[^}]*height:\s*var\(--xc-icon-sm\)/s,
     );
-    expect(modules['HwSignBlock.module.css']).toContain(
-        'padding: var(--xc-space-1) var(--xc-space-2);',
-    );
+    expect(modules['HwSignBlock.module.css']).toContain('gap: var(--xc-space-2);');
     expect(modules['LayoutModeToggle.module.css']).toContain('gap: var(--xc-space-2);');
 
     for (const [file, css] of Object.entries(modules)) {
@@ -370,7 +363,7 @@ it('uses tokens for geometry in the requested component modules', () => {
     expect(identity).toContain('flex: 0 0 var(--xc-icon-xl);');
     expect(identity).toContain('font-size: var(--xc-text-xs);');
 
-    const watcher = readFileSync(join(componentsRoot, 'WatcherResultPanel.module.css'), 'utf8');
+    const watcher = readFileSync(join(componentsRoot, 'WatcherExport.module.css'), 'utf8');
     const successRow = watcher.slice(watcher.indexOf('.successRow {'), watcher.indexOf('}', watcher.indexOf('.successRow {')));
     expect(successRow).toContain('gap: var(--xc-space-1);');
 });
@@ -380,8 +373,11 @@ it('uses the shared padding and radius for explicit card modules', () => {
     expect(tokens).toContain('--xc-card-pad: var(--xc-space-4);');
     expect(tokens).toContain('--xc-card-radius: var(--xc-radius-md);');
 
+    // A card module either composes the shared card (ui/Card.module.css)
+    // or, for a tone notice, draws its box from the same two tokens.
     for (const file of cardModules) {
         const css = readFileSync(join(componentsRoot, file), 'utf8');
+        if (/composes: (card|flush) from '[^']*\/Card\.module\.css'/.test(css)) continue;
         expect(css, file).toContain('padding: var(--xc-card-pad);');
         expect(css, file).toContain('border-radius: var(--xc-card-radius);');
     }
@@ -389,10 +385,7 @@ it('uses the shared padding and radius for explicit card modules', () => {
 
 it('tokenizes shared component dimensions except documented pixel exceptions', () => {
     const expectedPixelDeclarations = {
-        'ActionIntentSummary.module.css': [
-            'border-inline-start: 3px solid var(--xc-warning)',
-            'border: 1px solid var(--xc-border)',
-        ],
+        'ActionIntentSummary.module.css': [],
         'AlertsOverlay.module.css': [
             'max-width: min(380px, 100%)',
             'border-bottom: 1px solid var(--xc-border)',
@@ -402,25 +395,23 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
         ],
         'AmountField.module.css': [],
         'BackupReminderCard.module.css': [
-            'border: 1px solid var(--xc-border)',
             'flex: 1 1 240px',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: 2px',
         ],
         'BalanceChanges.module.css': [
-            'border: 1px solid var(--xc-border)',
-            'border-bottom: 1px dashed var(--xc-border-soft, var(--xc-border))',
+            'border-bottom: 1px solid var(--xc-border-soft, var(--xc-border))',
             'border-top: 1px solid var(--xc-border-soft, var(--xc-border))',
         ],
         'CollectiblesView.module.css': [
-            'border: 1px solid var(--xc-border)',
             'outline: 2px solid var(--xc-focus-ring)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
             'outline-offset: 2px',
-            'border-top: 1px dashed var(--xc-border)',
+            'border-top: 1px solid var(--xc-border)',
         ],
     };
+
 
     for (const file of tokenCleanupModules) {
         const css = readFileSync(join(componentsRoot, file), 'utf8');
@@ -458,7 +449,6 @@ it('keeps the audited component geometry on shared design tokens', () => {
         'calc(var(--xc-space-4) + env(safe-area-inset-right, 0))',
     );
     expect(cssByFile['NoticeModal.module.css']).toContain('padding: var(--xc-card-pad);');
-    expect(cssByFile['OwnerWithdrawWarning.module.css']).toContain('padding: var(--xc-card-pad);');
     expect(cssByFile['PlatformSwitcher.module.css']).toMatch(
         /\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\);[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
     );
@@ -467,10 +457,10 @@ it('keeps the audited component geometry on shared design tokens', () => {
         'calc(100vw - var(--xc-space-3) - var(--xc-space-3))',
     );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
-        'padding: var(--xc-space-1) var(--xc-control-pad-x);',
+        'padding-inline: var(--xc-control-pad-x-sm);',
     );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
-        'border-radius: var(--xc-radius-pill);',
+        'border-radius: var(--xc-control-radius);',
     );
     expect(statusModalModules.flatMap((file) => (
         undocumentedPixelGeometry(file, cssByFile[file])
@@ -485,6 +475,4 @@ it('uses dimension tokens or documents unmatched pixel values in cleanup modules
 
     expect(violations).toEqual([]);
 
-    const queuedResult = readFileSync(join(componentsRoot, 'QueuedResultPanel.module.css'), 'utf8');
-    expect(queuedResult).toContain('font-size: var(--xc-icon-xl);');
 });

@@ -40,8 +40,9 @@ export function activeNetworkLabel(value) {
 }
 
 /**
- * Keep non-Mainnet choices developer-only while preserving a recovery path
- * for an older persisted Regtest selection.
+ * Mainnet and Testnet are always offered. Regtest is a local developer
+ * network, so it is listed only with Developer Mode on, or while it is the
+ * persisted selection so a wallet left on it always has a way back off it.
  *
  * @param {{ developerMode?: boolean, current?: unknown }} opts
  */
@@ -49,12 +50,7 @@ export function activeNetworkOptions({ developerMode = false, current } = {}) {
     if (developerMode || normalizeActiveNetwork(current) === 'regtest') {
         return ACTIVE_NETWORK_OPTIONS;
     }
-    // Callers without a loaded network retain the loading-time list. Once
-    // settings resolve, Developer Mode controls every non-Mainnet choice.
-    if (current === undefined || !NETWORKS.includes(current)) {
-        return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
-    }
-    return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value === 'mainnet');
+    return ACTIVE_NETWORK_OPTIONS.filter((option) => option.value !== 'regtest');
 }
 
 /**

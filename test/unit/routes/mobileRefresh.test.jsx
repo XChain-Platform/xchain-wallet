@@ -61,7 +61,7 @@ describe('mobile refresh', () => {
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
 
         const refreshing = screen.getByRole('button', { name: 'Refreshing portfolio' });
@@ -72,7 +72,7 @@ describe('mobile refresh', () => {
         await act(async () => { held.reject(new Error('Failed to fetch')); });
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
-        expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
     });
 
@@ -99,7 +99,7 @@ describe('mobile refresh', () => {
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Refresh(ing)? balances/ })).toBeNull();
         const hero = screen.getByRole('region', { name: 'Active address balance' });
         const refresh = screen.getByRole('button', { name: 'Refresh portfolio' });
@@ -145,11 +145,11 @@ describe('mobile refresh', () => {
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
-        expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.getByText(/Showing saved balances from the last successful sync/))
             .toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
@@ -186,9 +186,12 @@ describe('mobile refresh', () => {
 
         await waitFor(() => expect(document.querySelector('[data-history-key]')).not.toBeNull());
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
-        expect(refresh).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
-        expect(refresh).not.toHaveClass(buttonStyles.sm);
-        expect(refresh.textContent).toBe('');
+        // A labelled kit button in the content actions row, not an icon in
+        // the page header.
+        expect(refresh).toHaveClass(buttonStyles.md);
+        expect(refresh).not.toHaveClass(buttonStyles.iconOnly);
+        expect(refresh.textContent).toBe('Refresh history');
+        expect(refresh.closest('[data-xc-page-actions]')).not.toBeNull();
         fireEvent.click(refresh);
 
         const refreshing = screen.getByRole('button', { name: 'Refreshing history' });

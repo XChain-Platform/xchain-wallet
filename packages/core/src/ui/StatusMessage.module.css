@@ -1,16 +1,19 @@
 .row {
     display: flex;
+    /* With large text the recovery action drops under the message instead of
+       squeezing the message into a narrow column. */
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
     margin: var(--xc-space-2) 0;
     padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-card-radius);
     font-size: var(--xc-text-sm);
     line-height: 1.4;
 }
 
 .text {
-    flex: 1;
+    flex: 1 1 8rem;
     min-width: 0;
     max-width: var(--xc-prose-max-width);
     margin-inline-end: auto;
@@ -37,31 +40,37 @@
     overflow-wrap: anywhere;
 }
 
-.recovery {
-    flex: 0 0 auto;
-    background: rgba(255, 255, 255, 0.18);
-    color: inherit;
-    border: 1px solid currentColor;
-    border-radius: var(--xc-radius-sm);
-    padding: 2px var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    cursor: pointer;
-    line-height: 1.2;
-    white-space: nowrap;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
+/* One notice of several in a StatusMessageGroup: its text, then its own
+   action at the line's end. The lines share the box's single icon. */
+.entry {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
+    gap: var(--xc-space-2);
 }
 
-.recovery:hover,
-.recovery:focus-visible {
-    background: rgba(255, 255, 255, 0.3);
-    outline: 2px solid currentColor;
-    outline-offset: 1px;
+.entry + .entry {
+    margin-block-start: var(--xc-space-2);
+}
+
+.entryText {
+    flex: 1 1 8rem;
+    min-width: 0;
+    max-width: var(--xc-prose-max-width);
+    margin-inline-end: auto;
+}
+
+/* A group's text column spans the box, so each line's action sits at the
+   box's end like a lone notice's; each line keeps the prose measure. */
+.group > .text {
+    max-width: none;
+}
+
+/* The action is the kit secondary Button (size sm); the notice only places it. */
+.recovery {
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    white-space: nowrap;
 }
 
 /* The variant selectors are compound (.row.error, not .error) on purpose.
@@ -89,10 +98,34 @@
     color: var(--xc-on-danger);
     border: 1px solid var(--xc-danger);
     font-weight: 500;
+    /* A secondary Button or link inside the notice reads its text and border
+       from these tokens, which are tuned for a page surface; on the danger
+       fill they take the label colour that fill is paired with. */
+    --xc-accent-text: var(--xc-on-danger);
+    --xc-border-strong: var(--xc-on-danger);
 }
 
 .row.success {
     background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
     color: var(--xc-success);
     border: 1px solid var(--xc-success, var(--xc-border));
+}
+
+/* A multi-line message passes one paragraph or list item per line; the lines
+   sit tight inside the one box instead of carrying page paragraph margins. */
+.body > p,
+.body > ul,
+.body > ol {
+    margin: 0;
+}
+
+.body > ul,
+.body > ol {
+    padding: 0;
+    list-style: none;
+}
+
+.body > * + *,
+.body li + li {
+    margin-top: var(--xc-space-1);
 }

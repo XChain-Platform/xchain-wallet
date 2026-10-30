@@ -106,7 +106,27 @@ describe('content-script relay always answers the page', () => {
         expect(reply.id).toBe('req-throw');
         expect(reply.ok).toBe(false);
         expect(reply.error.code).toBe('INTERNAL_ERROR');
-        expect(reply.error.message).toMatch(/RUNTIME_UNAVAILABLE/);
+        expect(reply.error.message).toBe('The wallet was updated or reloaded. Reload this page and try again.');
+    });
+
+    it('answers a worker restart mid-request in plain words, never Chrome\'s channel text', async () => {
+        sendMessageImpl = (_msg, cb) => {
+            globalThis.chrome.runtime.lastError = {
+                message: 'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+            };
+            try { cb(undefined); } finally { delete globalThis.chrome.runtime.lastError; }
+        };
+        const [reply] = await relay({
+            source: 'xchain-inject',
+            id: 'req-restart',
+            type: 'bridge.signMessage',
+            request: {},
+        });
+        expect(reply.id).toBe('req-restart');
+        expect(reply.ok).toBe(false);
+        expect(reply.error.code).toBe('INTERNAL_ERROR');
+        expect(reply.error.message).toBe('The wallet restarted before it answered. Try the request again.');
+        expect(reply.error.message).not.toMatch(/channel|listener|port|RUNTIME_/i);
     });
 
     it('answers a privileged type with the FORBIDDEN refusal, never a relay', async () => {

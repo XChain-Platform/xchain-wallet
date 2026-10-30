@@ -97,6 +97,12 @@ async function submitWizard(tick) {
     fireEvent.change(field, { target: { value: tick } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    // The wizard holds the submit until its availability lookup for a
+    // well-formed ticker settles; a refused ticker never starts one.
+    if (!tickerGrammarError(tick.trim())) {
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick })), { timeout: 3000 });
+        await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
+    }
     // A refused ticker stops at the details step, so only a valid one reaches the review.
     const proceed = screen.queryByRole('button', { name: 'Continue to confirmation' });
     if (proceed) fireEvent.click(proceed);

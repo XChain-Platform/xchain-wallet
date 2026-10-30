@@ -49,6 +49,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -638,7 +639,11 @@ assert.match(
     /USE_FINGERPRINT"\s*\n?\s*android:maxSdkVersion="27"/,
     'the legacy fingerprint permission is capped at API 27',
 );
-const qrScanner = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8');
+// The rationale copy lives in the English dictionary; reading it in place keeps
+// the check true when the smoke runs without the runner's English-copy loader.
+const qrScanner = withEnglishCopy(
+    readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8'),
+);
 assert.match(
     qrScanner,
     /data-testid="qr-scanner-camera-rationale"[\s\S]*?uses the camera only to scan QR codes[\s\S]*?paste the code instead/,
@@ -872,6 +877,26 @@ assert.match(
 // off command lines.
 const ceremony = readFileSync(join(wsRoot, 'tools', 'release', 'android-ceremony.sh'), 'utf8');
 assert.match(ceremony, /refusing to run in CI/, 'the ceremony refuses to run unattended');
+// The records/ writes (mkdir, write_provenance, DO-NOT-PUBLISH) come BEFORE the
+// signed pair is moved into the output dir, so signed bytes never sit there
+// without their provenance and rehearsal marker.
+{
+    const at = (re, what) => {
+        const m = re.exec(ceremony);
+        assert.ok(m, `the ceremony has ${what}`);
+        return m.index;
+    };
+    const mvAab = at(/^mv "\$WORK_DIR\/\$AAB_NAME" "\$OUTPUT_DIR\/\$AAB_NAME"$/m, 'the AAB move');
+    const mvApk = at(/^mv "\$WORK_DIR\/\$APK_NAME" "\$OUTPUT_DIR\/\$APK_NAME"$/m, 'the APK move');
+    const mkRecords = at(/^mkdir -p "\$RECORDS_DIR"$/m, 'the records/ mkdir');
+    const provCall = at(/^write_provenance store$/m, 'the store write_provenance call');
+    const noPublish = at(/DO-NOT-PUBLISH\.txt"/, 'the DO-NOT-PUBLISH write');
+    for (const [name, pos] of [['mkdir records/', mkRecords],
+        ['write_provenance', provCall], ['DO-NOT-PUBLISH', noPublish]]) {
+        assert.ok(pos < mvAab && pos < mvApk,
+            `${name} precedes both mv lines that stage the signed pair`);
+    }
+}
 // No password VALUE on a command line. A PATH to a 0600 file is not a secret,
 // and reading one is what lets the ceremony run without a human typing two
 // passphrases, so `-storepass:file <path>` and `--ks-pass file:<path>` are
@@ -1042,8 +1067,9 @@ assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not
 // APK is a genuine second build, because the `default` profile
 // compiles different code in and so there is no bundle to derive it from.
 // What stops that eroding the rule above is that it is OPT-IN: an unset
-// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was, and its
-// lane is NOT-SHIPPED, so no release demands the file either.
+// XCHAIN_BUILD_ANDROID_FULL leaves the ceremony exactly as it was. Its lane is
+// SHIPPED since v0.341.3, so a release scoped to it needs the file, while a
+// store-only `--lane android` release does not.
 assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
     'the full-feature APK leg exists and is opt-in, leaving the store lane untouched');
 

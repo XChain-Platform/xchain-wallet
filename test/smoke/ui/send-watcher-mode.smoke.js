@@ -10,7 +10,7 @@
 
 // Smoke for §20 / G040: Send.jsx watcher-mode branch (Step 2 of 3).
 //
-// After Cluster X Step 3, the WatcherResultPanel is a shared component
+// After Cluster X Step 3, the ResultScreen is a shared component
 // This smoke pins the Send.jsx integration only (hook + submit handler
 // + done-stage routing). The component's render shape lives in the
 // dedicated `watcher-result-panel.smoke.js`.
@@ -23,10 +23,10 @@
 //     `action.send.psbt`.
 //   - All three messaging shims expose `buildSendPsbtRequest` calling
 //     `action.send.psbt`.
-//   - Send.jsx reads walletMode via the shared useWalletMode hook,
+//   - Send.jsx waits for settings and reads walletMode from that snapshot,
 //     branches the submit handler to `messaging.buildSendPsbtRequest`,
 //     swaps the password / HW block for an explanatory hint at review,
-//     and renders the shared `<WatcherResultPanel>` in the done stage
+//     and renders the shared `<ResultScreen>` in the done stage
 //     when the result envelope carries `psbtHex` instead of a `txid`.
 
 import { strict as assert } from 'node:assert';
@@ -126,25 +126,24 @@ for (const [name, src] of [
 
 // ─── 5. Send.jsx watcher branch ---------------------------------
 
-// §20 Cluster X Step 2: walletMode derivation lifted to a shared hook
-// (`useWalletMode`). §20 Cluster X Step 3: WatcherResultPanel extracted
-// to `shared/components/WatcherResultPanel.jsx`.
+// Send reads readiness and mode from one settings snapshot so the signing
+// form cannot render while a watcher setting is still loading. §20 Cluster X
+// Step 3: ResultScreen extracted to
+// `shared/components/ResultScreen.jsx`.
 assert.match(
     sendSrc,
-    /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/,
-    'Send.jsx imports useWalletMode hook',
+    /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/,
+    'Send.jsx imports the shared ResultScreen',
 );
 assert.match(
     sendSrc,
-    /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
-    'Send.jsx imports the shared WatcherResultPanel',
+    /const walletModeReady = settings !== null \|\| !settingsLoading;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
+    'waits for and derives watcher mode from the same settings snapshot',
 );
-// a later change added `isSignerMode` to the same destructure (signer mode refuses
-// the route outright), so this pins the binding rather than the whole line.
 assert.match(
     sendSrc,
-    /const \{ isWatcherMode[^}]*\} = useWalletMode\(\);/,
-    'derives isWatcherMode via the shared hook',
+    /if \(!walletModeReady\) \{\s*return wrap\(<p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p>\);\s*\}/,
+    'does not render a signing-capable route before wallet mode is known',
 );
 assert.match(
     sendSrc,
@@ -177,26 +176,26 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/,
-    'done stage renders the shared WatcherResultPanel when result.psbtHex is set',
+    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/,
+    'done stage renders the shared ResultScreen when result.psbtHex is set',
 );
 
-// ─── 6. WatcherResultPanel no longer defined inline ------------
+// ─── 6. ResultScreen no longer defined inline ------------
 
 assert.doesNotMatch(
     sendSrc,
-    /function WatcherResultPanel\(/,
-    'WatcherResultPanel must be the shared component, not a local function',
+    /function ResultScreen\(/,
+    'ResultScreen must be the shared component, not a local function',
 );
 assert.doesNotMatch(
     sendSrc,
     /encodeXcwChunks/,
-    'Send.jsx no longer imports / uses encodeXcwChunks (lives in WatcherResultPanel)',
+    'Send.jsx no longer imports / uses encodeXcwChunks (lives in ResultScreen)',
 );
 assert.doesNotMatch(
     sendSrc,
     /encodeBbqrPsbtFrames/,
-    'Send.jsx no longer imports / uses encodeBbqrPsbtFrames (lives in WatcherResultPanel)',
+    'Send.jsx no longer imports / uses encodeBbqrPsbtFrames (lives in ResultScreen)',
 );
 
 console.log('send-watcher-mode smoke OK');

@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
     OwnAddressPickerScreen: ({ chainId }) => React.createElement('p', null, `Picker chain: ${chainId}`),
@@ -32,7 +33,13 @@ const address = (id, value, coinType) => ({
     signerId: 'signer-1',
 });
 
-function mountSleepForm(overrides = {}, initialChainId = BITCOIN) {
+function deferred() {
+    let resolve;
+    const promise = new Promise((next) => { resolve = next; });
+    return { promise, resolve };
+}
+
+function renderSleepForm(overrides = {}, initialChainId = BITCOIN, props = {}) {
     const addresses = {
         [BITCOIN]: [address('btc', BITCOIN_ADDRESS, 0)],
         [LITECOIN]: [address('ltc', LITECOIN_ADDRESS, 2)],
@@ -46,20 +53,28 @@ function mountSleepForm(overrides = {}, initialChainId = BITCOIN) {
         sleepAction: vi.fn().mockResolvedValue({ txid: 'sleep-txid' }),
         ...overrides,
     };
-    render(
+    const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <SleepForm
                 walletId="wallet-1"
                 mode="address"
                 initialChainId={initialChainId}
                 onBack={() => {}}
+                {...props}
             />
         </MessagingProvider>,
     );
-    return messaging;
+    return { messaging, ...view };
 }
 
-afterEach(cleanup);
+function mountSleepForm(overrides = {}, initialChainId = BITCOIN, props = {}) {
+    return renderSleepForm(overrides, initialChainId, props).messaging;
+}
+
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('SleepForm address lock chain selection', () => {
     it('does not render the selected network kind', async () => {
@@ -192,7 +207,7 @@ describe('SleepForm address lock chain selection', () => {
         fireEvent.change(await screen.findByLabelText(/Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
-        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
     });
 
@@ -212,5 +227,68 @@ describe('SleepForm address lock chain selection', () => {
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
         expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
+    });
+
+    it('starts one height refresh when Preview is submitted twice in one event batch', async () => {
+        const heldHeight = deferred();
+        const watermark = vi.fn()
+            .mockResolvedValueOnce({ watermark: 10_000 })
+            .mockImplementation(() => heldHeight.promise);
+        mountSleepForm({ getIndexerWatermark: watermark });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        await screen.findByText(/Duration starts from current block 10,000/);
+        fireEvent.change(duration, { target: { value: '12' } });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        act(() => {
+            preview.click();
+            preview.click();
+        });
+
+        expect(watermark).toHaveBeenCalledTimes(2);
+        await act(async () => { heldHeight.resolve({ watermark: 10_001 }); });
+        expect(await screen.findByText(/until block 10013/)).toBeInTheDocument();
+    });
+
+    it('dispatches one address lock when submit is clicked twice in one event batch', async () => {
+        const heldSubmit = deferred();
+        const sleepAction = vi.fn(() => heldSubmit.promise);
+        mountSleepForm({ sleepAction });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        fireEvent.change(duration, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
+        const submit = screen.getByRole('button', { name: 'Lock address' });
+        act(() => {
+            submit.click();
+            submit.click();
+        });
+
+        await waitFor(() => expect(sleepAction).toHaveBeenCalledTimes(1));
+        await act(async () => { heldSubmit.resolve({ txid: 'sleep-txid' }); });
+    });
+
+    it('does not compose a token pause after unmount during a height refresh', async () => {
+        const heldHeight = deferred();
+        const composeForConfirm = vi.fn();
+        const { unmount } = renderSleepForm({
+            getIndexerWatermark: vi.fn()
+                .mockResolvedValueOnce({ watermark: 10_000 })
+                .mockImplementation(() => heldHeight.promise),
+            getTokenInfo: vi.fn().mockResolvedValue({
+                tick: 'GATE', creator: BITCOIN_ADDRESS, locks: {},
+            }),
+            composeForConfirm,
+        }, BITCOIN, { mode: 'tick', initialTick: 'GATE' });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Pause token' })).toBeEnabled());
+        fireEvent.change(duration, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
+        unmount();
+        await act(async () => { heldHeight.resolve({ watermark: 10_001 }); });
+
+        expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });

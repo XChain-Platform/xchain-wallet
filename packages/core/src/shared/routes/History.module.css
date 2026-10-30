@@ -37,19 +37,18 @@
    advanced-filters panel in one bordered container so the mobile view reads
    as one block instead of three stacked widgets. */
 .filterCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
     width: 100%;
     box-sizing: border-box;
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
 }
 
+/* Holds only the phone Filters toggle, so it takes no room on wider
+   layouts, where the filter card is always open. */
 .toolbarTop {
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: flex-end;
     gap: var(--xc-space-2);
@@ -96,6 +95,14 @@
 .searchInput:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
+}
+
+/* The row's own Clear button clears the search; the engine's built-in
+   cancel mark would be a second control for the same thing. */
+.searchInput::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
 }
 
 /* Chain picker: full-width button + popover listbox so each option
@@ -286,23 +293,6 @@
     font-size: var(--xc-text-xs);
 }
 
-.activeDateRange button {
-    appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--xc-accent-text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    padding: var(--xc-space-1);
-    min-height: var(--xc-tap-min);
-}
-
-.activeDateRange button:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
 .dateError {
     color: var(--xc-danger-text, #b42318);
     font-size: var(--xc-text-sm);
@@ -311,7 +301,8 @@
 .timeline {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    /* Spaces each day heading from its list card and from the card above. */
+    gap: var(--xc-space-2);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -330,16 +321,27 @@
     font-size: var(--xc-text-sm);
 }
 
+/* A run of rows under one heading is one flush card with dividers between
+   rows, the same list Home shows in its Activity tab. */
+.rowList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+.rowList > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
 .row {
     position: relative;
-    border: 1px solid var(--xc-control-border);
-    background: var(--xc-surface-raised);
-    margin: var(--xc-space-1) 0;
 }
 
 .row:hover {
     background: var(--xc-control-bg-hover);
-    border-color: var(--xc-control-selected);
 }
 
 .row:focus-visible {
@@ -347,9 +349,16 @@
     outline-offset: 2px;
 }
 
+/* The selected row keeps its marker inside the list card: a rail on the
+   leading edge in the selected tone, not a border of its own. */
 .rowSelected {
-    border-color: var(--xc-control-selected);
     background: var(--xc-control-bg-hover);
+    box-shadow: inset 3px 0 0 var(--xc-control-selected);
+}
+
+/* The inset is physical, so the rail moves to the right edge in RTL. */
+:global([dir='rtl']) .rowSelected {
+    box-shadow: inset -3px 0 0 var(--xc-control-selected);
 }
 
 .rowMeta {
@@ -463,10 +472,7 @@
    table / panel; horizontal padding stays at space-3 for breathing
    room against the card edge. */
 .detailSection {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-1) var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -612,10 +618,11 @@
 
 /* Inline value + copy icon used in the details table for fields the
    user typically wants to paste (action_index / tx_hash / addresses). */
+/* The value first, its copy button right after it. */
 .copyableValue {
     display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
+    align-items: center;
+    gap: var(--xc-space-2);
     max-width: 100%;
 }
 
@@ -624,7 +631,7 @@
     word-break: break-word;
     white-space: normal;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
 }
 
 /* Explorer button row: equal-width columns that span the full row.
@@ -813,17 +820,6 @@
     gap: var(--xc-space-2);
 }
 
-/* Chain icon embedded next to the action label in the ActionDetail
-   header. */
-.titleChainIcon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin-inline-end: var(--xc-space-2);
-    vertical-align: -3px;
-}
-
 .detailDecoded {
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
@@ -835,23 +831,17 @@
     overflow-x: auto;
 }
 
-/* JSON viewer wrap with a small copy button anchored to the upper-
-   right corner so a user can copy the whole payload without
-   selecting + ctrl-C. The button sits on a translucent background
-   so it stays legible over the JSON text below it. */
+/* JSON viewer wrap: the copy button sits on its own row above the
+   payload, right-aligned, so it never covers the first lines of JSON. */
 .rawJsonWrap {
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-1);
 }
 
 .rawJsonCopy {
-    position: absolute;
-    top: 0;
-    inset-inline-end: 0;
-    z-index: 1;
-    background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
-    border-radius: var(--xc-radius-sm);
-    -webkit-backdrop-filter: var(--xc-backdrop-filter);
-    backdrop-filter: var(--xc-backdrop-filter);
+    align-self: flex-end;
 }
 
 .actions {
@@ -876,12 +866,6 @@
     justify-content: flex-end;
 }
 
-.error {
-    color: var(--xc-danger-fg);
-    font-size: var(--xc-text-sm);
-    margin: 0;
-}
-
 .rbfError {
     flex-basis: 100%;
     margin: 0;
@@ -903,7 +887,7 @@
 .saveContactForm {
     margin-top: var(--xc-space-2);
     padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
+    border-top: 1px solid var(--xc-border);
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -969,11 +953,9 @@
     border-top: 1px solid var(--xc-border);
 }
 
+/* A group is one row of the list: its header and, when expanded, its
+   member rows under a divider, all inside the list's card. */
 .groupCardWrap {
-    margin: var(--xc-space-1) 0;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     overflow: hidden;
 }
 
@@ -1044,22 +1026,17 @@
 }
 
 /* M2.3: the pending branch of the detail card. Sits above the hero
-   table, banded on its leading edge so it reads as a state notice
-   rather than as another field group. */
+   table as the plain card; a stuck or failed transaction tints its
+   headline instead of the card surface. */
 .pendingPanel {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-inline-start: 3px solid var(--xc-warning, #d99000);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
 }
 
-.pendingPanelWarning {
-    border-inline-start-color: var(--xc-danger, #d93838);
-    background: color-mix(in srgb, var(--xc-danger, #d93838) 8%, var(--xc-surface));
+.pendingPanelWarning .pendingHeadline {
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .pendingHeadline {
@@ -1121,8 +1098,8 @@
     font-style: italic;
     color: var(--xc-text-muted);
     max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     -webkit-user-select: text;
     user-select: text;
 }
@@ -1142,6 +1119,10 @@
    keys stack above their values. System text zoom does not reduce the CSS
    viewport, so this reflow includes common 375px through 430px phone widths. */
 @media not all and (min-width: 480px) {
+    .toolbarTop {
+        display: flex;
+    }
+
     .phoneFilterToggle {
         display: flex;
         flex: 1 1 auto;

@@ -61,8 +61,7 @@ test('demo Send uses an inline guard without contacting an encoder', async ({ pa
     expect(encoderRequests, 'demo actions must not request an encoder').toEqual([]);
 });
 
-test.fixme('demo Swap and Create token use an inline guard without contacting an encoder', async ({ page }) => {
-    // Never built: demo wallets hide the trade and create commands instead of showing an inline note.
+test('demo Swap and Create token use an inline guard without contacting an encoder', async ({ page }) => {
     test.slow();
     const encoderRequests = await trackEncoderRequests(page);
 
@@ -76,7 +75,7 @@ test.fixme('demo Swap and Create token use an inline guard without contacting an
         await openPaletteRoute(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Custom/ }).click();
-        await expect(main.getByRole('form', { name: 'Choose token chain' })).toBeVisible();
+        await expect(main.getByRole('form', { name: 'Choose token network' })).toBeVisible();
         await expect(main.getByLabel('Fee paid by', { exact: true }))
             .not.toHaveValue('', { timeout: 15_000 });
         await expectDemoGuard(page, 'Next');

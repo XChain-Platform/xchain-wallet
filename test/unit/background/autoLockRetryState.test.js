@@ -27,7 +27,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { createLockBackstop } from '../../../packages/extension/src/background/walletLock.js';
+import {
+    createLockBackstop,
+    AUTO_LOCK_REQUEST_CEILING_MS,
+    createUiRequestTracker,
+    requestHoldsAutoLock,
+} from '../../../packages/extension/src/background/walletLock.js';
 import { dispatchPreHost } from '../../../packages/extension/src/background/sessionMeta.js';
 import {
     applyAutoLockSignal,
@@ -235,15 +240,184 @@ describe('auto-lock retry after an incomplete lock', () => {
         expect(await readAutoLockState()).toBeNull();
     });
 
-    it('survives an unreadable auto-lock record instead of locking blind', async () => {
+    it('locks a session whose auto-lock record storage cannot read', async () => {
         const sessionBackend = flakyBackend(0);
         const { sw, backstop } = shell(sessionBackend, flakyBackend(0));
-        // A read that throws must not be read as "idle".
+        // A restarted worker holds no in-memory copy, so the unreadable record
+        // is a deadline it cannot enforce.
         globalThis.chrome.storage.session.get = vi.fn(async () => { throw new Error('nope'); });
 
-        expect(await backstop.maybeAutoLock()).toBe('skipped');
-        expect(sessionBackend.clears).toBe(0);
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sessionBackend.clears).toBe(1);
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('waits for an active request before locking on an unreadable record', async () => {
+        const sessionBackend = flakyBackend(0);
+        let active = true;
+        const sw = { host: {}, vault: {}, teardowns: 0 };
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend, signingSecretBackend: flakyBackend(0) }),
+            tearDownHost: () => { sw.host = null; sw.vault = null; sw.teardowns += 1; },
+            isUnlocked: () => Boolean(sw.host && sw.vault),
+            isRequestActive: () => active,
+            readAutoLockState,
+            clearAutoLockState,
+            shouldAutoLock,
+            logger: { log() { }, error() { } },
+        });
+        globalThis.chrome.storage.session.get = vi.fn(async () => { throw new Error('nope'); });
+
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        active = false;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+});
+
+describe('a signing request holds a due idle lock until it ends or hits its ceiling', () => {
+    let priorChrome;
+    const TICK = 24_000;
+
+    beforeEach(async () => {
+        priorChrome = globalThis.chrome;
+        globalThis.chrome = { storage: { session: sessionArea() } };
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1_000);
+    });
+
+    afterEach(() => {
+        globalThis.chrome = priorChrome;
+    });
+
+    // One clock drives the tracker and the backstop, as in the worker.
+    function clockedShell() {
+        const sw = { host: {}, vault: {}, teardowns: 0, clock: 61_000 + 120_000 };
+        const tracker = createUiRequestTracker({ now: () => sw.clock });
+        const sessionBackend = flakyBackend(0);
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend, signingSecretBackend: flakyBackend(0) }),
+            tearDownHost: () => { sw.host = null; sw.vault = null; sw.teardowns += 1; },
+            isUnlocked: () => Boolean(sw.host && sw.vault),
+            isRequestActive: () => tracker.isActive(),
+            readAutoLockState,
+            clearAutoLockState,
+            shouldAutoLock,
+            now: () => sw.clock,
+            logger: { log() { }, error() { } },
+        });
+        return { sw, tracker, sessionBackend, backstop };
+    }
+
+    it('holds across three ticks and locks on the first tick after the request ends', async () => {
+        const { sw, tracker, sessionBackend, backstop } = clockedShell();
+        const finish = tracker.begin('auth.signPsbt');
+
+        for (let i = 0; i < 3; i += 1) {
+            expect(await backstop.maybeAutoLock()).toBe('deferred');
+            sw.clock += TICK;
+        }
         expect(sw.teardowns).toBe(0);
+        expect(sessionBackend.clears).toBe(0);
+
+        finish();
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sessionBackend.clears).toBe(1);
+        expect(sw.teardowns).toBe(1);
+        expect(await readAutoLockState()).toBeNull();
+    });
+
+    it('stops holding once the request passes the ceiling', async () => {
+        const { sw, tracker, backstop } = clockedShell();
+        tracker.begin('broadcast.signedTx');
+
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS - 1;
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        sw.clock += 1;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('measures the ceiling from each request\'s own start', async () => {
+        const { sw, tracker, backstop } = clockedShell();
+        tracker.begin('action.send');
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS - TICK;
+        tracker.begin('action.send');
+        sw.clock += TICK;
+        // The first request is past its ceiling; the second still holds.
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+    });
+
+    it('a read never holds, however briefly it has run', async () => {
+        const { tracker, backstop, sw } = clockedShell();
+        tracker.begin('balances.wallet');
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+});
+
+describe('which UI requests hold a due idle lock', () => {
+    let priorChrome;
+
+    beforeEach(async () => {
+        priorChrome = globalThis.chrome;
+        globalThis.chrome = { storage: { session: sessionArea() } };
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1_000);
+    });
+
+    afterEach(() => {
+        globalThis.chrome = priorChrome;
+    });
+
+    function trackedShell(tracker) {
+        const sw = { host: {}, vault: {}, teardowns: 0 };
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend: flakyBackend(0), signingSecretBackend: flakyBackend(0) }),
+            tearDownHost: () => { sw.host = null; sw.vault = null; sw.teardowns += 1; },
+            isUnlocked: () => Boolean(sw.host && sw.vault),
+            isRequestActive: () => tracker.isActive(),
+            readAutoLockState,
+            clearAutoLockState,
+            shouldAutoLock,
+            now: () => 61_000 + 120_000,
+            logger: { log() { }, error() { } },
+        });
+        return { sw, backstop };
+    }
+
+    it('locks on the first due tick while reads the closed popup left wait on the network', async () => {
+        const tracker = createUiRequestTracker();
+        // The reads a closed, offline popup left in flight in the live drive.
+        tracker.begin('balances.wallet');
+        tracker.begin('coinpays.obligationsForAddress');
+        tracker.begin('settings.get');
+        const { sw, backstop } = trackedShell(tracker);
+
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('waits on a signing request until it settles', async () => {
+        const tracker = createUiRequestTracker();
+        const finish = tracker.begin('action.send');
+        const { sw, backstop } = trackedShell(tracker);
+
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        finish();
+        finish();
+        expect(tracker.isActive()).toBe(false);
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('names signing and broadcast routes as holding, and reads as not', () => {
+        for (const type of ['action.send', 'action.psbt', 'auth.signPsbt', 'auth.signMessage', 'broadcast.signedTx', 'broadcast.queue.broadcast', 'multisigSign.signLocally']) {
+            expect(requestHoldsAutoLock(type), type).toBe(true);
+        }
+        for (const type of ['balances.wallet', 'coinpays.obligationsForAddress', 'broadcast.queue.list', 'signer.status', 'wallet.list', undefined, 42]) {
+            expect(requestHoldsAutoLock(type), String(type)).toBe(false);
+        }
     });
 });
 

@@ -14,8 +14,20 @@
     line-height: 1.4;
 }
 
-.error {
-    color: var(--xc-danger-fg, #c0392b);
+/* The connect failure takes a whole row under the text and buttons. */
+.banner.withMessage {
+    flex-wrap: wrap;
+}
+
+/* A zero basis keeps the text and buttons on their first line, shrinking the
+   text as they do without a message, so only the message row wraps. */
+.withMessage .label {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.message {
+    flex: 1 0 100%;
 }
 
 .actions {
@@ -23,56 +35,4 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-}
-
-.accept {
-    background: var(--xc-accent-primary);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-on-accent, #fff);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    padding: 2px var(--xc-space-3);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.accept:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--xc-accent-primary) 85%, black);
-}
-.accept:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-.accept:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.dismiss {
-    flex-shrink: 0;
-    background: transparent;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    padding: 2px var(--xc-space-2);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.dismiss:hover {
-    background: var(--xc-bg-muted);
-}
-.dismiss:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
 }

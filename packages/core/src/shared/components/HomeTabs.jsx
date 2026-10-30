@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { Button, Icon, Tabs } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -28,6 +28,8 @@ import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
+import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
 import {
     isDemoWallet,
@@ -51,9 +53,13 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
-import { compareDecimalStrings, formatHistoryAmount } from '../utils/amountFormat.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/walletDetails.js';
 
 const TotalBalanceHero = memo(TotalBalanceHeroBase);
 const PortfolioChart = memo(PortfolioChartBase);
@@ -173,8 +179,11 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
+ * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
+ * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
+ * @param {boolean} [props.balanceNoticeShown] Home shows its own balance notice, so an empty tab shows no empty state
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -207,9 +216,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // Real balance reads carry no price, so native rows get the coin's live
     // §45 rate here; without it the hero and the chart count every coin as
     // unpriced. A demo wallet asks for nothing (its fixtures price
-    // themselves), and nothing is fetched until the settings read finishes,
+    // themselves), and nothing is fetched until a settings snapshot loads,
     // so an opted-out user does not reach the CoinGecko fallback before
-    // their choice is known.
+    // their choice is known, or at all when the settings read fails.
     const { settings, loading: settingsLoading } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const watchedRows = useMemo(
@@ -232,7 +241,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         chainCoins: nativeCoins,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: !settingsLoading,
+        refreshEnabled: Boolean(settings) && !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const spamKeys = useMemo(
@@ -263,7 +272,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         tokens: tokenRequests,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: !settingsLoading && active === 'tokens',
+        refreshEnabled: Boolean(settings) && !settingsLoading && active === 'tokens',
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
@@ -336,9 +345,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [active, filteredRows, sortBy, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    // Off for a demo wallet: its rows carry the wallet's real addresses, and
+    // a demo wallet's addresses never go to an explorer (issue #82).
     const ownedTokens = useOwnedTokens(
         balances,
-        active === 'tokens' || settings?.hideUnknownTokens === true,
+        !isDemo && (active === 'tokens' || settings?.hideUnknownTokens === true),
     );
     const automaticHiddenKeys = useMemo(
         () => settings?.hideUnknownTokens === true
@@ -405,8 +416,23 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         }
         return oldest;
     }, [filteredRows]);
-    const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
+    // A row whose balance read failed may hold funds, so it never reads as
+    // an empty wallet that needs its first funding.
+    const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row) || Boolean(row?.unavailable));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
+    // An empty tab while balances could not be checked proves nothing, so it
+    // says that once (and the shell's stale-balances notice steps aside).
+    // While Home's own balance notice is up, that notice is the one message
+    // and an empty tab stays quiet.
+    const quietEmpty = Boolean(balanceNoticeShown) && !isDemo;
+    const showUnchecked = !quietEmpty && balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
+    const uncheckedState = showUnchecked ? (
+        <BalancesUncheckedState
+            plain={false}
+            onRetry={onRecheckBalances}
+            onReceive={hasAddresses ? onReceive : undefined}
+        />
+    ) : null;
     const showBalanceSort = (active === 'coins' && !showFirstFunding && coins.length > 0)
         || (active === 'tokens' && filteredTokens.length > 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
@@ -427,11 +453,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     );
 
     const tabs = [
-        { id: 'coins',    label: 'Coins'    },
-        { id: 'tokens',   label: 'Tokens'   },
-        { id: 'nfts',     label: 'NFTs'     },
-        { id: 'defi',     label: 'DeFi'     },
-        { id: 'activity', label: 'Activity' },
+        { id: 'coins',    label: t('home.tabs.coins')    },
+        { id: 'tokens',   label: t('home.tabs.tokens')   },
+        { id: 'nfts',     label: t('home.tabs.nfts')     },
+        { id: 'defi',     label: t('home.tabs.defi')     },
+        { id: 'activity', label: t('home.tabs.activity') },
     ];
 
     return (
@@ -495,21 +521,21 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     value={active}
                     onChange={setActive}
                     panelId={`${tabsId}-panel`}
-                    aria-label="Wallet view"
+                    aria-label={t('home.tabs.walletView')}
                 />
 
                 {showBalanceSort ? (
                     <label className={styles.sortControl}>
-                        <span className={styles.sortLabel}>Sort balances</span>
+                        <span className={styles.sortLabel}>{t('home.tabs.sortBalances')}</span>
                         <span className={styles.sortCompactValue} aria-hidden="true">
-                            {sortBy === 'change' ? '24h change' : sortBy[0].toUpperCase() + sortBy.slice(1)}
+                            {sortBy === 'change' ? t('home.tabs.24hChange') : sortBy[0].toUpperCase() + sortBy.slice(1)}
                         </span>
                         <span className={styles.sortCompactIcon} aria-hidden="true">
                             <Icon.ChevronDownIcon />
                         </span>
                         <select
                             className={styles.sortSelect}
-                            aria-label="Sort balances"
+                            aria-label={t('home.tabs.sortBalances')}
                             value={sortBy}
                             onChange={(event) => {
                                 const value = event.target.value;
@@ -518,9 +544,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 persistBalanceSort(walletId, value);
                             }}
                         >
-                            <option value="value">Value</option>
-                            <option value="name">Name</option>
-                            <option value="change">24h change</option>
+                            <option value="value">{t('home.tabs.value')}</option>
+                            <option value="name">{t('walletDetails.name')}</option>
+                            <option value="change">{t('home.tabs.24hChange')}</option>
                         </select>
                     </label>
                 ) : null}
@@ -532,36 +558,21 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
-                {active === 'coins' ? (
+                {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
+                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0))
+                    && !(quietEmpty && (showFirstFunding || coins.length === 0)) ? (
                     showFirstFunding ? (
-                        <Placeholder
-                            title="Fund your wallet"
+                        <EmptyState
+                            title={t('home.tabs.fundYourWallet')}
                             body={hasAddresses
-                                ? 'Receive coins from another wallet or buy coins through Exchange to get started.'
-                                : 'Generate a receiving address, then transfer coins to it or buy coins through Exchange.'}
-                            action={(
-                                <div className={styles.firstFundingActions}>
-                                    <Button
-                                        variant="primary"
-                                        size="sm"
-                                        onClick={hasAddresses ? onReceive : onAddAddress}
-                                        disabled={hasAddresses ? !onReceive : !onAddAddress}
-                                        icon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
-                                    >
-                                        {hasAddresses ? 'Receive' : 'Generate an address'}
-                                    </Button>
-                                    {onBuy ? (
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={onBuy}
-                                            icon={<Icon.MarketIcon />}
-                                        >
-                                            Buy coins
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            )}
+                                ? t('home.tabs.receiveCoinsFromAnotherWallet')
+                                : t('home.tabs.generateAReceivingAddressThen')}
+                            actionLabel={hasAddresses ? t('home.receive') : t('receive.generateAnAddress')}
+                            onAction={hasAddresses ? onReceive : onAddAddress}
+                            actionIcon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
+                            secondaryActionLabel={onBuy ? t('home.tabs.buyCoins') : undefined}
+                            onSecondaryAction={onBuy}
+                            secondaryActionIcon={<Icon.MarketIcon />}
                         />
                     ) : (
                         <BalanceList
@@ -569,10 +580,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             fiatCurrency={settings?.fiatCurrency || 'USD'}
                             multisig={multisig}
                             multisigChainId={multisigChainId}
-                            emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
+                            emptyTitle={networkFilter === 'all' ? t('home.tabs.noCoinsYet') : t('home.tabs.noCoinsOnThisNetwork')}
                             emptyBody={networkFilter === 'all'
-                                ? 'Coins appear here after you receive Bitcoin, Litecoin, or Dogecoin.'
-                                : 'Coins on this network appear here after you receive them.'}
+                                ? t('home.tabs.coinsAppearHereAfterYou')
+                                : t('home.tabs.coinsOnThisNetworkAppear')}
                             onReceive={networkFilter === 'all' ? onReceive : undefined}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}
@@ -591,18 +602,19 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
 
                 {active === 'tokens' ? (
                     <>
-                    {filteredTokens.length === 0 ? (
+                    {filteredTokens.length === 0 && showUnchecked && !tokenQueryTrim ? uncheckedState : null}
+                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) && !(quietEmpty && !tokenQueryTrim) ? (
                         <BalanceList
                             rows={[]}
                             emptyTitle={tokenQueryTrim
-                                ? 'No matching tokens'
-                                : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
+                                ? t('home.tabs.noMatchingTokens')
+                                : (networkFilter === 'all' ? t('home.tabs.noTokensYet') : t('home.tabs.noTokensOnThisNetwork'))}
                             emptyBody={tokenQueryTrim
-                                ? 'Matching tokens appear here after you change or clear the filter.'
+                                ? t('home.tabs.matchingTokensAppearHereAfter')
                                 : (networkFilter === 'all'
-                                    ? 'Tokens appear here after you buy one in Markets or receive a transfer.'
-                                    : 'Tokens on this network appear here after you receive them.')}
-                            emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
+                                    ? t('home.tabs.tokensAppearHereAfterYou')
+                                    : t('home.tabs.tokensOnThisNetworkAppear'))}
+                            emptyActionLabel={tokenQueryTrim && canFilter ? t('home.tabs.clearFilter') : undefined}
                             onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         />
                     ) : null}
@@ -625,8 +637,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         />
                     ) : null}
                     {unpricedTokens.length > 0 ? (
-                        <section aria-label="Unpriced tokens">
-                            <p className={styles.tabNote}>Unpriced tokens</p>
+                        <section aria-label={t('home.tabs.unpricedTokens')}>
+                            <p className={styles.tabNote}>{t('home.tabs.unpricedTokens')}</p>
                             <BalanceList
                                 rows={unpricedTokens}
                                 fiatCurrency={settings?.fiatCurrency || 'USD'}
@@ -646,8 +658,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                         </section>
                     ) : null}
                     {issuedUnheld.length > 0 ? (
-                        <section aria-label="Issued by you" data-testid="issued-unheld">
-                            <p className={styles.tabNote}>Issued by you</p>
+                        <section aria-label={t('home.tabs.issuedByYou')} data-testid="issued-unheld">
+                            <p className={styles.tabNote}>{t('home.tabs.issuedByYou')}</p>
                             <BalanceList
                                 rows={issuedUnheld}
                                 fiatCurrency={settings?.fiatCurrency || 'USD'}
@@ -676,8 +688,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             protocol/NFT_Standard.md. */}
                         {nfts.length > 0 ? (
                         <p className={styles.tabNote}>
-                            A tick appears here when it can never be split and its supply can
-                            never grow. Everything you hold, collectible or not, is also under Tokens.
+                            {t('home.tabs.aTickAppearsHereWhen')}
                         </p>
                         ) : null}
                         <RouteErrorBoundary
@@ -687,10 +698,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             <CollectiblesView
                                 rows={nfts}
                                 demo={isDemo}
-                                emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
+                                emptyTitle={networkFilter === 'all' ? t('home.tabs.noCollectiblesYet') : t('home.tabs.noCollectiblesOnThisNetwork')}
                                 emptyBody={networkFilter === 'all'
-                                    ? 'Collectibles appear here after you receive an indivisible token with permanently locked supply.'
-                                    : 'Collectibles on this network appear here after you receive them.'}
+                                    ? t('home.tabs.collectiblesAppearHereAfterYou')
+                                    : t('home.tabs.collectiblesOnThisNetworkAppear')}
                                 onReceive={networkFilter === 'all' ? onReceive : undefined}
                                 onSelectToken={onSelectToken}
                                 pinnedKeys={pinnedKeys}
@@ -715,19 +726,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <Placeholder
-                            title="Your activity is in History"
-                            body="Every send, receive and other transaction, newest first."
-                            action={(
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onHistory}
-                                    disabled={!onHistory}
-                                >
-                                    Open History
-                                </Button>
-                            )}
+                        <EmptyState
+                            title={t('home.tabs.yourActivityIsInHistory')}
+                            body={t('home.tabs.everySendReceiveAndOther')}
+                            actionLabel={t('home.tabs.openHistory')}
+                            onAction={onHistory}
                         />
                     )
                 ) : null}
@@ -742,9 +745,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <Placeholder
-                            title="No DeFi positions yet"
-                            body="Staking, dispensers, contract balances and open orders will show here."
+                        <EmptyState
+                            title={t('home.tabs.noDefiPositionsYet')}
+                            body={t('home.tabs.stakingDispensersContractBalancesAnd')}
                         />
                     )
                 ) : null}
@@ -858,16 +861,6 @@ function useOwnedTokens(balances, enabled) {
     return owned;
 }
 
-function Placeholder({ title, body, action = null }) {
-    return (
-        <div className={styles.placeholder}>
-            <div className={styles.placeholderTitle}>{title}</div>
-            <p className={styles.placeholderBody}>{body}</p>
-            {action ? <div className={styles.placeholderAction}>{action}</div> : null}
-        </div>
-    );
-}
-
 function hasNonZeroQuantity(row) {
     try {
         return BigInt(row?.quantity ?? 0) !== 0n || BigInt(row?.pendingQuantity ?? 0) !== 0n;
@@ -913,20 +906,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-// Format a satoshi-string amount using the tick's divisibility. Plain
-// string math, no BigInt; these are demo values and stay small.
-function formatAmount(raw, divisibility) {
-    const s = String(raw ?? '').trim();
-    if (!s) return '';
-    const div = Number.isFinite(divisibility) ? divisibility : 8;
-    if (div === 0) return s;
-    if (!/^\d+$/.test(s)) return s;
-    const padded = s.padStart(div + 1, '0');
-    const whole = padded.slice(0, -div);
-    const frac = padded.slice(-div).replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
-}
-
 const ACTION_ICON = {
     send:       (k) => <Icon.SendIcon key={k} />,
     receive:    (k) => <Icon.ReceiveIcon key={k} />,
@@ -961,12 +940,16 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
-    const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
+    // One formatter with History: a SEND carries whole units, every other
+    // action base units.
+    const amount = activityRowAmount(entry, {
+        divisibility: tokenInfo?.divisibility ?? 8,
+        direction,
+    });
     const primary = amount
-        ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
+        ? `${amount}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     return (
@@ -1044,10 +1027,10 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title="No activity yet" body="Synthesized demo activity will appear here once the demo wallet has any chains active." />;
+        return <EmptyState title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
     }
     return (
-        <ul className={styles.demoList}>
+        <ul className={`${styles.demoList} ${styles.activityList}`}>
             {entries.map((e) => (
                 <ActivityEntryRow
                     key={e.key}
@@ -1102,7 +1085,7 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
 
     if (positions.length === 0) {
-        return <Placeholder title="No DeFi positions" body="No demo positions on the selected network." />;
+        return <EmptyState title={t('home.tabs.noDefiPositions')} body={t('home.tabs.noDemoPositionsOnThe')} />;
     }
     return (
         <ul className={styles.demoList}>
@@ -1214,13 +1197,13 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
                                 <div className={styles.demoRowMeta}>
                                     {p.blockIndex ? (
                                         <>
-                                            <span>Block {Number(p.blockIndex).toLocaleString('en-US')}</span>
+                                            <span>{t('home.tabs.blockNumber', { block: Number(p.blockIndex) })}</span>
                                             <span className={styles.confirmationsPill}>
-                                                {p.confirms} Confirms
+                                                {p.confirms} {t('home.tabs.confirms')}
                                             </span>
                                         </>
                                     ) : (
-                                        <span className={styles.confirmationsPill}>Unconfirmed</span>
+                                        <span className={styles.confirmationsPill}>{t('home.tabs.unconfirmed')}</span>
                                     )}
                                     {p.timestamp ? (
                                         <span className={styles.rowRelativeTime}>

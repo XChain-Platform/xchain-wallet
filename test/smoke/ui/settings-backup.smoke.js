@@ -22,6 +22,7 @@ const settingsPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes',
 const hostPath = join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
 const popupMsgPath = join(wsRoot, 'packages', 'extension', 'src', 'popup', 'messaging.js');
 const webMsgPath = join(wsRoot, 'packages', 'web', 'src', 'messaging.js');
+const savePath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'utils', 'backupFileSave.js');
 
 const src = readFileSync(sectionPath, 'utf8');
 
@@ -33,18 +34,22 @@ assert.match(
 );
 assert.match(
     src,
-    /messaging\.exportBackupFile\(\{[\s\S]+?walletId:\s*activeWallet\.id/,
+    /messaging\.exportBackupFile\(\{\s*walletId[,:]/,
     'calls messaging.exportBackupFile with walletId',
 );
 
 // Password prompt with confirm + mismatch detection
 assert.match(src, /Backup password/, 'password prompt label present');
-assert.match(src, /Confirm password/, 'confirm-password input present');
+assert.match(src, /Confirm backup password/, 'confirm-password input present');
 assert.match(src, /mismatch =/, 'mismatch detection present');
 
-// Download trigger uses Blob + temporary anchor
-assert.match(src, /new Blob\(/, 'Blob constructor used for download');
-assert.match(src, /\.xchain-wallet/, 'download filename has .xchain-wallet extension');
+// The file is saved through the shell dialog, the browser save picker, or a
+// Blob download the user then confirms; only a save signal marks it done.
+const saveSrc = readFileSync(savePath, 'utf8');
+assert.match(saveSrc, /new Blob\(/, 'Blob constructor used for download');
+assert.match(saveSrc, /\.xchain-wallet/, 'download filename has .xchain-wallet extension');
+assert.match(src, /startBackupDownload\(/, 'download route wired');
+assert.match(src, /BackupDownloadConfirm/, 'a download waits for the user to confirm the file');
 
 // Four backup rows (three previously-deferred lanes are now Live as of
 // v0.151.0 (seed reveal), v0.152.0 (dry-run restore), v0.154.0 (publish
@@ -77,7 +82,7 @@ const idx = settingsSrc.indexOf("id: 'backup'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*BackupSection/);
-assert.match(block, /props:\s*\{\s*activeWallet\s*(?:,\s*reload\s*)?\}/, 'BackupSection receives activeWallet via section.props');
+assert.match(block, /props:\s*\{\s*activeWallet\s*(?:,\s*reload\s*)?(?:,\s*onExportInTab:\s*onOpenBackupInTab\s*)?\}/, 'BackupSection receives activeWallet via section.props');
 assert.match(settingsSrc, /<Component \{\.\.\.panelProps\} \/>/, 'render switch spreads panel props');
 
 console.log('settings-backup smoke OK');

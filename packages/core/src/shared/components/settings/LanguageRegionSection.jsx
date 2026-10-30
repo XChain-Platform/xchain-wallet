@@ -22,7 +22,8 @@
 //
 // Both fields exist on the v1 Settings schema; no migration needed.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
@@ -30,12 +31,13 @@ import {
     ROW_COPY,
     ROW_HINT,
     ROW_VALUE,
-    SELECT,
     SettingsLoadError,
     STACK,
     Status,
 } from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 // Friendly display names for known locales; we extend this map as
 // translations land. Unknown registered locales fall back to their
@@ -89,12 +91,8 @@ const CONTROLS = {
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    alignItems: 'stretch',
     width: 'min(100%, 280px)',
-};
-const CURRENCY_INPUT = {
-    ...SELECT,
-    width: '100%',
 };
 const CURRENCY_LIST = {
     position: 'absolute',
@@ -126,12 +124,36 @@ export function LanguageRegionSection() {
     const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
     const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
+    const [languageError, setLanguageError] = useState(/** @type {string | null} */ (null));
+    // Counts picker choices so only the newest one may report a failed load:
+    // an older choice that a newer pick supersedes is not an error.
+    const languagePickRef = useRef(0);
 
-    useBackHandler(currencyPickerOpen ? () => setCurrencyPickerOpen(false) : undefined);
+    const pickerInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const skipOpenOnFocusRef = useRef(false);
 
-    if (loading) return <Status text="Loading…" />;
+    // Closing from an option would unmount the focused button and drop focus
+    // to the page, so focus returns to the search field without reopening.
+    const closeCurrencyPicker = () => {
+        const input = pickerInputRef.current;
+        const active = document.activeElement;
+        const focusInList = Boolean(input && active && active !== input && input.closest('[data-settings-fill]')?.contains(active));
+        setCurrencyPickerOpen(false);
+        if (focusInList) {
+            skipOpenOnFocusRef.current = true;
+            input.focus();
+        }
+    };
+
+    const closeCurrencyPickerOnFocusLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setCurrencyPickerOpen(false);
+    };
+
+    useBackHandler(currencyPickerOpen ? closeCurrencyPicker : undefined);
+
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const selectedCurrency = FIAT_CURRENCIES.find((currency) => currency.code === settings.fiatCurrency);
     const normalizedQuery = currencyQuery.trim().toLocaleLowerCase();
@@ -142,19 +164,27 @@ export function LanguageRegionSection() {
     const LANGUAGES = buildLanguageOptions(settings.developerMode === true);
 
     const onLanguageChange = async (next) => {
+        const pick = ++languagePickRef.current;
+        setLanguageError(null);
         try {
             if (!availableLocales().includes(next)) return;
             // Registered locales apply synchronously. Lazy locale chunks
             // finish loading before persistence so a failed chunk cannot
             // become the next launch's saved language.
             const applied = await setI18nLocale(next);
-            if (applied !== next) return;
+            if (pick !== languagePickRef.current) return;
+            if (applied !== next) {
+                // The chunk fails to load (offline or a failed fetch): the
+                // previous language stays live and a new pick retries it.
+                setLanguageError(t('settings.languageRegion.languageUnavailable'));
+                return;
+            }
             await update({ language: next });
         } catch (_err) { /* never bubble */ }
     };
     const onCurrencySelect = async (next) => {
         setCurrencyError(null);
-        setCurrencyPickerOpen(false);
+        closeCurrencyPicker();
         setCurrencyQuery('');
         try { await update({ fiatCurrency: next }); } catch (err) {
             // eslint-disable-next-line no-console
@@ -167,45 +197,48 @@ export function LanguageRegionSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Language</span>
-                    <span style={ROW_HINT}>Choose the language used for wallet navigation, settings, and messages.</span>
+                    <span style={ROW_VALUE}>{t('settings.languageRegion.language')}</span>
                 </div>
-                <select
-                    value={settings.language}
-                    onChange={(e) => onLanguageChange(e.target.value)}
-                    aria-label="Language"
-                    style={SELECT}
-                >
-                    {LANGUAGES.map((l) => (
-                        <option key={l.value} value={l.value}>{l.label}</option>
-                    ))}
-                </select>
+                <div data-settings-control="">
+                    <Select
+                        value={settings.language}
+                        onChange={(e) => onLanguageChange(e.target.value)}
+                        aria-label={t('settings.languageRegion.language')}
+                        aria-invalid={languageError ? 'true' : undefined}
+                        aria-describedby={languageError ? 'language-error' : undefined}
+                    >
+                        {LANGUAGES.map((l) => (
+                            <option key={l.value} value={l.value}>{l.label}</option>
+                        ))}
+                    </Select>
+                </div>
             </div>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Fiat currency</span>
-                    <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
-                    {unsupportedFiatCurrency ? (
-                        <span role="status" style={ROW_HINT}>
-                            {unsupportedFiatCurrency} is not supported. Values are shown in USD.
-                        </span>
-                    ) : null}
+                    <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
+                    <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
                 </div>
-                <div style={CONTROLS}>
-                    <input
+                {/* Tabbing out of the field or out of any option closes the list; otherwise it stays open over the rows the focus moved to. */}
+                <div data-settings-fill="" style={CONTROLS} onBlur={closeCurrencyPickerOnFocusLeave}>
+                    <Input
+                        ref={pickerInputRef}
                         type="search"
                         role="combobox"
                         aria-autocomplete="list"
                         aria-controls="fiat-currency-options"
                         aria-expanded={currencyPickerOpen}
-                        aria-label="Fiat currency"
+                        aria-label={t('settings.languageRegion.fiatCurrency')}
                         aria-invalid={currencyError ? 'true' : undefined}
                         aria-describedby={currencyError ? 'fiat-currency-error' : undefined}
-                        placeholder="Search by code or name"
+                        placeholder={t('settings.languageRegion.searchByCodeOrName')}
                         value={currencyPickerOpen
                             ? currencyQuery
                             : selectedCurrency ? currencyLabel(selectedCurrency) : ''}
                         onFocus={() => {
+                            if (skipOpenOnFocusRef.current) {
+                                skipOpenOnFocusRef.current = false;
+                                return;
+                            }
                             setCurrencyPickerOpen(true);
                             setCurrencyQuery('');
                         }}
@@ -220,15 +253,9 @@ export function LanguageRegionSection() {
                                 onCurrencySelect(filteredCurrencies[0].code);
                             }
                         }}
-                        onBlur={(e) => {
-                            if (!e.currentTarget.parentElement?.contains(e.relatedTarget)) {
-                                setCurrencyPickerOpen(false);
-                            }
-                        }}
-                        style={CURRENCY_INPUT}
                     />
                     {currencyPickerOpen ? (
-                        <div id="fiat-currency-options" role="listbox" aria-label="Supported fiat currencies" style={CURRENCY_LIST}>
+                        <div id="fiat-currency-options" role="listbox" aria-label={t('settings.languageRegion.supportedFiatCurrencies')} style={CURRENCY_LIST}>
                             {filteredCurrencies.map((currency) => (
                                 <button
                                     key={currency.code}
@@ -243,13 +270,20 @@ export function LanguageRegionSection() {
                                 </button>
                             ))}
                             {filteredCurrencies.length === 0 ? (
-                                <Status text="No supported currencies match." />
+                                <Status text={t('settings.languageRegion.noSupportedCurrenciesMatch')} />
                             ) : null}
                         </div>
                     ) : null}
                 </div>
             </div>
+            {languageError ? <Status id="language-error" text={languageError} tone="error" /> : null}
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
+            {unsupportedFiatCurrency ? (
+                <Status
+                    text={t('settings.languageRegion.currencyNotSupported', { currency: unsupportedFiatCurrency })}
+                    tone="warning"
+                />
+            ) : null}
         </div>
     );
 }

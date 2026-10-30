@@ -235,6 +235,80 @@ try {
         }
     }
 
+    // --- 4d. A permitted skip is signed as partial, never as checked ---
+    {
+        const dir = mkdtempSync(join(work, 'partial-'));
+        const snap = 'xchain-wallet_0.0.0_arm64.snap';
+        const deb = 'xchain-wallet_0.0.0_arm64.deb';
+        writeFileSync(join(dir, snap), 'not opened without unsquashfs\n');
+        writeFileSync(join(dir, deb), '!<arch>\nnot opened without dpkg-deb\n');
+
+        const bare = mkdtempSync(join(work, 'partial-bin-'));
+        for (const tool of ['grep', 'head', 'mktemp', 'rm', 'tar']) {
+            const found = execFileSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+            symlinkSync(found, join(bare, tool));
+        }
+        const script = `source ${JSON.stringify(lib)}; `
+            + `xr_list_artifacts() { printf '%s\\n' './${snap}' './${deb}'; }; `
+            + 'PATH="$1"; xr_check_payload_arches "$2" 2>&1; '
+            + 'unchecked="$(printf \'%s\\n\' "${XR_PAYLOAD_UNCHECKED[@]}")"; '
+            + 'PATH="$3"; xr_write_manifest "$2" v0.0.0 abc123 2026-01-01T00:00:00Z enforced '
+            + '"" "" "" "" "$unchecked"';
+        const out = execFileSync('bash', ['-c', script, 'bash', bare, dir, process.env.PATH], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const manifest = readFileSync(join(dir, 'RELEASE_HASHES.txt'), 'utf8');
+        const unchecked = manifest.split('\n').filter((line) => line.startsWith('# payload-unchecked '));
+        check('missing extractors make the architecture summary PARTIAL with its count',
+            /payload-architecture gate PARTIAL \(2 unchecked\)/.test(out), out);
+        check('missing extractors make the native summary PARTIAL with its count',
+            /payload-native gate PARTIAL \(2 unchecked\)/.test(out), out);
+        check('a partial payload check is declared inside the manifest',
+            manifest.includes('# payload-check: partial\n'), manifest);
+        check('every skipped gate and artifact gets one manifest line',
+            unchecked.length === 4
+                && unchecked.includes(`# payload-unchecked architecture: ./${snap}`)
+                && unchecked.includes(`# payload-unchecked native: ./${snap}`)
+                && unchecked.includes(`# payload-unchecked architecture: ./${deb}`)
+                && unchecked.includes(`# payload-unchecked native: ./${deb}`), manifest);
+
+        const oldDir = mkdtempSync(join(work, 'full-old-'));
+        const newDir = mkdtempSync(join(work, 'full-new-'));
+        writeFileSync(join(oldDir, 'artifact.bin'), 'fully checked bytes\n');
+        writeFileSync(join(newDir, 'artifact.bin'), 'fully checked bytes\n');
+        const base = `source ${JSON.stringify(lib)}; xr_write_manifest "$1" v0.0.0 abc123 `
+            + '2026-01-01T00:00:00Z enforced "" "" "" ""';
+        execFileSync('bash', ['-c', base, 'bash', oldDir]);
+        execFileSync('bash', ['-c', `${base} ""`, 'bash', newDir]);
+        check('an empty payload-check result leaves the manifest byte-identical',
+            readFileSync(join(oldDir, 'RELEASE_HASHES.txt')).equals(
+                readFileSync(join(newDir, 'RELEASE_HASHES.txt'))));
+    }
+
+    // --- 4e. The capture in sign.sh survives an empty result under set -u ---
+    //
+    // sign.sh runs under `set -euo pipefail`, and bash 3.2 (macOS) aborts on
+    // expanding an empty array there. A fully checked run leaves it empty.
+    {
+        const sign = readFileSync(join(repo, 'tools', 'release', 'sign.sh'), 'utf8');
+        const start = sign.indexOf('PAYLOAD_UNCHECKED=""');
+        const end = sign.indexOf('\nfi\n', start);
+        const snippet = start > -1 && end > start ? sign.slice(start, end + 4) : 'false';
+        const script = `set -euo pipefail; XR_PAYLOAD_UNCHECKED=(); ${snippet}\n`
+            + 'printf "[%s]" "$PAYLOAD_UNCHECKED"; '
+            + 'XR_PAYLOAD_UNCHECKED=("architecture: ./a.snap" "native: ./a.snap"); '
+            + `${snippet}\nprintf "[%s]" "$PAYLOAD_UNCHECKED"`;
+        let out = '';
+        try {
+            out = execFileSync('bash', ['-c', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch (err) {
+            out = `exit ${err.status}: ${err.stderr ?? ''}`;
+        }
+        check('sign.sh captures an empty and a populated unchecked list under set -u',
+            out === '[][architecture: ./a.snap\nnative: ./a.snap]', out);
+    }
+
     // --- 5. The whole-directory gate fails the release, with a real exit
     {
         const dir = mkdtempSync(join(work, 'dir-'));
@@ -267,9 +341,14 @@ try {
         // green.
         const live = /^[ \t]*xr_check_payload_arches "\$INPUT_DIR"/m.exec(sign);
         const payloadGate = live ? live.index : -1;
+        const capture = sign.indexOf('PAYLOAD_UNCHECKED=', payloadGate);
+        const manifestWrite = sign.indexOf('xr_write_manifest "$INPUT_DIR"', capture);
         check('sign.sh runs the payload-architecture gate, uncommented', payloadGate > -1,
             sign.slice(Math.max(0, sign.indexOf('xr_check_payload_arches') - 80), sign.indexOf('xr_check_payload_arches') + 80));
         check('and runs it after the artifact-set gate', setGate > -1 && payloadGate > setGate);
+        check('and passes its unchecked result into the signed manifest',
+            capture > payloadGate && manifestWrite > capture
+                && sign.slice(manifestWrite, manifestWrite + 400).includes('"$PAYLOAD_UNCHECKED"'));
     }
 } finally {
     rmSync(work, { recursive: true, force: true });
@@ -284,6 +363,7 @@ console.log(
     'OK: release payload-architecture smoke (: an AppImage is judged by its own'
     + ' ELF header rather than its filename, a mislabelled one is refused in both'
     + ' directions, a snap or deb whose contents cannot be read is refused rather than'
-    + ' skipped, the directory gate exits 1 and says so, and sign.sh runs it after the'
-    + ' artifact-set gate and before it signs anything)',
+    + ' skipped, permitted skips print PARTIAL and are stamped into the manifest without'
+    + ' changing fully checked bytes, the directory gate exits 1 and says so, and sign.sh'
+    + ' runs it after the artifact-set gate and before it signs anything)',
 );

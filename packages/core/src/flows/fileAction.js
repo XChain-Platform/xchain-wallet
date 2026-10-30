@@ -29,6 +29,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { actionTextSafetyError } from '../shared/utils/actionTextSafety.js';
 
 /**
  * @typedef {Object} FileActionOpts
@@ -97,6 +98,11 @@ export async function fileAction(opts) {
     for (const [field, value] of [['name', opts.name], ['type', opts.type], ['title', opts.title], ['memo', opts.memo]]) {
         if (typeof value === 'string' && /[|;]/.test(value)) {
             throw new Error(`fileAction: ${field} cannot contain | or ; characters`);
+        }
+        if (typeof value === 'string') {
+            const label = field[0].toUpperCase() + field.slice(1);
+            const safetyError = actionTextSafetyError(value, label);
+            if (safetyError) throw new Error(`fileAction: ${safetyError}`);
         }
     }
 

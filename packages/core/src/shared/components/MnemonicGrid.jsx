@@ -10,7 +10,12 @@
 
 import { useId, useMemo, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import styles from './MnemonicGrid.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/settings.js';
 
 /**
  * Read-only mnemonic display per §19.2. Keeps the phrase concealed until the
@@ -27,6 +32,9 @@ import styles from './MnemonicGrid.module.css';
  * @param {'small' | 'full'} [props.variant]
  */
 export function MnemonicGrid({ mnemonic, variant = 'full' }) {
+    // A recovery phrase on screen is a copy of the wallet: hold the screen
+    // guard for as long as the grid is mounted, whatever screen hosts it.
+    useProtectedScreen();
     const mnemonicKey = useMemo(() => Symbol('mnemonic'), [mnemonic]);
     const [revealedKey, setRevealedKey] = useState(null);
     const contentId = useId();
@@ -44,14 +52,15 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     aria-expanded={revealed}
                     onClick={() => setRevealedKey(revealed ? null : mnemonicKey)}
                 >
-                    {revealed ? 'Hide recovery phrase' : 'Reveal recovery phrase'}
+                    {revealed ? t('settings.backup.hideRecoveryPhrase') : t('settings.backup.revealRecoveryPhrase')}
                 </Button>
             </div>
             <div id={contentId}>
                 {revealed ? (
                     <ol
                         className={gridClass}
-                        aria-label="Recovery phrase"
+                        aria-label={t('importWallet.recoveryPhrase')}
+                        data-secret=""
                         onCopy={(event) => event.preventDefault()}
                     >
                         {words.map((word, i) => (
@@ -63,7 +72,7 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     </ol>
                 ) : (
                     <p className={styles.concealedMessage}>
-                        Recovery phrase hidden. Make sure no one can see your screen before revealing it.
+                        {t('components.mnemonicGrid.recoveryPhraseHiddenMakeSure')}
                     </p>
                 )}
             </div>

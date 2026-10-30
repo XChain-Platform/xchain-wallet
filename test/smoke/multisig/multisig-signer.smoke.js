@@ -24,6 +24,7 @@ if (!globalThis.crypto) {
 import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer, AbstractMethodError } from '../../../packages/core/src/signers/Signer.js';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { flows } from '../../../packages/core/src/index.js';
 import { fingerprintSessionRef } from '../../../packages/core/src/uri/multisigPsbtEnvelope.js';
 
@@ -253,7 +254,8 @@ function makeFakeVault({ wallet, session }) {
         vault,
         sessionId: 's-1',
         pubkey: alice,
-        publicNonceHex: '11'.repeat(66),
+        // Two compressed curve points, the shape of a step 1 nonce.
+        publicNonceHex: [1, 2].map((n) => Buffer.from(secp256k1.getPublicKey(String(n).padStart(64, '0'), true)).toString('hex')).join(''),
     });
     const after1 = await vault.multisigSigningSessions.get('s-1');
     assert.equal(after1.nonces.length, 1, 'round 1 nonce persisted');

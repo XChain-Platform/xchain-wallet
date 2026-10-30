@@ -24,12 +24,18 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+
+// Lists read at once while counting members; the explorer rate-limits a burst.
+const LIST_DETAIL_CONCURRENCY = 4;
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -74,7 +80,7 @@ function extractListRows(resp) {
  * @param {() => void} props.onBack
  */
 export function ListPickerScreen({
-    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = 'Choose a list', onSelect, onBack,
+    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = t('components.listPickerScreen.chooseAList'), onSelect, onBack,
 }) {
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -124,24 +130,45 @@ export function ListPickerScreen({
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
                 if (typeof messaging.getListByActionIndex !== 'function') return;
-                for (const row of uniq) {
-                    const idx = String(row.action_index);
-                    try {
-                        const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
-                        if (cancelled) return;
-                        setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
-                        setDescriptions((prev) => ({
-                            ...prev,
-                            [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                // Counts arrive a few at a time. A state update per list
+                // re-renders every row each time, which grows with the square
+                // of the list count and froze the screen for a wallet with
+                // hundreds of lists, so results are buffered and flushed in
+                // batches.
+                let pendingCounts = {};
+                let pendingDescriptions = {};
+                let flushTimer = null;
+                const flush = () => {
+                    flushTimer = null;
+                    if (cancelled) return;
+                    const nextCounts = pendingCounts;
+                    const nextDescriptions = pendingDescriptions;
+                    pendingCounts = {};
+                    pendingDescriptions = {};
+                    setCounts((prev) => ({ ...prev, ...nextCounts }));
+                    setDescriptions((prev) => ({ ...prev, ...nextDescriptions }));
+                };
+                const queue = [...uniq];
+                const readNext = async () => {
+                    while (queue.length >= 1 && !cancelled) {
+                        const idx = String(queue.shift().action_index);
+                        try {
+                            // eslint-disable-next-line no-await-in-loop
+                            const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
+                            pendingCounts[idx] = currentListMemberCount(detail);
+                            pendingDescriptions[idx] = typeof detail?.description === 'string' && detail.description.length > 0
                                 ? detail.description
-                                : null,
-                        }));
-                    } catch {
-                        if (cancelled) return;
-                        setCounts((prev) => ({ ...prev, [idx]: null }));
-                        setDescriptions((prev) => ({ ...prev, [idx]: null }));
+                                : null;
+                        } catch {
+                            pendingCounts[idx] = null;
+                            pendingDescriptions[idx] = null;
+                        }
+                        if (!cancelled && flushTimer === null) flushTimer = setTimeout(flush, 100);
                     }
-                }
+                };
+                await Promise.all(Array.from({ length: LIST_DETAIL_CONCURRENCY }, readNext));
+                if (flushTimer !== null) clearTimeout(flushTimer);
+                flush();
             })
             .catch(() => { if (!cancelled) setLoadError('Couldn’t load lists. Check your connection and try again.'); });
         return () => { cancelled = true; };
@@ -166,7 +193,7 @@ export function ListPickerScreen({
         });
     }, [rows, query, descriptions]);
 
-    const header = <PageHeader onBack={onBack} title={title} />;
+    const header = <PageHeader nested onBack={onBack} title={title} />;
 
     if (loadError) {
         return (
@@ -174,14 +201,14 @@ export function ListPickerScreen({
                 <ListPage>
                     <StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage>
                     <Button variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
-                        Retry
+                        {t('home.retryBalances')}
                     </Button>
                 </ListPage>
             </Screen>
         );
     }
     if (!rows) {
-        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>Loading lists…</div></ListPage></Screen>;
+        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>{t('components.listPickerScreen.loadingLists')}</div></ListPage></Screen>;
     }
     if (rows.length === 0) {
         return (
@@ -189,11 +216,11 @@ export function ListPickerScreen({
                 <ListPage>
                     <EmptyState
                         title={filterType === '2'
-                            ? 'No address lists yet'
-                            : 'No published lists yet'}
+                            ? t('components.listPickerScreen.noAddressListsYet')
+                            : t('components.listPickerScreen.noPublishedListsYet')}
                         body={filterType === '2'
-                            ? 'Address lists published from this chain appear here.'
-                            : 'Lists published from this chain appear here.'}
+                            ? t('components.listPickerScreen.addressListsPublishedFromThis')
+                            : t('components.listPickerScreen.listsPublishedFromThisChain')}
                         titleAs="p"
                         role={null}
                     />
@@ -205,25 +232,26 @@ export function ListPickerScreen({
     return (
         <Screen variant={variant} header={header}>
             <ListPage toolbar={(
-                <input
+                <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     role="textbox"
                     className={styles.abSearch}
-                    placeholder="Search"
+                    placeholder={t('routes.addressList.search')}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    aria-label="Search lists"
+                    aria-label={t('components.listPickerScreen.searchLists')}
                 />
             )}>
                 {visibleRows.length === 0 ? (
                     <EmptyState
-                        title="No matching lists"
-                        body="Try a different search."
+                        title={t('components.listPickerScreen.noMatchingLists')}
+                        body={t('components.listPickerScreen.tryADifferentSearch')}
                         titleAs="p"
                         role={null}
                     />
@@ -233,7 +261,7 @@ export function ListPickerScreen({
                             const idx = String(row.action_index ?? '?');
                             const isTick = String(row.type) === '1';
                             const isUnion = String(row.type) === '3';
-                            const status = String(row.status || '');
+                            const statusWhy = listStatusText(row.status);
                             const count = counts[idx];
                             const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
                             const titleLabel = typeof row.name === 'string' && row.name.length > 0
@@ -263,7 +291,7 @@ export function ListPickerScreen({
                                         title={(
                                             <span className={styles.abName}>
                                                 {titleLabel}
-                                                {status && status !== 'valid' ? ` (${status})` : ''}
+                                                {statusWhy ? ` (${statusWhy})` : ''}
                                             </span>
                                         )}
                                         subtitle={(

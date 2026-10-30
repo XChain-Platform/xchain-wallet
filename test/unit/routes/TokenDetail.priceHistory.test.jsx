@@ -13,7 +13,7 @@
 // gets a plain message in the chart's place and no range tabs.
 
 import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest';
-import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -147,7 +147,7 @@ describe('TokenDetail price history', () => {
         );
 
         await screen.findByRole('status', { name: 'Loading token artwork' });
-        expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(2);
+        expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(1);
         expect(screen.getByRole('status', { name: 'Loading token verification' }).style.height).toBe('38px');
         expect(screen.getByRole('status', { name: 'Loading supply history' }).style.height).toBe('94px');
         expect(screen.getByRole('status', { name: 'Loading price history' }).style.height).toBe('64px');
@@ -169,6 +169,67 @@ describe('TokenDetail price history', () => {
         expect(screen.getByText(/official token in the/i)).toBeTruthy();
         expect(actions.previousElementSibling).toBe(supplySlot);
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
+    });
+
+    it('leaves no blank verification band once a token on no roster has loaded', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', marketPrice: '0.5', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOROSTER"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'NOROSTER balance' });
+        await vi.waitFor(() => expect(screen.queryByRole('status', { name: 'Loading token verification' })).toBeNull());
+        // The element after the balance hero holds content, not an empty slot.
+        expect(hero.nextElementSibling.textContent.trim()).not.toBe('');
+        expect(screen.queryByText(/official token in the/i)).toBeNull();
+    });
+
+    it('shows an empty supply history beside the page sections, not inside a card', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOSUPPLY"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const title = await screen.findByText('No supply history yet');
+        const hero = screen.getByRole('region', { name: 'NOSUPPLY balance' });
+        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        // The empty state is a sibling of the hero and the actions: one
+        // message in the page stack, with no card drawn around it.
+        expect(actions.previousElementSibling.contains(title)).toBe(true);
+        expect(actions.previousElementSibling.parentElement).toBe(hero.parentElement);
+        expect(actions.previousElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
+        expect(actions.previousElementSibling.className).not.toMatch(/infoCard/);
     });
 
     it('reserves price-history and price-alert space until native prices settle', async () => {
@@ -230,7 +291,8 @@ describe('TokenDetail price history', () => {
     it('uses the selected currency for balances, market values, and price requests', async () => {
         const messaging = renderNativeDetail();
 
-        expect(await screen.findAllByText(/€100\.00/)).not.toHaveLength(0);
+        // 2 BTC at the live €40,000 price; the carried rate of 50 only stands in.
+        expect(await screen.findAllByText(/€80,000\.00/)).not.toHaveLength(0);
         expect(await screen.findByText('€40,000.00')).toBeTruthy();
         expect(await screen.findByText('€1.20B')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
@@ -239,6 +301,16 @@ describe('TokenDetail price history', () => {
             includeSparkline: true,
             fiatCurrency: 'EUR',
         });
+    });
+
+    it('values a native holding at the live price rather than a carried or restored rate', async () => {
+        // A reload restores the route with the rate the balance row had then.
+        renderNativeDetail();
+        const hero = await screen.findByRole('region', { name: 'BTC balance' });
+
+        await screen.findByText('€40,000.00');
+        expect(within(hero).getByText(/€80,000\.00/)).toBeTruthy();
+        expect(within(hero).queryByText(/€100\.00/)).toBeNull();
     });
 
     it('shows a message and no synthesized line for a real wallet', async () => {
@@ -251,6 +323,18 @@ describe('TokenDetail price history', () => {
         expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+    });
+
+    it('prints a small DEX price as a decimal and still derives the market cap', async () => {
+        // The token record carries the price as a number, and a small one
+        // stringifies in exponent form.
+        renderDetail('real-wallet', {
+            assetInfo: { creator: 'bcrt1qx', marketPrice: 1.5384615384615385e-9, totalSupply: '1000000' },
+        });
+
+        expect(await screen.findByText('0.0000000015384615 BTC')).toBeTruthy();
+        expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('0.0015 BTC');
+        expect(screen.queryByText(/e-9/)).toBeNull();
     });
 
     it('draws selectable synthesized ranges only for the demo wallet', async () => {
@@ -330,7 +414,7 @@ describe('TokenDetail price history', () => {
         widgetFailure.current = 'market';
         renderDetail('demo-wallet');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('group', { name: 'Quick actions' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 

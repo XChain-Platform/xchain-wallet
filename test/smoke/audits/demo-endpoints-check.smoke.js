@@ -49,7 +49,9 @@ assert.ok(testnet.length > 0, 'testnet must produce probes');
 // is the property that keeps the gate pointed where the app points.
 const shippedHosts = new Set(
     BUNDLED_DESCRIPTORS.filter((d) => d.networkKind === 'testnet')
-        .flatMap((d) => [d.explorer.defaultUrl, d.encoder.defaultUrl, d.hub.defaultUrl])
+        .flatMap((d) => [d.explorer, d.encoder, d.hub])
+        .filter(Boolean)
+        .map((endpoint) => endpoint.defaultUrl)
         .map((u) => new URL(u).host),
 );
 for (const probe of testnet) {
@@ -59,12 +61,10 @@ for (const probe of testnet) {
     );
 }
 
-// One hub probe, not one per chain: the registry route is origin-level, and
-// three identical probes would report one outage three times.
 assert.equal(
-    testnet.filter((p) => p.service === 'hub').length,
-    1,
-    'the hub registry probe is deduplicated by URL',
+    testnet.filter((p) => p.service.startsWith('hub')).length,
+    0,
+    'testnet descriptors with no hub produce no hub probes',
 );
 assert.equal(
     new Set(testnet.map((p) => p.url)).size,

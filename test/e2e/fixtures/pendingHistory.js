@@ -29,10 +29,10 @@ import {
     explorerJson,
     minerRpc,
     REGTEST_CHAIN_ID,
-    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    readReceiveAddress,
 } from './regtest.js';
-import { expect, gotoSection } from './wallet.js';
+import { expect } from './wallet.js';
 
 /** The venue's native ticker, e.g. RLTC -> LTC. */
 export const NATIVE_COIN = REGTEST_COIN.replace(/^R/, '');
@@ -236,34 +236,82 @@ export async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
 /**
  * Picks an asset in the Send form's picker by its (chainId, tick) pair.
  *
- * NOT by accessible name: `BalanceList` labels every row `Open <name> details`,
- * which is IDENTICAL for the same token on all three regtest chains, and
- * picking the wrong one silently re-targets the form's network.
- * `data-balance-key` is the only per-row discriminator in the DOM.
+ * The form's asset control is the hero button `Change asset (currently
+ * <name>)`, anchored so it cannot also catch an extra recipient's
+ * "Recipient N token: X. Change asset" button. The row is chosen by
+ * `data-balance-key`, NOT by accessible name: the row's "Select XCHAIN on
+ * Bitcoin" label repeats the display name, which every chain shares for the
+ * gas token, and picking the wrong one silently re-targets the form's network.
  */
 export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
-    await page.getByRole('button', { name: /Change asset/ }).click();
+    const main = page.getByRole('main');
+    const trigger = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const empty = main.getByRole('heading', { name: 'Nothing to send yet' });
+    await expect(trigger.or(empty).first(), 'Send rendered neither its form nor its empty state')
+        .toBeVisible({ timeout: 30_000 });
+    if (await empty.isVisible()) {
+        throw new Error(`Send shows "Nothing to send yet", so there is no ${tick} to pick: the wallet `
+            + 'sees no balance on this network yet. Fund the address and reload first.');
+    }
+    await trigger.click();
     await page.getByLabel('Search coins or tokens').fill(searchText);
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the Send picker offered no ${tick} row on ${chainId} for "${searchText}"`)
         .toBeVisible({ timeout: 30_000 });
-    await row.click();
+    await row.getByRole('button', { name: /^Select / }).first().click();
+    await expect(main.getByRole('button', { name: /^Change asset \(currently / }).first(),
+        `picking ${tick} did not return to the Send form`).toBeVisible({ timeout: 15_000 });
 }
 
 /**
- * This wallet's own address on the venue chain, read off the Send form.
+ * This wallet's own address on the venue chain.
  *
- * Not `readReceiveAddress`: the Receive screen opens on whichever chain the
- * wallet lists first (Bitcoin), so off Bitcoin it hands back the wrong chain's
- * address. Picking the NATIVE asset is what selects the chain on Send, and the
- * form then states the source address it will spend from.
+ * Read off Receive, which drives its own address picker onto the venue chain.
+ * Send cannot answer this before funding: an unfunded wallet gets "Nothing to
+ * send yet" there and no form to read a From address off.
  */
 export async function readOwnAddress(page) {
-    await gotoSection(page, 'Send');
-    await pickAssetByChainAndTick(page, REGTEST_CHAIN_LABEL, REGTEST_CHAIN_ID, NATIVE_COIN);
-    const address = await page.getByRole('main').getByLabel('From', { exact: true }).inputValue();
-    expect(address, `the Send form named no source address on ${REGTEST_CHAIN_LABEL}`).toBeTruthy();
-    return address;
+    return readReceiveAddress(page);
+}
+
+/**
+ * The 64-hex transaction id a screen shows inside `scope`, or undefined.
+ *
+ * Success screens draw the id truncated, so the full 64 characters are only in
+ * the element's accessible name; visible text is the fallback for screens that
+ * print it whole. The fallback bounds the run by hex characters, not by word
+ * boundaries, because a label such as "Transaction ID" can sit against the id
+ * with no separator, and a word boundary never falls between "D" and a digit.
+ * A longer hex run (a PSBT, a pubkey) still never reads as an id.
+ *
+ * @param {import('@playwright/test').Locator} scope
+ * @returns {Promise<string | undefined>}
+ */
+export async function readShownTxid(scope) {
+    const labelled = await scope.locator('[aria-label]').evaluateAll((nodes) => nodes
+        .map((n) => n.getAttribute('aria-label') || '')
+        .find((label) => /^[0-9a-f]{64}$/.test(label)));
+    return labelled ?? (await scope.innerText()).match(/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/)?.[0];
+}
+
+/**
+ * Waits until `scope` shows a full transaction id and returns it.
+ *
+ * A text match on the 64 hex characters cannot wait for a success screen that
+ * draws the id truncated, so this polls `readShownTxid`, which also reads the
+ * accessible name.
+ *
+ * @param {import('@playwright/test').Locator} scope
+ * @param {{ timeout?: number, message?: string }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function waitForShownTxid(scope, { timeout = 180_000, message = 'the screen never showed a transaction id' } = {}) {
+    let txid;
+    await expect.poll(async () => {
+        txid = await readShownTxid(scope).catch(() => undefined);
+        return txid ?? '';
+    }, { timeout, message }).toMatch(/^[0-9a-f]{64}$/);
+    return txid;
 }
 
 /** Approves the open confirm modal and returns the txid the wallet reports. */
@@ -280,7 +328,7 @@ export async function approveAndGetTxid(page) {
 
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 180_000 });
-    const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+    const txid = await readShownTxid(page.getByRole('main'));
     expect(txid, 'the success screen showed no transaction id').toBeTruthy();
     return txid;
 }

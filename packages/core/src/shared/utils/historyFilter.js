@@ -78,7 +78,13 @@ export function classifyEntryAction(entry, walletAddresses) {
     const a = String(entry?.action || '').toUpperCase();
     if (a === 'SEND') {
         const src = entrySource(entry).toLowerCase();
-        if (src && walletAddresses && walletAddresses.has(src)) return 'send';
+        if (src) return walletAddresses && walletAddresses.has(src) ? 'send' : 'receive';
+        // An explorer SEND row can carry no source, only the destination. The
+        // row was fetched for one of this wallet's addresses, so a destination
+        // that is not the wallet's own means the value left it.
+        const dest = entryDestination(entry).toLowerCase();
+        const own = String(entry?.address || '').toLowerCase();
+        if (dest && dest !== own && !(walletAddresses && walletAddresses.has(dest))) return 'send';
         return 'receive';
     }
     if (a === 'ISSUE' || a === 'ISSUANCE') return 'issue';
@@ -120,8 +126,30 @@ export function classifyEntryStatus(entry, nowMs = Date.now()) {
     if (raw.valid === 0 || raw.valid === false) return 'failed';
     if (Number(entry.blockIndex) > 0) return 'confirmed';
     if (entry.pending?.chainConfirmed === true) return 'confirmed';
-    if (entry.pending && pendingDisplayState(entry, nowMs) === 'dropped') return 'failed';
+    if (entry.pending) {
+        const state = pendingDisplayState(entry, nowMs);
+        // Another transaction spent this one's coins, so it can never
+        // confirm: like a dropped send, it is over, not waiting.
+        if (state === 'dropped' || state === 'replaced-elsewhere') return 'failed';
+    }
     return 'pending';
+}
+
+/**
+ * `classifyEntryStatus` for a screen that holds no mempool read of its own,
+ * such as the Send done card. "Dropped" means a mempool listed the transaction
+ * and no longer does; with no current read that claim has nothing behind it,
+ * and a send still waiting for its block would read as failed 90 seconds after
+ * its first sighting. Such an entry stays pending. A failed local record and an
+ * explorer row marked invalid still read as failed.
+ *
+ * @param {HistoryEntry} entry
+ * @param {number} [nowMs]
+ */
+export function classifyEntryStatusWithoutMempool(entry, nowMs = Date.now()) {
+    const status = classifyEntryStatus(entry, nowMs);
+    if (status !== 'failed' || !entry?.pending) return status;
+    return pendingDisplayState(entry, nowMs) === 'dropped' ? 'pending' : status;
 }
 
 /**
@@ -186,6 +214,12 @@ function entrySource(entry) {
     if (!entry) return '';
     const raw = entry.raw || {};
     return String(entry.source || raw.source || raw.SOURCE || '');
+}
+
+function entryDestination(entry) {
+    if (!entry) return '';
+    const raw = entry.raw || {};
+    return String(raw.destination || raw.DESTINATION || '');
 }
 
 // The seconds-or-milliseconds reading lives with the merge that creates the

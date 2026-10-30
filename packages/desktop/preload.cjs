@@ -32,6 +32,13 @@
 //     "wipe", main decides what that means, so a compromised renderer
 //     cannot aim it at an arbitrary path.
 //
+//   - `xchainWalletBridge.saveBackupFile({ fileName, content })`. Saves
+//     an encrypted wallet backup through the native save dialog and
+//     answers with the written path or "not saved", so the backup counts
+//     as done only for a file that exists. Same shape of trust as
+//     `wipeStorage`: the renderer offers a file and a name, main shows
+//     the dialog and writes where the user chose; no path crosses in.
+//
 //   - `xchainWalletSignerBridge.{postMessage,onMessage}`:
 //     duplex port for the hardware-signer RPC. Renderer-hosted
 //     Trezor/Ledger signers expose their status + sign methods back
@@ -54,7 +61,14 @@
 //     asks main to spawn a fresh BrowserWindow pre-routed to the
 //     specified view + context (e.g. a pending tx detail).
 //     `xchainWalletWindow.onStateChange(listener)` keeps sibling windows
-//     aligned when the shared main-process session or active wallet changes.
+//     aligned when the shared main-process session, active wallet, settings,
+//     active network, or a wallet or account record changes.
+//     `xchainWalletWindow.onHidden(listener)` reports native minimize and hide
+//     transitions that do not reliably reach the DOM event system.
+//     `xchainWalletWindow.setScreenProtected(boolean)` turns screen capture
+//     protection on or off for the calling window only, while a screen
+//     shows key material (renderer/screenGuardBridge.js). One boolean in,
+//     no window id: a renderer cannot aim it at another window.
 //
 //   - `xchainWalletRegistry.getRemoteDescriptors()`: §9.7 / G007
 //     chain-registry sync. The renderer CSP pins connect-src 'self',
@@ -78,6 +92,14 @@
 //     nudge, so a link clicked while the app was closed is applied once.
 //     Links are attacker-controlled input: the renderer only ever turns
 //     one into a prefilled form the user still has to act on.
+//
+//   - `xchainWalletTrezorBridge.{call,close}`: the renderer's half of the
+//     Trezor Connect relay (§40.12). `call(method, args)` asks main to run
+//     one Connect method the signer uses in the bridge window main owns on
+//     the isolated no-HID session, and resolves to `{ ok, result }` or
+//     `{ ok: false, error }`. `close()` closes that window, settling any
+//     waiting call. The renderer never gets a handle to the window, its
+//     session or the hosted script.
 
 // CommonJS on purpose: Electron loads sandboxed preloads (webPreferences
 // sandbox: true) through its CJS wrapper, so an ESM `import` here throws
@@ -92,12 +114,20 @@ const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
 const STATE_CHANGE_CHANNEL = 'xchain:state-changed';
 const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
+const SAVE_BACKUP_CHANNEL = 'xchain:save-backup';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
+const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
+const TREZOR_BRIDGE_CALL_CHANNEL = 'xchain:trezor-bridge-call';
+const TREZOR_BRIDGE_CLOSE_CHANNEL = 'xchain:trezor-bridge-close';
+// Matches main/trezorBridgeWindow.js CONNECT_METHODS: a call main refuses
+// throws here instead.
+const TREZOR_CONNECT_METHODS = ['getFeatures', 'getAddress', 'getPublicKey', 'signTransaction', 'signMessage'];
+const WINDOW_HIDDEN_CHANNEL = 'xchain:window-hidden';
 
 function assertArgumentCount(method, args, expected) {
     if (args.length !== expected) {
@@ -160,6 +190,19 @@ function validateOpenDetached(args) {
     return options;
 }
 
+function validateTrezorCall(args) {
+    const method = 'xchainWalletTrezorBridge.call';
+    if (args.length !== 1 && args.length !== 2) throw new TypeError(`${method}: expected 1 or 2 arguments`);
+    const [name, request] = args;
+    if (!TREZOR_CONNECT_METHODS.includes(name)) throw new TypeError(`${method}: unsupported Connect method`);
+    if (request !== undefined) assertRecord(method, request);
+    return request === undefined ? { method: name } : { method: name, args: request };
+}
+
+// The frame rules match main/security.js isValidSignerBridgeMessage exactly: a
+// frame main refuses is dropped with no reply, so it must throw here instead.
+const SIGNER_ID_MAX_LENGTH = 256;
+
 function validateSignerMessage(args) {
     const method = 'xchainWalletSignerBridge.postMessage';
     assertArgumentCount(method, args, 1);
@@ -169,8 +212,10 @@ function validateSignerMessage(args) {
     if (message.kind === 'register' || message.kind === 'unregister') {
         assertAllowedKeys(method, message, ['kind', 'signerIds']);
         if (!Array.isArray(message.signerIds)
-            || message.signerIds.some((id) => typeof id !== 'string' || id.length === 0)) {
-            throw new TypeError(`${method}: signerIds must be an array of non-empty strings`);
+            || message.signerIds.some((id) => typeof id !== 'string' || id.length === 0
+                || id.length > SIGNER_ID_MAX_LENGTH)) {
+            throw new TypeError(`${method}: signerIds must be an array of non-empty strings `
+                + `of at most ${SIGNER_ID_MAX_LENGTH} characters`);
         }
         return message;
     }
@@ -185,13 +230,18 @@ function validateSignerMessage(args) {
         }
         if (!message.ok) {
             if (!isRecord(message.error)
-                || typeof message.error.name !== 'string'
-                || typeof message.error.message !== 'string') {
-                throw new TypeError(`${method}: error must contain string name and message properties`);
+                || typeof message.error.name !== 'string' || message.error.name.length === 0
+                || typeof message.error.message !== 'string' || message.error.message.length === 0) {
+                throw new TypeError(`${method}: error must contain non-empty string name and message properties`);
             }
             assertAllowedKeys(method, message.error, ['name', 'message']);
+            if (Object.hasOwn(message, 'result')) {
+                throw new TypeError(`${method}: failed responses cannot contain result`);
+            }
         } else if (Object.hasOwn(message, 'error')) {
             throw new TypeError(`${method}: successful responses cannot contain error`);
+        } else if (!Object.hasOwn(message, 'result')) {
+            throw new TypeError(`${method}: successful responses must contain result`);
         }
         return message;
     }
@@ -219,6 +269,23 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
         assertNoArguments('xchainWalletBridge.wipeStorage', arguments);
         return ipcRenderer.invoke(WIPE_STORAGE_CHANNEL);
     },
+    /**
+     * Save an encrypted backup through the native save dialog.
+     * `{ ok: true, saved: true, path }` means the file is written there;
+     * `{ ok: true, saved: false }` means the user cancelled.
+     * @param {{ fileName: string, content: string }} request
+     * @returns {Promise<{ ok: true, saved: true, path: string } | { ok: true, saved: false } | { ok: false, error: string }>}
+     */
+    saveBackupFile(request) {
+        const method = 'xchainWalletBridge.saveBackupFile';
+        assertArgumentCount(method, arguments, 1);
+        assertRecord(method, request);
+        assertAllowedKeys(method, request, ['fileName', 'content']);
+        if (typeof request.fileName !== 'string' || typeof request.content !== 'string') {
+            throw new TypeError(`${method}: fileName and content must be strings`);
+        }
+        return ipcRenderer.invoke(SAVE_BACKUP_CHANNEL, { fileName: request.fileName, content: request.content });
+    },
 });
 
 contextBridge.exposeInMainWorld('xchainWalletWindow', {
@@ -233,9 +300,14 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, validateOpenDetached(arguments));
     },
     /**
-     * Subscribe to process-wide session and active-wallet changes made by a
-     * sibling window. Returns an unsubscribe function.
-     * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }) => void} listener
+     * Subscribe to process-wide session, active-wallet, settings, network,
+     * wallet record and account record changes made by a sibling window.
+     * Returns an unsubscribe function.
+     * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }
+     *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }
+     *   | { kind: 'wallets', change: 'added' }
+     *   | { kind: 'wallets', change: 'renamed' | 'removed', walletId: string }
+     *   | { kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string }) => void} listener
      * @returns {() => void}
      */
     onStateChange(listener) {
@@ -246,6 +318,33 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
             assertNoArguments('xchainWalletWindow.onStateChange unsubscribe', arguments);
             ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
         };
+    },
+    /**
+     * Subscribe to native minimize and hide transitions for this window.
+     * Returns an unsubscribe function.
+     * @param {() => void} listener
+     * @returns {() => void}
+     */
+    onHidden(listener) {
+        listener = assertListener('xchainWalletWindow.onHidden', arguments);
+        const wrapped = () => { listener(); };
+        ipcRenderer.on(WINDOW_HIDDEN_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletWindow.onHidden unsubscribe', arguments);
+            ipcRenderer.removeListener(WINDOW_HIDDEN_CHANNEL, wrapped);
+        };
+    },
+    /**
+     * Turn screen capture protection on or off for this window. Core's
+     * screen guard calls it as a key-material screen mounts and unmounts.
+     * @param {boolean} protectedNow
+     * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+     */
+    setScreenProtected(protectedNow) {
+        const method = 'xchainWalletWindow.setScreenProtected';
+        assertArgumentCount(method, arguments, 1);
+        if (typeof protectedNow !== 'boolean') throw new TypeError(`${method}: expected a boolean`);
+        return ipcRenderer.invoke(SCREEN_PROTECTION_CHANNEL, protectedNow);
     },
 });
 
@@ -346,6 +445,26 @@ contextBridge.exposeInMainWorld('xchainWalletRegistry', {
     getRemoteDescriptors() {
         assertNoArguments('xchainWalletRegistry.getRemoteDescriptors', arguments);
         return ipcRenderer.invoke(CHAIN_REGISTRY_CHANNEL);
+    },
+});
+
+contextBridge.exposeInMainWorld('xchainWalletTrezorBridge', {
+    /**
+     * Run one Connect method in main's Trezor Connect bridge window.
+     * @param {string} method
+     * @param {object} [args]
+     * @returns {Promise<{ ok: true, result: unknown } | { ok: false, error: string }>}
+     */
+    call(method, args) {
+        return ipcRenderer.invoke(TREZOR_BRIDGE_CALL_CHANNEL, validateTrezorCall(arguments));
+    },
+    /**
+     * Close the bridge window; any waiting call settles as closed.
+     * @returns {Promise<{ ok: boolean }>}
+     */
+    close() {
+        assertNoArguments('xchainWalletTrezorBridge.close', arguments);
+        return ipcRenderer.invoke(TREZOR_BRIDGE_CLOSE_CHANNEL);
     },
 });
 

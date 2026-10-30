@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // §34 keyboard shortcuts E2E. Drives the real web shell: the `?` help modal,
-// the `g`-leader navigation, and a modifier combo (Cmd/Ctrl+L locks). The unit
+// the `g`-leader navigation, and a modifier combo (G then L locks). The unit
 // tests cover the dispatcher in isolation; this proves the shell wiring
 // (handlers -> setUnlockedView / lock, the ShortcutHelp mount, and the
 // enabled-gating).
@@ -36,9 +36,10 @@ test.describe('keyboard shortcuts', () => {
         await expect(navItem(page, 'History')).toHaveAttribute('aria-current', 'page');
     });
 
-    test('Cmd/Ctrl+L locks the wallet', async ({ page }) => {
+    test('G then L locks the wallet', async ({ page }) => {
         await createWallet(page);
-        await page.keyboard.press('ControlOrMeta+l');
+        await page.keyboard.press('g');
+        await page.keyboard.press('l');
         await expect(unlockButton(page)).toBeVisible();
     });
 });
@@ -63,7 +64,8 @@ test.describe('keyboard shortcut residuals', () => {
         await expect(page.getByText(/Lock wallet is now/)).toBeVisible();
 
         // The old combo is dead; the new one locks.
-        await page.keyboard.press('ControlOrMeta+l');
+        await page.keyboard.press('g');
+        await page.keyboard.press('l');
         await expect(unlockButton(page)).toBeHidden();
         await page.keyboard.press('ControlOrMeta+j');
         await expect(unlockButton(page)).toBeVisible();

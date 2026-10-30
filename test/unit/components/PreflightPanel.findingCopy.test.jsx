@@ -62,7 +62,7 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
 
     it('groups the unverified check count', () => {
         mount(reportWith({ unverified: Array(1234) }));
-        expect(screen.getByText('Could not verify (1,234)')).toBeTruthy();
+        expect(screen.getByText('Couldn\'t verify (1,234)')).toBeTruthy();
     });
 
     it('leads a warning with plain copy and keeps the SDK sentence as the detail', () => {
@@ -86,7 +86,7 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
     });
 
     it('never promotes an unmapped warning message to the headline', () => {
-        const f = { code: 'SOME_FUTURE_CODE', severity: 'warning', message: 'FUTURE_FIELD=1 is not supported yet.' };
+        const f = { code: 'SOME_FUTURE_CODE', severity: 'warning', message: 'FUTURE_FIELD=1 isn\'t supported yet.' };
         mount(reportWith({ findings: [f] }));
         const [headline, detail] = screen.getByTestId('preflight-warning-SOME_FUTURE_CODE').querySelectorAll('span');
         expect(headline.textContent).not.toContain('FUTURE_FIELD');
@@ -225,5 +225,27 @@ describe('PreflightPanel warning copy <-> xchain-sdk registry', () => {
         expect(registry.length).toBeGreaterThan(20);
         const unaccounted = registry.filter((code) => !(code in WARNING_COPY) && !NEVER_A_NAMED_WARNING.has(code));
         expect(unaccounted).toEqual([]);
+    });
+
+    // warningText matches the SDK's `_downgradedBy` VALUE as a literal, so run
+    // the installed producer rather than repeating the literal back to itself.
+    it('gives the local balance headline to the demotion the SDK producer stamps', () => {
+        const { applyTier1 } = requireSdkDeep('preflightTier1Findings');
+        const findings = [{
+            code: preflightConstants.FINDING_CODES.BALANCE_INSUFFICIENT,
+            severity: 'error', source: 'client', overridable: true,
+            message: 'Insufficient JDOG balance: have 5, need 9 after pending.',
+            data: { localDeltaApplied: true },
+        }];
+        applyTier1(findings, { kind: 'verdict', valid: true });
+        const demoted = findings.find((f) => f.source === 'client');
+        expect(demoted.severity).toBe('warning');
+        const { headline } = warningText(demoted);
+        expect(headline).toMatch(/network accepted/i);
+        expect(headline).not.toBe(WARNING_COPY.BALANCE_INSUFFICIENT);
+
+        mount(reportWith({ verdict: 'warn', findings }));
+        expect(screen.getByTestId('preflight-warning-BALANCE_INSUFFICIENT').textContent)
+            .toMatch(/network accepted/i);
     });
 });

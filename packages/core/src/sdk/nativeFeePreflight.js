@@ -35,6 +35,34 @@
 // this single helper, so the guardrail covers every action surface.
 
 import { satsResponseAmount } from './amountValidation.js';
+import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
+
+// Consensus fee destinations copied from the SDK coin registry. The remote quote may
+// confirm this address, but it never chooses it. Selecting by the SDK's local chain identity
+// keeps a reply from choosing both the network and the destination it wants us to pay.
+const FEE_DESTINATION_BY_CHAIN = Object.freeze({
+    'bitcoin-mainnet': '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
+    'bitcoin-testnet': 'mfees5QurRs5BHXofdGpTG5pXB6uC6R8RU',
+    'bitcoin-regtest': 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',
+    'litecoin-mainnet': 'Lfees7tszAx5Gqam2fuqf6biaX3LXafM4H',
+    'litecoin-testnet': 'mfeeskqGYw3wXYqMZFnUxBwGposEvjziRW',
+    'litecoin-regtest': 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls',
+    'dogecoin-mainnet': 'DFeesjvoMoVqd9UDuwDSAxzHMF5xZFgeG9',
+    'dogecoin-testnet': 'nfeesoodkv5UTFXcDeKcUU95QHFiK2Ggo7',
+    'dogecoin-regtest': 'mfees5pa2HwNBonk5vG23aDWkN9fuDJib4',
+});
+
+const CHAIN_BY_EXPLORER_COIN = Object.freeze({
+    BTC: 'bitcoin-mainnet',
+    TBTC: 'bitcoin-testnet',
+    RBTC: 'bitcoin-regtest',
+    LTC: 'litecoin-mainnet',
+    TLTC: 'litecoin-testnet',
+    RLTC: 'litecoin-regtest',
+    DOGE: 'dogecoin-mainnet',
+    TDOGE: 'dogecoin-testnet',
+    RDOGE: 'dogecoin-regtest',
+});
 
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
@@ -95,13 +123,13 @@ export function nativeFeeErrorMessage(
         const amount = quoted ? ` (${quoted} ${coin})` : '';
         return mandatory
             ? `This action's protocol fee${amount} is too small to send as a ${coin} payment, and ${coin} is ` +
-              `the only way to pay a protocol fee on this chain, so it cannot be submitted here.`
+              `the only way to pay a protocol fee on this network, so it cannot be submitted here.`
             : `This action's protocol fee${amount} is too small to send as a ${coin} payment - the network will ` +
               `not relay it. ${untick}${mint}`;
     }
     if (reason === 'unsupported') {
         return mandatory
-            ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
+            ? `This action cannot be submitted on this network: its protocol fee has no ${coin} price, ` +
               `and ${coin} is the only way to pay a protocol fee here.`
             : `Paying the protocol fee in ${coin} is not available for this action. ${untick}${mint}`;
     }
@@ -224,6 +252,34 @@ function oracleVerdictMessage(detail, coin) {
         + 'sent. Waiting will not change this, so adjust the action and try again.';
 }
 
+/**
+ * The sentence for an OracleFeeUnpayableError, the refusal the oracle pre-flight
+ * raises on the XCHAIN fee lane, where the native-fee quote never runs.
+ *
+ * The oracle fee quote carries the same indexer verdicts as the native-fee quote,
+ * so the same table names the remedy. Only the three verdicts with a known remedy
+ * are answered; anything else returns null so the caller's generic copy applies
+ * rather than wire wording.
+ *
+ * @param {unknown} err
+ * @param {{ coinTicker?: string }} [chain]
+ * @returns {string | null}
+ */
+export function oracleFeeRefusalMessage(err, { coinTicker } = {}) {
+    if (!err || typeof err !== 'object' || /** @type {any} */ (err).name !== 'OracleFeeUnpayableError') {
+        return null;
+    }
+    const m = /oracle usage fee pre-flight failed \([a-z]+\): (.+)$/s
+        .exec(String(/** @type {any} */ (err).message || ''));
+    const detail = m ? m[1].trim().replace(/^invalid:\s*/i, '') : '';
+    if (!/^ORACLE_ADDRESS\b/i.test(detail)
+        || !/no effective oracle price|no validator price|missing oracle fee output|insufficient oracle fee/i
+            .test(detail)) {
+        return null;
+    }
+    return oracleVerdictMessage(detail, coinTicker || 'the native coin');
+}
+
 // The indexer's verdict, recovered from the message the constructor built. Same
 // boundary-survival reason as dustAmountFromMessage: the popup receives only
 // { name, message }, so `quote` is gone by the time a form renders this. The leading
@@ -303,8 +359,23 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // compose-time quote can take seconds; Reject/close must be able to
     // abort it). Older SDKs ignore the extra option harmlessly.
     const quote = await sdk.quoteNativeFee(actionData, { source, signal });
+    if (signal && signal.aborted) throw new Error('aborted');
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
+
+    const pinned = resolvePinnedFeeDestination(sdk);
+    if (!pinned) {
+        throw new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { ...quote, error: 'cannot verify feeDestination because the SDK chain and network are unknown' },
+        });
+    }
+    if (typeof quote.feeDestination !== 'string' || quote.feeDestination !== pinned.destination) {
+        throw new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { ...quote, error: `feeDestination does not match the pinned destination for ${pinned.chainId}` },
+        });
+    }
 
     // Relay policy rejects a positive output below dust, while protocol validation requires
     // only a minimum payment. Raise a small quote to the relay floor and carry both amounts so
@@ -334,7 +405,16 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
 
     const outs = Array.isArray(encoderOpts.customOutputs) ? encoderOpts.customOutputs.slice() : [];
     if (feeSats > 0) {
-        outs.push({ address: quote.feeDestination, value: feeSats });
+        // The output is read through nativeFeeOutputOf, the same rule the post-build output
+        // check uses. Its address comes from the local pin after the quote proves an exact match.
+        const feeOutput = nativeFeeOutputOf({ feeDestination: pinned.destination, requiredFeeSats: feeSats });
+        if (!feeOutput) {
+            throw new NativeFeeForfeitError({
+                reason: 'invalid',
+                quote: { ...quote, error: 'the fee quote names no fee destination address' },
+            });
+        }
+        outs.push(feeOutput);
     }
 
     if (typeof onProgress === 'function') onProgress('native_fee_quoted', { quote: payableQuote });
@@ -342,6 +422,15 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Strip our own flag so it isn't forwarded to the encoder as an unknown param.
     const { payFeeInNativeCoin, ...rest } = encoderOpts;
     return { encoderOpts: { ...rest, customOutputs: outs }, quote: payableQuote };
+}
+
+function resolvePinnedFeeDestination(sdk) {
+    const configured = [sdk?.options?.network, sdk?.config?.network]
+        .find((value) => typeof value === 'string' && FEE_DESTINATION_BY_CHAIN[value]);
+    const routeCoin = sdk?.explorer?.coin;
+    const chainId = configured || CHAIN_BY_EXPLORER_COIN[routeCoin];
+    const destination = chainId && FEE_DESTINATION_BY_CHAIN[chainId];
+    return destination ? { chainId, destination } : null;
 }
 
 function nativeDecimalFromSats(sats) {

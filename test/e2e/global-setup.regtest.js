@@ -21,7 +21,10 @@
 // Order matters: `seedPrices` talks to the explorer and the miner, so it would
 // report a down tunnel as a price problem if it ran first.
 
-import { assertVenueReachable, healVenueClock, seedPrices, runInIndexer, REGTEST_COIN } from './fixtures/regtest.js';
+import {
+    assertVenueReachable, healVenueClock, seedPrices, runInIndexer, REGTEST_COIN,
+    assertGasHeadroom, readGasHeadroom, GAS_HEADROOM_FLOOR,
+} from './fixtures/regtest.js';
 import { readStateScript } from './fixtures/priceSeed.js';
 import { startPriceKeeper } from './fixtures/priceKeeper.js';
 import { ensureGasToken } from './fixtures/gasToken.js';
@@ -82,6 +85,26 @@ export default async function globalSetup(config) {
         );
     }
 
+    const baseURL = config?.projects?.[0]?.use?.baseURL
+        || `http://localhost:${process.env.XC_PREVIEW_PORT || 4173}`;
+
+    // On Bitcoin the gas token goes in BEFORE the price, because there the
+    // price cannot exist without it. A venue whose own hub finalizes rounds
+    // derives XCHAIN/USD from the indexer's XCHAIN tick, so on a re-genesised
+    // chain the hub abstains from that pair until somebody ISSUEs XCHAIN, and
+    // `seedPrices` (which leaves a live oracle's rows alone) refuses with "no
+    // current oracle price for XCHAIN/USD" before the ISSUE below is reached.
+    // The run then fails at setup forever, and nothing in it can heal the venue.
+    // The Bitcoin ISSUE does not need the price: the indexer exempts the gas
+    // tick's ISSUE from the issuance fee, so it quotes valid at zero fee with
+    // no oracle round. Measured on the regtest venue after a genesis reset:
+    // this fixture issued XCHAIN on the unpriced venue and its MINT probe read
+    // `present` before the hub's first XCHAIN/USD round. Off Bitcoin the token
+    // arrives over a bridge from Bitcoin regtest, a path that was not
+    // re-measured here, so it keeps its place after the seed.
+    const gasFirst = REGTEST_COIN === 'RBTC';
+    if (gasFirst) await ensureGasToken({ baseURL, log: console.log });
+
     //Logged rather than silent: which price a run is asserting against
     // is the single fact that explains a fee number, and "already priced" vs
     // "seeded" is the difference between reading the venue's own oracle and
@@ -96,12 +119,15 @@ export default async function globalSetup(config) {
 
     // A priced venue with no gas token still cannot fund a single spec: every
     // one of them MINTs XCHAIN, and on a re-genesised chain that tick does not
-    // exist until somebody ISSUEs it. After the seed, because the ISSUE is
-    // itself a priced action; before the keeper, because nothing downstream
-    // matters until this holds. See gasToken.js.
-    const baseURL = config?.projects?.[0]?.use?.baseURL
-        || `http://localhost:${process.env.XC_PREVIEW_PORT || 4173}`;
-    await ensureGasToken({ baseURL, log: console.log });
+    // exist until somebody ISSUEs it. Off Bitcoin that happens here, after the
+    // seed (Bitcoin did it above); before the keeper either way, because
+    // nothing downstream matters until this holds. See gasToken.js.
+    if (!gasFirst) await ensureGasToken({ baseURL, log: console.log });
+    // An issued gas token can still be minted out: every confirm screen then
+    // refuses the mint and each spec waits out its timeout on a disabled
+    // Approve. Stop the run here instead.
+    await assertGasHeadroom(GAS_HEADROOM_FLOOR);
+    console.log(`[regtest ${REGTEST_COIN}] XCHAIN mint headroom: ${(await readGasHeadroom()) ?? 'uncapped'}`);
 
     // A seed checked ONCE is not a priced venue, it is a priced first minute.
     // The margin is spent in chain seconds and a chain that mines on demand can

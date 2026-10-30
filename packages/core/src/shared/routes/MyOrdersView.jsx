@@ -28,14 +28,14 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { AddressText, Button, ChainBadge, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -56,12 +56,13 @@ const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
 ).test(String(value ?? '').trim());
 
 function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.orders)) return resp.orders;
-    return [];
+    let rows = [];
+    if (Array.isArray(resp)) rows = resp;
+    else if (Array.isArray(resp?.data)) rows = resp.data;
+    else if (Array.isArray(resp?.rows)) rows = resp.rows;
+    else if (Array.isArray(resp?.orders)) rows = resp.orders;
+    // A null or scalar entry from the explorer would throw while reading a row field.
+    return rows.filter((row) => row !== null && typeof row === 'object' && !Array.isArray(row));
 }
 
 // A side's human label: ownership, a token amount, or a native-coin amount
@@ -144,14 +145,28 @@ function partialRemaining(item) {
     return String(fill.giveRemaining);
 }
 
-// Read the open candidates' details a few at a time and return
-// key -> fill state. A failed or shapeless read leaves the order as the
-// feeds saw it rather than failing the whole list.
+// The list feed hydrates each row with its detail's `state` block when the
+// chain clock is current, so a row that carries a lifecycle status already
+// holds what orders.detail would return.
+function hydratedFillState(row) {
+    const status = row?.state?.status;
+    return typeof status === 'string' && status.trim() ? fillStateOf(row) : null;
+}
+
+// Return key -> fill state for the open candidates: a hydrated row's own
+// state, otherwise its detail read a few at a time. A failed or shapeless
+// read leaves the order as the feeds saw it rather than failing the whole list.
 async function readFillStates(messaging, candidates) {
     const fills = new Map();
+    const unread = [];
+    for (const it of candidates) {
+        const own = hydratedFillState(it.row);
+        if (own) fills.set(it.key, own);
+        else unread.push(it);
+    }
     if (typeof messaging?.getOrderDetail !== 'function') return fills;
-    for (let i = 0; i < candidates.length; i += FILL_READ_CONCURRENCY) {
-        const slice = candidates.slice(i, i + FILL_READ_CONCURRENCY);
+    for (let i = 0; i < unread.length; i += FILL_READ_CONCURRENCY) {
+        const slice = unread.slice(i, i + FILL_READ_CONCURRENCY);
         const details = await Promise.all(slice.map((it) => messaging
             .getOrderDetail({ chainId: it.chainId, actionIndex: String(it.row.action_index) })
             .catch(() => null)));
@@ -236,6 +251,12 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setByChain({});
+            setItems([]);
+            setLoadError(null);
+            return;
+        }
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getOrdersForAddress !== 'function') {
             setItems([]); return;
@@ -300,6 +321,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     const loadAutopay = useCallback(async () => {
         const requestId = ++autopayRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setAutopayByKey(new Map());
+            return;
+        }
         if (typeof messaging?.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
@@ -336,21 +361,23 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            trailing={onCreateOrder ? (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Icon.PlusIcon />}
-                    onClick={onCreateOrder}
-                    aria-label="New order"
-                    title="New order"
-                />
-            ) : undefined}
         />
     );
-    const wrap = (children) => (
+    // The page header holds only the title and Back, so New order sits in
+    // the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage
+                notices={notices}
+                actions={onCreateOrder && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateOrder}>
+                        New order
+                    </Button>
+                ) : null}
+            >
+                {children}
+            </ListPage>
         </Screen>
     );
 
@@ -382,15 +409,17 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         );
     }
     if (loadError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={L.hint}
-                recovery={{ label: 'Try again', onAction: load }}
-            >
-                {loadError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={L.hint}
+                    recovery={{ label: 'Try again', onAction: load }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ),
+        });
     }
     if (items.length === 0) {
         return wrap(
@@ -400,6 +429,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 actionLabel={onCreateOrder ? 'Create an order' : undefined}
                 onAction={onCreateOrder}
             />,
+            { emptyOffersCreate: true },
         );
     }
 
@@ -507,6 +537,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 function OrderActionPanel({
     type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
 }) {
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { chainId, owner, row } = item;
     const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
@@ -579,6 +610,51 @@ function OrderActionPanel({
             ? { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex }
             : { VERSION: '2', ORDER_ACTION_INDEX: orderActionIndex, ...editParams };
         try {
+            // The list can be minutes old: re-read cancels and fill state so an
+            // order that expired, filled or was cancelled since is not signed again.
+            // Both reads are fresh, so they never return the list's own answer.
+            let freshCancelledKeys = item.cancelledKeys || new Set();
+            if (typeof messaging.getOrderCancelsForAddress === 'function') {
+                let response;
+                try {
+                    response = await messaging.getOrderCancelsForAddress({ chainId, address: owner.address, fresh: true });
+                } catch {
+                    setError('Could not refresh this order. Try again.');
+                    return;
+                }
+                freshCancelledKeys = new Set();
+                for (const cancel of extractRows(response)) {
+                    if (String(cancel.source) === owner.address
+                        && String(cancel.status || 'valid') === 'valid') {
+                        freshCancelledKeys.add(`${chainId}:${cancel.order_action_index}`);
+                    }
+                }
+            }
+            if (typeof messaging.getOrderDetail === 'function') {
+                let freshDetail;
+                try {
+                    freshDetail = await messaging.getOrderDetail({ chainId, actionIndex: orderActionIndex, fresh: true });
+                } catch {
+                    setError('Could not refresh this order. Try again.');
+                    return;
+                }
+                const freshFill = fillStateOf(freshDetail);
+                if (freshFill) {
+                    const status = deriveStatus(
+                        { ...item, fill: freshFill },
+                        freshCancelledKeys,
+                        Math.floor(Date.now() / 1000),
+                    );
+                    if (status !== 'open') {
+                        setError('This order is not open. Refresh My orders and try again.');
+                        return;
+                    }
+                }
+            }
+            if (freshCancelledKeys.has(item.key)) {
+                setError('This order is not open. Refresh My orders and try again.');
+                return;
+            }
             const res = await lane.run({
                 actionData: { action: 'ORDER', params },
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
@@ -649,7 +725,8 @@ function OrderActionPanel({
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onDone}
                     what={isCancel ? 'order cancel' : 'order edit'}
                     unsaved={result.unsaved}
@@ -657,7 +734,7 @@ function OrderActionPanel({
             );
         }
         if (result.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
         }
         return wrap(
             <>
@@ -685,6 +762,7 @@ function OrderActionPanel({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={isCancel ? 'Cancel order' : 'Edit order'}
             onSubmit={submit}
             actions={(
@@ -703,8 +781,8 @@ function OrderActionPanel({
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                <dt className={F.detailsLabel}>Network</dt>
+                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
                 <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>
@@ -754,7 +832,7 @@ function OrderActionPanel({
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
             ) : null}
-            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            {error ? <FormNotice variant="error">{error}</FormNotice> : null}
 
         </FormPage>,
     );

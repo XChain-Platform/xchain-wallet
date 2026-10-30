@@ -26,7 +26,7 @@ import { PriceAlertForm } from '../../../packages/core/src/shared/components/Pri
 import { PsbtConfirmScreen } from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
 import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
 import { QueuedBroadcastBanner } from '../../../packages/core/src/shared/components/QueuedBroadcastBanner.jsx';
-import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 import { RawPsbtViewer } from '../../../packages/core/src/shared/components/RawPsbtViewer.jsx';
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
@@ -46,7 +46,6 @@ import { TxStatusTimeline } from '../../../packages/core/src/shared/components/T
 import { UndoSendToast } from '../../../packages/core/src/shared/components/UndoSendToast.jsx';
 import { UpdateNoticeBanner } from '../../../packages/core/src/shared/components/UpdateNoticeBanner.jsx';
 import { WatchOnlyBadge } from '../../../packages/core/src/shared/components/WatchOnlyBadge.jsx';
-import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 vi.mock('lightweight-charts', () => ({
@@ -281,7 +280,7 @@ const RENDER_CASES = [
             decodedAction={{ summary: 'Send tokens to the named recipient.' }}
         />
     )],
-    ['QueuedResultPanel', () => <QueuedResultPanel onDone={noop} unsaved />],
+    ['ResultScreen signed-not-broadcast', () => <ResultScreen state="signed-not-broadcast" onDone={noop} unsaved />],
     ['RawPsbtViewer', () => (
         <RawPsbtViewer
             developerMode
@@ -370,8 +369,8 @@ const RENDER_CASES = [
         <UndoSendToast status="counting" remaining={5} onCancel={noop} />
     )],
     ['WatchOnlyBadge', () => <WatchOnlyBadge visible />],
-    ['WatcherResultPanel', () => (
-        <WatcherResultPanel result={{ psbtHex: 'deadbeef' }} onDone={noop} />
+    ['ResultScreen unsigned', () => (
+        <ResultScreen state="unsigned" result={{ psbtHex: 'deadbeef' }} onDone={noop} />
     )],
 ];
 

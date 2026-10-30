@@ -84,7 +84,9 @@ export function useContractManifest({ chainId, contractActionIndex, skip = false
                     maxTakeBps: Number.isFinite(next?.maxTakeBps) ? next.maxTakeBps : null,
                     status,
                 };
-                cache.set(key, normalized);
+                // An unavailable answer is a failed lookup, not a fact about the
+                // contract, so the next review asks again.
+                if (status !== 'unavailable') cache.set(key, normalized);
                 setManifest(normalized);
             })
             .catch(() => { /* silent; panel falls back to the undeclared-manifest caution */ });

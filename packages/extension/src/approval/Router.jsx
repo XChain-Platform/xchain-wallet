@@ -10,9 +10,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 import { ListPage, Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
+import { watchApprovalRequest } from './watchRequest.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
 import styles from './approval.module.css';
@@ -77,6 +79,17 @@ function ApprovalRoute() {
             });
         return () => { cancelled = true; };
     }, [id]);
+
+    // A worker restart drops the parked request; say so at once instead of
+    // leaving the password field up until Sign is pressed.
+    const loaded = data !== null;
+    useEffect(() => {
+        if (!loaded || !id) return undefined;
+        return watchApprovalRequest(id, (message) => {
+            setData(null);
+            setError(message);
+        });
+    }, [loaded, id]);
 
     const reject = useCallback(async () => {
         try {

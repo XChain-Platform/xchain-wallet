@@ -1,34 +1,13 @@
-.headPopup {
-    margin-bottom: var(--xc-space-3);
-}
-
-.headFull {
-    text-align: center;
-    margin-bottom: var(--xc-space-5);
-}
-
-.subtitlePopup {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-    margin: 0;
-}
-
-.subtitleFull {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
-}
-
 .mnemonicLabel {
     display: block;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 500;
-    margin-bottom: var(--xc-space-1);
 }
 
+/* The header is its own child of the form, which spaces children by the form
+   gap; the negative margin brings the label to the shared label gap above
+   its field, as the Input and Textarea labels sit. */
 .mnemonicHeader {
     display: flex;
     flex-wrap: wrap;
@@ -36,7 +15,7 @@
     justify-content: space-between;
     gap: var(--xc-space-1) var(--xc-space-2);
     min-width: 0;
-    margin-bottom: var(--xc-space-1);
+    margin-bottom: calc(var(--xc-label-gap) - var(--xc-form-gap));
 }
 
 .mnemonicHeader > * {
@@ -97,20 +76,6 @@
     font-family: var(--xc-font-mono);
 }
 
-.actionsPopup {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-3);
-}
-
-.actionsFull {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-4);
-}
-
 .advancedRow {
     margin: var(--xc-space-3) 0 0;
     display: flex;
@@ -142,17 +107,7 @@
 }
 
 .backupPointerCard {
+    composes: card from '../../ui/Card.module.css';
     margin-bottom: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     word-break: break-all;
-}
-
-@media (max-height: 520px) {
-    .headPopup,
-    .headFull {
-        margin-bottom: var(--xc-space-2);
-    }
 }

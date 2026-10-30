@@ -52,14 +52,26 @@
 }
 
 .input {
+    /* The invisible input fills the 44px hit area, so the control itself,
+       not only its label, is a full-size touch target. */
     position: absolute;
-    width: var(--xc-switch-track-width);
-    height: var(--xc-switch-track-height);
+    inset: 0;
+    width: 100%;
+    height: 100%;
     margin: 0;
     /* Opacity 0 also hides the global focus ring on the input; the track
        draws the visible ring below. */
-    opacity: 0;
+    /* Important: the global disabled rule in tokens.css sets opacity with !important,
+       which would otherwise paint a disabled switch's native checkbox over the track. */
+    opacity: 0 !important;
     cursor: inherit;
+}
+
+/* The global disabled rule forces opacity with !important, which would make
+   this invisible native input paint over the drawn control; the module rule
+   outranks it and keeps the input hidden while disabled. */
+.input:disabled {
+    opacity: 0 !important;
 }
 
 .track {

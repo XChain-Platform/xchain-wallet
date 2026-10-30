@@ -12,7 +12,12 @@ import { clearLockoutState } from '../../flows/lockoutTracking.js';
 import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
 import { clearPanicModeState } from '../../flows/panicMode.js';
 import { clearBackupReminderState } from '../../flows/backupReminder.js';
+import { clearMigrationSweeps } from '../../flows/migrationSweeps.js';
 import { clearBalanceCache } from './balanceCache.js';
+import { HISTORY_CACHE_PREFIX } from './historyCache.js';
+
+/** Key of the localStorage record that answers "a wallet already exists"; the wipe removes it first. */
+export const VAULT_META_STORAGE_KEY = 'xchain-wallet:vault-meta';
 
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
@@ -35,6 +40,8 @@ const WALLET_LOCAL_STORAGE_KEYS = Object.freeze([
     'xchain.governancePolls.seen',
     'xchain.deadlines.seen',
     'xchain.dispenserEscrow.seen',
+    // The diagnostic console log names the wallet ids it unlocked and locked.
+    'xchain.logConsole',
 ]);
 
 /** Renderer key families scoped to a wallet or one of its accounts. */
@@ -51,9 +58,12 @@ const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
     'xc:alertCenter:',
     'xc:balanceCache:',
     'xc:balances:sort:',
-    'xc:historyCache:v1:',
+    HISTORY_CACHE_PREFIX,
     'xc:homeFilters:',
 ]);
+
+/** Tab-session key family holding each History screen's filters and search, keyed by wallet and account. */
+const HISTORY_VIEW_STATE_PREFIX = 'xc:historyViewState:';
 
 /** Key families whose wallet id is the final colon-delimited component. */
 const WALLET_SUFFIX_STORAGE_PREFIXES = Object.freeze([
@@ -98,6 +108,7 @@ const WALLET_SUFFIX_STORAGE_PREFIXES = Object.freeze([
  *     injected stores): the signing freeze and the configured duress password.
  *     Both belong to the erased wallet, so a successful wipe removes them and
  *     a failed shell wipe keeps them guarding the wallet that survived.
+ *   - localStorage `xchain.logConsole`: the diagnostic log, whose entries carry wallet ids.
  *   - localStorage wallet-scoped UI records: biometric enrollment, active
  *     wallet/account ids, backup state, demo credentials, pending envelope
  *     recovery, route memory, messaging state, drafts and list preferences.
@@ -116,22 +127,36 @@ const WALLET_SUFFIX_STORAGE_PREFIXES = Object.freeze([
  * publishes a `wipeStorage` hook on the bridge we hand the job to the
  * process that owns those stores.
  *
- * Failure policy differs per store on purpose. The renderer stores are
- * best-effort (we resolve as soon as the delete completes or errors,
- * because every caller reloads afterwards), but a *failed shell wipe
- * rejects*: the reload that follows would otherwise present the same
- * unlock screen with no explanation, which is exactly the bug this
- * function exists to prevent. Both callers render the thrown message.
+ * Failure policy: the localStorage records are best-effort, but a refused
+ * IndexedDB delete and a *failed shell wipe* both reject: the reload that
+ * follows would otherwise present the same unlock screen with no
+ * explanation, which is exactly the bug this function exists to prevent.
+ * A refused delete restores the vault meta first, so the wallet is left
+ * whole rather than locked behind kdfParams that no longer exist. Every
+ * caller renders the thrown message.
  *
  * @returns {Promise<void>}
- * @throws {Error} when a shell-owned wipe was attempted and failed
+ * @throws {Error} when the vault database or a shell-owned store could not be cleared
  */
 export async function wipeWalletStorage() {
-    // Clear the localStorage meta entry first (synchronous, can't fail).
+    // Clear the localStorage meta entry first: its removal is what tells the
+    // other tabs to reload and close their handles on the database below.
+    let metaSnapshot = null;
     try {
-        globalThis.localStorage?.removeItem('xchain-wallet:vault-meta');
+        metaSnapshot = globalThis.localStorage?.getItem(VAULT_META_STORAGE_KEY) ?? null;
+        globalThis.localStorage?.removeItem(VAULT_META_STORAGE_KEY);
     } catch { /* ignore */ }
-    await deleteVaultDatabase();
+    try {
+        await deleteVaultDatabase();
+    } catch (err) {
+        // The encrypted vault is still there, and without its kdfParams no
+        // password opens it. Put the meta back so the wallet stays whole and
+        // the user sees the error instead of an unlock screen that cannot work.
+        if (metaSnapshot !== null) {
+            try { globalThis.localStorage?.setItem(VAULT_META_STORAGE_KEY, metaSnapshot); } catch { /* ignore */ }
+        }
+        throw err;
+    }
     await wipeShellStorage();
     // Drop the queue only after the shell wipe succeeds, so a failed wipe keeps a live wallet's signed txs.
     try {
@@ -140,11 +165,33 @@ export async function wipeWalletStorage() {
     removeLocalStorageKeys(WALLET_LOCAL_STORAGE_KEYS);
     sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
     for (const prefix of WALLET_LOCAL_STORAGE_PREFIXES) sweepLocalStoragePrefix(prefix);
+    sweepStoragePrefix(globalThis.sessionStorage, HISTORY_VIEW_STATE_PREFIX);
     // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
     clearLockoutState();
     clearPanicModeState();
     clearDuressPassphrase();
     clearBackupReminderState();
+    clearMigrationSweeps();
+}
+
+/**
+ * Call `onWipe` when another tab of this origin wipes the wallet. The wipe
+ * removes the vault meta record, which fires a storage event with no new value
+ * in every other tab; those tabs still hold an unlocked session and keep
+ * writing wallet-scoped records for a vault that no longer exists. The event
+ * does not fire in the tab that made the change.
+ *
+ * @param {() => void} onWipe
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeVaultWipe(onWipe) {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {};
+    const onStorage = (event) => {
+        if (event?.key !== VAULT_META_STORAGE_KEY || event.newValue !== null) return;
+        onWipe();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
 }
 
 /**
@@ -157,6 +204,9 @@ export function clearRemovedWalletStorage(walletId) {
     if (typeof walletId !== 'string' || walletId.length === 0) return;
     clearBalanceCache(walletId);
     clearBackupReminderState(walletId);
+    // A migration list names the legacy wallet and its sweep destination;
+    // either one leaving makes the list meaningless.
+    clearMigrationSweeps(walletId);
     try {
         const store = globalThis.localStorage;
         if (!store) return;
@@ -172,7 +222,7 @@ export function clearRemovedWalletStorage(walletId) {
         ]);
         const walletPrefixes = [
             `xc:balanceCache:${encodedId}:`,
-            `xc:historyCache:v1:${encodedId}:`,
+            `${HISTORY_CACHE_PREFIX}${encodedId}:`,
             `xc:msgRead:${walletId}:`,
             `xc:msgUnread:${walletId}:`,
             `xc:msgRequestDeclined:${walletId}:`,
@@ -190,6 +240,7 @@ export function clearRemovedWalletStorage(walletId) {
             }
         }
         for (const key of keys) store.removeItem(key);
+        sweepStoragePrefix(globalThis.sessionStorage, `${HISTORY_VIEW_STATE_PREFIX}${walletId}:`);
         if (activeWalletId(store.getItem('xc:activeWallet')) === walletId) {
             store.removeItem('xc:activeWallet');
         }
@@ -228,8 +279,17 @@ function removeLocalStorageKeys(keys) {
  * @param {string} prefix
  */
 function sweepLocalStoragePrefix(prefix) {
+    sweepStoragePrefix(globalThis.localStorage, prefix);
+}
+
+/**
+ * Same sweep over any Storage, best-effort.
+ *
+ * @param {Storage | undefined} store
+ * @param {string} prefix
+ */
+function sweepStoragePrefix(store, prefix) {
     try {
-        const store = globalThis.localStorage;
         if (!store) return;
         const keys = [];
         for (let i = 0; i < store.length; i++) {
@@ -241,13 +301,21 @@ function sweepLocalStoragePrefix(prefix) {
 }
 
 /**
- * Best-effort delete of the renderer-side IndexedDB vault database.
- * Resolves on success, error and blocked alike.
+ * Delete the renderer-side IndexedDB vault database.
+ *
+ * Resolves on success, and on blocked: a blocked delete stays queued and
+ * completes once the other tabs, which reload on the meta removal, close
+ * their handles. Rejects when the browser refuses the delete, because the
+ * encrypted vault it holds survives that refusal.
  *
  * @returns {Promise<void>}
+ * @throws {Error} when the browser refuses to delete the database
  */
 function deleteVaultDatabase() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        const refused = (cause) => reject(new Error(
+            `Could not clear the wallet data this browser stores: ${cause?.message || cause?.name || 'the browser did not say why'}`,
+        ));
         try {
             const idb = typeof globalThis !== 'undefined' ? globalThis.indexedDB : null;
             if (!idb || typeof idb.deleteDatabase !== 'function') {
@@ -256,9 +324,11 @@ function deleteVaultDatabase() {
             }
             const req = idb.deleteDatabase('xchain-wallet');
             req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
+            req.onerror = () => refused(req.error);
             req.onblocked = () => resolve();
         } catch {
+            // A renderer whose IndexedDB throws on use cannot have stored the
+            // vault there, and failing here would stop the shell wipe below.
             resolve();
         }
     });

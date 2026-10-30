@@ -243,6 +243,26 @@ export function isTrustedSenderEvent(event, appRoot) {
     return isAppUrl(senderFrameUrl(event), appRoot);
 }
 
+/**
+ * Decide what happens when a page's beforeunload handler tries to cancel an
+ * unload (a form with unsent input registers one). Electron has no prompt of
+ * its own: with no `will-prevent-unload` listener a reload, a window close
+ * and an app quit all stop silently, so a quit, a SIGTERM or a logout
+ * would never finish while such a form is open. A quit in progress always
+ * lets the page go; any other unload asks the person first.
+ *
+ * @param {{ quitting: boolean, testMode?: boolean, confirmLeave: () => boolean }} options
+ * @returns {boolean}  true means ignore the page's handler and unload
+ */
+export function shouldIgnoreBeforeUnload({ quitting, testMode = false, confirmLeave }) {
+    if (quitting || testMode) return true;
+    try {
+        return confirmLeave() === true;
+    } catch {
+        return false;
+    }
+}
+
 const IPC_MESSAGE_TYPE_MAX_LENGTH = 128;
 const OPEN_WINDOW_VIEW_MAX_LENGTH = 128;
 const OPEN_WINDOW_CONTEXT_MAX_LENGTH = 16 * 1024;
@@ -378,44 +398,3 @@ export function isValidSignerBridgeMessage(message) {
         && message.error.message.length > 0;
 }
 
-/**
- * §40.12: window.open() marker trezorFactory.js passes when it
- * wants to open the isolated Trezor Connect bridge window. Before this,
- * the hosted Trezor Connect script ran as a plain <script> tag inside the
- * main renderer's own top-level document, which made it indistinguishable
- * from the app's own code to the WebHID device handlers in permissions.js
- * (a compromised script would have passed every "is this our own app"
- * check they run and could have reached a paired Ledger). The bridge
- * window's session (built in index.js) is explicitly denied `hid` via
- * permissions.js#attachHidDenial, so nothing running inside it can be
- * granted a device regardless of what origin it reports.
- *
- * Exported so index.js's window-open handler reads it from here rather
- * than typing it out again. trezorFactory.js (the renderer side that
- * calls `window.open` with it) keeps its own copy of the literal instead
- * of importing this module: it is bundled by vite for the browser, and
- * this file's `node:path`/`node:url` predicates below do not resolve
- * there. Keep the two literals in sync by hand.
- */
-export const TREZOR_CONNECT_BRIDGE_WINDOW_NAME = 'xchain-trezor-connect-bridge';
-
-/**
- * True when a `window.open()` call should be allowed to spawn the
- * isolated Trezor Connect bridge window instead of being denied like
- * every other window.open this app's renderers attempt.
- *
- * Two things have to hold, not one: `frameName` must be the exact marker
- * above, AND the OPENER must be this app's own trusted top-level renderer.
- * The second check is what stops the bridge window itself (or anything it
- * embeds) from replaying the same frameName to recursively open another
- * bridge and defeat the isolation; the bridge's own `getURL()` is a
- * `data:` URL, never inside `appRoot`, so it never passes `isAppUrl`.
- *
- * @param {unknown} frameName   the `window.open(url, frameName)` argument
- * @param {unknown} openerUrl   the calling webContents' own URL
- * @param {unknown} appRoot     absolute path of the packaged renderer dir
- * @returns {boolean}
- */
-export function isTrezorConnectBridgeWindowOpen(frameName, openerUrl, appRoot) {
-    return frameName === TREZOR_CONNECT_BRIDGE_WINDOW_NAME && isAppUrl(openerUrl, appRoot);
-}

@@ -395,15 +395,15 @@
     "property": "margin",
     "value": "-1px",
     "lines": [
-      42
+      56
     ]
   },
   {
-    "file": "packages/core/src/shared/components/ToastHost.module.css",
+    "file": "packages/core/src/shared/components/ToastStack.module.css",
     "property": "padding",
     "value": "2px",
     "lines": [
-      64
+      12
     ]
   },
   {
@@ -440,7 +440,7 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/components/WatcherResultPanel.module.css",
+    "file": "packages/core/src/shared/components/WatcherExport.module.css",
     "property": "gap",
     "value": "2px",
     "lines": [
@@ -887,7 +887,7 @@
     "property": "padding",
     "value": "2px",
     "lines": [
-      66
+      57
     ]
   },
   {

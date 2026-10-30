@@ -210,10 +210,11 @@ describe('extension popup main screens at 360x600', () => {
 
         expect(appWrapper).not.toContain('<ReachabilityBanner');
         expect(popupApp).toMatch(
-            // The network and demo banners are gone by ruling; the reachability
-            // notice is the only one left in the layout's notice slot, and a
-            // demo wallet shows none.
-            /notices=\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}/,
+            // The network and demo banners are gone by ruling; the layout's
+            // notice slot holds the outcome of a send that settled while the
+            // wallet was locked, then the reachability notice, which a demo
+            // wallet does not show.
+            /notices=\{\(\s*<>\s*\{activeWalletId \? <LockedSendOutcomeNotice walletId=\{activeWalletId\} routeKey=\{unlockedView\} \/> : null\}\s*\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}\s*<\/>\s*\)\}/,
         );
         expect(css.popup).toMatch(
             /html\.xchain-toolbar-popup\s*\{[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,
@@ -223,11 +224,12 @@ describe('extension popup main screens at 360x600', () => {
         );
     });
 
-    it('keeps 360px action labels whole without flex shrinking', () => {
-        // A row never squeezes a button below its label; a label wider than
-        // the whole column wraps inside the button instead of spilling out.
+    it('keeps 360px action labels whole while a full row shrinks', () => {
+        // A full row shrinks its buttons, never below a button's longest word;
+        // a label wider than the whole column wraps inside the button instead
+        // of spilling out.
         expect(css.button).toMatch(
-            /\.btn\s*\{[^}]*flex-shrink:\s*0[^}]*white-space:\s*normal/s,
+            /\.btn\s*\{[^}]*flex-shrink:\s*1[^}]*min-width:\s*auto[^}]*white-space:\s*normal/s,
         );
         expect(css.button).not.toMatch(/\.label\s*\{[^}]*white-space:\s*nowrap/s);
     });

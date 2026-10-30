@@ -44,6 +44,7 @@ import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 import { ChromeUnlockThrottleStore } from './unlockThrottle.js';
 import { serializeError } from './MessageHost.js';
+import { VaultIncompleteError, vaultErrorKind } from '@xchain-wallet/core/storage/backend.js';
 
 /**
  * @typedef {Object} PreHostBackends
@@ -178,6 +179,7 @@ export async function dispatchPreHost(type, request, deps) {
             return handleSessionStatus({
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
+                metaBackend: deps.metaBackend,
             });
         case 'wallet.unlock':
             return handleWalletUnlock(request, {
@@ -257,11 +259,36 @@ export async function hasSessionKey(sessionBackend) {
 }
 
 /**
- * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'] }} deps
+ * Whether a meta record is on disk while the blob is not: one that loads, or
+ * one too damaged to parse. A read that fails any other way says nothing
+ * either way, so it answers false and status keeps its plain answer.
+ *
+ * @param {PreHostBackends['metaBackend']} metaBackend
+ * @returns {Promise<boolean>}
  */
-export async function handleSessionStatus({ storageBackend, sessionBackend }) {
+async function metaOutlivedVault(metaBackend) {
+    try {
+        return Boolean(await metaBackend.load());
+    } catch (err) {
+        return vaultErrorKind(err) === 'corrupt';
+    }
+}
+
+/**
+ * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'], metaBackend?: PreHostBackends['metaBackend'] }} deps
+ * @throws {VaultIncompleteError} when the meta is on disk and the blob is not
+ */
+export async function handleSessionStatus({ storageBackend, sessionBackend, metaBackend }) {
     const blob = await storageBackend.load();
     const hasWallet = blob !== null;
+    // Meta with no blob is an install nothing can open and onboarding cannot
+    // write over: assertFreshVault refuses every create, import and restore
+    // while the meta is there, and a meta too damaged to parse refuses them
+    // the same way. Answering no-wallet would open that dead end, so the
+    // shell gets the incomplete-wallet screen, whose reset clears the meta.
+    if (!hasWallet && metaBackend && await metaOutlivedVault(metaBackend)) {
+        throw new VaultIncompleteError();
+    }
     const hasSession = await hasSessionKey(sessionBackend);
     return {
         hasWallet,

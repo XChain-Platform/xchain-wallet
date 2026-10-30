@@ -13,14 +13,18 @@ import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, Lis
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
@@ -31,6 +35,8 @@ import {
     writeMsgUnread,
 } from '../utils/msgReadMemory.js';
 import { parseMessageContent } from '../utils/messageContent.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
+import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -67,6 +73,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const scope = `${walletId}:${activeAccountId || 'default'}`;
     // Whether the session can sign without a per-action password. The shared
     // confirmation screen uses this to either show the unlocked note or ask
@@ -265,10 +272,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 ...(pw ? { password: pw } : {}),
             });
             if (requestId !== inboxRequestRef.current) return;
-            setMessages(Array.isArray(result?.messages) ? result.messages : []);
+            setMessages(Array.isArray(result?.messages)
+                ? result.messages.filter(isRenderableMessage)
+                : []);
             const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
             setInboxWarning(failedAddresses > 0
-                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the chain service did not answer. Try again.`
+                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the network service did not answer. Try again.`
                 : null);
             setStage('inbox');
             setPassword('');
@@ -306,6 +315,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         if (autoOpenedRef.current) return undefined;
         if (stage !== 'pick') return undefined;
         if (!addressesByChain || sweepAddrs.length === 0) return undefined;
+        // Offline the inbox read cannot finish; it opens when the connection
+        // returns.
+        if (offline) return undefined;
         autoOpenedRef.current = true;
         if (flowsLib.isDemoWallet(walletId)) { void fetchInbox(null); return undefined; }
         if (typeof messaging.signerReady !== 'function') { setStage('password'); return undefined; }
@@ -319,7 +331,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             .catch(() => { if (!cancelled) setStage('password'); });
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [stage, addressesByChain, sweepAddrs, walletId, messaging]);
+    }, [stage, addressesByChain, sweepAddrs, walletId, messaging, offline]);
 
     // MESSAGE format-0/1 rows are ECDH key-exchange handshakes (a published
     // pubkey, no body), not conversation messages: keep them out of the chat
@@ -359,6 +371,77 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             return next;
         });
     }
+
+    // "Share my key" runs here rather than in the request row, so its
+    // confirmation replaces the whole inbox screen (as every other action's
+    // does) instead of rendering a second screen, header and Back included,
+    // inside one row of the list. One share runs at a time; each request
+    // keeps its own outcome (sending, sent, error, unsigned PSBT).
+    const [shareTarget, setShareTarget] = useState(
+        /** @type {{ request: { id: string, from: string, ownerAddress: string }, record: any } | null} */ (null),
+    );
+    const [shareStates, setShareStates] = useState(
+        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean }>} */ ({}),
+    );
+    const shareLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId: shareTarget?.record?.chainId,
+        owner: shareTarget?.record || null,
+        software: 'sendHandshake',
+        hardware: 'sendHandshakeHw',
+    });
+    const shareLaneRef = useRef(shareLane);
+    shareLaneRef.current = shareLane;
+    useEffect(() => {
+        if (!shareTarget) return;
+        const { request, record } = shareTarget;
+        const update = (patch) => setShareStates((prev) => ({
+            ...prev,
+            [request.id]: { ...(prev[request.id] || {}), ...patch },
+        }));
+        update({ stage: 'sending', error: null });
+        (async () => {
+            try {
+                const { actionData } = flowsLib.buildHandshakeActionData({
+                    chainRegistry,
+                    chainId: record.chainId,
+                    from: record,
+                    destination: request.from,
+                    version: 1,
+                });
+                const result = await shareLaneRef.current.run({
+                    actionData,
+                    submitExtra: { destination: request.from, version: 1 },
+                });
+                if (shareLaneRef.current.isWatcherMode) update({ stage: 'idle', watcherResult: result });
+                else if (result?.queued) update({ stage: 'queued', unsaved: result.unsaved === true });
+                else update({ stage: 'sent' });
+            } catch (err) {
+                if (isUserRejection(err)) {
+                    update({ stage: 'idle' });
+                    return;
+                }
+                const name = err?.name;
+                let message;
+                if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
+                    message = 'Incorrect password.';
+                } else {
+                    const descriptor = chainRegistry.get(record.chainId);
+                    message = submitFailureMessage(err, {
+                        chainId: record.chainId,
+                        coinTicker: tickerForDescriptor(descriptor),
+                        verb: 'share your key',
+                        fallback: 'Could not share your key. Check your connection and try again.',
+                    });
+                }
+                update({ stage: 'idle', error: message });
+            } finally {
+                setShareTarget(null);
+            }
+        })();
+    }, [shareTarget]);
+
     const conversations = useMemo(
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
@@ -429,13 +512,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // most recent ECIES (1) / ECDH (2) message in the thread so an ECDH
     // conversation (where the sender can read their own sent messages) keeps
     // that property. A thread with no encrypted message is a plaintext (v3)
-    // conversation; AES (3) has no send surface, so it falls back to ECIES.
+    // conversation; AES (3) has no send surface, so it falls back to ECIES, as
+    // does an encrypted message whose method the inbox does not recognise.
     const threadEncryption = useMemo(() => {
         for (let i = thread.length - 1; i >= 0; i -= 1) {
             if (thread[i].method === 2) return 'ecdh';
             if (thread[i].method === 1) return 'ecies';
         }
-        return thread.some((m) => m.method === 3) ? 'ecies' : 'plaintext';
+        return thread.some((m) => m.method === 3 || m.encrypted === true) ? 'ecies' : 'plaintext';
     }, [thread]);
 
     // Interleave iMessage-style day separators: a single centered date header
@@ -493,22 +577,21 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         <PageHeader
             onBack={onBack}
             title="Messaging"
-            titleIcon={<Icon.MessageIcon />}
-            trailing={onCompose ? (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={null}
-                    onClick={() => onCompose()}
-                    aria-label="New conversation"
-                    title="New conversation"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
+    // The page header holds only the title and Back, so New conversation
+    // sits in the content's actions row. An empty inbox offers New message
+    // from its EmptyState instead, so the screen never shows the action twice.
+    const actionsFor = (emptyOffersCompose = false) => (onCompose && !emptyOffersCompose ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => onCompose()}
+        >
+            New conversation
+        </Button>
+    ) : null);
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -518,28 +601,30 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (loadError) {
         return wrap(
-            <ListPage>
-                <StatusMessage
-                    variant="error"
-                    className={styles.error}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setLoadError(null);
-                            setAddressesByChain(null);
-                            setAddressesReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    {loadError}
-                </StatusMessage>
-            </ListPage>,
+            <ListPage
+                notices={(
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setLoadError(null);
+                                setAddressesByChain(null);
+                                setAddressesReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                )}
+                actions={actionsFor()}
+            />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -549,8 +634,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (sweepAddrs.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
+            </ListPage>,
+        );
+    }
+
+    // Offline before the inbox has loaded, the page says so once instead of
+    // loading a sweep, or asking for a password to unlock one, that cannot run.
+    if (offline && (stage === 'pick' || stage === 'submitting' || stage === 'password')) {
+        return wrap(
+            <ListPage actions={actionsFor()}>
+                <OfflineEmptyState body="Your messages load when the connection returns." onRetry={recheck} />
             </ListPage>,
         );
     }
@@ -560,7 +655,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -570,7 +665,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (stage === 'submitting') {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -579,41 +674,60 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     }
 
     if (stage === 'password') {
+        // A message can be composed without unlocking the inbox (a wallet
+        // with no ready signer is told why on the compose form), so New
+        // conversation stays reachable above the unlock form.
         return wrap(
-            <FormPage
-                label="Unlock messaging inbox"
-                onSubmit={handleUnlock}
-                status={unlockError ? (
-                    <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
-                        {unlockError}
-                    </StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={password.length === 0}
-                    >
-                        Unlock inbox
-                    </Button>
-                )}
-            >
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Decrypts this account's messages."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (unlockError) setUnlockError(null);
-                    }}
-                    autoComplete="current-password"
-                    aria-invalid={unlockError ? true : undefined}
-                    aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
-                />
-            </FormPage>,
+            <ListPage actions={actionsFor()}>
+                <FormPage
+                    label="Unlock messaging inbox"
+                    onSubmit={handleUnlock}
+                    status={unlockError ? (
+                        <StatusMessage id="messaging-unlock-error" variant="error">
+                            {unlockError}
+                        </StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={password.length === 0}
+                        >
+                            Unlock inbox
+                        </Button>
+                    )}
+                >
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Password"
+                        hint="Decrypts this account's messages."
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (unlockError) setUnlockError(null);
+                        }}
+                        autoComplete="current-password"
+                        aria-invalid={unlockError ? true : undefined}
+                        aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
+                    />
+                </FormPage>
+            </ListPage>,
+        );
+    }
+
+    // A key share under review takes the whole screen.
+    if (shareTarget && shareLane.open) {
+        const descriptor = chainRegistry.get(shareTarget.record.chainId);
+        return (
+            <ActionConfirmScreen
+                {...shareLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || shareTarget.record.chainId}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+            />
         );
     }
 
@@ -625,7 +739,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         // their own address as if it were someone else's.
         const cpName = ownerSet.has(selectedCounterparty)
             ? 'You'
-            : contactsByAddress[selectedCounterparty];
+            : neutralizeControlText(contactsByAddress[selectedCounterparty], { maxLength: 255 });
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
@@ -676,7 +790,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
                                         }}
                                     >
-                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder()}
+                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder(m.method)}
                                     </div>
                                     <div className={local.messageMeta}>
                                         {m.timestamp ? (
@@ -686,7 +800,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             </span>
                                         ) : null}
                                         {content ? (
-                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" />
+                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" appearance="outlined" />
                                         ) : null}
                                     </div>
                                 </li>
@@ -730,9 +844,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 variant={variant}
                 header={(
                     <PageHeader
+                        nested
                         onBack={() => setSelectedCounterparty(null)}
-                        title={cpName || <AddressText address={selectedCounterparty} />}
-                        titleIcon={<Icon.MessageIcon />}
+                        title={cpName || <AddressText address={displayAddress(selectedCounterparty)} />}
                     />
                 )}
                 footer={composer}
@@ -744,28 +858,16 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     return wrap(
         <ListPage
-            toolbar={(
-                <div className={local.toolbar}>
-                    <Input
-                        type="search"
-                        size="md"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search conversations"
-                    />
-                    <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
-                </div>
-            )}
-        >
-            {inboxWarning ? (
+            notices={inboxWarning ? (
                 <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
             ) : null}
+            actions={actionsFor(conversations.length === 0)}
+            toolbar={(
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search conversations">
+                    <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
+                </ListToolbar>
+            )}
+        >
             {handshakeRequesters.length > 0 ? (
                 <section aria-label="Encrypted-session requests" className={local.requestSection}>
                     <SectionHeader
@@ -780,12 +882,19 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                 <SessionRequestRow
                                     key={r.from}
                                     request={r}
-                                    record={record}
-                                    signerReady={signerReady}
-                                    messaging={messaging}
                                     walletId={walletId}
-                                    variant={variant}
-                                    contactName={contactsByAddress[r.from]}
+                                    contactName={neutralizeControlText(contactsByAddress[r.from], { maxLength: 255 })}
+                                    shareState={shareStates[r.id] || null}
+                                    shareBusy={Boolean(shareTarget)}
+                                    onShare={() => setShareTarget({ request: r, record })}
+                                    onClearWatcherResult={() => setShareStates((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] || {}), watcherResult: null },
+                                    }))}
+                                    onQueuedSeen={() => setShareStates((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] || {}), stage: 'queued-seen' },
+                                    }))}
                                     onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
@@ -841,11 +950,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                         // hold more than one such conversation.
                                                         <Fragment>
                                                             You&nbsp;·&nbsp;
-                                                            <AddressText address={c.counterparty} />
+                                                            <AddressText address={displayAddress(c.counterparty)} />
                                                         </Fragment>
                                                     ) : contactsByAddress[c.counterparty]
-                                                        ? contactsByAddress[c.counterparty]
-                                                        : <AddressText address={c.counterparty} truncate={false} />}
+                                                        ? neutralizeControlText(contactsByAddress[c.counterparty], { maxLength: 255 })
+                                                        : <AddressText address={displayAddress(c.counterparty)} />}
                                                 </span>
                                             </span>
                                             <span className={local.convTime}>
@@ -875,10 +984,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
  * @param {{ content: { text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null } }} props
  */
 function MessageContent({ content }) {
-    const parts = content.text.split(/(https?:\/\/[^\s<>"']+)/gi);
+    const displayText = messageTextForDisplay(content.text);
+    const parts = displayText.split(/(https?:\/\/[^\s<>"']+)/gi);
     return (
         <>
-            {content.text ? (
+            {displayText ? (
                 <span>
                     {parts.map((part, index) => /^https?:\/\//i.test(part) ? (
                         <a
@@ -901,7 +1011,7 @@ function MessageContent({ content }) {
                 >
                     <Icon.DownloadIcon />
                     <span>
-                        {content.attachment.name} ({content.attachment.size.toLocaleString()} bytes)
+                        {messageTextForDisplay(content.attachment.name)} ({content.attachment.size.toLocaleString()} bytes)
                     </span>
                 </a>
             ) : null}
@@ -968,109 +1078,56 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * needs the hardware-approval gate; a password is asked for only when the
  * session signer isn't already unlocked.
  *
+ * The share itself runs in MessagingInbox (its confirmation takes the whole
+ * screen); this row shows the request and that share's outcome.
+ *
  * @param {object} props
  * @param {{ id: string, from: string, ownerAddress: string }} props.request
- * @param {any} props.record                 owner address record (incl. chainId)
- * @param {boolean} props.signerReady
- * @param {any} props.messaging
  * @param {string} props.walletId
- * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
+ * @param {{ stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean } | null} props.shareState
+ * @param {boolean} props.shareBusy            a share (this one or another) is running
+ * @param {() => void} props.onShare
+ * @param {() => void} props.onClearWatcherResult
  * @param {() => void} props.onDecline
  * @param {(() => void) | null} [props.onMessage]
  */
 function SessionRequestRow({
     request,
-    record,
-    signerReady,
-    messaging,
     walletId,
-    variant,
     contactName,
+    shareState,
+    shareBusy,
+    onShare,
+    onClearWatcherResult,
+    onQueuedSeen,
     onDecline,
     onMessage,
 }) {
-    const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
-    const lane = useOwnerActionLane({
-        messaging,
-        walletId,
-        chainId: record.chainId,
-        owner: record,
-        software: 'sendHandshake',
-        hardware: 'sendHandshakeHw',
-    });
+    const demoGuard = useDemoGuard(walletId);
+    const stage = shareState?.stage || 'idle';
+    const error = shareState?.error || null;
+    const watcherResult = shareState?.watcherResult || null;
 
-    async function share() {
-        setStage('sending');
-        setError(null);
-        try {
-            const { actionData } = flowsLib.buildHandshakeActionData({
-                chainRegistry,
-                chainId: record.chainId,
-                from: record,
-                destination: request.from,
-                version: 1,
-            });
-            const result = await lane.run({
-                actionData,
-                submitExtra: { destination: request.from, version: 1 },
-            });
-            if (lane.isWatcherMode) {
-                setWatcherResult(result);
-                setStage('idle');
-                return;
-            }
-            setStage('sent');
-        } catch (err) {
-            if (isUserRejection(err)) {
-                setStage('idle');
-                return;
-            }
-            const name = err?.name;
-            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
-                setError('Incorrect password.');
-            } else {
-                const descriptor = chainRegistry.get(record.chainId);
-                setError(submitFailureMessage(err, {
-                    chainId: record.chainId,
-                    coinTicker: tickerForDescriptor(descriptor),
-                    verb: 'share your key',
-                    fallback: 'Could not share your key. Check your connection and try again.',
-                }));
-            }
-            setStage('idle');
-        }
-    }
-
-    function handleShare() {
-        share();
-    }
-
-    if (lane.open) {
-        const descriptor = chainRegistry.get(record.chainId);
+    if (watcherResult) {
         return (
             <li className={local.requestRow}>
-                <ActionConfirmScreen
-                    {...lane.confirmProps}
-                    screenVariant={variant}
-                    chainLabel={descriptor?.displayName || record.chainId}
-                    signerReady={signerReady}
-                    hintClassName={styles.hint}
+                <ResultScreen
+                    state="unsigned"
+                    result={watcherResult}
+                    onBuildAnother={onClearWatcherResult}
+                    onDone={onClearWatcherResult}
                 />
             </li>
         );
     }
 
-    if (watcherResult) {
+    // Signed but held in the broadcast queue: the key has not gone out, and the
+    // share button stays gone so a second press cannot sign a duplicate.
+    if (stage === 'queued') {
         return (
             <li className={local.requestRow}>
-                <WatcherResultPanel
-                    result={watcherResult}
-                    onBuildAnother={() => setWatcherResult(null)}
-                    onDone={() => setWatcherResult(null)}
-                />
+                <ResultScreen state="signed-not-broadcast" onDone={onQueuedSeen} what="key share" unsaved={shareState?.unsaved} />
             </li>
         );
     }
@@ -1078,30 +1135,32 @@ function SessionRequestRow({
     return (
         <li className={local.requestRow}>
             <div className={local.requestWho}>
-                {contactName || <AddressText address={request.from} truncate={false} />}
+                {contactName || <AddressText address={displayAddress(request.from)} truncate={false} />}
             </div>
-            {stage === 'sent' ? (
-                <p className={local.requestSent} role="status">
-                    ✓ Key shared. They can now send you encrypted messages.
-                </p>
+            {stage === 'queued-seen' ? (
+                <StatusMessage variant="warning">{SIGNED_NOT_BROADCAST_MESSAGE}</StatusMessage>
+            ) : stage === 'sent' ? (
+                <StatusMessage variant="success">
+                    Key shared. They can now send you encrypted messages.
+                </StatusMessage>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                    <Button variant="secondary" onClick={onDecline} disabled={stage === 'sending'}>
                         Decline
                     </Button>
                     {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                        <Button variant="secondary" onClick={onMessage} disabled={stage === 'sending'}>
                             Message
                         </Button>
                     ) : null}
-                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
+                    <Button variant="primary" onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
                         Share my key
                     </Button>
                 </div>
             )}
-            {error ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{error}</p>
-            ) : null}
+            {demoGuard.note}
+            {demoGuard.dialog}
+            <StatusMessage variant="error">{error}</StatusMessage>
         </li>
     );
 }
@@ -1109,6 +1168,25 @@ function SessionRequestRow({
 function requestId(message) {
     if (typeof message?.txid === 'string' && message.txid) return message.txid;
     return [message?.chainId || message?.chain || '', message?.from || '', message?.to || '', message?.timestamp || ''].join(':');
+}
+
+function displayAddress(value) {
+    return neutralizeControlText(value, { maxLength: 255 });
+}
+
+function isRenderableMessage(message) {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
+    if (typeof message.from !== 'string' || !message.from) return false;
+    if (typeof message.to !== 'string' || !message.to) return false;
+    if (message.text !== null && message.text !== undefined && typeof message.text !== 'string') return false;
+    if (message.txid !== null && message.txid !== undefined && typeof message.txid !== 'string') return false;
+    try {
+        if (message.timestamp !== null && message.timestamp !== undefined
+            && !Number.isFinite(Number(message.timestamp))) return false;
+    } catch {
+        return false;
+    }
+    return true;
 }
 
 // The conversation key for a message: whichever endpoint is not ours.
@@ -1194,8 +1272,14 @@ function methodLabel(method) {
 // ECDH (2) decrypt automatically from the wallet's keys, so a remaining locked
 // body is an AES (3) pre-shared-key message (no key-entry surface) or one not
 // addressed to a key we hold.
-function encryptedPlaceholder() {
-    return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
+function encryptedPlaceholder(method) {
+    if (method === 3) {
+        return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
+    }
+    if (method === 1 || method === 2) {
+        return '🔒 This encrypted message could not be decrypted. It may be damaged or addressed to another key.';
+    }
+    return '🔒 This encrypted message cannot be read here.';
 }
 
 // Local calendar-day key (Y-M-D) used to detect when a thread crosses midnight
@@ -1252,8 +1336,8 @@ function buildThreadItems(thread) {
 function previewFor(text) {
     if (typeof text === 'string' && text.trim()) {
         const content = parseMessageContent(text);
-        if (content.text.trim()) return content.text;
-        if (content.attachment) return `Attachment: ${content.attachment.name}`;
+        if (content.text.trim()) return messageTextForDisplay(content.text);
+        if (content.attachment) return `Attachment: ${messageTextForDisplay(content.attachment.name)}`;
     }
     return '🔒 Encrypted message';
 }

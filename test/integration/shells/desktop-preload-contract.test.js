@@ -174,6 +174,9 @@ const BRIDGE_WORLDS = [
     'xchainWalletUpdater',
     // OS deep links: main parks a link and nudges, the renderer claims it.
     'xchainWalletDeepLink',
+    // §40.12: the Trezor Connect relay. Main owns the bridge window on the
+    // isolated no-HID session; the renderer gets call and close only.
+    'xchainWalletTrezorBridge',
 ];
 
 beforeEach(() => {
@@ -253,7 +256,9 @@ describe('desktop preload: the renderer sandbox surface', () => {
 
         await bridge.sendMessage({ type: 'session.status' });
         await bridge.wipeStorage();
+        await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history' });
+        await win.setScreenProtected(true);
         await registry.getRemoteDescriptors();
         signer.postMessage({ kind: 'register', signerIds: [] });
         // row 142: the install call is walked here specifically so
@@ -269,6 +274,10 @@ describe('desktop preload: the renderer sandbox surface', () => {
         // The deep-link claim is walked for the same reason: a take on a
         // channel main never answers would leave every parked link unclaimed.
         await pre.worlds.get('xchainWalletDeepLink').takePending();
+        // The Trezor relay is walked so a call or close on a channel main
+        // never answers fails here rather than as a pairing that never ends.
+        await pre.worlds.get('xchainWalletTrezorBridge').call('getFeatures');
+        await pre.worlds.get('xchainWalletTrezorBridge').close();
 
         const used = new Set([
             ...pre.invokes.map(([channel]) => channel),
@@ -276,7 +285,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(8);
+        expect(used.size).toBe(12);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {
@@ -582,11 +591,11 @@ describe('desktop renderer: deep-link routing', () => {
     });
 
     it('routes a send link to a hardened Send prefill', () => {
-        expect(deepLinkRoute('xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123&memo=hi%E2%80%AEx', reg))
+        expect(deepLinkRoute('xchain://bitcoin-mainnet/BTC?amount=1&to=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4&memo=hi%E2%80%AEx', reg))
             .toEqual({
                 view: 'send',
                 sendPrefill: {
-                    address: 'bc1q123', amount: '1', tick: 'BTC', chainId: 'bitcoin-mainnet', memo: 'hi␦x',
+                    address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', amount: '1', tick: 'BTC', chainId: 'bitcoin-mainnet', memo: 'hi␦x',
                 },
             });
     });
@@ -639,7 +648,7 @@ const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0))
 
 describe('desktop renderer: deep-link claim and apply', () => {
     const reg = registryLib.defaultRegistry();
-    const SEND = { raw: 'xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123' };
+    const SEND = { raw: 'xchain://bitcoin-mainnet/BTC?amount=1&to=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' };
     afterEach(cleanup);
 
     it('claims the parked link on attach and again on every nudge', async () => {
@@ -692,7 +701,7 @@ describe('desktop renderer: deep-link claim and apply', () => {
         await flush();
 
         expect(apply).toHaveBeenCalledTimes(1);
-        expect(apply.mock.calls[0][0]).toMatchObject({ view: 'send', sendPrefill: { address: 'bc1q123', amount: '1' } });
+        expect(apply.mock.calls[0][0]).toMatchObject({ view: 'send', sendPrefill: { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', amount: '1' } });
     });
 
     it('routes a nudge that arrives while unlocked straight to apply', async () => {

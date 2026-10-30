@@ -213,7 +213,9 @@ export function buildExportFilename({ scope = 'all', format, date }) {
 function csvField(v) {
     if (v === null || v === undefined) return '';
     const text = String(v);
-    const s = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    // A leading tab or carriage return starts a formula in a spreadsheet just as
+    // the visible triggers do.
+    const s = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
     if (/[",\n\r]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`;
     }

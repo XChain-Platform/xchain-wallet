@@ -26,8 +26,11 @@ import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
+import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
+import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
+import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
 import {
     buildEditFeedListsParams,
     buildBetActionPsbt,
@@ -38,6 +41,8 @@ import {
     installShellErrorCapture,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
+import { assertBroadcastSignaturesVerify } from '@xchain-wallet/core/signers/verifyTxSignatures.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -45,7 +50,7 @@ import {
     notifyDisconnectedSites,
     notifyNetworkChanged,
 } from '../bridge/bridgeEvents.js';
-import { applyAutoLockSignal } from './autoLockState.js';
+import { AUTO_LOCK_UNSAVED, applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from './broadcastQueueStore.js';
@@ -54,10 +59,20 @@ import {
     createHoldBeforeBroadcast,
     createSendHoldRegistry,
 } from './sendHold.js';
+import {
+    claimingSdkRegistry,
+    createOwnSpendLedger,
+    createRouteClaims,
+    psbtOutpoints,
+    rawTxOutpoints,
+    soldNames,
+} from './ownSpends.js';
+import { createLockedSendOutcomeStore, finishPatchFor } from './lockedSendOutcomes.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
     createConfirmActionSessionStorage,
+    ownSpendStoreFrom,
     reservationStoreFrom,
 } from './confirmActionSessionStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
@@ -68,6 +83,7 @@ import {
     startLabelSyncRestoreTask,
     waitForLabelSyncRestoreTask,
 } from './labelSyncRestoreTasks.js';
+import { createAddressDiscoveryTask } from './addressDiscoveryTask.js';
 
 const {
     importedAddressIdsFor,
@@ -152,6 +168,7 @@ const {
     listContacts,
     findContactByAddress,
     saveContact,
+    saveContacts,
     deleteContact,
     dispensersForSource,
     dispensersForAddress,
@@ -650,6 +667,17 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
  * @param {import('@xchain-wallet/core').signers.SignerPool} [signerPool]
  * @returns {Promise<import('@xchain-wallet/core').signers.Signer | undefined>}
  */
+// The software-signed action routes whose transaction spends this wallet's
+// coins. Each one claims them before it signs (see withSpendClaim).
+const SPENDING_ACTION_TYPES = [
+    'sweep', 'issue', 'mint', 'destroy', 'callback', 'sleep', 'broadcast', 'oraclePrice', 'addressPrefs',
+    'deployChunked', 'dispenser', 'dividend', 'createList', 'airdrop', 'advanced', 'order', 'cancelOrder',
+    'editOrder', 'coinpay', 'swap', 'link', 'file', 'gatedPublish', 'message', 'deploy', 'execute', 'deposit',
+    'withdraw', 'stake', 'unstake', 'collect', 'delegate', 'revokeDelegation', 'createPoll', 'castBallot',
+    'delegateVote', 'createMarket', 'placeBet', 'resolveMarket', 'cancelMarket', 'editBetFeedLists',
+    'clearVoteDelegation', 'contractStake',
+].map((name) => `action.${name}`);
+
 async function sessionSigner(req, vault, signerPool) {
     const signer = await pickSignerFromRequest({
         vault,
@@ -874,6 +902,8 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
     }
 }
 
+const NETWORK_SWITCH_CANCEL_REASON = 'Network changed, request cancelled';
+
 async function cancelMatchingApprovals(approvals, matches) {
     if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
     return approvals.cancelOriginsMatching(matches);
@@ -906,8 +936,14 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     return { ok: true };
 }
 
-async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents, approvals) {
     if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    // An open approval was composed for the network it was requested on, so a
+    // switch rejects every one of them (the dApp sees USER_REJECTED) and closes
+    // the windows before the new network is announced.
+    if (typeof approvals?.cancelAll === 'function') {
+        await approvals.cancelAll(NETWORK_SWITCH_CANCEL_REASON);
+    }
     if (typeof bridgeEvents?.chainChanged !== 'function') return;
     const activeChainIds = filterChainIdsByActiveNetwork(
         Object.keys(next?.fees ?? {}),
@@ -993,7 +1029,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
- *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'wallets' | 'accounts' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -1036,9 +1072,108 @@ export function createBackgroundHost(deps) {
         // One host-level send hold shared by beforeBroadcast and the cancel route.
         // Injectable so timer and cancellation behavior can be tested without delays.
         sendHold: injectedSendHold,
+        // Locks the wallet when storage refuses the auto-lock arm (the
+        // session.autolock route). The extension passes its lock backstop.
+        onAutoLockArmRefused,
+        // Outcomes of sends that settled after a lock closed the vault. Every
+        // host in one process reads the same store (lockedSendOutcomes.js).
+        lockedSendOutcomes = createLockedSendOutcomeStore(),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+
+    // A lock closes the vault while an approved send is still signing or
+    // broadcasting; the send finishes and its last write to its pending record
+    // fails. Every action route is wrapped so that outcome is noted outside the
+    // vault, and the next host to open the vault finishes the record from it.
+    // The route's own result or error goes back untouched.
+    const registerRoute = host.register.bind(host);
+    host.register = (type, handler) => registerRoute(
+        type,
+        typeof type === 'string' && type.startsWith('action.') && typeof handler === 'function'
+            ? keepOutcomeAcrossLock(handler)
+            : handler,
+    );
+
+    function keepOutcomeAcrossLock(handler) {
+        return async (req, ctx) => {
+            let result;
+            try {
+                result = await handler(req, ctx);
+            } catch (err) {
+                await noteLockedOutcome(req, ctx?.vault, null, err);
+                throw err;
+            }
+            await noteLockedOutcome(req, ctx?.vault, result, null);
+            return result;
+        };
+    }
+
+    async function noteLockedOutcome(req, vault, result, err) {
+        try {
+            const settled = err ?? result;
+            if (!settled || typeof settled !== 'object' || !settled.pendingTxWriteError) return;
+            // A write refused for another reason (a full disk) has no unlock to wait for.
+            if (vault?.isOpen !== false) return;
+            const pendingTxId = settled.pendingTxId;
+            const walletId = req?.walletId;
+            if (typeof pendingTxId !== 'string' || !pendingTxId || typeof walletId !== 'string' || !walletId) return;
+            let kind = 'sent';
+            if (err) {
+                if (err.name === flows.BROADCAST_FAILED_TRANSIENT_NAME) kind = 'queued';
+                else if (err.name === flows.BROADCAST_FAILED_PERMANENT_NAME) kind = 'failed';
+                else kind = 'unsent';
+            } else if (result.queued) {
+                kind = 'queued';
+            }
+            const leg = Array.isArray(req?.legs) && req.legs.length === 1 ? req.legs[0] : req;
+            await lockedSendOutcomes.record({
+                id: pendingTxId,
+                pendingTxId,
+                walletId,
+                chainId: typeof req?.chainId === 'string' ? req.chainId : null,
+                txid: typeof settled.txid === 'string' ? settled.txid : null,
+                amount: leg?.amount == null ? null : String(leg.amount),
+                tick: typeof leg?.tick === 'string' ? leg.tick : null,
+                kind,
+                at: Date.now(),
+                finished: false,
+            });
+        } catch (noteErr) {
+            console.error('[xchain] could not keep a send outcome across the lock:', noteErr);
+        }
+    }
+
+    // Finish every pending record a locked send left behind, against this
+    // host's open vault. An outcome whose wallet is gone is dropped with it.
+    async function finishLockedSendOutcomes(vault) {
+        if (!vault || vault.isOpen === false) return;
+        await lockedSendOutcomes.update(async (entries) => {
+            const kept = [];
+            for (const entry of entries) {
+                if (entry.finished) { kept.push(entry); continue; }
+                try {
+                    const wallet = typeof vault.wallets?.get === 'function'
+                        ? await vault.wallets.get(entry.walletId)
+                        : null;
+                    if (!wallet) continue;
+                    const record = await vault.pendingTxs.get(entry.pendingTxId);
+                    let summary = null;
+                    if (record) {
+                        const patch = finishPatchFor(entry, record);
+                        if (patch) await vault.pendingTxs.put({ ...record, ...patch });
+                        summary = typeof record.actionSummary === 'string' ? record.actionSummary : null;
+                    }
+                    kept.push({ ...entry, finished: true, summary });
+                } catch {
+                    // The vault could not answer; the next list retries this one.
+                    kept.push(entry);
+                }
+            }
+            return kept;
+        });
+    }
+    let lockedOutcomesFinished = finishLockedSendOutcomes(hostDeps.vault).catch(() => {});
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
     // Popup and side panel share this host. Matching semantic sends stay
     // exclusive through signing and broadcast while unrelated sends proceed.
@@ -1053,7 +1188,77 @@ export function createBackgroundHost(deps) {
         }
     }
 
+    // A send composed on one network must not sign or broadcast after the
+    // wallet switched to another: the undo hold and a second window both
+    // leave time for a switch between compose and broadcast.
+    async function assertActiveSendNetwork(
+        { chainId, vault, chainRegistry },
+        reviewAgain = 'Return to Send and review the payment again.',
+    ) {
+        const descriptor = chainRegistry?.get?.(chainId);
+        if (!descriptor) return;
+        const activeNetwork = getActiveNetwork(await vault.settings.get());
+        if (descriptor.networkKind !== activeNetwork) {
+            // Named so the form shows this sentence instead of its generic failure line.
+            throw Object.assign(new Error(`The active network changed to ${activeNetwork}. ${reviewAgain}`), {
+                name: 'ActiveNetworkChangedError',
+            });
+        }
+    }
+
+    // LIST and AIRDROP confirms can be resumed or left open in a second
+    // window, so they take the same network check before signing.
+    const REVIEW_ACTION_AGAIN = 'Go back and review the action again.';
+
+    // A stored confirm whose PSBT a send has just broadcast is spent. The popup
+    // clears its own session after the send returns, but a popup that closes
+    // between Approve and that return never does, and Home would then offer to
+    // finish a payment that has already left the wallet. The host drops it at
+    // the moment of the broadcast, so the clear does not depend on the popup
+    // staying open.
+    async function dropConfirmSessionsForPsbt(psbtHex) {
+        if (!confirmSessionStorage || typeof psbtHex !== 'string' || psbtHex.length === 0) return;
+        try {
+            const stored = await confirmSessionStorage.loadSessions();
+            for (const [id, session] of Object.entries(stored || {})) {
+                if (session?.composed?.psbt === psbtHex) await confirmSessionStorage.removeSession(id);
+            }
+        } catch { /* the popup's own clear still runs when it is open */ }
+    }
+
+    // PSBTs of stored confirms that a surface approved and the host is signing
+    // or broadcasting now. A surface that closes and reopens in that window
+    // would otherwise read the stored confirm and offer the payment as not sent.
+    const confirmsInFlight = new Set();
+
+    // LIST and AIRDROP are resumable as well (RESUMABLE_DISPATCH_METHODS), so
+    // a broadcast of either drops its stored confirm the same way a send does.
+    // A queued broadcast (the signed bytes sit in the broadcast queue) and a
+    // permanent refusal (re-signing is forbidden) end the confirm too. Only an
+    // unsaved transient failure keeps it, since it is then the one way back.
+    async function finishStoredConfirm(psbtHex, run) {
+        const tracked = typeof psbtHex === 'string' && psbtHex.length > 0 && !confirmsInFlight.has(psbtHex);
+        if (tracked) confirmsInFlight.add(psbtHex);
+        try {
+            let result;
+            try {
+                result = await run();
+            } catch (err) {
+                if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
+                    || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
+                    await dropConfirmSessionsForPsbt(psbtHex);
+                }
+                throw err;
+            }
+            await dropConfirmSessionsForPsbt(psbtHex);
+            return result;
+        } finally {
+            if (tracked) confirmsInFlight.delete(psbtHex);
+        }
+    }
+
     async function sendWithHold(req, flowDeps) {
+        await assertActiveSendNetwork({ ...req, ...flowDeps });
         const legs = Array.isArray(req?.legs) && req.legs.length > 0
             ? req.legs
             : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
@@ -1075,16 +1280,104 @@ export function createBackgroundHost(deps) {
         }
         activeSendIntents.add(intentKey);
         try {
-            const opts = { ...req, ...flowDeps };
-            const beforeBroadcast = createHoldBeforeBroadcast({
-                sendHold,
-                holdId: opts.holdId,
-                undoSeconds: opts.undoSeconds,
-            });
-            return await sendToken({ ...opts, beforeBroadcast });
+            // The hardware lane passes its deps inside req.
+            return await withSpendClaim(req, flowDeps ?? req, (claimDeps) => sendHeld(req, {
+                ...flowDeps,
+                ...(claimDeps?.sdkRegistry ? { sdkRegistry: claimDeps.sdkRegistry } : {}),
+            }));
         } finally {
             activeSendIntents.delete(intentKey);
         }
+    }
+
+    // The send itself, once its coins are claimed: the undo hold and the network
+    // check run before the signed transaction leaves the wallet.
+    async function sendHeld(req, flowDeps) {
+        const opts = { ...req, ...flowDeps };
+        const holdBeforeBroadcast = createHoldBeforeBroadcast({
+            sendHold,
+            holdId: opts.holdId,
+            undoSeconds: opts.undoSeconds,
+        });
+        // The network check runs again after any hold, the last moment
+        // before the signed transaction leaves the wallet.
+        const beforeBroadcast = async (...args) => {
+            if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
+            await assertActiveSendNetwork(opts);
+        };
+        return finishStoredConfirm(
+            opts.prebuiltPsbt?.psbtHex,
+            () => sendToken({ ...opts, beforeBroadcast }),
+        );
+    }
+
+    // Every action the background signs claims the coins its reviewed PSBT
+    // spends (see ownSpends.js), so a review another surface built over the same
+    // coins is refused before anything is signed. A PSBT the route builds itself
+    // (a dApp send, an action built at submit time, each leg of a chunked
+    // deploy) claims its coins the moment the encoder returns it, through the
+    // registry `run` receives. The claim holds while the transaction signs, for
+    // a while after it goes out, and, through the queue entry itself, while it
+    // waits in the broadcast queue; any other end frees it. An order or a
+    // dispenser that sells a name claims the name too, so another sale of it
+    // from this wallet is refused before signing.
+    async function withSpendClaim(req, deps, run) {
+        const chainId = req?.chainId;
+        const route = createRouteClaims(ownSpends, queuedOutpoints);
+        let sdk = null;
+        try { sdk = deps?.sdkRegistry?.get?.(chainId) ?? null; } catch { sdk = null; }
+        const names = soldNames(req?.params);
+        const nameClaim = names.length > 0 ? await ownSpends.claim(chainId, [], { names }) : '';
+        try {
+            await route.claim(chainId, psbtOutpoints(sdk, req?.prebuiltPsbt?.psbtHex));
+        } catch (err) {
+            if (nameClaim) await ownSpends.release(nameClaim);
+            throw err;
+        }
+        const claimDeps = deps?.sdkRegistry
+            ? {
+                ...deps,
+                sdkRegistry: claimingSdkRegistry(deps.sdkRegistry, {
+                    onBuilt: (builtChain, builtSdk, psbtHex) => route.claim(builtChain, psbtOutpoints(builtSdk, psbtHex)),
+                    onSent: (sentChain, txHex) => route.sent(sentChain, rawTxOutpoints(txHex), txidOfRaw(txHex)),
+                }),
+            }
+            : deps;
+        let wentOut = false;
+        try {
+            const result = await run(claimDeps);
+            wentOut = Boolean(result?.txid) && !result?.queued;
+            return result;
+        } catch (err) {
+            // A refused second phase follows a commit that did go out.
+            wentOut = /^broadcast failed \(phase2\)/i.test(String(err?.message || '').trim());
+            throw err;
+        } finally {
+            await route.settle(wentOut);
+            if (nameClaim) {
+                if (wentOut) await ownSpends.keep(nameClaim);
+                else await ownSpends.release(nameClaim);
+            }
+        }
+    }
+
+    // The coins the signed transactions waiting in the broadcast queue spend, in
+    // every wallet's queue: a dApp request names no wallet, and a coin belongs
+    // to one queue at most. `exceptTxid` leaves out a queued copy of the very
+    // transaction being sent.
+    async function queuedOutpoints(chainId, exceptTxid = '') {
+        await ensureQueueLoaded();
+        const except = String(exceptTxid || '').toLowerCase();
+        return [...queueStore.queues.values()]
+            .flatMap((entries) => (Array.isArray(entries) ? entries : []))
+            .filter((entry) => entry?.chainId === chainId)
+            .filter((entry) => !except || txidOfRaw(entry?.signedTxHex) !== except)
+            .flatMap((entry) => rawTxOutpoints(entry?.signedTxHex));
+    }
+
+    // The id of signed transaction bytes, '' for bytes that do not parse.
+    function txidOfRaw(txHex) {
+        try { return String(rawTxid(txHex) || '').toLowerCase(); } catch { return ''; }
     }
 
     // ONE reservation ledger per host, shared across every
@@ -1108,6 +1401,10 @@ export function createBackgroundHost(deps) {
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
+    );
+    // Different sends over the same coins stay exclusive too (see ownSpends.js).
+    const ownSpends = createOwnSpendLedger(
+        confirmSessionStorage ? { store: ownSpendStoreFrom(confirmSessionStorage) } : undefined,
     );
 
     // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
@@ -1306,6 +1603,50 @@ export function createBackgroundHost(deps) {
         waitForLabelSyncRestoreTask(req?.token)
     ));
 
+    // Used-address discovery (§15.4). A restore or the Settings action
+    // starts it; it runs in the background over the unlocked software
+    // signers, on the active network only, and screens poll its status.
+    const addressDiscovery = createAddressDiscoveryTask();
+    host.register('wallet.discoverAddresses', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const requested = typeof req?.walletId === 'string' && req.walletId
+            ? [req.walletId]
+            : (await vault.wallets.list()).map((w) => w.id);
+        const signerFor = (walletId) => {
+            const signer = signerPool && typeof signerPool.get === 'function' ? signerPool.get(walletId) : null;
+            return signer && signer.kind === 'software' ? signer : null;
+        };
+        const walletIds = requested.filter((id) => signerFor(id));
+        if (walletIds.length === 0) {
+            throw new Error('Unlock the wallet, then check for used addresses again.');
+        }
+        let activeNetwork = null;
+        try {
+            activeNetwork = getActiveNetwork(await vault.settings.get());
+        } catch { /* every network the wallet holds addresses on */ }
+        return addressDiscovery.start({
+            walletIds,
+            chainName: (chainId) => chainRegistry.descriptorFor(chainId)?.displayName ?? chainId,
+            countChains: async (walletId) => (
+                await flows.discoveryChainIds({ vault, walletId, chainRegistry, activeNetwork: activeNetwork ?? undefined })
+            ).length,
+            run: (walletId, onProgress) => {
+                const signer = signerFor(walletId);
+                if (!signer) throw new Error('The wallet locked before the check finished.');
+                return flows.discoverWalletAddresses({
+                    vault,
+                    walletId,
+                    signer,
+                    chainRegistry,
+                    sdkRegistry,
+                    activeNetwork: activeNetwork ?? undefined,
+                    onProgress,
+                });
+            },
+        });
+    });
+    host.register('wallet.addressDiscoveryStatus', () => addressDiscovery.status());
+    host.register('wallet.addressDiscoveryDismiss', (req) => addressDiscovery.dismiss(req?.id));
+
     host.register('wallet.exists', async (req, { vault }) => {
         const id = req?.walletId;
         if (typeof id !== 'string' || !id) return { exists: false };
@@ -1377,6 +1718,7 @@ export function createBackgroundHost(deps) {
                     onConflict: 'preserve',
                 }),
             });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.wallet.id });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
@@ -1428,6 +1770,7 @@ export function createBackgroundHost(deps) {
 
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
+        await publishSurfaceState('wallets', { change: 'renamed', walletId: updated.id });
         return { wallet: toSafeWallet(updated) };
     });
 
@@ -1437,6 +1780,11 @@ export function createBackgroundHost(deps) {
         if (previous?.name !== updated.name) {
             await announceAccountChange(vault, bridgeEvents, [updated.id]);
         }
+        await publishSurfaceState('accounts', {
+            change: 'renamed',
+            walletId: updated.walletId,
+            accountId: updated.id,
+        });
         return { account: updated };
     });
 
@@ -1482,6 +1830,11 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
         });
         await announceAccountChange(vault, bridgeEvents, [r.account.id]);
+        await publishSurfaceState('accounts', {
+            change: 'added',
+            walletId: r.account.walletId,
+            accountId: r.account.id,
+        });
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1618,6 +1971,7 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             bridgeEvents,
+            approvals,
         );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
@@ -1671,6 +2025,7 @@ export function createBackgroundHost(deps) {
                 vault,
                 chainRegistry,
                 bridgeEvents,
+                approvals,
             );
             await publishSurfaceState('network', { settings: result });
         }
@@ -1810,12 +2165,28 @@ export function createBackgroundHost(deps) {
     // here so the service worker can lock the wallet after the popup closes,
     // when the foreground timer no longer runs. Sender-gated to the trusted
     // extension UI by the transport (not a `bridge.*` type).
+    // Forward the foreground `activity` flag: an activity report restarts the
+    // idle window and can never re-arm a disarmed record.
+    // An arm storage refuses locks the wallet: a worker restart would find no
+    // record and leave the session open for good. The reply tells the surface
+    // that armed it, so it can say why the wallet locked.
     host.register('session.autolock', async (req) => {
-        await applyAutoLockSignal(
-            { armed: req?.armed === true, idleMs: req?.idleMs },
+        const { saved } = await applyAutoLockSignal(
+            {
+                armed: req?.armed === true,
+                idleMs: req?.idleMs,
+                activity: req?.activity === true,
+                issuedAt: req?.issuedAt,
+            },
             Date.now(),
         );
-        return { ok: true };
+        if (saved) return { ok: true };
+        try {
+            await onAutoLockArmRefused?.();
+        } catch (err) {
+            console.error('[xchain] lock after a refused auto-lock arm failed:', err);
+        }
+        return { ok: false, reason: AUTO_LOCK_UNSAVED };
     });
 
     // §19.6: dry-run restore. Derive the first N addresses per active
@@ -1844,6 +2215,7 @@ export function createBackgroundHost(deps) {
     // tap-to-reveal, auto-hide on blur, no clipboard write: this
     // handler is the pure primitive.
     host.register('wallet.revealMnemonic', async (req, { vault }) => {
+        assertWalletUnlockedForReveal(vault, 'revealMnemonic');
         return revealMnemonic({
             vault,
             walletId: req?.walletId,
@@ -1932,11 +2304,11 @@ export function createBackgroundHost(deps) {
         // Unlocked session: pull the vault master key from the pooled
         // signer so the UI does not have to re-prompt for the password.
         let sessionMasterKey = null;
-        if (!req?.password && signerPool && typeof signerPool.get === 'function') {
-            const pooled = signerPool.get(req?.walletId);
-            if (pooled && typeof pooled.getMasterKey === 'function') {
-                try { sessionMasterKey = pooled.getMasterKey(); } catch { /* locked: fall through */ }
-            }
+        const pooled = signerPool && typeof signerPool.get === 'function'
+            ? signerPool.get(req?.walletId)
+            : null;
+        if (!req?.password && pooled && typeof pooled.getMasterKey === 'function') {
+            try { sessionMasterKey = pooled.getMasterKey(); } catch { /* locked: fall through */ }
         }
         const r = await importWif({
             vault,
@@ -1950,6 +2322,13 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        // The unlocked signer read its imported keys at unlock, so hand it
+        // the new one; otherwise every send or sweep from this address fails
+        // until a relock. A locked signer reads it from the vault at the next
+        // unlock, so a refusal here never fails an import the vault holds.
+        if (pooled && typeof pooled.addImportedWif === 'function' && r?.address?.id) {
+            try { pooled.addImportedWif(r.address.id, req.wif); } catch { /* locked: next unlock reads it */ }
+        }
         return { wallet: toSafeWallet(r.wallet), address: r.address };
     });
 
@@ -2083,7 +2462,8 @@ export function createBackgroundHost(deps) {
     // + conflict policy. Returns the imported walletId + write/skip
     // counts so the shell can surface "Imported wallet 'X' with N
     // addresses" copy.
-    host.register('wallet.importBackup', async (req, { vault }) => {
+    host.register('wallet.importBackup', async (req, { vault, vaultKeyring }) => {
+        await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await importBackupFile({
             vault,
             fileContent: req?.fileContent,
@@ -2096,6 +2476,7 @@ export function createBackgroundHost(deps) {
             onConflict: req?.onConflict,
             mode: req?.mode,
         });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         return {
             walletId: r.walletId,
             writes: r.writes,
@@ -2113,7 +2494,8 @@ export function createBackgroundHost(deps) {
     // locations are fetched; on-chain FILE references are a follow-up
     // that needs SDK wiring and are rejected explicitly rather than
     // silently ignored.
-    host.register('wallet.importBackupPointer', async (req, { vault }) => {
+    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring }) => {
+        await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await restoreFromBackupPointer({
             vault,
             pointer: req?.pointer,
@@ -2124,6 +2506,7 @@ export function createBackgroundHost(deps) {
             mode: req?.mode,
             resolveBackupContent: resolveBackupPointerContent,
         });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         return {
             walletId: r.walletId,
             writes: r.writes,
@@ -2156,6 +2539,7 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        await publishSurfaceState('wallets', { change: 'removed', walletId });
         const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
         const affectedOrigins = new Set(sitesBefore
             .filter((site) => {
@@ -2236,8 +2620,15 @@ export function createBackgroundHost(deps) {
         if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
             throw new Error('sites.restore: origin is blocked');
         }
+        // The site may have reconnected after the disconnect. Its new grant is
+        // the one the user last chose, and a second record for the origin would
+        // leave two grants with the bridge reading whichever comes back first.
+        const existing = await vault.connectedSites.findBy('origin', site.origin);
+        if (existing.some((candidate) => candidate.id !== site.id)) {
+            return { ok: true, restored: false };
+        }
         await vault.connectedSites.put(site);
-        return { ok: true };
+        return { ok: true, restored: true };
     });
 
     // §12 / G009: origin blocklist. listBlockedOrigins reads from
@@ -2395,7 +2786,7 @@ export function createBackgroundHost(deps) {
     // rest of the session.
     host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || !req.descriptor) {
-            throw new Error('chainRegistry.addCustomChain: descriptor required');
+            throw new Error('A network description is required.');
         }
         return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
     });
@@ -2502,14 +2893,28 @@ export function createBackgroundHost(deps) {
         return newestAddress(req, { vault, chainRegistry });
     });
 
+    // Which of the chain's registry address types the installed SDK can generate,
+    // so no picker offers one that generation then refuses. `supported` is null
+    // when the SDK cannot be asked yet; the caller then keeps the registry list.
+    host.register('sdk.addressTypes', async (req, { chainRegistry, sdkRegistry }) => {
+        const descriptor = chainRegistry.get(req?.chainId);
+        if (!descriptor) throw new Error(`sdk.addressTypes: unknown chain "${req?.chainId}"`);
+        let sdk;
+        try {
+            sdk = sdkRegistry.get(descriptor.id);
+        } catch {
+            return { supported: null };
+        }
+        return { supported: sdkSupportedAddressTypes(sdk, descriptor.addressTypes) };
+    });
+
     // Rename an address: set its user-facing label by record id.
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
-        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
-        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
+        const label = schemas.address.normalizeAddressLabel(req?.label, rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
@@ -2651,6 +3056,7 @@ export function createBackgroundHost(deps) {
     // gatedKeys access (PC-26): the send guard needs the pack key to
     // compose a valid gated send; no unlock or signing happens here.
     host.register('action.send.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry });
         return buildSendPsbt({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
@@ -2680,6 +3086,7 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.composeForConfirm: chainId is required');
         }
+        await assertActiveSendNetwork({ chainId, vault, chainRegistry });
         const source = normalizeSource(req?.from, 'action.composeForConfirm');
 
         // Build actionData/encoderOpts from either a generic payload or the
@@ -2789,11 +3196,41 @@ export function createBackgroundHost(deps) {
             encoderOpts = { ...encoderOpts, change };
         }
 
+        // Coins another send or action from this wallet holds are not this
+        // send's to spend, so Max prices the rest (see ownSpends.js).
+        if (!Array.isArray(encoderOpts.utxos)) {
+            const free = await unclaimedUtxos(chainId, source.address, sdkRegistry);
+            // Every coin is held: there is nothing for Max to offer, and the
+            // form must not fall back to the balance less a fee estimate.
+            if (free?.length === 0) {
+                return { maxSats: '0', feeSats: '0', inputSats: '0', otherOutputSats: '0', source: 'encoder-quote', coinsHeld: true };
+            }
+            if (free) encoderOpts = { ...encoderOpts, utxos: free };
+        }
+
         return flows.quoteMaxSendable({
             sdkRegistry, chainRegistry, vault, chainId,
             source: source.address, destination, encoderOpts,
         });
     });
+
+    // The address's spendable outputs minus the coins a claim or a queued send
+    // holds, or null when nothing is held there (the encoder then selects as usual).
+    async function unclaimedUtxos(chainId, address, sdkRegistry) {
+        const held = [...await ownSpends.heldOutpoints(chainId), ...await queuedOutpoints(chainId)];
+        if (held.length === 0) return null;
+        const taken = new Set(held.map((o) => `${String(o.txid).toLowerCase()}:${Number(o.vout)}`));
+        let rows;
+        try {
+            const res = await sdkRegistry.get(chainId)?.encoder?.getUTXOs?.(address);
+            rows = Array.isArray(res) ? res : res?.utxos;
+        } catch {
+            return null;
+        }
+        if (!Array.isArray(rows)) return null;
+        const free = rows.filter((row) => !taken.has(`${String(row?.txid ?? '').toLowerCase()}:${Number(row?.vout)}`));
+        return free.length === rows.length ? null : free;
+    }
 
     // VOTE's wire params are built by sdk.voting.*Params, which lives
     // HERE, not in the renderer. The three VOTE forms each kept a hand-written
@@ -2938,7 +3375,12 @@ export function createBackgroundHost(deps) {
     host.register('action.confirmSession.list', async () => {
         if (!confirmSessionStorage) return { supported: false, sessions: [] };
         const all = await confirmSessionStorage.loadSessions();
-        return { supported: true, sessions: Object.values(all || {}) };
+        // A confirm whose approval is still signing or broadcasting is not a
+        // payment to finish; it leaves the list once it settles or comes back
+        // when it fails in the one way that keeps it.
+        const sessions = Object.values(all || {})
+            .filter((session) => !confirmsInFlight.has(session?.composed?.psbt));
+        return { supported: true, sessions };
     });
 
     // Called on EVERY terminal state (approved, rejected, errored). A session
@@ -2980,7 +3422,9 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.quoteNativeFee !== 'function') {
             throw new Error(`action.requoteNativeFee: SDK for "${chainId}" lacks quoteNativeFee`);
         }
-        return sdk.quoteNativeFee(actionString, { source: req?.source });
+        // The Approve-time re-quote must see an oracle round that landed after
+        // compose, never compose's own quote reused or served from the cache.
+        return flows.explorerFreshScope(sdk, () => sdk.quoteNativeFee(actionString, { source: req?.source }));
     });
 
     // Run sdk.preflight HOST-side (the SDK, its explorer endpoint,
@@ -3024,11 +3468,12 @@ export function createBackgroundHost(deps) {
             }
         } catch { /* best-effort; a pending-read hiccup must not fail the pre-flight */ }
         const localDeltas = [...callerDeltas, ...reserved, ...pendingDeltas];
-        return sdk.preflight(req.actionString, {
+        const run = (attempt) => sdk.preflight(req.actionString, {
             source: req.source,
             chain: chainId,
             localDeltas: localDeltas.length ? localDeltas : undefined,
-            bypassCache: req.bypassCache === true,
+            // A retry must not reuse the local-only report produced by the 429.
+            bypassCache: req.bypassCache === true || attempt > 0,
             preflight: req.mode || 'report',
             // Only 'native' and 'xchain' cross this boundary: anything else is
             // dropped rather than forwarded, so a malformed caller cannot make
@@ -3036,6 +3481,14 @@ export function createBackgroundHost(deps) {
             ...(req.feeMode === 'native' || req.feeMode === 'xchain'
                 ? { feeMode: req.feeMode } : {}),
         });
+        // The Approve-time re-check and any 429 retry skip the SDK's report
+        // cache. Their explorer reads go fresh too, so neither an HTTP cache nor
+        // the host's short reuse window can return the local-only first result.
+        return flows.retryRateLimitedPreflight(sdk, (attempt) => (
+            req.bypassCache === true || attempt > 0
+                ? flows.explorerFreshScope(sdk, () => run(attempt))
+                : run(attempt)
+        ));
     });
 
     // §4.6 input liveness: are the coins this PSBT spends still unspent?
@@ -3121,9 +3574,19 @@ export function createBackgroundHost(deps) {
         if (!sdk?.auth?.verifyMessage) {
             throw new Error(`auth.verifyMessage: SDK for "${chainId}" lacks auth.verifyMessage`);
         }
+        // Message verification recovers a key hash and ignores the address version
+        // byte, so an address of another network (testnet while mainnet is chosen)
+        // would verify. Refuse any address the chosen network does not accept.
+        if (typeof sdk.wallet?.validateAddress === 'function') {
+            let addressVerdict = null;
+            try { addressVerdict = sdk.wallet.validateAddress(address); } catch (_err) { addressVerdict = { valid: false }; }
+            if (addressVerdict && addressVerdict.valid === false) return { valid: false };
+        }
         let valid = false;
         try {
-            valid = Boolean(sdk.auth.verifyMessage(address, message, signature));
+            // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean
+            const verdict = sdk.auth.verifyMessage(address, message, signature);
+            valid = typeof verdict === 'boolean' ? verdict : verdict?.valid === true;
         } catch (_err) {
             valid = false;
         }
@@ -3162,6 +3625,18 @@ export function createBackgroundHost(deps) {
             throw new Error(`auth.signMessage: no chain id for chain "${address.chain}" and network "${address.network}"`);
         }
         const isHd = address.source === 'hd' && typeof address.derivationPath === 'string';
+        // The signer comes from the wallet and the path from the record, so an
+        // HD record of another wallet signs with this wallet's key at that path,
+        // from an address the review never showed. An imported key is looked up
+        // in the wallet's own key list and cannot cross wallets.
+        if (isHd) {
+            const account = typeof address.accountId === 'string' && address.accountId
+                ? await vault.accounts.get(address.accountId)
+                : null;
+            if (!account || account.walletId !== walletId) {
+                throw new Error(`auth.signMessage: address "${addressId}" is not in this wallet`);
+            }
+        }
         return signMessageFlow({
             vault,
             walletId,
@@ -3215,7 +3690,39 @@ export function createBackgroundHost(deps) {
         discardQueuedBroadcast: (args) => flows.discardQueuedBroadcast(args),
     });
     void ensureQueueLoaded();
-    host.register('broadcast.queue.list', async (req, { vault, chainRegistry }) => {
+    // Sends that settled while the wallet was locked, for the unlocked shell to
+    // tell the person what happened. Each list first finishes any pending record
+    // still owed a write, so the outcome and the record agree.
+    host.register('send.lockedOutcomes.list', async (req, { vault }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) return [];
+        await lockedOutcomesFinished;
+        lockedOutcomesFinished = finishLockedSendOutcomes(vault).catch(() => {});
+        await lockedOutcomesFinished;
+        const entries = await lockedSendOutcomes.list();
+        return entries
+            .filter((e) => e.finished && e.walletId === walletId)
+            .map((e) => ({
+                id: e.id,
+                kind: e.kind,
+                chainId: e.chainId,
+                txid: e.txid,
+                amount: e.amount,
+                tick: e.tick,
+                summary: e.summary ?? null,
+                at: e.at,
+            }));
+    });
+    host.register('send.lockedOutcomes.clear', async (req) => {
+        const ids = Array.isArray(req?.ids) ? req.ids.filter((id) => typeof id === 'string') : [];
+        if (ids.length > 0) await lockedSendOutcomes.remove(ids);
+        return { cleared: ids.length };
+    });
+
+    host.register('broadcast.queue.list', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        // A record a locked send left at 'broadcasting' is finished first, so
+        // the restore below never offers a send the network already took.
+        await lockedOutcomesFinished;
         await ensureQueueLoaded();
         // The queued-broadcast banner lists on mount, which is the first moment
         // after an unlock at which an owed write has a vault to land in.
@@ -3226,7 +3733,7 @@ export function createBackgroundHost(deps) {
             // read rather than as the refused write left it. Restoring runs last
             // because it only ADDS records reading 'queued' or 'broadcasting',
             // the two statuses the reconcile keeps anyway.
-            await reconcileRestoredEntries(vault, req.walletId);
+            await reconcileRestoredEntries(vault, req.walletId, sdkRegistry);
             await restoreQueueFromVault(vault, chainRegistry, req.walletId);
         }
         return [...getQueue(req?.walletId)];
@@ -3234,7 +3741,7 @@ export function createBackgroundHost(deps) {
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
     // callers (e.g. PsbtSignForm, future RBF replace lanes) can park a
     // signed hex on the queue without going through the action.* path.
-    host.register('broadcast.queue.enqueue', async (req) => {
+    host.register('broadcast.queue.enqueue', async (req, { sdkRegistry }) => {
         await ensureQueueLoaded();
         const walletId = req?.walletId;
         const chainId = req?.chainId;
@@ -3248,6 +3755,15 @@ export function createBackgroundHost(deps) {
         if (typeof signedTxHex !== 'string' || !signedTxHex) {
             throw new Error('broadcast.queue.enqueue: signedTxHex is required');
         }
+        const sdk = sdkRegistry.get(chainId);
+        // Explicit callers hand this route signed bytes the wallet did not
+        // produce in this flow. Establish every spent coin through the tracker
+        // and verify its signature before the bytes enter durable queue state.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex: signedTxHex,
+            signerId: 'broadcast.queue.enqueue',
+        });
         const stored = pushQueueEntry(walletId, {
             chainId,
             signedTxHex,
@@ -3361,6 +3877,13 @@ export function createBackgroundHost(deps) {
             feeIncrease: coinAmount(plan.feeIncreaseSats),
         };
         if (req?.preview === true) return feeQuote;
+        // Refuse to sign a second replacement while one waits in the queue: re-signing beside a queued signed copy is forbidden.
+        // The refusal is a plain sentence because the History card shows it as written.
+        await ensureQueueLoaded();
+        if (getQueue(walletId).some((e) => e?.rbfReplacesPendingTxId === conflictRecord.id)) {
+            throw new Error('A replacement for this transaction is already waiting in the queued-transactions banner. '
+                + 'Send it or remove it there before you speed up or cancel again.');
+        }
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3423,6 +3946,10 @@ export function createBackgroundHost(deps) {
         if (typeof signed?.txHex !== 'string' || !signed.txHex || typeof signed?.txid !== 'string' || !signed.txid) {
             throw new Error('tx.replace: signer did not return a complete transaction');
         }
+        // The freeze is checked again once the signer returns: a hardware
+        // prompt can hold the sign open while panic mode is armed elsewhere,
+        // and the replacement must not reach the network or the ledger then.
+        flows.assertSigningAllowed();
 
         let pending = schemas.createPendingTx({
             chain: descriptor.coin,
@@ -3448,12 +3975,43 @@ export function createBackgroundHost(deps) {
         try {
             broadcast = await sdk.encoder.broadcastTx(signed.txHex);
         } catch (err) {
-            await vault.pendingTxs.put({
-                ...pending,
-                status: 'failed',
-                error: err?.message ? String(err.message) : String(err),
-            });
-            throw err;
+            // An already-on-network answer means these exact bytes reached a node, so the
+            // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
+            if (!flows.isAlreadyOnNetworkRejection(err)) {
+                const failure = err?.message ? String(err.message) : String(err);
+                // Retire only bytes that can never confirm; the same split broadcast.signedTx applies.
+                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                    const failedPatch = { status: 'failed', error: failure };
+                    if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, failedPatch) === 'unreachable') {
+                        recordOwedSettlement(walletId, pending.id, 'patch', failedPatch);
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.name = flows.BROADCAST_FAILED_PERMANENT_NAME; } catch { /* keep immutable error */ }
+                    }
+                    throw err;
+                }
+                // A transient failure may still have reached a node, so keep the record live and queue
+                // the same signed bytes for a re-send; the entry names the original so a later
+                // delivery retires it. The original stays 'broadcast' until then.
+                const queuedPatch = { status: 'queued', error: failure };
+                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
+                }
+                await enqueueSignedBroadcast(walletId, {
+                    chainId,
+                    signedTxHex: signed.txHex,
+                    summary: pending.actionSummary,
+                    txid: signed.txid,
+                    pendingTxId: pending.id,
+                    rbfReplacesPendingTxId: conflictRecord.id,
+                });
+                await flushOwedSettlements(vault);
+                if (err && typeof err === 'object') {
+                    try { err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME; } catch { /* keep immutable error */ }
+                }
+                throw err;
+            }
+            broadcast = signed.txid;
         }
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
@@ -3502,6 +4060,49 @@ export function createBackgroundHost(deps) {
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
     }
+    // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
+    // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
+    async function settleReplacedOriginal(vault, entry, replacementTxHash) {
+        const originalId = entry?.rbfReplacesPendingTxId;
+        if (typeof originalId !== 'string' || !originalId) return;
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) return;
+        try {
+            const original = await vault?.pendingTxs?.get(originalId);
+            if (!original || original.chainConfirmed === true) return;
+            if (original.status !== 'broadcast' && original.status !== 'broadcasting') return;
+            await vault.pendingTxs.put({ ...original, status: 'rbf-replaced', rbfReplacement: replacementTxHash });
+        } catch (_e) { /* the original stays live */ }
+    }
+    // Rewrite a two-phase entry and its PendingTx as the reveal once the commit
+    // is on the network, marked commit-landed, before the reveal goes out. A
+    // crash from here resumes with the reveal alone, and a refused reveal keeps
+    // its record 'broadcast' on the commit's txid (permanentReleasePatch).
+    // Neither write can stop the reveal: the commit is already out.
+    async function advanceToReveal(vault, walletId, q, entry, reveal) {
+        const { revealTxHex: _sentHex, revealTxid: _sentTxid, ...rest } = entry;
+        const advanced = {
+            ...rest,
+            signedTxHex: reveal.txHex,
+            ...(reveal.txid ? { txid: reveal.txid } : {}),
+            commitLanded: true,
+            ...(entry.txid ? { commitTxid: entry.txid } : {}),
+        };
+        const cur = q.findIndex((e) => e.id === entry.id);
+        if (cur >= 0) q[cur] = advanced;
+        await persistQueue();
+        const patch = {
+            status: 'broadcasting',
+            txHex: reveal.txHex,
+            txid: advanced.txid ?? null,
+            commitLanded: true,
+            commitTxid: entry.txid ?? null,
+            error: null,
+        };
+        if (await settleQueuedPendingTx(vault, advanced, patch) === 'unreachable') {
+            recordOwedSettlement(walletId, advanced.pendingTxId, 'patch', patch);
+        }
+        return advanced;
+    }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
     // entry (double-click, popup and expanded tab racing) must fail before it
@@ -3517,7 +4118,9 @@ export function createBackgroundHost(deps) {
         const id = req?.id;
         const claim = `${walletId}:${id}`;
         if (inFlightQueueBroadcasts.has(claim)) {
-            throw new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+            const inFlight = new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+            inFlight.name = flows.QUEUED_BROADCAST_IN_FLIGHT_NAME;
+            throw inFlight;
         }
         inFlightQueueBroadcasts.add(claim);
         try {
@@ -3525,7 +4128,11 @@ export function createBackgroundHost(deps) {
             const q = getQueue(walletId);
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
-            const entry = q[idx];
+            // Reassigned once a two-phase entry's commit lands: from then on the
+            // entry is its reveal, and every settlement below describes that.
+            let entry = q[idx];
+            // The coins this entry spends, held once it goes out (see ownSpends.js).
+            const queuedSpend = rawTxOutpoints(entry.signedTxHex);
             const retryAfterMs = Number.isFinite(entry.nextRetryAt)
                 ? Math.ceil(entry.nextRetryAt - Date.now())
                 : 0;
@@ -3555,6 +4162,15 @@ export function createBackgroundHost(deps) {
             // maintains its own queue and bypasses core drainQueuedBroadcast (which
             // already gates), so the same assertion is applied here at the new call site.
             flows.assertSigningAllowed();
+            // Queue storage is not a trust boundary: bytes may have survived an
+            // older build or changed outside this process. Resolve the spent
+            // scripts and amounts again immediately before any durable claim or
+            // network call, so a refusal leaves the entry queued and unsent.
+            await assertBroadcastSignaturesVerify({
+                sdk,
+                txHex: entry.signedTxHex,
+                signerId: 'broadcast.queue.broadcast',
+            });
             // Claim the durable half before the bytes go out, the same write
             // core's drain makes at the same point. A record reading 'queued'
             // is what the reload recovery treats as proof that its transaction
@@ -3583,6 +4199,25 @@ export function createBackgroundHost(deps) {
                     `broadcast.queue: entry "${id}" is no longer queued in the vault, so its bytes were not sent; compose a fresh transaction`,
                 );
             }
+            // The freeze is checked again once the claim is written, the last
+            // moment before the bytes leave: a freeze armed during that write
+            // (another tab, the popup, a duress entry) stops the send. The
+            // record goes back to 'queued', the status reload recovery reads as
+            // "signed, never sent", so the entry stays offered and unsent.
+            try {
+                flows.assertSigningAllowed();
+            } catch (freezeErr) {
+                const unclaimPatch = { status: 'queued', error: null };
+                if (await settleQueuedPendingTx(vault, entry, unclaimPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', unclaimPatch);
+                }
+                throw freezeErr;
+            }
+            // A freeze armed after the commit is out still holds the reveal.
+            // The refusal leaves the pair advanced to its reveal and marked
+            // commit-landed, so the next attempt sends the reveal alone, and it
+            // skips the failure settlement below: nothing was rejected.
+            let revealFrozen = null;
             // `q` is the live array the queue Map holds and every renderer context
             // mutates it through this one host, so a discard of a lower entry or
             // another broadcast can shift it while this handler waits on the
@@ -3591,8 +4226,30 @@ export function createBackgroundHost(deps) {
             // would delete a different, still-valid signed transaction.
             let result;
             try {
+                // A two-phase entry carries its signed reveal: the commit goes
+                // first, and the reveal follows in this same call, so the commit
+                // is never sent alone. A refused commit falls to the catch below
+                // with the entry unchanged, so it is settled as the pair it is.
+                const reveal = schemas.pendingTx.queuedRevealOf(entry);
+                if (reveal) {
+                    try {
+                        await sdk.encoder.broadcastTx(entry.signedTxHex);
+                    } catch (commitErr) {
+                        // "Already known" is the commit delivered by an attempt
+                        // interrupted before its reveal: the reveal still goes out.
+                        if (!saysAlreadyOnNetwork(commitErr)) throw commitErr;
+                    }
+                    entry = await advanceToReveal(vault, walletId, q, entry, reveal);
+                    try {
+                        flows.assertSigningAllowed();
+                    } catch (freezeErr) {
+                        revealFrozen = freezeErr;
+                        throw freezeErr;
+                    }
+                }
                 result = await sdk.encoder.broadcastTx(entry.signedTxHex);
             } catch (err) {
+                if (revealFrozen !== null && err === revealFrozen) throw err;
                 // The same permanence split the core queue applies,
                 // applied here too - this queue retries on demand and had no way to
                 // stop. A signed transaction whose inputs are gone can never
@@ -3615,6 +4272,8 @@ export function createBackgroundHost(deps) {
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
+                    await settleReplacedOriginal(vault, entry, entry.txid);
+                    await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -3705,6 +4364,8 @@ export function createBackgroundHost(deps) {
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
                 recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
             }
+            await settleReplacedOriginal(vault, entry, landedPatch.txid);
+            await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
             const cur = q.findIndex((e) => e.id === id);
             if (cur >= 0) q.splice(cur, 1);
             await persistQueue();
@@ -3812,6 +4473,18 @@ export function createBackgroundHost(deps) {
         // same pattern as the signing chokepoints and drainQueuedBroadcast.
         flows.assertSigningAllowed();
 
+        // These bytes come from a paste or a signed PSBT round trip, not from
+        // this wallet's own signer, so every input's signature is verified
+        // against the coin it spends before anything is recorded or sent:
+        // against the PSBT when the caller holds one, otherwise against the
+        // prevouts the UTXO tracker reports. A refusal leaves no record.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex,
+            psbtHex: typeof req?.psbtHex === 'string' && req.psbtHex ? req.psbtHex : null,
+            signerId: 'broadcast.signedTx',
+        });
+
         // Audit invariant (matches the submitAction path, §11.3.8): persist a
         // PendingTx record BEFORE the irreversible broadcast so a spend through
         // this route always leaves a local trace in history / the tx-status
@@ -3842,11 +4515,18 @@ export function createBackgroundHost(deps) {
             actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
             psbtHex: '',
         });
+        // The caller's txid wins; a pasted raw transaction carries none, so it is
+        // derived from the bytes. A record without a txid is invisible to the
+        // History pending list and cannot match a duplicate of itself.
+        let knownTxid = typeof req?.txid === 'string' && req.txid ? req.txid : null;
+        if (!knownTxid) {
+            try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
+        }
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
-            ...(typeof req?.txid === 'string' && req.txid ? { txid: req.txid } : {}),
+            ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
 
@@ -4186,7 +4866,9 @@ export function createBackgroundHost(deps) {
             // reservationLedger rides along for flows with post-broadcast
             // cleanup (sweepToken's PC-34 force-close leg); other flows
             // ignore the extra option.
-            return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
+            // A send claims its coins inside sendWithHold; every other action claims them here.
+            if (flow === sendWithHold) return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
+            return withSpendClaim(rest, deps, (claimDeps) => flow({ ...rest, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
         });
     }
 
@@ -4204,8 +4886,14 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.deployChunked.hw', deployChunkedRun);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
-    registerHwHandler('action.createList.hw', createList);
-    registerHwHandler('action.airdrop.hw', airdropAction);
+    registerHwHandler('action.createList.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => createList(opts));
+    });
+    registerHwHandler('action.airdrop.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => airdropAction(opts));
+    });
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
@@ -4319,7 +5007,7 @@ export function createBackgroundHost(deps) {
 
     // PC-05: current pause state of a tick or address (latest SLEEP row).
     host.register('sleep.state', async (req, { sdkRegistry }) => {
-        return sleepStateFor({ sdkRegistry, chainId: req.chainId, query: req.query, type: req.type });
+        return sleepStateFor({ sdkRegistry, chainId: req.chainId, query: req.query, type: req.type, fresh: req?.fresh === true });
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -4627,6 +5315,12 @@ export function createBackgroundHost(deps) {
         // an address-book edit makes the on-chain copy stale too. They
         // are vault-global, hence no walletId.
         noteLabelChange({ vault }, null);
+        return r;
+    });
+    // An import saves every record in one vault write; see saveContacts.
+    host.register('contacts.saveMany', async (req, { vault }) => {
+        const r = await saveContacts({ ...req, vault });
+        if (r.saved.length > 0) noteLabelChange({ vault }, null);
         return r;
     });
     host.register('contacts.delete', async (req, { vault }) => {
@@ -5079,8 +5773,10 @@ export function createBackgroundHost(deps) {
         return contributeMultisigNonce({ ...req, vault });
     });
 
-    host.register('multisigSign.contributeSignature', async (req, { vault }) => {
-        return contributeMultisigSignature({ ...req, vault });
+    // The registry carries the SDK's MuSig2 partial verifier; a partial counts
+    // only once it verifies.
+    host.register('multisigSign.contributeSignature', async (req, { vault, sdkRegistry }) => {
+        return contributeMultisigSignature({ ...req, vault, sdkRegistry });
     });
 
     host.register('multisigSign.aggregate', async (req, { vault, sdkRegistry }) => {
@@ -5184,11 +5880,17 @@ export function createBackgroundHost(deps) {
     // (b) confirm the LIST on the AIRDROP review screen.
 
     host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        const result = await finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
         return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
@@ -5353,6 +6055,15 @@ export function createBackgroundHost(deps) {
         return listTickCoinSupport({ sdkRegistry, chainId: req?.chainId });
     });
 
+    // The address-list item gate the list create and fork forms read: the coins
+    // whose addresses a LIST on this chain accepts, its own included. The flow
+    // answers [] for a missing explorer, a throw or a flag that is not true.
+    host.register('sdk.listAnyCoinItems', async (req, { sdkRegistry }) => {
+        return listAnyCoinItemsSupport({
+            sdkRegistry, chainId: req?.chainId, coin: req?.coin, networkKind: req?.networkKind,
+        });
+    });
+
     host.register('sdk.getActionFields', async (req, { sdkRegistry }) => {
         return getActionFields({ ...req, sdkRegistry });
     });
@@ -5384,6 +6095,7 @@ export function createBackgroundHost(deps) {
 
 
     host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        assertWalletUnlockedForReveal(vault, 'exportPrivateKey');
         return exportPrivateKey({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
@@ -5406,9 +6118,34 @@ export function createBackgroundHost(deps) {
         return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
-    host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
-        return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    host.register('balances.address', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        // The vault lets the read answer a demo wallet's address from its
+        // fixture instead of the explorer (issue #82).
+        const shape = await addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
+        return withHeldCoinsAside(shape, req?.chainId, req?.address, sdkRegistry);
     });
+
+    // The coin balance a form offers, without the coins another send from this
+    // wallet holds. A send that is signing or waiting in the queue has spent
+    // them, and the change the netted balance counts does not exist until it
+    // goes out. Max prices the same coins (see unclaimedUtxos), so the
+    // available line and Max agree. Nothing is read when nothing is held.
+    async function withHeldCoinsAside(shape, chainId, address, sdkRegistry) {
+        const native = shape?.native;
+        if (!native || typeof chainId !== 'string' || typeof address !== 'string') return shape;
+        const free = await unclaimedUtxos(chainId, address, sdkRegistry);
+        if (!free) return shape;
+        let freeSats = 0n;
+        let offered;
+        try {
+            for (const row of free) freeSats += BigInt(row?.value ?? 0);
+            offered = BigInt(native.quantity);
+        } catch {
+            return shape;
+        }
+        if (freeSats >= offered) return shape;
+        return { ...shape, native: { ...native, quantity: freeSats.toString() } };
+    }
 
     host.register('utxos.address', async (req, { sdkRegistry }) => {
         const chainId = req?.chainId;
@@ -5453,10 +6190,11 @@ export function createBackgroundHost(deps) {
     // exactly as before.
     host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
         let seenNow;
+        let replaced;
         try {
-            ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
+            ({ seenNow, replaced } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
         } catch { /* the listing below must never depend on the tracker or the explorer */ }
-        return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
+        return livePendingTxs({ ...req, vault, chainRegistry, seenNow, replaced });
     });
 
     // "Remove from history" on a failed local send. The flow deletes only a
@@ -5586,7 +6324,44 @@ export function createBackgroundHost(deps) {
         });
     }
 
+    // Every software-signed action that spends coins claims them around its
+    // whole route (see withSpendClaim); a send claims inside sendWithHold.
+    for (const type of SPENDING_ACTION_TYPES) {
+        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(req, routeDeps, (claimDeps) => handler(req, claimDeps)));
+    }
+
+    // A raw signed transaction claims the coins it spends before it goes out,
+    // like every send the background signs (see ownSpends.js), so it can
+    // neither replace a send from this wallet nor be replaced by one. The same
+    // bytes sent again, a copy of a send already out or of one in the queue,
+    // pass; queued bytes hold their coins through the queue entry.
+    host.wrap('broadcast.signedTx', (handler) => async (req, routeDeps) => {
+        const chainId = req?.chainId;
+        const outpoints = typeof chainId === 'string' && chainId ? rawTxOutpoints(req?.txHex) : [];
+        if (outpoints.length === 0) return handler(req, routeDeps);
+        const txid = txidOfRaw(req.txHex);
+        const claim = await ownSpends.claim(chainId, outpoints, { queued: await queuedOutpoints(chainId, txid), txid });
+        let wentOut = false;
+        try {
+            const result = await handler(req, routeDeps);
+            wentOut = Boolean(result?.txid) && !result?.queued;
+            return result;
+        } finally {
+            if (wentOut) await ownSpends.keep(claim, txid);
+            else await ownSpends.release(claim);
+        }
+    });
+
     registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
+    // A dApp SEND or SWEEP builds its PSBT after the approval and claims its
+    // coins there, before it signs. A page names no reviewed PSBT to claim.
+    for (const type of ['bridge.signAction', 'bridge.parallel']) {
+        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(
+            { chainId: req?.chainId },
+            routeDeps,
+            (claimDeps) => handler(req, claimDeps),
+        ));
+    }
 
     // PC-16: the auto-pay engine runs shell-side (next to the other
     // watchers) but must place its funds holds in THIS host's ledger so
@@ -5624,6 +6399,30 @@ export class PasswordChangeConflictError extends Error {
     constructor() {
         super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
         this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
+ * A restore into an open vault re-seals the backed-up wallet under
+ * `devicePassword`, so that password has to be the one the vault opens with:
+ * any other leaves a wallet the unlock skips and that cannot sign. Checked
+ * against the vault key before the backup is read. An empty box is left to the
+ * flow, which names it; a shell with no keyring has nothing to check against.
+ *
+ * @param {unknown} devicePassword
+ * @param {import('@xchain-wallet/core').storage.Vault} vault
+ * @param {import('./vaultKeyring.js').VaultKeyring | undefined} keyring
+ */
+async function assertRestoreDevicePassword(devicePassword, vault, keyring) {
+    if (typeof devicePassword !== 'string' || devicePassword.length === 0) return;
+    if (typeof keyring?.kdfParams !== 'function' || typeof vault?.keyMatches !== 'function') return;
+    const kdfParams = await keyring.kdfParams();
+    if (!kdfParams) return;
+    const key = await coreCrypto.deriveMasterKeyAsync(devicePassword, kdfParams);
+    try {
+        if (!vault.keyMatches(key)) throw new flows.RestoreDevicePasswordError();
+    } finally {
+        key.fill(0);
     }
 }
 
@@ -5729,7 +6528,10 @@ export async function changeWalletPassword(req, deps, operations = {}) {
             try {
                 if (await rekey(candidate, sealOpts(candidate))) candidates.push(candidate);
             } catch (err) {
-                if (/** @type {any} */ (err)?.name !== 'BackupSeedPasswordError') throw err;
+                // Skip another wallet this password cannot open, or whose seal is
+                // damaged: it keeps its old seal and the change goes ahead.
+                const name = /** @type {any} */ (err)?.name;
+                if (name !== 'BackupSeedPasswordError' && name !== 'BackupSealDamagedError') throw err;
             }
         }
 

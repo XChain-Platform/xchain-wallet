@@ -22,9 +22,13 @@
 import {
     createContext, createElement, useCallback, useContext, useEffect, useRef, useState,
 } from 'react';
-import { flows as flowsLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
+
+// Home and the app shell mount this hook, so the error-copy tables load only
+// when a sweep actually fails instead of riding in the startup bundle.
+const loadSubmitFailureMessage = () => import('../utils/submitFailureMessage.js');
 
 const DEFAULT_POLL_MS = 60_000;
 // Exported under its own name so the release profiler
@@ -118,9 +122,15 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
         throw results[0].error || new Error('Failed to scan for payments due.');
     }
     const found = [];
+    // An explorer page that overlaps, or one address held twice, lists a match
+    // twice; the queue shows each match once.
+    const seen = new Set();
     for (const r of results) {
         for (const row of r.rows) {
             if (!isPendingForPayer(row, r.address)) continue;
+            const key = `${r.chainId}:${r.address}:${row.action_index ?? row.actionIndex}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
             found.push({
                 chainId: r.chainId,
                 address: r.address,
@@ -153,11 +163,16 @@ function sortKey(expiration) {
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} [accountId]
- * @param {{ pollMs?: number }} [opts]
+ * @param {{ pollMs?: number, offline?: boolean }} [opts]
+ *        `offline` holds the scan: no reads start while the network is
+ *        unreachable, rows already found stay, and the scan runs again by
+ *        itself when `offline` clears.
  * @returns {{ obligations: PendingObligation[], scanning: boolean, error: string | null, refresh: () => void, payableCount: number }}
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
+    const offline = Boolean(opts.offline);
+    const identity = `${walletId || ''}::${accountId || ''}`;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
     const [scanning, setScanning] = useState(false);
@@ -172,7 +187,6 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const refresh = useCallback(() => { runRef.current?.(true); }, []);
 
     useEffect(() => {
-        const identity = `${walletId || ''}::${accountId || ''}`;
         if (identityRef.current !== identity) {
             identityRef.current = identity;
             setObligations([]);
@@ -180,8 +194,15 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         }
         // No wallet, or the demo wallet: nothing to owe, and the demo
         // wallet's fabricated addresses must not spam the explorer.
-        if (!walletId || flowsLib.isDemoWallet(walletId)) {
+        if (!walletId || isDemoWallet(walletId)) {
             setObligations([]);
+            setScanning(false);
+            runRef.current = null;
+            return undefined;
+        }
+        // Offline the reads cannot finish and the request layer would retry
+        // each for a minute; nothing is scanning and nothing is claimed.
+        if (offline) {
             setScanning(false);
             runRef.current = null;
             return undefined;
@@ -202,11 +223,16 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                         setError(null);
                     }
                 })
-                .catch((scanError) => {
+                .catch((scanError) => loadSubmitFailureMessage().then(({ submitFailureMessage }) => {
                     // Keep the previous rows on a failed sweep; a transient
                     // outage should not flicker the badge to zero.
-                    if (!cancelled) setError(scanError?.message || "Failed to scan for payments due.");
-                })
+                    if (!cancelled) {
+                        setError(submitFailureMessage(scanError, {
+                            verb: 'load payments due',
+                            fallback: "Couldn't load payments due. Check your connection and try again.",
+                        }));
+                    }
+                }))
                 .finally(() => {
                     if (!cancelled) setScanning(false);
                 });
@@ -234,13 +260,21 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 document.removeEventListener('visibilitychange', onVisible);
             }
         };
-    }, [walletId, accountId, messaging, pollMs]);
+    }, [walletId, accountId, identity, messaging, pollMs, offline]);
 
-    const payableCount = obligations.filter(
+    const visibleObligations = identityRef.current === identity ? obligations : [];
+    const visibleError = identityRef.current === identity ? error : null;
+    const payableCount = visibleObligations.filter(
         (o) => classifyObligation(o.expiration).state !== 'expired',
     ).length;
 
-    return { obligations, scanning, error, refresh, payableCount };
+    return {
+        obligations: visibleObligations,
+        scanning,
+        error: visibleError,
+        refresh,
+        payableCount,
+    };
 }
 
 // One state owner per tree.

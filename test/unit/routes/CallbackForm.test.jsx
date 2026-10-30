@@ -15,7 +15,6 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     CallbackForm,
-    callbackFeeError,
     callbackTermsError,
 } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -100,6 +99,32 @@ afterEach(() => {
 });
 
 describe('callback field validation', () => {
+    it('distinguishes unread records from readable records with no callback', () => {
+        const unreadMessage = "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.";
+        expect(callbackTermsError(null, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE', loadError: true }, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE' }, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE', creator: SOURCE.address }, 2)).toBe(
+            'This token does not have a complete callback configuration.',
+        );
+    });
+
+    it('refuses before review when the issuer is unknown', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS, creator: null } : { tick: 'PAY', divisibility: 2 }
+            )),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it.each([
         [{ ...TERMS, callbackTick: '' }, 'complete callback configuration'],
         [{ ...TERMS, callbackTick: 'BAD|TICK' }, 'Callback token can only use'],
@@ -112,14 +137,6 @@ describe('callback field validation', () => {
     ])('rejects malformed callback terms %#', (terms, message) => {
         expect(callbackTermsError(terms, 2)).toContain(message);
     });
-
-    it.each([
-        [{ mode: 'custom', customRate: 0 }, {}, 'greater than zero'],
-        [{ mode: 'custom', customRate: -1 }, {}, 'greater than zero'],
-        [{ mode: 'custom', customRate: 1.123456789 }, {}, 'at most 8 decimal places'],
-    ])('rejects invalid custom fees %#', (pick, estimate, message) => {
-        expect(callbackFeeError(pick, estimate)).toContain(message);
-    });
 });
 
 describe('CallbackForm review safety', () => {
@@ -127,11 +144,61 @@ describe('CallbackForm review safety', () => {
         const messaging = mount();
         await readySubmit();
 
-        await waitFor(() => expect(messaging.tokenHolderSummary).toHaveBeenCalled());
-        expect(messaging.tokenHolderSummary).toHaveBeenCalledWith(expect.objectContaining({
+        await waitFor(() => expect(messaging.tokenHolderSummary).toHaveBeenCalledWith(expect.objectContaining({
             callbackAmount: '1.25',
             callbackDecimals: 2,
+        })));
+        for (const [args] of messaging.tokenHolderSummary.mock.calls) {
+            expect(args.callbackDecimals).toBe(2);
+        }
+    });
+
+    // The holder summary floors each holder's payout to the decimals it is
+    // given, so asking before the payout token loads shows a short figure.
+    function payoutByDecimals() {
+        return vi.fn(async ({ callbackDecimals }) => ({
+            recipientCount: 2,
+            totalPayout: callbackDecimals === 2 ? '2.5' : '2',
+            partial: false,
         }));
+    }
+
+    it('waits for the payout token before asking for the holder payout', async () => {
+        let releasePayout = () => {};
+        const payoutRead = new Promise((resolve) => {
+            releasePayout = () => resolve({ tick: 'PAY', divisibility: 2 });
+        });
+        const messaging = mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (tick === 'CALLABLE' ? { ...TERMS } : payoutRead)),
+            tokenHolderSummary: payoutByDecimals(),
+        });
+        await readySubmit();
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(messaging.tokenHolderSummary).not.toHaveBeenCalled();
+        expect(screen.queryByText('2 PAY')).toBeNull();
+
+        releasePayout();
+        expect(await screen.findByText('2.5 PAY')).toBeTruthy();
+        for (const [args] of messaging.tokenHolderSummary.mock.calls) {
+            expect(args.callbackDecimals).toBe(2);
+        }
+    });
+
+    it('shows no payout figure when the payout token read fails', async () => {
+        const messaging = mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS } : { tick: 'PAY', divisibility: null, loadError: true }
+            )),
+            tokenHolderSummary: payoutByDecimals(),
+        });
+        await readySubmit();
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PAY' })));
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(messaging.tokenHolderSummary).not.toHaveBeenCalled();
+        expect(screen.queryByText('Total payout')).toBeNull();
+        expect(screen.queryByText('2 PAY')).toBeNull();
     });
 
     it('shows a plain error for a malformed source before review', async () => {
@@ -139,6 +206,9 @@ describe('CallbackForm review safety', () => {
         const messaging = mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [badSource] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: badSource.id } }),
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS, creator: badSource.address } : { tick: 'PAY', divisibility: 2 }
+            )),
         }, { initialFromAddress: badSource.address });
 
         fireEvent.click(await readySubmit());
@@ -170,7 +240,7 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText(
-            'Callback is not allowed until block 100. The chain is at 99.',
+            'Callback is not allowed until block 100. The network is at 99.',
         )).toBeTruthy();
         expect(height).toHaveBeenCalledTimes(2);
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -190,6 +260,25 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText(/Callback terms changed since this form opened/)).toBeTruthy();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('names an unread token record when its Review refresh rejects', async () => {
+        let callbackReads = 0;
+        const getTokenInfo = vi.fn(async ({ tick }) => {
+            if (tick === 'PAY') return { tick: 'PAY', divisibility: 2 };
+            callbackReads += 1;
+            if (callbackReads === 1) return { ...TERMS };
+            throw new Error('explorer failed');
+        });
+        const messaging = mount({ getTokenInfo });
+
+        fireEvent.click(await readySubmit());
+
+        expect(await screen.findByText(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/does not have a complete callback configuration/)).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -236,5 +325,29 @@ describe('CallbackForm review safety', () => {
             'Could not refresh callback terms, block height, and payout. Try again.',
         )).toBeTruthy();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+});
+
+describe('CallbackForm with an unread token record', () => {
+    // An explorer outage returns a record with no fields. The callback terms
+    // are then unknown, not absent: the form states the one issuer refusal and
+    // never tells the owner to set up a callback the token may already have.
+    it('states the outage once and never reads it as a missing callback', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { tick: 'CALLABLE', loadError: true } : { tick: 'PAY', divisibility: 2 }
+            )),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByText(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/has no callback configured/)).toBeNull();
+        expect(screen.queryByText(/No callback configured/)).toBeNull();
+        expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });

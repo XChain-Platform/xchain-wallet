@@ -26,7 +26,8 @@
 // popup, which keeps its bindings either way.
 //
 // A spec that never touches a chain does not need the CORS workaround, so this
-// fixture drops it. Anything that talks to the regtest explorer must keep using
+// fixture drops it and stands in for the network instead (offlineVenue.js).
+// Anything that talks to the regtest explorer must keep using
 // fixtures/extension.js.
 
 import fs from 'fs';
@@ -35,7 +36,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { test as base, expect, chromium } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { stubOfflineVenue } from './offlineVenue.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from './wallet.js';
+import { PRODUCTION_BLOCK_ARG } from '../host-block.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIST = path.resolve(HERE, '../../../packages/extension/dist');
@@ -47,14 +50,17 @@ export const test = base.extend({
         }
         const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xc-ext-iso-e2e-'));
         const context = await chromium.launchPersistentContext(userDataDir, {
-            // Chromium loads extensions only in a headed context.
-            headless: false,
+            // New headless loads extensions, so no window opens.
+            channel: 'chromium',
+            headless: true,
             viewport: { width: 400, height: 700 },
             args: [
                 `--disable-extensions-except=${EXTENSION_DIST}`,
                 `--load-extension=${EXTENSION_DIST}`,
                 // Deliberately NO --disable-web-security and NO
                 // --disable-features=IsolateOrigins: see the header.
+                // The production hosts fail to resolve, as in extension.js.
+                PRODUCTION_BLOCK_ARG,
             ],
         });
         await use(context);
@@ -68,7 +74,15 @@ export const test = base.extend({
         await use(new URL(sw.url()).host);
     },
 
-    page: async ({ context, extensionId }, use) => {
+    // Answers the explorer's balance reads with an empty ledger and refuses
+    // every other external request, so Home paints its balance header offline
+    // and no spec in this fixture can reach a production service.
+    offlineVenue: async ({ context }, use) => {
+        await stubOfflineVenue(context);
+        await use(true);
+    },
+
+    page: async ({ context, extensionId, offlineVenue }, use) => {
         // Pre-accept the licence gate: it is not what these specs test.
         await context.addInitScript(
             ([atKey, versionKey, version]) => {

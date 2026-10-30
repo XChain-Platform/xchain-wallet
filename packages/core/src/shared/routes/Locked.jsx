@@ -10,22 +10,31 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+// Direct module imports, not the flows barrel: the barrel keeps every flow
+// module in the startup bundle, and this screen is part of first paint.
 import {
     getLockoutState,
     getRemainingMs,
-    recordLockoutFailure,
-    recordLockoutSuccess,
+    LOCKOUT_STORAGE_KEY,
+    recordFailure as recordLockoutFailure,
+    recordSuccess as recordLockoutSuccess,
+} from '../../flows/lockoutTracking.js';
+import {
     isBiometricSupported,
     isBiometricRegistered,
     unlockWithBiometric,
-    tripDuressIfMatch,
+} from '../../flows/biometricUnlock.js';
+import { tripDuressIfMatch } from '../../flows/duressPassphrase.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import {
     getDemoWalletId,
     getDemoWalletPassword,
     isDemoWalletExpired,
+    isDemoLockHeld,
     clearDemoWalletId,
-} from '@xchain-wallet/core/flows';
+} from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
@@ -39,10 +48,14 @@ import {
     subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
-import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+// The demo-exit confirm opens only on a tap, so it and its styles load on demand.
+import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
+import { useIdlePreload } from '../utils/onDemandComponent.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import styles from './Locked.module.css';
+import { t } from '../../i18n/index.js';
 
 const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
 
@@ -64,8 +77,10 @@ const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your w
  *
  * @param {object} props
  * @param {() => void} [props.onUnlocked]
+ * @param {'auto-lock-unsaved' | null} [props.lockReason] why the shell locked
+ *   the wallet, when the reason is one the user should be told
  */
-export function Locked({ onUnlocked }) {
+export function Locked({ onUnlocked, lockReason = null }) {
     // S4: The unlock screen: a recording of it is a recording of the password
     // being typed.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -76,7 +91,6 @@ export function Locked({ onUnlocked }) {
     const variant = screenVariantFor(shell);
 
     const [password, setPassword] = useState('');
-    const [passwordVisible, setPasswordVisible] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     // §15.6 step 2. The unlock reply, not this screen, decides whether a
     // passphrase is ever asked for: the vault is sealed until the password
@@ -163,7 +177,7 @@ export function Locked({ onUnlocked }) {
     async function handleForgotPasswordWipe() {
         if (wipeBusy) return;
         if (!restoreLane) return;
-        if (wipeConfirmText.trim().toUpperCase() !== 'WIPE') return;
+        if (!isExactTypedConfirmation(wipeConfirmText, 'WIPE')) return;
         setWipeBusy(true);
         setWipeError(null);
         try {
@@ -188,10 +202,28 @@ export function Locked({ onUnlocked }) {
         active: forgotOpen,
         restoreFocusRef: forgotTriggerRef,
     });
-    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy);
+    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy, 'screen');
+    // The unlock screen is the bottom of the app, so Android Back leaves it
+    // the way Home does.
+    useNativeExitRoot(true, true);
+    useIdlePreload(DemoExitConfirm);
 
     useEffect(() => {
         inputRef.current?.focus();
+    }, []);
+
+    // A native shell dispatches `pause` on the document when the app goes to
+    // the background. Without this, typed text waits in the field until the
+    // app comes back, so whoever picks the device up next finds the password
+    // ready to submit. The web, extension and desktop shells never fire it.
+    useEffect(() => {
+        if (typeof document === 'undefined') return undefined;
+        const onPause = () => {
+            setPassword('');
+            setCaptureValue('');
+        };
+        document.addEventListener('pause', onPause);
+        return () => document.removeEventListener('pause', onPause);
     }, []);
 
     // The wallet list is safe metadata, so it can restore the heading before
@@ -261,12 +293,14 @@ export function Locked({ onUnlocked }) {
     // Demo wallets persist their auto-generated password (a throwaway
     // wallet holding only synthetic data), so a reload can silently
     // re-unlock instead of stranding the user on a password screen for a
-    // key they never typed. Try it once on mount; on any failure fall
+    // key they never typed. Try it once on mount, unless the user locked it; on any failure fall
     // through to the normal unlock UI.
     const demoAutoUnlockTriedRef = useRef(false);
     useEffect(() => {
         if (demoAutoUnlockTriedRef.current) return undefined;
         if (!demoWalletId || isDemoWalletExpired()) return undefined;
+        // The user pressed Lock: stay on this screen instead of undoing it.
+        if (isDemoLockHeld()) return undefined;
         if (typeof messaging?.unlockWallet !== 'function') return undefined;
         const pw = getDemoWalletPassword();
         if (!pw) return undefined;
@@ -293,6 +327,26 @@ export function Locked({ onUnlocked }) {
     }, [clearUnlockingNoteTimer, demoWalletId, messaging, onUnlocked]);
 
     const isLockedOut = remainingMs > 0;
+
+    // The counter lives in storage the whole origin shares, so another tab can
+    // start a wait this screen never saw. Every attempt re-reads it first, and
+    // a storage event brings the banner in without a failed guess of its own.
+    const refreshLockout = useCallback(() => {
+        const state = getLockoutState();
+        const ms = getRemainingMs(state);
+        setLockout(state);
+        setRemainingMs(ms);
+        return ms;
+    }, []);
+
+    useEffect(() => {
+        const onStorage = (event) => {
+            if (event.key !== null && event.key !== LOCKOUT_STORAGE_KEY) return;
+            refreshLockout();
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, [refreshLockout]);
 
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
@@ -376,6 +430,7 @@ export function Locked({ onUnlocked }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (unlockInFlightRef.current || busy || password.length === 0 || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
@@ -404,7 +459,17 @@ export function Locked({ onUnlocked }) {
                 );
                 haptic.error();
             } else {
+                // Refused before any password check (another tab holds the
+                // vault, a worker throttle): the duress passphrase still arms
+                // the freeze, which every open context's signer reads, and the
+                // message below is the one any password gets here.
+                tripDuressIfMatch(password);
+                // Two failures carry a sentence that says what to do: another
+                // tab holding the vault, and a browser that cannot coordinate
+                // tabs. "Close and reopen the app" would send the user the wrong way.
                 setError(err?.message === 'Could not prepare unlock'
+                    || err?.name === 'VaultInUseError'
+                    || err?.name === 'VaultCoordinationUnavailableError'
                     ? err.message
                     : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();
@@ -417,6 +482,7 @@ export function Locked({ onUnlocked }) {
 
     async function handleBiometric() {
         if (unlockInFlightRef.current || busy || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
@@ -510,41 +576,50 @@ export function Locked({ onUnlocked }) {
                     overflowWrap: 'anywhere',
                 }}
             >
-                {inCaptureStep ? 'Save wallet passphrase' : (activeWalletName || 'Unlock wallet')}
+                {inCaptureStep ? t('locked.saveWalletPassphrase') : (activeWalletName || t('locked.unlockWallet'))}
             </h1>
         </div>
     );
 
+    // The shared warning notice, not a box of its own inside the form card.
+    // The notice reads whole when it appears; the countdown ticks silently
+    // inside it so a screen reader does not repeat the sentence every second.
     const lockoutBanner = isLockedOut ? (
-        <div
-            className={styles.lockoutBanner}
-            role="status"
-            aria-live="polite"
-        >
-            <span>
-                {/* The device scope and network guidance distinguish this
-                    local counter from a network-level restriction. */}
-                Too many incorrect passwords on this device. Wait{' '}
-                <span className={styles.lockoutCountdown}>
-                    {formatCountdown(remainingMs)}
-                </span>
-                {' '}before trying again. Changing networks will not skip the wait.
+        <StatusMessage variant="warning" className={styles.lockoutBanner}>
+            {/* "On this device" marks the counter as local. The lock screen
+                has no network control, so the banner names none. */}
+            {t('locked.tooManyIncorrectPasswordsOn')}{' '}
+            <span className={styles.lockoutCountdown} aria-live="off">
+                {formatCountdown(remainingMs)}
             </span>
-        </div>
+            {' '}{t('locked.beforeTryingAgain')}
+        </StatusMessage>
+    ) : null;
+
+    const lockReasonNotice = lockReason === 'auto-lock-unsaved' ? (
+        <StatusMessage key="lock-reason" variant="warning" className={styles.lockoutBanner}>
+            {t('locked.autoLockUnsaved')}
+        </StatusMessage>
     ) : null;
 
     const form = (
         <FormPage
-            label="Unlock wallet"
+            label={t('locked.unlockWallet')}
             className={styles.unlockForm}
             onSubmit={handleSubmit}
-            status={busy && !inCaptureStep && showUnlockingNote ? (
-                <p className={styles.unlockingNote} aria-live="polite">
-                    Unlocking your wallet securely. This may take a moment.
-                </p>
-            ) : null}
+            status={[
+                lockReasonNotice,
+                busy && !inCaptureStep && showUnlockingNote ? (
+                    <p key="unlocking" className={styles.unlockingNote} aria-live="polite">
+                        {t('locked.unlockingYourWalletSecurelyThis')}
+                    </p>
+                ) : null,
+                lockoutBanner,
+            ]}
             actions={(
                 <div className={styles.unlockActions}>
+                    {/* During a lockout the banner says how long to wait and the
+                        button only goes disabled, so the countdown is said once. */}
                     <Button
                         type="submit"
                         variant="primary"
@@ -552,7 +627,7 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
-                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
+                        {t('locked.unlockWallet2')}
                     </Button>
                     {biometricAvailable ? (
                         <Button
@@ -562,20 +637,20 @@ export function Locked({ onUnlocked }) {
                             onClick={handleBiometric}
                             disabled={busy || isLockedOut}
                         >
-                            Use biometrics
+                            {t('locked.useBiometrics')}
                         </Button>
                     ) : null}
                     {demoWalletId ? (
                         <div className={styles.demoExitBlock}>
                             <p className={styles.demoExitNote}>
-                                This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.
+                                {t('locked.thisIsADemoWallet')}
                             </p>
                             <Button
                                 type="button"
                                 variant="danger"
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
-                                Exit demo &amp; wipe
+                                {t('walletDetails.exitDemo')}
                             </Button>
                             {demoWipeError && !demoConfirmOpen ? (
                                 <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
@@ -584,7 +659,7 @@ export function Locked({ onUnlocked }) {
                                 <DemoExitConfirm
                                     busy={demoWipeBusy}
                                     error={demoWipeError}
-                                    message="This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This cannot be undone."
+                                    message={t('locked.thisPermanentlyDeletesEveryWallet2')}
                                     onConfirm={handleExitDemo}
                                     onCancel={() => { setDemoConfirmOpen(false); setDemoWipeError(null); }}
                                 />
@@ -604,7 +679,7 @@ export function Locked({ onUnlocked }) {
                                 hidden={forgotOpen}
                                 style={{ alignSelf: 'center' }}
                             >
-                                Forgot password?
+                                {t('locked.forgotPassword')}
                             </Button>
                             {forgotOpen ? (
                                 <div
@@ -613,40 +688,41 @@ export function Locked({ onUnlocked }) {
                                     className={styles.wipeConfirm}
                                     role="alertdialog"
                                     aria-modal="false"
-                                    aria-label="Restore wallet access"
+                                    aria-label={t('locked.restoreWalletAccess')}
                                 >
                                     {!restoreLane ? (
                                         <>
                                             <p className={styles.wipeNote}>
-                                                <strong>Your password cannot be recovered or reset.</strong>{' '}
-                                                You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.
+                                                <strong>{t('locked.yourPasswordCannotBeRecovered')}</strong>{' '}
+                                                {t('locked.youCanRestoreTheWallet')}
                                             </p>
                                             <Button
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={() => setRestoreLane('mnemonic')}
                                             >
-                                                Use recovery phrase
+                                                {t('locked.useRecoveryPhrase')}
                                             </Button>
                                             <Button
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={() => setRestoreLane('backup')}
                                             >
-                                                Use backup file
+                                                {t('locked.useBackupFile')}
                                             </Button>
                                         </>
                                     ) : (
                                         <>
-                                            <p className={styles.wipeWarning}>
-                                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
-                                            </p>
+                                            <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
+                                                <strong>{t('locked.thisPermanentlyDeletesEveryWallet')}</strong>
+                                            </StatusMessage>
                                             <p className={styles.wipeNote}>
-                                                Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
+                                                {t('locked.fundsOnTheBlockchainAre')} {restoreLane === 'backup' ? t('locked.encryptedBackupFile') : t('locked.recoveryPhrase')} {t('locked.forEveryWalletYouNeed')} {restoreLane === 'backup' ? t('locked.backupFileRestore') : t('locked.recoveryPhraseRestore')} {t('locked.form')}
                                             </p>
                                             <Input
                                                 type="text"
-                                                label="Type WIPE to confirm"
+                                                label={t('vaultUnavailable.wipeConfirm')}
+                                                hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                                 value={wipeConfirmText}
                                                 onChange={(e) => setWipeConfirmText(e.target.value)}
                                                 autoComplete="off"
@@ -658,9 +734,9 @@ export function Locked({ onUnlocked }) {
                                                 variant="danger"
                                                 onClick={handleForgotPasswordWipe}
                                                 loading={wipeBusy}
-                                                disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
+                                                disabled={wipeBusy || !isExactTypedConfirmation(wipeConfirmText, 'WIPE')}
                                             >
-                                                Erase vault and restore
+                                                {t('locked.eraseVaultAndRestore')}
                                             </Button>
                                         </>
                                     )}
@@ -671,7 +747,7 @@ export function Locked({ onUnlocked }) {
                                         disabled={wipeBusy}
                                         autoFocus
                                     >
-                                        Cancel
+                                        {t('common.cancel')}
                                     </Button>
                                     {wipeError ? (
                                         <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
@@ -684,23 +760,24 @@ export function Locked({ onUnlocked }) {
             )}
         >
             {hero}
-            {lockoutBanner}
             <input
                 type="text"
                 name="username"
                 value="xchain-wallet"
                 autoComplete="username"
                 readOnly
-                aria-label="Wallet username"
+                aria-label={t('locked.walletUsername')}
                 hidden
             />
-            <div className={styles.passwordField}>
+            {/* The wrong-password message appears under the field in a space kept free
+                while it is hidden, so the centred form does not jump when it shows. */}
+            <div className={error ? styles.passwordField : `${styles.passwordField} ${styles.passwordFieldIdle}`}>
                 <Input
                     ref={inputRef}
-                    className={styles.passwordInput}
-                    type={passwordVisible ? 'text' : 'password'}
+                    type="password"
+                    revealable
                     name="password"
-                    label="Password"
+                    label={t('common.password')}
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);
@@ -710,16 +787,6 @@ export function Locked({ onUnlocked }) {
                     disabled={busy || isLockedOut}
                     error={error || undefined}
                 />
-                <button
-                    type="button"
-                    className={styles.passwordToggle}
-                    onClick={() => setPasswordVisible((visible) => !visible)}
-                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
-                    aria-pressed={passwordVisible}
-                    title={passwordVisible ? 'Hide password' : 'Show password'}
-                >
-                    {passwordVisible ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                </button>
             </div>
         </FormPage>
     );
@@ -728,7 +795,7 @@ export function Locked({ onUnlocked }) {
     // abandons the rest of the queue: the next unlock offers them again.
     const captureForm = captureWallet ? (
         <FormPage
-            label="Save wallet passphrase"
+            label={t('locked.saveWalletPassphrase')}
             onSubmit={handleCapture}
             actions={(
                 <>
@@ -738,7 +805,7 @@ export function Locked({ onUnlocked }) {
                         onClick={handleCaptureSkip}
                         disabled={busy}
                     >
-                        Not now
+                        {t('extensionBanner.notNow')}
                     </Button>
                     <Button
                         type="submit"
@@ -746,21 +813,22 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={captureValue.length === 0}
                     >
-                        Continue
+                        {t('adsNotice.continue')}
                     </Button>
                 </>
             )}
         >
             {hero}
             <p className={styles.captureCopy}>
-                <strong>{captureWallet.name} uses a passphrase.</strong>{' '}
-                Enter it once to finish setting up this device. It will be stored on this device, protected by your wallet password, so you are not asked again.
+                <strong>{captureWallet.name} {t('locked.usesAPassphrase')}</strong>{' '}
+                {t('locked.enterItOnceToFinish')}
             </p>
             <Input
                 id="locked-capture-passphrase"
                 ref={captureRef}
                 type="password"
-                label="Passphrase"
+                revealable
+                label={t('locked.passphrase')}
                 value={captureValue}
                 onChange={(e) => {
                     setCaptureValue(e.target.value);
@@ -777,7 +845,7 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
-            {body}
+            <div className={styles.centre}>{body}</div>
         </Screen>
     );
 }
@@ -793,17 +861,17 @@ export function Locked({ onUnlocked }) {
  */
 function formatCountdown(ms) {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
-    if (totalSec < 60) return `${totalSec} ${totalSec === 1 ? 'second' : 'seconds'}`;
+    if (totalSec < 60) return t('locked.countdown.seconds', { count: totalSec });
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     if (mins < 60) {
-        const minuteText = `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+        const minuteText = t('locked.countdown.minutes', { count: mins });
         if (secs === 0) return minuteText;
-        return `${minuteText} ${secs} ${secs === 1 ? 'second' : 'seconds'}`;
+        return t('locked.countdown.pair', { first: minuteText, second: t('locked.countdown.seconds', { count: secs }) });
     }
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    const hourText = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    const hourText = t('locked.countdown.hours', { count: hours });
     if (remMins === 0) return hourText;
-    return `${hourText} ${remMins} ${remMins === 1 ? 'minute' : 'minutes'}`;
+    return t('locked.countdown.pair', { first: hourText, second: t('locked.countdown.minutes', { count: remMins }) });
 }

@@ -65,7 +65,6 @@ describe('regression/remaining-control-rows', () => {
 
         expectButtonsUseSize([
             screen.getByRole('button', { name: 'Switch input to USD' }),
-            screen.getByRole('button', { name: 'Paste from clipboard' }),
         ], 'sm');
     });
 
@@ -91,7 +90,7 @@ describe('regression/remaining-control-rows', () => {
             </MessagingContext.Provider>,
         );
 
-        const chain = await screen.findByRole('combobox', { name: 'Token chain' });
+        const chain = await screen.findByRole('combobox', { name: 'Token network' });
         expectFieldsUseSize([
             chain,
             screen.getByRole('textbox', { name: 'Token ticker' }),

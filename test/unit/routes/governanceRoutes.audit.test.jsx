@@ -169,6 +169,26 @@ describe('governance route audit', () => {
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['Question (optional)', 'safe\u202eunsafe', 'Question cannot contain text-direction control characters.'],
+        ['Option 0', 'safe\u200bunsafe', 'Option cannot contain zero-width characters.'],
+    ])('refuses hostile poll text from %s before compose', async (label, value, message) => {
+        const messaging = messagingWith();
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+
+        expect(await screen.findByText(message)).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
     it('refuses poll creation from an address with no governance-token balance', async () => {
         const messaging = messagingWith({
             getWalletBalances: vi.fn().mockResolvedValue({
@@ -399,21 +419,21 @@ describe('governance route audit', () => {
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
 
         for (const rate of ['0', '-1']) {
             fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
             fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+            expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         }
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeTruthy();
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeTruthy();
+        expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
@@ -714,7 +734,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
-        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+        expect(screen.getByText('Polls created on this network appear here.')).toBeTruthy();
     });
 
     it('hides poll rows that belong to the previous wallet while the next list loads', async () => {

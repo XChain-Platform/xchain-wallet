@@ -22,14 +22,15 @@ describe('classifyRecipients edge cases', () => {
             invalid: [],
             duplicates: 0,
             wrongNetwork: [],
+            addressRefs: [],
         });
     });
 
-    it('deduplicates valid bech32 addresses without changing the retained spelling', () => {
+    it('deduplicates bech32 case variants and returns the lowercase form', () => {
         const upper = BTC_MAINNET.toUpperCase();
         const out = classifyRecipients([upper, BTC_MAINNET, upper], CHAIN);
 
-        expect(out.valid).toEqual([upper]);
+        expect(out.valid).toEqual([BTC_MAINNET]);
         expect(out.duplicates).toBe(2);
     });
 
@@ -51,10 +52,48 @@ describe('classifyRecipients edge cases', () => {
         expect(out.duplicates).toBe(0);
     });
 
+    // Mirrors the indexer's canonical caret id: a caret, then digits with no leading zero.
+    it('names a canonical ^<index> address reference but still skips it', () => {
+        const out = classifyRecipients([BTC_MAINNET, '^123', '^7'], CHAIN);
+
+        expect(out.valid).toEqual([BTC_MAINNET]);
+        expect(out.invalid).toEqual(['^123', '^7']);
+        expect(out.addressRefs).toEqual(['^123', '^7']);
+        expect(out.wrongNetwork).toEqual([]);
+    });
+
+    it('leaves non-canonical caret entries as plain invalid input', () => {
+        const odd = ['^007', '^0', '^', '^12a', '^-1', '123', '^^5'];
+        const out = classifyRecipients(odd, CHAIN);
+
+        expect(out.invalid).toEqual(odd);
+        expect(out.addressRefs).toEqual([]);
+    });
+
+    it('names a reference without a chain too, since it is never a plausible address', () => {
+        const out = classifyRecipients(['^42'], null);
+
+        expect(out.valid).toEqual([]);
+        expect(out.addressRefs).toEqual(['^42']);
+    });
+
     it('reports valid addresses for another network separately from malformed input', () => {
         const out = classifyRecipients([BTC_REGTEST, 'not-an-address'], CHAIN);
 
         expect(out.invalid).toEqual([BTC_REGTEST, 'not-an-address']);
         expect(out.wrongNetwork).toEqual([BTC_REGTEST]);
+    });
+});
+
+// One pasted token with no separators costs minutes unless it is refused first:
+// the validators decode it as base58 once per coin and network, and that decode
+// is quadratic.
+describe('classifyRecipients on a very long single entry', () => {
+    it('drops it as invalid in well under a second', () => {
+        const started = performance.now();
+        const result = classifyRecipients(['x'.repeat(30_000)], { coin: 'bitcoin', networkKind: 'mainnet' });
+        expect(result.valid).toEqual([]);
+        expect(result.invalid).toHaveLength(1);
+        expect(performance.now() - started).toBeLessThan(1000);
     });
 });

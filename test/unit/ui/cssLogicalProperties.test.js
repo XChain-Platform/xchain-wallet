@@ -51,7 +51,6 @@ const physicalProperties = new Set([
 // LTR edge, and number inputs stay LTR in every locale.
 const allowedPhysicalDeclarations = new Set([
     'packages/core/src/shared/components/AlertsOverlay.module.css|.overlay|padding|env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0)',
-    'packages/core/src/shared/components/BottomTabBar.module.css|.sheet|padding|var(--xc-space-2) env(safe-area-inset-right, 0px) calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3))) env(safe-area-inset-left, 0px)',
     'packages/core/src/shared/components/GatedFileViewer.module.css|.overlay|padding|calc(var(--xc-space-4) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',
     "packages/core/src/shared/components/LeftNav.module.css|.layout[data-xc-tier='compact'] > .main > .header|padding|env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px)",
     'packages/core/src/shared/components/NoticeModal.module.css|.overlay|padding|calc(var(--xc-page-top) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',
@@ -79,8 +78,8 @@ const ltrIslands = [
     'packages/core/src/shared/components/PsbtIntentPanel.module.css|.addr,.value,.totalsValue,.details code',
     'packages/core/src/shared/components/RawPsbtViewer.module.css|.hex,.json',
     'packages/core/src/shared/components/TotalBalanceHero.module.css|.amount',
-    'packages/core/src/shared/components/WatcherResultPanel.module.css|.successMono',
-    'packages/core/src/shared/components/WatcherResultPanel.module.css|.machineText',
+    'packages/core/src/shared/components/WatcherExport.module.css|.successMono',
+    'packages/core/src/shared/components/WatcherExport.module.css|.machineText',
     'packages/core/src/shared/components/settings/BackupSection.module.css|.mnemonicInput',
     'packages/core/src/shared/components/settings/BackupSection.module.css|.gapLimitInput',
     'packages/core/src/shared/components/settings/DeveloperModeSection.module.css|.descriptor',
@@ -347,6 +346,20 @@ describe('wallet CSS logical properties', () => {
         expect(value(route('MarketActivity', ":global([dir='rtl']) .marketSelectorChevron"), 'transform')).toBe('scaleX(-1)');
         expect(value(route('MySwapsView', ":global([dir='rtl']) .side + .side::before"), 'transform')).toBe('scaleX(-1)');
         expect(value(route('OnboardingCarousel', ":global([dir='rtl']) .frame"), '--xc-frame-enter-offset')).toBe('calc(-1 * var(--xc-space-4))');
+        expect(value(route('History', ":global([dir='rtl']) .rowSelected"), 'box-shadow')).toBe('inset -3px 0 0 var(--xc-control-selected)');
+        expect(value(route('MessagingInbox', '.convName'), 'unicode-bidi')).toBe('plaintext');
+        expect(value(route('MessagingInbox', '.convPreview'), 'unicode-bidi')).toBe('plaintext');
+    });
+
+    it('flips the navigation rail and reserves address-field room on the side the actions occupy', () => {
+        const value = (rule, property) => rule?.nodes.find((node) => node.type === 'decl' && node.prop === property)?.value;
+        expect(value(ruleFor('packages/core/src/ui/tokens.css', ":root[dir='rtl']"), '--xc-shadow-nav-indicator'))
+            .toBe('inset -3px 0 0 var(--xc-accent-primary, var(--xc-text))');
+        for (const name of ['AddressField', 'AddressCombobox']) {
+            const rtlInput = ruleFor(`packages/core/src/ui/${name}.module.css`, ":global([dir='rtl']) .wrap input");
+            expect(value(rtlInput, 'padding-inline-start'), name).toMatch(/^var\(--address-end-room,/);
+            expect(value(rtlInput, 'text-align'), name).toBe('end');
+        }
     });
 
     it('mirrors shell affordances and isolates machine-readable values', () => {
@@ -358,7 +371,9 @@ describe('wallet CSS logical properties', () => {
 
         expect(assetCard).toMatch(/\.chevron:dir\(rtl\)[^{]*\{[^}]*transform:\s*scaleX\(-1\)/s);
         expect(badge).toMatch(/\.badge:dir\(rtl\)[^{]*\{[^}]*safe-area-inset-right/s);
-        expect(badge).toMatch(/\.picker:dir\(rtl\)[^{]*\{[^}]*background-position:\s*left/s);
+        // The badge picker takes its chevron, and its RTL side, from the shared select rule.
+        expect(badge).not.toMatch(/\.picker[^{]*\{[^}]*background-position/s);
+        expect(read('packages/core/src/ui/tokens.css')).toMatch(/\[dir='rtl'\] select[^{]*\{[^}]*background-position:\s*left/s);
         expect(shell).toMatch(/\.sidebarFrame:dir\(rtl\)[^{]*\{[^}]*box-shadow:\s*16px/s);
         expect(approval.match(/dir="ltr"/g)).toHaveLength(3);
     });

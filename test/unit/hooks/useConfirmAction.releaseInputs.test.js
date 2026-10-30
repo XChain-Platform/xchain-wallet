@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
-import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { refusedBeforeSigning, useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
 
 const RESERVATION_ID = '0123456789abcdef0123456789abcdef';
 
@@ -15,7 +15,7 @@ function settle(promise) {
     return promise.then((value) => ({ value }), (error) => ({ error }));
 }
 
-function makeCompose({ releaseInputs, reservationId = RESERVATION_ID } = {}) {
+function makeCompose({ releaseInputs, reservationId = RESERVATION_ID, action = 'SEND' } = {}) {
     const encoder = {
         createTx: vi.fn(async () => ({
             psbt: 'PSBT',
@@ -31,8 +31,8 @@ function makeCompose({ releaseInputs, reservationId = RESERVATION_ID } = {}) {
                 encoder,
                 actions: {
                     createAction: () => ({
-                        actionString: 'SEND|0|JDOG|1|addr',
-                        action: 'SEND',
+                        actionString: `${action}|0|JDOG|1|addr`,
+                        action,
                         version: 0,
                     }),
                 },
@@ -46,7 +46,7 @@ function makeCompose({ releaseInputs, reservationId = RESERVATION_ID } = {}) {
         },
         chainId: 'btc',
         actionData: {
-            action: 'SEND',
+            action,
             params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: 'addr' },
         },
         encoderOpts: { pubkey: 'pub', change: 'change' },
@@ -109,6 +109,150 @@ describe('useConfirmAction encoder reservation release', () => {
             await hook.result.current.approve({});
             await confirmation;
         });
+        hook.unmount();
+
+        expect(releaseInputs).not.toHaveBeenCalled();
+    });
+
+    // A refusal raised before signing leaves nothing that could spend the
+    // inputs, and the fresh review it asks for needs them free to compose.
+    it('releases once when onApprove refuses before signing', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const refusal = refusedBeforeSigning(new Error('Terms changed. Nothing was sent.'));
+        const { confirmation } = await readyConfirm(hook.result, compose, async () => { throw refusal; });
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).error).toBe(refusal);
+        hook.unmount();
+
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
+    });
+
+    it('releases a send build once when broadcast is permanently refused', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const refusal = Object.assign(new Error('Nothing was sent: bad-txns-inputs-missingorspent'), {
+            name: 'BroadcastFailedPermanentError',
+        });
+        const { confirmation } = await readyConfirm(
+            hook.result,
+            compose,
+            async () => { throw refusal; },
+        );
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).error).toBe(refusal);
+        hook.unmount();
+
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
+    });
+
+    it('releases a staking action build when broadcast is permanently refused', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs, action: 'UNSTAKE' });
+        const hook = renderHook(() => useConfirmAction());
+        const refusal = Object.assign(new Error('Nothing was sent: txn-mempool-conflict'), {
+            name: 'BroadcastFailedPermanentError',
+        });
+        const { confirmation } = await readyConfirm(
+            hook.result,
+            compose,
+            async () => { throw refusal; },
+        );
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).error).toBe(refusal);
+        hook.unmount();
+
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
+    });
+
+    it.each([
+        ['transient refusal', Object.assign(new Error('ECONNREFUSED'), { name: 'BroadcastFailedTransientError' })],
+        ['unknown outcome', new Error('signer reply was lost')],
+        ['already-known reply', Object.assign(new Error('txn-already-known'), { name: 'BroadcastFailedPermanentError' })],
+    ])('keeps inputs held for a %s', async (_label, outcome) => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const { confirmation } = await readyConfirm(
+            hook.result,
+            compose,
+            async () => { throw outcome; },
+        );
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        await confirmation;
+        hook.unmount();
+
+        expect(releaseInputs).not.toHaveBeenCalled();
+    });
+
+    it('keeps inputs held when the submit result is already queued', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const queued = { queued: true, broadcast: 'queued' };
+        const { confirmation } = await readyConfirm(hook.result, compose, async () => queued);
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).value).toBe(queued);
+        hook.unmount();
+
+        expect(releaseInputs).not.toHaveBeenCalled();
+    });
+
+    it('preserves the permanent refusal when releasing its inputs fails', async () => {
+        const releaseInputs = vi.fn(async () => { throw new Error('release unavailable'); });
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const refusal = Object.assign(new Error('Nothing was sent: bad-txns-inputs-missingorspent'), {
+            name: 'BroadcastFailedPermanentError',
+        });
+        const { confirmation } = await readyConfirm(
+            hook.result,
+            compose,
+            async () => { throw refusal; },
+        );
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        const shown = await confirmation;
+        expect(hook.result.current.error).toBe(refusal);
+        hook.unmount();
+
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
+        expect(shown.error).toBe(refusal);
+    });
+
+    it('keeps the inputs held when onApprove fails without saying nothing was signed', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const { confirmation } = await readyConfirm(hook.result, compose, async () => { throw new Error('signer crashed'); });
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).error?.message).toBe('signer crashed');
         hook.unmount();
 
         expect(releaseInputs).not.toHaveBeenCalled();

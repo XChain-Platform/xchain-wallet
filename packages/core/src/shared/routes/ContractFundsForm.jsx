@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -23,7 +24,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
@@ -38,8 +39,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -77,6 +78,7 @@ function isPositiveDecimal(value) {
  */
 export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDeposit = mode === 'deposit';
@@ -118,7 +120,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain. Use Receive to generate one first.');
+                    setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -288,6 +290,8 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         // The refusal line is already on screen above the fields.
         if (withdrawRefused) return;
         if (!fromAddress) {
@@ -422,7 +426,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -436,11 +440,12 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result?.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result?.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -466,10 +471,11 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -493,7 +499,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>
@@ -651,17 +657,18 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} ${preposition} contract`}
             onSubmit={handleReview}
             status={withdrawRefused || formError ? (
                 <>
                     {withdrawRefused ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {OWNER_WITHDRAW_DISABLED_REASON}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

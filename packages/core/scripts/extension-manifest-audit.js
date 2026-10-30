@@ -18,7 +18,8 @@
 //
 //   1. manifest-version-3            - `manifest_version` must be 3
 //   2. version-is-cws-valid          - 1–4 dot-separated integers, 0–65535
-//   3. version-matches-wallet        - equals deriveExtensionVersion(root)
+//   3. version-matches-wallet        - equals deriveExtensionVersion(root),
+//                                      including beta/respin ordering tuples
 //   4. version-name-mirrors-wallet   - `version_name` === root package.json
 //   5. extension-pkg-matches-wallet  - extension package version matches root
 //   6. description-present-and-short - ≤ 132 chars (CWS listing limit)

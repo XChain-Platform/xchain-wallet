@@ -52,14 +52,14 @@ function messagingFor({ source = SOURCE, genesis, overrides = {} } = {}) {
     });
 }
 
-function mount(client = messagingFor()) {
+function mount(client = messagingFor(), issuerAddress = SOURCE.address) {
     render(
         <MessagingProvider shell="web" messaging={client}>
             <AttachContentForm
                 walletId="wallet-1"
                 chainId={CHAIN}
                 tick="ART"
-                issuerAddress={SOURCE.address}
+                issuerAddress={issuerAddress}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -92,6 +92,17 @@ afterEach(() => {
 });
 
 describe('AttachContentForm validation and review', () => {
+    it('refuses before review when the issuer is unknown', async () => {
+        const client = messagingFor();
+        mount(client, null);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled();
+        expect(client.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('shows normalized FILE values and keeps the draft when Back returns to the form', async () => {
         mount();
         await chooseFile(' art.png ', 'image/png');
@@ -149,12 +160,27 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it.each([
-        ['', 'Enter a custom fee rate greater than zero.'],
-        ['0', 'Enter a custom fee rate greater than zero.'],
-        ['-1', 'Enter a custom fee rate greater than zero.'],
-        ['0.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['0.00000001', 'Custom fee rate is too small to encode. Enter a larger rate.'],
-        ['100000000000000000000', 'Custom fee rate is too high. Enter a smaller rate.'],
+        ['Title (optional)', 'safe\u202eunsafe', 'Title cannot contain text-direction control characters.'],
+        ['Memo (optional)', 'safe\u200bunsafe', 'Memo cannot contain zero-width characters.'],
+    ])('refuses hostile %s text before review', async (label, value, message) => {
+        mount();
+        await chooseFile();
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        await review();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+    });
+
+    it.each([
+        ['', 'Enter a custom fee rate.'],
+        ['0', 'Custom fee rate must be greater than zero.'],
+        ['-1', 'Custom fee rate must be greater than zero.'],
+        ['0.123456789', 'Enter a rate of at least 1 sat/vB.'],
+        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
+        ['0.00000001', 'Enter a rate of at least 1 sat/vB.'],
+        ['100000000000000000000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses custom fee %j before review', async (rate, message) => {
         mount();
         await chooseFile();
@@ -167,7 +193,7 @@ describe('AttachContentForm validation and review', () => {
 
         await review();
 
-        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(await screen.findAllByText(message)).toHaveLength(1);
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
 
@@ -204,7 +230,7 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it('refuses a malformed selected signing address', async () => {
-        mount(messagingFor({ source: { ...SOURCE, address: 'not-an-address' } }));
+        mount(messagingFor({ source: { ...SOURCE, address: 'not-an-address' } }), 'not-an-address');
         await chooseFile();
 
         await review();

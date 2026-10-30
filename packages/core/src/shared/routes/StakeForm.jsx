@@ -13,6 +13,7 @@ import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -25,7 +26,7 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -35,8 +36,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 
@@ -85,6 +86,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -168,7 +170,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 // external), matching Send.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -205,7 +207,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     // post-top-up total.
     useEffect(() => {
         const pk = signingPubkey.trim().toLowerCase();
-        if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId) {
+        // A demo wallet cannot stake, and a demo wallet's addresses never go to
+        // an explorer (issue #82).
+        if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId || demoGuard.blocked) {
             setDetectStatus('idle');
             setExistingStake('0');
             return;
@@ -245,7 +249,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 setDetectStatus('error');
             });
         return () => { cancelled = true; };
-    }, [signingPubkey, fromAddress, chainId, messaging]);
+    }, [signingPubkey, fromAddress, chainId, messaging, demoGuard.blocked]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -341,8 +345,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRateValid = feePick.mode !== 'custom'
-        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -387,6 +389,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -419,10 +423,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing public key must be exactly 64 hexadecimal characters (Ed25519).');
-            return;
-        }
-        if (!customFeeRateValid) {
-            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);
@@ -523,7 +523,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -535,11 +535,12 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -567,10 +568,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         const verb = reviewedParams.VERSION === '2' ? 'Top up' : 'Stake';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review stake"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -598,7 +600,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -696,11 +698,12 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Stake XCHAIN"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -768,11 +771,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {qualifyReadout ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.5rem 0.75rem',
+                    border: 'var(--xc-card-border)',
+                    borderRadius: 'var(--xc-card-radius)',
+                    padding: 'var(--xc-card-pad)',
                     marginBottom: '0.75rem',
-                    background: 'var(--xc-bg-muted)',
+                    background: 'var(--xc-card-bg)',
                 }}>
                     <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
                         Capabilities this stake unlocks

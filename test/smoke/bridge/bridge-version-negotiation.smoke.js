@@ -98,15 +98,16 @@ assert.doesNotMatch(
     /isBridgeVersionSupported\(req\.bridgeVersion\)/,
     'the legacy-only version read is gone',
 );
-// connect's two return paths (existing grant + fresh grant) now build their
+// connect's three return paths (existing grant, a grant a concurrent
+// same-origin connect stores while this one waits, fresh grant) build their
 // answer through ONE ConnectSuccess builder, so version + supportedVersions
 // cannot diverge between them by construction. Both still report
 // the WALLET's version: requiredBridgeVersion is a range, so echoing the
 // request back would report a range where a version is declared.
 const connectReturns = handlersSrc.match(/return connectSuccess\(/g) || [];
 assert.equal(
-    connectReturns.length, 2,
-    'both connect return paths (existing + new) build the ConnectSuccess',
+    connectReturns.length, 3,
+    'every connect return path (existing, concurrent, new) builds the ConnectSuccess',
 );
 assert.match(
     handlersSrc,

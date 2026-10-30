@@ -1,4 +1,11 @@
+/* One row of an activity list. The list is the card (a flush card with
+   dividers between rows, on Home and in History alike), so a row draws no
+   border, corner or fill of its own; it keeps the card inset. */
 .row {
+    padding: var(--xc-card-pad);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     width: 100%;
     min-width: 0;
     min-height: var(--xc-control-h-lg);
@@ -7,18 +14,16 @@
     display: grid;
     /* Two lines: the title and amount on top, the context, status and time
        below. The title owns the flexible column, so the context and amount
-       give way first and the title is never cut to a few letters. */
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+       give way first and the title is never cut to a few letters. The title
+       column keeps a floor, so a long amount wraps inside its own column
+       instead of squeezing the label to nothing. */
+    grid-template-columns: auto minmax(3rem, 1fr) auto auto auto;
     grid-template-areas:
         "mark label primary primary trailing"
         "mark label status time trailing";
     align-items: center;
     column-gap: var(--xc-space-2);
     row-gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     color: var(--xc-text);
     font: inherit;
     text-align: start;
@@ -27,7 +32,6 @@
 }
 
 .row:hover {
-    border-color: var(--xc-accent-primary);
     background: var(--xc-bg-muted);
 }
 
@@ -37,7 +41,6 @@
 }
 
 .selected {
-    border-color: var(--xc-accent-primary);
     background: var(--xc-bg-muted);
 }
 
@@ -74,6 +77,12 @@
 /* The row is a button, which the tokens make unselectable; addresses and
    amounts inside it stay selectable for copying. */
 .context {
+    /* A badge, a link mark and the counterparty share the line with a gap, so
+       the Unverified pill no longer abuts the address; the address, the last
+       child, is the one that gives way. */
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
     max-width: 100%;
     min-width: 0;
     overflow: hidden;
@@ -84,11 +93,20 @@
     user-select: text;
 }
 
+.context > :last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .primary {
     grid-area: primary;
     font-size: var(--xc-text-sm);
     font-weight: 700;
     text-align: end;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
 }
 
 .status {
@@ -139,7 +157,6 @@
 @media (max-width: 400px) {
     .row {
         column-gap: var(--xc-space-1);
-        padding: var(--xc-space-2);
     }
 
     .primary,

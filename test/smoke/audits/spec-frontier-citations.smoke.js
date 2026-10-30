@@ -41,7 +41,9 @@ import {
 
 skipUnlessSpecs('spec frontier-citations smoke');
 
-const specs = listSpecs();
+// The wallet's own specs. Other components' specs sit in the same directories and
+// cite paths in checkouts this repo has no say over, so they are not held to this gate.
+const specs = listSpecs().filter((s) => /^wallet-/.test(s.name));
 const withFrontier = [];
 const dead = [];
 const deadTests = [];
@@ -143,9 +145,11 @@ assert.equal(deadTests.length, 0,
 // rather than left red because the alternative is a red gate nobody owns: the
 // session that retired the spec had no reason to read this floor, and the
 // session that wrote the floor had no way to know the spec would retire.
-assert.ok(withFrontier.length >= 6,
-    `only ${withFrontier.length} of ${specs.length} specs in ${SPECS_DIR} carry a BUILD-SPEC:FRONTIER `
-    + 'block, fewer than the 6 standing after a spec was retired to the resolved directory. That '
+// Lowered from 6 to 5 on 2026-10-19: the six counted the five wallet publishing and
+// rails specs plus a node spec that is not the wallet's to gate.
+assert.ok(withFrontier.length >= 5,
+    `only ${withFrontier.length} of ${specs.length} wallet specs under ${SPECS_DIR} carry a BUILD-SPEC:FRONTIER `
+    + 'block, fewer than the 5 that stand. That '
     + 'block is where a spec keeps its own record of what is left and who owns each row; if one lost '
     + 'its block, the goal state now lives nowhere. If a spec was genuinely retired, lower this floor '
     + 'in the same change and say why.');

@@ -42,7 +42,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const \{ settings \} = useSettings\(\)/,
+    /const \{ settings(?:, loading: settingsLoading)? \} = useSettings\(\)/,
     'hook called',
 );
 
@@ -93,7 +93,11 @@ assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 // --- gate UI -----------------------------------------------------------
 
-assert.match(sendSrc, /styles\.testSendGate/, 'banner uses testSendGate class');
+assert.match(
+    sendSrc,
+    /<StatusMessage variant="info" role="alert" lead=\{t\('send\.testGate\.title'\)\}>/,
+    'banner is a shared StatusMessage that announces as an alert',
+);
 // The banner used to be inlined in the `stage === 'review'` branch,
 // which a later change made unreachable for every non-watcher send. Every assertion
 // in this file still passed while the feature was dead, so pin the banner to
@@ -106,15 +110,17 @@ assert.match(
 );
 const formRender = sendSrc.slice(sendSrc.indexOf('id="send-form"'));
 assert.ok(formRender.length > 0, 'compose form found');
+// The banner is one of the compose form's status notices, so it leads the page
+// content above the form card.
 assert.match(
     formRender,
-    /\{testSendGateBanner\}/,
+    /status=\{\[[\s\S]*?,\s*testSendGateBanner\s*[,\]]/,
     'banner renders on the compose form',
 );
 assert.match(
     formRender,
-    /type="submit"[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable\}/,
-    'compose-form Send button disabled while offline, gated, or Max is unavailable',
+    /type="submit"[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable \|\| !!amountBalanceError\}/,
+    'compose-form Send button disabled while offline, gated, Max is unavailable, or the amount exceeds the known balance',
 );
 assert.match(
     sendSrc,
@@ -144,7 +150,7 @@ assert.match(
 
 // --- CSS hooks ----------------------------------------------------------
 
-for (const cls of ['testSendGate', 'testSendTitle', 'testSendBody', 'testSendActions']) {
+for (const cls of ['testSendBody', 'testSendActions']) {
     assert.match(sendCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

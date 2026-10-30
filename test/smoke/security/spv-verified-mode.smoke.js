@@ -41,7 +41,9 @@ const flowPath = join(core, 'src', 'flows', 'verifyBalances.js');
 assert.ok(existsSync(detailPath) && existsSync(flowPath), 'the SPV surfaces exist');
 
 const detailSrc = read(detailPath);
-const historySrc = read(historyPath);
+const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => read(join(core, 'src', 'shared', 'routes', `${n}.jsx`)))
+    .join('\n');
 const balanceSrc = read(balancePath);
 const flowSrc = read(flowPath);
 

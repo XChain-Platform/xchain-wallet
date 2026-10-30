@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const haptic = vi.hoisted(() => ({
@@ -27,9 +27,9 @@ vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', async () => {
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
-import { ToastHost, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, preloadToastStack, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { TokenField } from '../../../packages/core/src/shared/components/TokenField.jsx';
-import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 
 const css = (name) => readFileSync(
     `packages/core/src/shared/components/${name}.module.css`,
@@ -50,6 +50,9 @@ afterEach(() => {
 });
 
 describe('shared M to Z components at a 320px viewport', () => {
+    // The app loads the toast cards on idle after first paint; load them up front here.
+    beforeAll(() => preloadToastStack());
+
     it('keeps the searchable NetworkFilter toolbar inside its container', () => {
         const families = ['bitcoin', 'litecoin', 'dogecoin', 'ethereum', 'solana', 'dash', 'cosmos'];
         const chainRegistry = {
@@ -155,17 +158,20 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(screen.getByText(/notification message remains readable/)).toBeVisible();
         expect(screen.getByRole('button', { name: 'Review this notification action' })).toBeVisible();
 
-        const source = css('ToastHost');
+        const source = css('ToastStack');
         expect(source).toMatch(/\.toast\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/@media \(max-width:\s*360px\)[\s\S]*\.toast\s*\{[^}]*flex-wrap:\s*wrap/s);
-        expect(source).toMatch(/@media \(max-width:\s*360px\)[\s\S]*\.controls\s*\{[^}]*flex:\s*1 1 100%/s);
+        // One row at every width: the message column shrinks and wraps its
+        // own text, and the controls never become a full-width strip that
+        // sits over (and once swallowed taps on) the controls beneath.
+        expect(source).not.toMatch(/@media \(max-width:\s*360px\)/);
+        expect(source).toMatch(/\.message\s*\{[^}]*min-width:\s*0[^}]*word-break:\s*break-word/s);
         expect(source).toMatch(/\.actionBtn\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
-    it('contains the WatcherResultPanel section, payload, and action row', () => {
+    it('contains the unsigned result notice, payload, and action row', () => {
         const title = 'Unsignedtransaction'.repeat(24);
         renderAt320(
-            <WatcherResultPanel
+            <ResultScreen state="unsigned"
                 result={{
                     psbtHex: 'deadbeef'.repeat(40),
                     encoding: 'psbt'.repeat(30),
@@ -177,14 +183,14 @@ describe('shared M to Z components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByRole('region', { name: title })).toBeVisible();
-        expect(screen.getByRole('heading', { name: title }).className).toMatch(/title/);
-        expect(screen.getByRole('textbox', { name: 'Unsigned transaction hex' })).toBeVisible();
+        expect(screen.getByTestId('result-screen-notice')).toBeVisible();
+        expect(screen.getByTestId('result-screen-notice').textContent).toContain(title);
+        expect(screen.getByRole('textbox', { name: 'Unsigned transaction code' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Build another' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Done' })).toBeVisible();
 
-        const source = css('WatcherResultPanel');
+        const source = css('WatcherExport');
         expect(source).toMatch(/\.successTxidBlock textarea\s*\{[^}]*box-sizing:\s*border-box[^}]*max-width:\s*100%/s);
-        expect(source).toMatch(/\.actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*min-width:\s*0/s);
+        expect(css('ResultScreen')).toMatch(/\.actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*min-width:\s*0/s);
     });
 });

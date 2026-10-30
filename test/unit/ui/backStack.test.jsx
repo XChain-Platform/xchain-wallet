@@ -122,13 +122,13 @@ describe('back stack', () => {
     });
 
     it('expires the first Home Back press after the exit window', async () => {
-        vi.spyOn(Date, 'now')
-            .mockReturnValueOnce(10_000)
-            .mockReturnValueOnce(12_001);
+        let now = 10_000;
+        vi.spyOn(Date, 'now').mockImplementation(() => now);
         render(<><NativeBackRoot /><PageHeader title="Home" /></>);
         await settle();
 
         nativeBack({ canGoBack: false });
+        now = 12_001;
         nativeBack({ canGoBack: false });
 
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
@@ -322,5 +322,40 @@ describe('back stack', () => {
         expect(routeBack).not.toHaveBeenCalled();
         unregister();
         unregisterOverlay();
+    });
+
+    it('keeps the sentinel while a reload is starting so the reload is not superseded', async () => {
+        const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+        const unregister = registerBackHandler(() => {});
+        await settle();
+        expect(armed()).toBe(true);
+
+        // A reload begins with beforeunload; the overlay that asked for it
+        // unmounts in the same tick.
+        window.dispatchEvent(new Event('beforeunload'));
+        unregister();
+        await settle();
+
+        expect(historyBack).not.toHaveBeenCalled();
+    });
+
+    it('retires the sentinel once an unload that never completed has passed its grace', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+            const unregister = registerBackHandler(() => {});
+            await vi.advanceTimersByTimeAsync(10);
+            expect(armed()).toBe(true);
+
+            window.dispatchEvent(new Event('beforeunload'));
+            unregister();
+            await vi.advanceTimersByTimeAsync(10);
+            expect(historyBack).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(2100);
+            expect(historyBack).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

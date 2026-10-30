@@ -11,6 +11,8 @@
 import * as branding from '../../branding/branding.js';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import styles from './NetworkFilterDropdown.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 // Each entry carries the icon URL at module load time so the dropdown renders
 // without any async work. Uses mainnet icons because callers store coin
@@ -48,10 +50,9 @@ export function NetworkFilterDropdown({
     announceNetworkCount = false,
 }) {
     const selectedValue = value || 'all';
-    const countLabel = `${NETWORK_OPTIONS.length} networks`;
     const ariaLabel = announceNetworkCount && selectedValue === 'all'
-        ? `Filter by network: All networks, ${countLabel}`
-        : 'Filter by network';
+        ? t('components.networkFilterDropdown.filterByNetworkAll', { count: NETWORK_OPTIONS.length })
+        : t('home.filter.filterByNetwork');
 
     return (
         <div className={`${styles.networkWrap} ${styles[size] || ''}`.trim()}>

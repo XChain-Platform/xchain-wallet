@@ -230,7 +230,7 @@ describe('PlaceOrderPanel validation', () => {
         pressEnter(await screen.findByRole('button', { name: 'Review' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
 
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN,
             actionData: expect.objectContaining({ action: 'ORDER' }),
@@ -264,7 +264,7 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(2);
     });
 
@@ -381,7 +381,7 @@ describe('PlaceOrderPanel validation', () => {
                 <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
             </MessagingProvider>,
         );
-        expect(await screen.findByText(/Outstanding auto-pay exposure on this chain/)).toBeInTheDocument();
+        expect(await screen.findByText(/Outstanding auto-pay exposure on this network/)).toBeInTheDocument();
 
         view.rerender(
             <MessagingProvider shell="desktop" messaging={messaging}>
@@ -389,7 +389,7 @@ describe('PlaceOrderPanel validation', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByText(/Outstanding auto-pay exposure on this chain/)).toBeNull();
+        expect(screen.queryByText(/Outstanding auto-pay exposure on this network/)).toBeNull();
         expect(getAutopayExposure).toHaveBeenLastCalledWith({ walletId: 'wallet-new' });
     });
 });

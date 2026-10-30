@@ -23,11 +23,15 @@ import { useEffect, useRef } from 'react';
 
 /** @type {object[]} */
 const activeTraps = [];
-let bodyScrollLocks = 0;
-let priorBodyOverflow = '';
+// Dialog portals lock their own document, including preview frames, without
+// freezing the page that embeds them.
+// Keyed by document: a modal rendered into an iframe (the style guide's width
+// frames) locks that frame's body, never the page around it.
+const bodyScrollLocks = new WeakMap();
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+const SUPPRESS_INITIAL_FOCUS_ATTR = 'data-xc-suppress-initial-focus';
 
 function installFocusVisibleFallback() {
     if (typeof document === 'undefined') return;
@@ -51,19 +55,24 @@ function installFocusVisibleFallback() {
 
 installFocusVisibleFallback();
 
-function lockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body) return;
-    if (bodyScrollLocks === 0) {
-        priorBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+function lockBodyScroll(doc) {
+    if (!doc?.body) return;
+    const lock = bodyScrollLocks.get(doc);
+    if (lock) {
+        lock.count += 1;
+        return;
     }
-    bodyScrollLocks += 1;
+    bodyScrollLocks.set(doc, { count: 1, priorOverflow: doc.body.style.overflow });
+    doc.body.style.overflow = 'hidden';
 }
 
-function unlockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body || bodyScrollLocks === 0) return;
-    bodyScrollLocks -= 1;
-    if (bodyScrollLocks === 0) document.body.style.overflow = priorBodyOverflow;
+function unlockBodyScroll(doc) {
+    const lock = doc && bodyScrollLocks.get(doc);
+    if (!lock) return;
+    lock.count -= 1;
+    if (lock.count > 0) return;
+    if (doc.body) doc.body.style.overflow = lock.priorOverflow;
+    bodyScrollLocks.delete(doc);
 }
 
 function lockInert(element) {
@@ -112,6 +121,9 @@ function inertTargetsOutside(root) {
     return targets;
 }
 
+/** Frames a disabled or inert opener is waited on before focus is handed back. */
+const RESTORE_RETRY_FRAMES = 10;
+
 const FOCUSABLE_SELECTOR = [
     'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
     'input:not([disabled]):not([type="hidden"])', 'select:not([disabled])',
@@ -157,6 +169,48 @@ function openerFor(container) {
     return null;
 }
 
+function pageFocusTarget(closedLayer) {
+    const available = (candidate) => candidate
+        && candidate.isConnected
+        && !closedLayer?.contains(candidate)
+        && !candidate.closest('[inert]')
+        && candidate.getAttribute('aria-hidden') !== 'true';
+    const heading = Array.from(document.querySelectorAll(
+        '#xc-main h1, main h1, [role="main"] h1',
+    )).find(available);
+    if (heading) return heading;
+    return Array.from(document.querySelectorAll('#xc-main, main, [role="main"]'))
+        .find(available) || null;
+}
+
+/**
+ * Returns focus after a transient layer closes without overriding a route or
+ * control that already claimed it. A removed opener falls back to the active
+ * page heading, or its main region when the page has no heading.
+ *
+ * @param {HTMLElement | null} opener
+ * @param {HTMLElement | null} [closedLayer]
+ * @returns {boolean} whether focus moved
+ */
+export function restoreFocusAfterClose(opener, closedLayer = null) {
+    const now = document.activeElement;
+    const unclaimed = !now || now === document.body || !now.isConnected
+        || Boolean(closedLayer?.contains(now));
+    if (!unclaimed) return false;
+
+    const target = opener?.isConnected ? opener : pageFocusTarget(closedLayer);
+    if (!target || typeof target.focus !== 'function') return false;
+    if (!target.matches(FOCUSABLE_SELECTOR) && !target.hasAttribute('tabindex')) {
+        target.tabIndex = -1;
+    }
+    try {
+        target.focus({ preventScroll: true });
+        return document.activeElement === target;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Trap Tab focus within `containerRef` while `active`. On activate, snapshots
  * the opener and moves focus to `initialFocusRef` (or the first focusable
@@ -184,7 +238,8 @@ export function useFocusTrap(containerRef, {
 
         const layer = {};
         activeTraps.push(layer);
-        lockBodyScroll();
+        const ownerDoc = container.ownerDocument;
+        lockBodyScroll(ownerDoc);
         const modalRoot = modalRootFor(container);
         const backgroundTargets = modalRoot ? inertTargetsOutside(modalRoot) : [];
         backgroundTargets.forEach(lockInert);
@@ -200,9 +255,11 @@ export function useFocusTrap(containerRef, {
         const initial = requestedInitial === container
             ? (firstFocusable || container)
             : (requestedInitial || firstFocusable);
-        if (container.contains(document.activeElement)) {
+        const suppressInitialFocus = ownerDoc.documentElement
+            ?.hasAttribute(SUPPRESS_INITIAL_FOCUS_ATTR);
+        if (container.contains(ownerDoc.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
-        } else if (initial && typeof initial.focus === 'function') {
+        } else if (!suppressInitialFocus && initial && typeof initial.focus === 'function') {
             // Defer to after paint so the element is actually focusable.
             requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
         }
@@ -232,13 +289,32 @@ export function useFocusTrap(containerRef, {
             const layerIndex = activeTraps.indexOf(layer);
             if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
             backgroundTargets.forEach(unlockInert);
-            unlockBodyScroll();
+            unlockBodyScroll(ownerDoc);
             const prev = previouslyFocused.current;
-            const now = document.activeElement;
-            const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
-            if (unclaimed && prev && prev.isConnected && typeof prev.focus === 'function') {
+            // A caller often disables its opener while the dialog is pending
+            // (a Delete button marked busy until the confirm settles), and the
+            // browser refuses focus to a disabled or inert control, so the
+            // hand-back fell to the page body. Such an opener is re-enabled in
+            // an update just after the one that closes the dialog, so a
+            // blocked opener is retried for a few frames. An opener the close
+            // removed (the dialog's action navigated away) hands focus to the
+            // new page's heading instead of leaving it on the body.
+            const restore = (attempt) => {
+                const now = document.activeElement;
+                const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
+                if (!unclaimed) return;
+                if (!prev || !prev.isConnected || typeof prev.focus !== 'function') {
+                    restoreFocusAfterClose(null, container);
+                    return;
+                }
+                const blocked = prev.disabled || prev.closest?.('[inert]');
+                if (blocked && attempt < RESTORE_RETRY_FRAMES && typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(() => restore(attempt + 1));
+                    return;
+                }
                 try { prev.focus(); } catch { /* noop */ }
-            }
+            };
+            restore(0);
         };
     }, [active, containerRef, initialFocusRef, restoreFocusRef, trap]);
 }

@@ -815,6 +815,64 @@ describe('fetchChannelPointer', () => {
     });
 });
 
+describe('feed responses are bounded', () => {
+    const streamed = (totalBytes, chunkBytes = 64 * 1024) => {
+        let sent = 0;
+        let cancelled = false;
+        return {
+            ok: true,
+            status: 200,
+            body: {
+                getReader: () => ({
+                    read: async () => {
+                        if (sent >= totalBytes) return { done: true };
+                        sent += chunkBytes;
+                        return { done: false, value: new Uint8Array(chunkBytes) };
+                    },
+                    cancel: async () => { cancelled = true; },
+                }),
+            },
+            wasCancelled: () => cancelled,
+            sent: () => sent,
+        };
+    };
+
+    it('stops reading an endless channel pointer and fails closed', async () => {
+        const res = streamed(Number.MAX_SAFE_INTEGER);
+        const r = await fetchChannelPointer({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async () => res,
+        });
+        expect(r.ok).toBe(false);
+        expect(r.reason).toMatch(/too large/);
+        expect(res.wasCancelled()).toBe(true);
+        expect(res.sent()).toBeLessThan(1024 * 1024);
+    });
+
+    it('refuses a manifest or signature whose declared length is over the cap', async () => {
+        const big = { ok: true, status: 200, headers: { get: () => String(512 * 1024 * 1024) }, arrayBuffer: async () => { throw new Error('read anyway'); } };
+        const r = await fetchReleaseManifest({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            tag: 'v9.9.9',
+            fetch: async () => big,
+        });
+        expect(r.ok).toBe(false);
+        expect(r.reason).toMatch(/too large/);
+    });
+
+    it('reads a normal streamed pointer whole', async () => {
+        const res = streamed(2 * 64 * 1024);
+        const r = await fetchChannelPointer({
+            feedBaseUrl: 'https://downloads.xchain.io/wallet/',
+            pointerName: 'stable-linux.yml',
+            fetch: async () => res,
+        });
+        expect(r.ok).toBe(true);
+        expect(r.pointerText.length).toBe(2 * 64 * 1024);
+    });
+});
+
 describe('fetchReleaseManifest', () => {
     const okRes = (body) => ({
         ok: true,

@@ -10,17 +10,23 @@
 
 // ReachabilityBanner: §49.1 / §49.2 / G152.
 //
-// The compact notice sits below persistent app chrome and reports only the
-// user-facing consequence. Its Details disclosure identifies affected coins
+// The compact notice is the first row of the page content, below the page
+// header, and reports only the user-facing consequence. Its Details disclosure identifies affected coins
 // and when they were last checked, without service names or network kinds.
 
-import { useContext, useEffect, useId, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useReachability } from '../hooks/useReachability.js';
-import { branding as brandingLib, registry as registryLib } from '../../index.js';
-import { NoticesRouteContext } from './noticesRoute.js';
-import styles from './ReachabilityBanner.module.css';
-
-const chainRegistry = registryLib.defaultRegistry();
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeHiddenContext,
+    ReachabilityNoticeReportContext,
+    ReachabilityNoticeWantedContext,
+    routeHoldsNetworkData,
+    routeMayShowBalances,
+} from './noticesRoute.js';
+import { t } from '../../i18n/index.js';
+import { ReachabilityLine, affectedCoins } from './ReachabilityLine.jsx';
 
 /**
  * @param {object} [props]
@@ -36,103 +42,66 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
         confirmMs,
         startupGraceMs,
     });
-    const [detailsOpen, setDetailsOpen] = useState(false);
-    const panelId = useId();
-    // Details belong to the screen they were opened on.
     const routeKey = useContext(NoticesRouteContext);
-    useEffect(() => { setDetailsOpen(false); }, [routeKey]);
+    // A screen that already says its balances could not be checked takes
+    // the place of this notice; the probe keeps running underneath.
+    const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
+    // Balances are named only on a screen that can show one.
+    const mayShowBalances = routeMayShowBalances(routeKey);
+    // A screen of data held on this device has nothing to go out of date.
+    // A local-data screen can still ask for the notice (the endpoint settings).
+    const wantedByScreen = useContext(ReachabilityNoticeWantedContext);
+    const holdsNetworkData = routeHoldsNetworkData(routeKey) || wantedByScreen;
+    const unreachable = holdsNetworkData && (overall === 'degraded' || overall === 'offline');
+    const variant = overall === 'offline' ? 'error' : 'warning';
+    const text = mayShowBalances
+        ? t('reachability.notice.balances')
+        : t(overall === 'offline' ? 'reachability.notice.offline' : 'reachability.notice.degraded');
 
-    if (overall !== 'degraded' && overall !== 'offline') return null;
+    // The route hears what this notice says even while a screen hides it, so
+    // an empty state for data that could not be checked steps aside and a
+    // form can carry the sentence in its own notice.
+    const report = useContext(ReachabilityNoticeReportContext);
+    const refreshRef = useRef(refresh);
+    refreshRef.current = refresh;
+    const retry = useCallback(() => refreshRef.current(), []);
+    const coins = useMemo(() => affectedCoins(perChain), [perChain]);
+    useEffect(() => {
+        if (!report) return undefined;
+        report(unreachable ? {
+            variant,
+            text,
+            retryLabel: loading ? 'Checking…' : 'Try again',
+            retrying: loading,
+            retry,
+            // What the Details disclosure shows, for a form that carries the sentence.
+            coins,
+            lastChecked,
+        } : null);
+        return undefined;
+    }, [report, unreachable, variant, text, loading, retry, coins, lastChecked]);
+    useEffect(() => (report ? () => report(null) : undefined), [report]);
 
-    const coins = affectedCoins(perChain);
-    const staleness = lastChecked
-        ? `Last checked ${formatAgo(Date.now() - lastChecked)} ago.`
-        : '';
+    if (hiddenByScreen || !unreachable) return null;
 
-    const hasDetails = coins.length > 0 || Boolean(staleness);
-
-    // The Details panel is a row in the notice's own flow, so it pushes route
-    // content down instead of floating over the header or scrolling inside
-    // the notices strip.
+    // The notice is a StatusMessage so it looks like every other notice. The
+    // Details panel sits in the message's own flow, so it pushes route content
+    // down instead of floating over it or scrolling inside the notice.
     return (
-        <div className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}>
-            <div className={styles.banner}>
-                {/* Only the state is announced, so a poll that refreshes the
-                    last-checked age does not repeat the notice. */}
-                <span className={styles.message} role="status" aria-live="polite" aria-atomic="true">
-                    Some balances may be out of date
-                </span>
-                <button
-                    type="button"
-                    className={styles.retry}
-                    onClick={refresh}
-                    disabled={loading}
-                >
-                    {loading ? 'Checking…' : 'Try again'}
-                </button>
-                {hasDetails ? (
-                    <button
-                        type="button"
-                        className={styles.detailsToggle}
-                        aria-expanded={detailsOpen ? 'true' : 'false'}
-                        aria-controls={panelId}
-                        onClick={() => setDetailsOpen((open) => !open)}
-                    >
-                        Details
-                    </button>
-                ) : null}
-            </div>
-            {hasDetails && detailsOpen ? (
-                <div id={panelId} className={styles.detailPanel}>
-                    {coins.length > 0 ? (
-                        <ul className={styles.coinList} aria-label="Affected coins">
-                            {coins.map((coin) => (
-                                <li key={coin.key} className={styles.coin}>
-                                    {coin.iconUrl ? (
-                                        <img src={coin.iconUrl} alt="" aria-hidden="true" />
-                                    ) : (
-                                        <span className={styles.coinFallback} aria-hidden="true" />
-                                    )}
-                                    <span>{coin.name}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : null}
-                    {staleness ? <p className={styles.staleness}>{staleness}</p> : null}
-                </div>
-            ) : null}
-        </div>
+        <StatusMessage
+            variant={variant}
+            role={null}
+            // This is the shell's notice itself, so its error tone never hides it.
+            keepsShellNotice
+            // The live region is the inner status span; the box carries the notice marker.
+            marksNotice
+            recovery={{
+                label: loading ? 'Checking…' : 'Try again',
+                onAction: refresh,
+                disabled: loading,
+            }}
+        >
+            <ReachabilityLine text={text} coins={coins} lastChecked={lastChecked} resetKey={routeKey} />
+        </StatusMessage>
     );
-}
-
-function affectedCoins(perChain) {
-    if (!Array.isArray(perChain)) return [];
-    const seen = new Set();
-    const coins = [];
-    for (const chain of perChain) {
-        if (chain?.mode !== 'degraded' && chain?.mode !== 'offline') continue;
-        const descriptor = chainRegistry.get(chain.chainId);
-        const key = descriptor?.coin || coinNameFromChainId(chain.chainId).toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        coins.push({
-            key,
-            name: descriptor?.displayName || coinNameFromChainId(chain.chainId),
-            iconUrl: brandingLib.chainIconSmallUrl(
-                descriptor?.coin ? `${descriptor.coin}-mainnet` : chain.chainId,
-            ),
-        });
-    }
-    return coins;
-}
-
-function formatAgo(diffMs) {
-    if (diffMs < 60_000) return `${Math.max(1, Math.round(diffMs / 1000))}s`;
-    if (diffMs < 3_600_000) return `${Math.round(diffMs / 60_000)}m`;
-    return `${Math.round(diffMs / 3_600_000)}h`;
-}
-
-function coinNameFromChainId(chainId) {
-    const coin = String(chainId || 'Unknown').split('-')[0];
-    return `${coin.charAt(0).toUpperCase()}${coin.slice(1)}`;
 }

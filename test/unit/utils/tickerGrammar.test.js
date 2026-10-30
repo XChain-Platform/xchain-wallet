@@ -176,6 +176,8 @@ describe('ticker grammar', () => {
 
         it('refuses characters outside the allowlist entirely', () => {
             expect(tickerGrammarError('CAFÉ')).toMatch(/can only use/);
+            expect(tickerGrammarError('СOIN')).toMatch(/can only use/);
+            expect(tickerGrammarError('ΤOKEN')).toMatch(/can only use/);
             expect(tickerGrammarError('TOKEN/1')).toMatch(/can only use/);
             expect(tickerGrammarError('BACK\\SLASH')).toMatch(/can only use/);
             expect(tickerGrammarError("QUOTE'D")).toMatch(/can only use/);

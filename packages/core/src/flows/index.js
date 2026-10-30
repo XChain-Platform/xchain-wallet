@@ -101,6 +101,7 @@ export {
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
     BATCH_WEIGHT_BUDGET,
+    BATCH_MAX_COMMANDS,
 } from './batchCommand.js';
 export { oraclePriceAction } from './oraclePriceAction.js';
 export {
@@ -209,6 +210,7 @@ export {
     listContacts,
     findContactByAddress,
     saveContact,
+    saveContacts,
     deleteContact,
 } from './contacts.js';
 export {
@@ -216,7 +218,7 @@ export {
     filterSuggestions,
 } from './recentDestinations.js';
 export { checkRecipientNovelty } from './recipientNovelty.js';
-export { classifySignRisk } from './signRiskClassifier.js';
+export { classifySignRisk, assertNoDeceptiveCharacters } from './signRiskClassifier.js';
 export {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -366,6 +368,8 @@ export {
     contributeMultisigSignature,
     aggregateMultisigSession,
     finalizeMultisigSigningSession,
+    MultisigFinalizationConflictError,
+    MULTISIG_FINALIZATION_CONFLICT,
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
 export { signMultisigLocally } from './multisigSignLocally.js';
@@ -528,6 +532,8 @@ export {
     BackupConflictError,
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
+    BackupSealDamagedError,
+    RestoreDevicePasswordError,
     BACKUP_PAYLOAD_VERSION,
     MIN_BACKUP_PASSWORD_LENGTH,
 } from './backupFile.js';
@@ -621,10 +627,20 @@ export {
     assertSigningAllowed,
     configurePanicModePersistence,
     applyExternalPanicModeState,
+    holdPanicModeFreeze,
+    getPanicModeSaveStatus,
+    subscribePanicModeSaveStatus,
+    subscribePanicModeState,
+    PANIC_SAVE_OK,
+    PANIC_SAVE_UNSAVED,
+    PANIC_SAVE_CLEAR_FAILED,
     PANIC_STORAGE_KEY,
     getPanicArmedBy,
     PANIC_ARMED_SELF,
     PANIC_ARMED_DURESS,
+    PANIC_COVER_MESSAGE,
+    panicCoverError,
+    isPanicFreezeSelfArmed,
     PanicModeActiveError,
     DEFAULT_DURATION_MS as PANIC_MODE_DEFAULT_DURATION_MS,
     MIN_DURATION_MS as PANIC_MODE_MIN_DURATION_MS,
@@ -658,13 +674,17 @@ export {
 export {
     classifyBroadcastFailure,
     isAlreadyOnNetworkRejection,
+    isSpendConflictRejection,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
+    QUEUED_BROADCAST_IN_FLIGHT_NAME,
 } from './broadcastPermanence.js';
 // §4.6 input liveness. The host route owns the utxo fetch; the comparison and
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
-export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
+export {
+    INPUTS_ALREADY_SPENT_NAME, NAME_SALE_IN_FLIGHT_NAME, checkInputLiveness, inputAddresses, livenessMessage, nameSaleInFlightMessage,
+} from './inputLiveness.js';
 // Which transaction carries the native-coin protocol fee.
 export {
     nativeFeeOutputOf,
@@ -682,6 +702,8 @@ export {
     nativeFeeRequoteMessage,
     satsFromNativeDecimal,
 } from './nativeFeeRequote.js';
+// Host routes run signature guards and retried pre-flights with fresh explorer reads.
+export { explorerFreshScope, retryRateLimitedPreflight } from '../sdk/explorerRateLimit.js';
 // Finishing a stored confirm away from the form that made it.
 export {
     RESUMABLE_DISPATCH_METHODS,
@@ -702,6 +724,16 @@ export {
     computeBackupReminderState,
 } from './backupReminder.js';
 export {
+    readMigrationSweeps,
+    pendingMigrationSweeps,
+    recordMigration,
+    setMigrationRows,
+    markMigrationSwept,
+    dismissMigrationSweeps,
+    clearMigrationSweeps,
+    subscribeMigrationSweeps,
+} from './migrationSweeps.js';
+export {
     entriesToCsv,
     entriesToJson,
     buildExportFilename,
@@ -715,6 +747,9 @@ export {
     getDemoWalletPassword,
     getDemoWalletExpiry,
     clearDemoWalletId,
+    holdDemoLock,
+    isDemoLockHeld,
+    releaseDemoLock,
     isDemoWallet,
     isDemoWalletExpired,
     DEMO_DEFAULT_TTL_MS,
@@ -748,6 +783,12 @@ export {
     DEFAULT_PER_QUERY_TIMEOUT_MS,
     DEFAULT_CHAIN_TIMEOUT_MS,
 } from './discoverUsedAddresses.js';
+export {
+    discoverWalletAddresses,
+    discoveryChainIds,
+    DISCOVERY_GAP_LIMIT,
+    UnrecognizedExplorerReplyError,
+} from './walletAddressDiscovery.js';
 export {
     createSignThrottle,
     SIGN_THROTTLE_DEFAULT_BURST,

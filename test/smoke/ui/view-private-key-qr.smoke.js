@@ -20,6 +20,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -46,7 +47,7 @@ assert.match(keyQrSrc, /alt=\{alt\}/, 'KeyQR threads alt through for a11y');
 // --- 2. Both shells wire renderQR to KeyQR --------------------------------
 
 assert.match(
-    readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8'),
+    englishDictionarySource(),
     /'shell\.privateKeyQr': 'Private key QR'/,
     'the localized QR alt text stays "Private key QR"',
 );

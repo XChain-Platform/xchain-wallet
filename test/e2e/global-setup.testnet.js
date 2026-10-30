@@ -27,11 +27,26 @@
 // stageRunInput), and the teardown returned here removes it. A venue that
 // fails never has the key staged at all.
 
-import { RUN_INPUT_ENV, checkTestnetVenue, liveVenue, stageRunInput, TESTNET_COIN, testnetEndpoints } from './fixtures/testnet.js';
+import {
+    RUN_INPUT_ENV,
+    TESTNET_COIN,
+    checkTestnetVenue,
+    liveVenue,
+    readRunInput,
+    stageRunInput,
+    testnetEndpoints,
+} from './fixtures/testnet.js';
+import { assertOriginsAllowed, suiteOrigin } from './fixtures/testnet_origin.js';
+import { MINT_AMOUNT, preflightGasHeadroom } from './fixtures/testnet_gas_preflight.js';
+import { preflightRunInputKeys } from './fixtures/testnet_keys.js';
+import { preflightRunInput } from './fixtures/testnet_preflight.js';
+import { preflightClaimantReward } from './fixtures/testnet_rewards.js';
 
 export default async function globalSetup() {
     const endpoints = testnetEndpoints();
-    const report = await checkTestnetVenue(liveVenue(endpoints));
+    await assertOriginsAllowed(endpoints, { origin: suiteOrigin() });
+    const venue = liveVenue(endpoints);
+    const report = await checkTestnetVenue(venue);
     // Which price a run is asserting against is the single fact that explains
     // a fee number, so it is logged beside the height the run starts from.
     console.log(`[testnet ${TESTNET_COIN}] explorer ${endpoints.explorerUrl}: tip ${report.tip}, `
@@ -39,7 +54,23 @@ export default async function globalSetup() {
     console.log(`[testnet ${TESTNET_COIN}] priced: XCHAIN/USD ${report.price.xchainUsdPrice}, `
         + `coin/USD ${report.price.coinUsdPrice} (round ${report.price.oracleRound})`);
 
+    await preflightGasHeadroom(MINT_AMOUNT, {
+        explorerUrl: endpoints.explorerUrl,
+        coin: TESTNET_COIN,
+    });
     const staged = await stageRunInput(process.stdin);
+    try {
+        const input = readRunInput(staged.file);
+        preflightRunInputKeys(input);
+        await preflightRunInput(venue, input);
+        await preflightClaimantReward(input, {
+            explorerUrl: endpoints.explorerUrl,
+            coin: TESTNET_COIN,
+        });
+    } catch (error) {
+        staged.cleanup();
+        throw error;
+    }
     // Backstop for a runner killed before teardown: 'exit' handlers run on a
     // normal exit and after Playwright's own SIGINT handling.
     process.once('exit', staged.cleanup);

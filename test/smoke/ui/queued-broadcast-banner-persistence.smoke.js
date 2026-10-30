@@ -46,15 +46,23 @@ const navJsx = readFileSync(
 assert.ok(/FullLayoutWithNav\(\{ nav, bottomBar, header, notices, children \}\)/.test(navJsx),
     'FullLayoutWithNav exposes header and notices slots');
 assert.ok(
-    /\{header \? <div className=\{styles\.header\}>\{header\}<\/div> : null\}/.test(navJsx),
+    /<div className=\{styles\.header\}>\{header\}<\/div>/.test(navJsx),
     'FullLayoutWithNav renders the header above the route body when supplied',
 );
+// Notices are page content, not toolbar content: the layout keeps them
+// mounted (so a queued broadcast survives route changes) and portals them
+// into one host that the route's Screen shows at the top of its body.
 assert.ok(
-    /\{notices \? \(\s*<div className=\{styles\.notices\}>\s*<NoticesRouteContext\.Provider value=\{routeKey \?\? null\}>\s*\{notices\}\s*<\/NoticesRouteContext\.Provider>\s*<\/div>\s*\) : null\}/.test(navJsx),
-    'FullLayoutWithNav renders the notices above the route body when supplied',
+    /createPortal\(\s*<NoticesRouteContext\.Provider value=\{routeKey \?\? null\}>[\s\S]*?\{notices\}[\s\S]*?noticesHost,\s*\)/.test(navJsx),
+    'FullLayoutWithNav keeps the notices mounted and renders them into the shared host',
 );
-assert.ok(/<div className=\{styles\.mainBody\}>\{children\}<\/div>/.test(navJsx),
-    'route body wrapped in .mainBody so the header + body share the main flex column');
+assert.ok(
+    /<div className=\{styles\.mainBody\}>[\s\S]*?<ShellNoticesContext\.Provider value=\{shellNotices\}>[\s\S]*?\{children\}/.test(navJsx),
+    'route body wrapped in .mainBody and handed the notices host for its Screen',
+);
+// The route body also carries the nav-surface context PageHeader reads.
+assert.ok(/<NavSurfaceContext\.Provider value=\{navSurface\}>/.test(navJsx),
+    'route body carries the visible nav surface for PageHeader');
 
 // --- 2. CSS supports the new flex column --------------------------------
 

@@ -21,6 +21,33 @@ const ADDRESS = {
 afterEach(cleanup);
 
 describe('PublishFileForm rendering', () => {
+    it('refuses hostile file metadata before watcher review', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PublishFileForm walletId="wallet-1" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.change(await screen.findByLabelText('Choose file to publish'), {
+            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
+        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+            target: { value: 'safe\u200bunsafe' },
+        });
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Title cannot contain zero-width characters.');
+        expect(screen.queryByRole('form', { name: 'Review publish' })).toBeNull();
+    });
+
     it('loads owned tokens only after gated publishing is selected', async () => {
         const getOwnedTokens = vi.fn().mockResolvedValue([{ tick: 'GATE' }]);
         const messaging = {
@@ -80,5 +107,39 @@ describe('PublishFileForm rendering', () => {
         expect(clickAllowed).toBe(false);
         expect(screen.getByRole('form', { name: 'Publish file' })).toBeTruthy();
         expect(screen.queryByRole('form', { name: 'Review publish' })).toBeNull();
+    });
+
+    it('never signs a fresh build from the review stage after leaving watcher mode', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            fileAction: vi.fn().mockResolvedValue({ txid: 'a'.repeat(64) }),
+            fileActionHw: vi.fn().mockResolvedValue({ txid: 'b'.repeat(64) }),
+            buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbt: 'unsigned' }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PublishFileForm walletId="wallet-1" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+        const fileInput = await screen.findByLabelText('Choose file to publish');
+        fireEvent.change(fileInput, {
+            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        const review = await screen.findByRole('form', { name: 'Review publish' });
+
+        window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: { walletMode: 'full' } }));
+        await screen.findByRole('button', { name: 'Sign and publish' });
+        fireEvent.submit(review);
+
+        await waitFor(() => expect(document.body.textContent).toMatch(/confirm screen/i));
+        expect(messaging.fileAction).not.toHaveBeenCalled();
+        expect(messaging.fileActionHw).not.toHaveBeenCalled();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });

@@ -16,9 +16,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { escrowedTokens, sumEscrowByTick, addPlainDecimals } from '../../../packages/core/src/flows/escrowedTokens.js';
 import {
     assertReferencedOfferActionable,
+    OFFER_LIFECYCLE_REFUSAL,
     readMarketExpiryClock,
     withMarketExpiry,
 } from '../../../packages/core/src/flows/marketExpiry.js';
+import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import { hydrateEnvelopeError, serializeError } from '../../../packages/extension/src/background/MessageHost.js';
 
 const OWNER = 'tltc1ql05c4je6cjg5ejzyrrr2nxvdr7htmf5eelek37';
 
@@ -227,6 +230,47 @@ describe('market expiry clock and action guard', () => {
             chainId: 'litecoin-testnet',
             actionData: { action: 'ORDER', params: { VERSION: '1', ORDER_ACTION_INDEX: '9' } },
         })).rejects.toThrow('chain height is still syncing');
+    });
+
+    it('shows a stale-height refusal in its own words after it crosses the host boundary', async () => {
+        // A dispenser edit signed one block after the indexer fell behind the
+        // node: the form passes the error message as its fallback, and the
+        // submit copy must not collapse the wallet's own sentence into the
+        // generic "Something went wrong" line.
+        const sdk = {
+            ...fakeSdk({ status: {
+                last_block: { TLTC: 1432 },
+                chain_tip: { TLTC: 1433 },
+                last_block_time: { TLTC: 4_000 },
+            } }),
+            getAction: vi.fn(async () => ({ state: { status: 'open', expiration: 9_000 } })),
+        };
+        const thrown = await assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'DISPENSER', params: { VERSION: '2', DISPENSER_ACTION_INDEX: '201' } },
+        }).then(() => null, (err) => err);
+        expect(thrown?.name).toBe(OFFER_LIFECYCLE_REFUSAL);
+
+        const crossed = hydrateEnvelopeError(serializeError(thrown).error);
+        expect(submitFailureMessage(crossed, {
+            chainId: 'bitcoin-regtest', coinTicker: 'BTC', fallback: crossed.message,
+        })).toBe('Could not verify whether this dispenser has expired because the chain height is '
+            + 'still syncing. Try again.');
+    });
+
+    it('shows an expired-offer refusal in its own words', async () => {
+        const sdk = {
+            ...fakeSdk({ status: currentStatus }),
+            getAction: vi.fn(async () => ({ state: { status: 'expired', expiration: 4_000 } })),
+        };
+        const thrown = await assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'ORDER', params: { VERSION: '1', ORDER_ACTION_INDEX: '9' } },
+        }).then(() => null, (err) => err);
+        expect(submitFailureMessage(thrown, { fallback: thrown?.message }))
+            .toBe('This order has expired.');
     });
 });
 

@@ -33,6 +33,32 @@ export const MULTISIG_SCHEMES = /** @type {const} */ ([
     'taproot-musig2',
 ]);
 
+// Most cosigners each scheme can spend from. P2SH: 15 compressed keys fill
+// the 520-byte redeem script limit. P2WSH: the script builder encodes the key
+// count as a small-number opcode, and OP_16 is the last one; at 17 keys the
+// count byte becomes OP_NOP, so the witness script can never satisfy
+// OP_CHECKMULTISIG and funds sent to it are lost. Taproot MuSig2 aggregates to
+// one key, so its cap is a usability limit, not a script limit.
+export const MAX_MULTISIG_COSIGNERS = Object.freeze({
+    'p2sh-multisig': 15,
+    'p2wsh-multisig': 16,
+    'taproot-musig2': 20,
+});
+
+/**
+ * True when a scheme holds more cosigners than its address type can spend
+ * from. Configs stored before the ceiling can exceed it; their address is
+ * unspendable or underivable.
+ *
+ * @param {string} scheme
+ * @param {number} cosignerCount
+ * @returns {boolean}
+ */
+export function exceedsMultisigCeiling(scheme, cosignerCount) {
+    const max = MAX_MULTISIG_COSIGNERS[scheme];
+    return typeof max === 'number' && cosignerCount > max;
+}
+
 // §22.2: 'local' covers both software accounts and paired hardware
 // signers (the wallet has the signer record locally either way).
 // 'external-xpub' is an xpub copied in from another wallet; we can

@@ -14,9 +14,17 @@ import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+import { AddressDiscoveryNotice } from '../components/AddressDiscoveryNotice.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/addressDiscovery.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/walletDetails.js';
+import { walletOriginLabel } from '../utils/walletOriginLabel.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
+import { pendingMigrationSweeps } from '../../flows/migrationSweeps.js';
 
 // Re-exported for the callers and tests that reached for it here before
 // the demo-exit primitives were pulled into one module.
@@ -55,8 +63,26 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
     const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+    // Remounts the status line on each check started here.
+    const [discoveryRun, setDiscoveryRun] = useState(0);
+    const [discoveryError, setDiscoveryError] = useState(/** @type {string | null} */ (null));
+    const [discoveryStarting, setDiscoveryStarting] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
+
+    async function handleCheckAddresses() {
+        if (discoveryStarting) return;
+        setDiscoveryStarting(true);
+        setDiscoveryError(null);
+        try {
+            await messaging.discoverAddresses({ walletId });
+            setDiscoveryRun((n) => n + 1);
+        } catch (err) {
+            setDiscoveryError(err?.message || String(err));
+        } finally {
+            setDiscoveryStarting(false);
+        }
+    }
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
     const currentWalletLoad = walletLoad.walletId === walletId ? walletLoad : null;
     const wallet = currentWalletLoad?.wallet || null;
@@ -159,21 +185,22 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }
 
     const formatLabel = wallet.format === 'counterwallet-legacy' ? 'FreeWallet (Counterwallet legacy)' : 'BIP39';
-    const originLabel = ({
-        'created':                'Generated in this wallet',
-        'imported-mnemonic':      'Imported from a recovery phrase',
-        'imported-freewallet':    'Imported from FreeWallet',
-        'imported-xchain-backup': 'Restored from backup file',
-        'imported-wif':           'Imported single private key',
-    })[wallet.origin] || wallet.origin || 'N/A';
+    const originLabel = walletOriginLabel(wallet.origin);
     const created = wallet.createdAt ? new Date(wallet.createdAt) : null;
     const createdLabel = created && !Number.isNaN(created.getTime())
         ? created.toLocaleString()
         : 'N/A';
 
+    const canCheckAddresses = !isDemo
+        && wallet.origin !== 'demo'
+        && wallet.format !== 'wif-only'
+        && typeof messaging.discoverAddresses === 'function';
+
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
+                {discoveryError ? <StatusMessage variant="error">{discoveryError}</StatusMessage> : null}
+                {discoveryRun > 0 ? <AddressDiscoveryNotice key={discoveryRun} /> : null}
                 <dl className={pickerStyles.detailList}>
                     <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
                     <Row label={t('walletDetails.type')} value={formatLabel} />
@@ -202,7 +229,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                     <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
                 </dl>
                 {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -211,12 +238,14 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             disabled={exitBusy}
                             icon={<Icon.MigrateIcon />}
                         >
-                            {t('walletDetails.upgradeRecovery')}
+                            {pendingMigrationSweeps(wallet.id)
+                                ? t('walletDetails.continueMigration')
+                                : t('walletDetails.upgradeRecovery')}
                         </Button>
                     </div>
                 ) : null}
                 {onRename ? (
-                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="primary"
@@ -229,8 +258,22 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                         </Button>
                     </div>
                 ) : null}
+                {canCheckAddresses ? (
+                    <div>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            block
+                            onClick={handleCheckAddresses}
+                            disabled={exitBusy || discoveryStarting}
+                            icon={<Icon.SearchIcon />}
+                        >
+                            {t('addressDiscovery.action')}
+                        </Button>
+                    </div>
+                ) : null}
                 {isDemo ? (
-                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <div>
                         <Button
                             type="button"
                             variant="danger"
@@ -240,16 +283,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             {t('walletDetails.exitDemo')}
                         </Button>
                         {exitError && !exitConfirmOpen ? (
-                            <p
-                                role="alert"
-                                style={{
-                                    marginTop: 'var(--xc-space-2)',
-                                    fontSize: 'var(--xc-text-xs)',
-                                    color: 'var(--xc-danger-fg)',
-                                }}
-                            >
-                                {exitError}
-                            </p>
+                            <StatusMessage variant="error">{exitError}</StatusMessage>
                         ) : null}
                         {exitConfirmOpen ? (
                             <DemoExitConfirm

@@ -10,29 +10,28 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
-import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
+import '../i18n/locales/en/verifySignature.js';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
 
-function inspectClipboardPaste(value) {
-    const edges = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
-    const hiddenCharacters = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
-    const normalized = String(value ?? '').replace(edges, '');
-    const hidden = hiddenCharacters.test(normalized);
-    return hidden
-        ? {
-            ok: false,
-            value: normalized,
-            error: 'Pasted text contains hidden characters. Check it and try again.',
-        }
-        : { ok: true, value: normalized, error: null };
+// A large address book would otherwise render every contact as an option
+// on focus and on each keystroke. Typing narrows the matches, and the
+// address book button reaches every contact. Recent sends keep their place
+// after the contacts; their number is already bounded upstream.
+const MAX_CONTACT_SUGGESTIONS = 50;
+
+function capContactSuggestions(matches) {
+    let contacts = 0;
+    return matches.filter((s) => s.source !== 'contact' || (contacts += 1) <= MAX_CONTACT_SUGGESTIONS);
 }
 
 /**
@@ -78,7 +77,7 @@ function inspectClipboardPaste(value) {
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  */
-export const AddressCombobox = forwardRef(function AddressCombobox(
+export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombobox(
     {
         value,
         onChange,
@@ -102,12 +101,10 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const listboxId = useId();
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
-    const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const filtered = useMemo(
-        () => filterSuggestions(suggestions, value),
+        () => capContactSuggestions(filterSuggestions(suggestions, value)),
         [suggestions, value],
     );
 
@@ -169,31 +166,24 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     return (
         <div className={wrapClass} ref={containerRef} onBlur={onBlur}>
             <Input
-                ref={(node) => {
-                    inputRef.current = node;
-                    if (typeof ref === 'function') ref(node);
-                    else if (ref) ref.current = node;
-                }}
+                ref={ref}
                 role="combobox"
                 aria-expanded={showDropdown ? 'true' : 'false'}
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
-                placeholder="Address"
+                placeholder={t('verifySignature.address')}
                 label={label}
                 size={size}
                 disabled={disabled}
                 dir="ltr"
                 autoComplete="off"
-                style={{
-                    paddingInlineEnd: IconComponent
-                        ? 'calc((var(--address-control-height) * 2) + var(--xc-space-8))'
-                        : 'calc(var(--address-control-height) + var(--xc-space-8))',
+                style={IconComponent ? {
+                    '--address-end-room': 'calc(var(--address-control-height) + var(--xc-space-2))',
                     ...style,
-                }}
+                } : style}
                 value={value}
                 onChange={(e) => {
-                    setPasteError('');
                     onChange(e);
                     setOpen(true);
                     setActiveIndex(-1);
@@ -222,7 +212,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     setActiveIndex(-1);
                 }}
                 pasteGuard
-                error={pasteError || error}
+                error={error}
                 {...rest}
             />
             {IconComponent ? (
@@ -240,30 +230,6 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
-            <span className={styles.pasteAction}>
-                <ClipboardPasteButton
-                    disabled={disabled}
-                    onPaste={(text) => {
-                        const inspected = inspectClipboardPaste(text);
-                        if (!inspected.ok) {
-                            setPasteError(inspected.error);
-                            return;
-                        }
-                        setPasteError('');
-                        const pasteEvent = {
-                            clipboardData: { getData: () => inspected.value },
-                            defaultPrevented: false,
-                            currentTarget: inputRef.current,
-                            target: inputRef.current,
-                            preventDefault() { this.defaultPrevented = true; },
-                        };
-                        onPaste?.(pasteEvent);
-                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: inspected.value } });
-                        setOpen(true);
-                        setActiveIndex(-1);
-                    }}
-                />
-            </span>
             {showDropdown ? (
                 <ul
                     id={listboxId}
@@ -286,13 +252,13 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             <span className={styles.label}>
                                 {s.label}
                                 <span className={styles.badge}>
-                                    {s.source === 'contact' ? 'Contact' : 'Recent'}
+                                    {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <AddressText address={s.address} className={styles.sublabel} size="sm" />
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" focusable={false} />
                         </li>
                     ))}
                 </ul>

@@ -21,16 +21,24 @@ import {
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import { protocolFeeRowCopy } from '../../../packages/core/src/flows/protocolFeeRow.js';
 
+const FEE_DESTINATIONS = Object.freeze({
+    'bitcoin-mainnet': '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
+    'litecoin-mainnet': 'Lfees7tszAx5Gqam2fuqf6biaX3LXafM4H',
+    'dogecoin-mainnet': 'DFeesjvoMoVqd9UDuwDSAxzHMF5xZFgeG9',
+});
+
 // Minimal SDK stub whose quoteNativeFee returns a canned quote and records its args.
 // It is a bitcoin SDK by default, so a test that pads to 546 says that it assumes Bitcoin.
-function makeSdk(quote) {
+function makeSdk(quote, network = 'bitcoin-mainnet') {
     return {
         seen: null,
+        options: { network },
         wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
         async quoteNativeFee(actionData, opts) {
             this.seen = { actionData, opts };
             return Object.assign(
-                { supported: true, valid: true, requiredFeeSats: 2000, feeDestination: 'feeDest' },
+                { supported: true, valid: true, requiredFeeSats: 2000,
+                  feeDestination: FEE_DESTINATIONS[network] },
                 quote || {},
             );
         },
@@ -55,7 +63,9 @@ describe('applyNativeFeePreflight', () => {
             sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true, pubkey: 'pk' }, source: 'src1',
         });
         expect(out.quote.requiredFeeSats).toBe(2000);
-        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 2000 }]);
+        expect(out.encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['bitcoin-mainnet'], value: 2000,
+        }]);
         expect(out.encoderOpts.payFeeInNativeCoin).toBeUndefined();
         expect(out.encoderOpts.pubkey).toBe('pk');
         expect(sdk.seen.opts.source).toBe('src1');
@@ -69,7 +79,8 @@ describe('applyNativeFeePreflight', () => {
         });
         expect(out.encoderOpts.customOutputs).toHaveLength(2);
         expect(out.encoderOpts.customOutputs.map(o => o.address)).toContain('extra');
-        expect(out.encoderOpts.customOutputs.map(o => o.address)).toContain('feeDest');
+        expect(out.encoderOpts.customOutputs.map(o => o.address))
+            .toContain(FEE_DESTINATIONS['bitcoin-mainnet']);
     });
 
     it('does not mutate the caller-supplied customOutputs array', async () => {
@@ -105,7 +116,9 @@ describe('applyNativeFeePreflight', () => {
     });
 
     it('rounds a Litecoin SWEEP fee up to the relay dust floor', async () => {
-        const sdk = Object.assign(makeSdk({ requiredFeeSats: 600, requiredFeeNative: '0.00000600' }), {
+        const sdk = Object.assign(makeSdk({
+            requiredFeeSats: 600, requiredFeeNative: '0.00000600',
+        }, 'litecoin-mainnet'), {
             wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
         });
         const out = await applyNativeFeePreflight({
@@ -114,7 +127,9 @@ describe('applyNativeFeePreflight', () => {
             encoderOpts: { payFeeInNativeCoin: true },
         });
 
-        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 5460 }]);
+        expect(out.encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['litecoin-mainnet'], value: 5460,
+        }]);
         expect(out.quote).toMatchObject({
             requiredFeeSats: 5460,
             requiredFeeNative: '0.00005460',
@@ -126,24 +141,34 @@ describe('applyNativeFeePreflight', () => {
 
     it('reads the dust threshold off the SDK network when sizing the output', async () => {
         // 600 sats clears Bitcoin's 546 and is far below Dogecoin's 100000.
-        const withNetwork = (dustThreshold) => Object.assign(makeSdk({ requiredFeeSats: 600 }), {
+        const withNetwork = (network, dustThreshold) => Object.assign(makeSdk({
+            requiredFeeSats: 600,
+        }, network), {
             wallet: { getBitcoinNetwork: () => ({ dustThreshold }) },
         });
         const btc = await applyNativeFeePreflight({
-            sdk: withNetwork(546), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+            sdk: withNetwork('bitcoin-mainnet', 546), actionData: ACTION,
+            encoderOpts: { payFeeInNativeCoin: true },
         });
-        expect(btc.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 600 }]);
+        expect(btc.encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['bitcoin-mainnet'], value: 600,
+        }]);
 
         const doge = await applyNativeFeePreflight({
-            sdk: withNetwork(100000), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+            sdk: withNetwork('dogecoin-mainnet', 100000), actionData: ACTION,
+            encoderOpts: { payFeeInNativeCoin: true },
         });
-        expect(doge.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 100000 }]);
+        expect(doge.encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['dogecoin-mainnet'], value: 100000,
+        }]);
     });
 
     it('still attaches a fee at or above the threshold', async () => {
         const sdk = makeSdk({ requiredFeeSats: 546 });
         const out = await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
-        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 546 }]);
+        expect(out.encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['bitcoin-mainnet'], value: 546,
+        }]);
     });
 
     it('exposes a non-empty forfeiture warning string', () => {
@@ -179,6 +204,39 @@ describe('applyNativeFeePreflight without a resolvable dust floor', () => {
     it('reports an unknown floor as null rather than any coin\'s number', () => {
         expect(resolveDustThreshold({})).toBe(null);
         expect(resolveDustThreshold({ wallet: { getBitcoinNetwork: () => ({ dustThreshold: 100000 }) } })).toBe(100000);
+    });
+});
+
+// The fee output's address comes from the local chain pin. The quote must name that exact
+// address so a malformed or redirected reply is refused before it reaches the encoder.
+describe('applyNativeFeePreflight fee destination', () => {
+    it.each([
+        ['undefined', undefined],
+        ['an empty string', ''],
+        ['whitespace', '   '],
+        ['a number', 123],
+        ['null', null],
+        ['an object', { address: FEE_DESTINATIONS['bitcoin-mainnet'] }],
+        ['a different network', 'mfees5QurRs5BHXofdGpTG5pXB6uC6R8RU'],
+    ])('refuses a positive fee whose destination is %s', async (_label, feeDestination) => {
+        const sdk = makeSdk({ feeDestination });
+        const caller = [{ address: 'extra', value: 5 }];
+        let err;
+        try {
+            await applyNativeFeePreflight({
+                sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true, customOutputs: caller },
+            });
+        } catch (e) { err = e; }
+        expect(err).toBeInstanceOf(NativeFeeForfeitError);
+        expect(err.reason).toBe('invalid');
+        expect(caller).toEqual([{ address: 'extra', value: 5 }]);
+    });
+
+    it('refuses a zero-fee quote with a blank destination', async () => {
+        const sdk = makeSdk({ requiredFeeSats: 0, feeDestination: '' });
+        await expect(applyNativeFeePreflight({
+            sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+        })).rejects.toMatchObject({ name: 'NativeFeeForfeitError', reason: 'invalid' });
     });
 });
 

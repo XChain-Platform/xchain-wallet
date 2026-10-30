@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     PageHeader,
@@ -21,16 +22,19 @@ import {
 } from '@xchain-wallet/core/ui';
 import { airdrop as airdropLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
-import { findListOwner } from '../../flows/listMembership.js';
+import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -61,6 +65,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const listActionIndex = String(listRef.actionIndex);
     const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const signerReady = useSignerReady(walletId);
@@ -84,7 +89,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             if (cancelled) return;
             setAddressesByChain(byChain || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -143,7 +148,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         software: 'createList',
         hardware: 'createListHw',
     });
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'TRANSFER';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'TRANSFER');
     const trimmedDestination = destination.trim();
     const trimmedMemo = memo.trim();
 
@@ -159,14 +164,17 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         const candidates = airdropLib.parsePaste(trimmedDestination);
         const classified = airdropLib.classifyRecipients(candidates, descriptor);
         if (candidates.length !== 1 || classified.valid.length !== 1) {
-            setFormError('Destination must be one valid address for the selected chain.');
+            setFormError('Destination must be one valid address for the selected network.');
             return false;
         }
         if (owner && trimmedDestination.toLowerCase() === owner.toLowerCase()) {
             setFormError('Destination must be different from the current owner.');
             return false;
         }
-        if (!typedConfirmOk) { setFormError('Type TRANSFER to confirm.'); return false; }
+        if (!typedConfirmOk) {
+            setFormError(typedConfirmationCopy.hint('TRANSFER'));
+            return false;
+        }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return false; }
@@ -186,6 +194,18 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             MEMO: trimmedMemo,
         };
         try {
+            if (typeof messaging.getListByActionIndex === 'function') {
+                const ownerCheck = await recheckListOwner({
+                    readList: (actionIndex) => messaging.getListByActionIndex({ chainId, actionIndex }),
+                    actionIndex: listActionIndex,
+                    owner,
+                });
+                if (!ownerCheck.ok) {
+                    setOwner(ownerCheck.owner);
+                    setFormError(ownerCheck.message);
+                    return;
+                }
+            }
             const next = await lane.run({
                 actionData: { action: 'LIST', params },
                 submitExtra: { params },
@@ -223,7 +243,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 extraCredentials={(
                     <Input
                         label='Type "TRANSFER" to confirm'
-                        hint="List ownership changes permanently when this transaction confirms."
+                        hint={typedConfirmationCopy.listTransfer()}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -242,9 +262,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     }
 
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="list transfer" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => setResult(null)}
                     onDone={onDone}
@@ -257,6 +280,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                     {result.psbtHex && !result.txid ? 'Unsigned list transfer created.' : 'List transfer submitted.'}
                 </StatusMessage>
                 <p className={styles.hint}>The new owner takes control when the transfer confirms.</p>
+                {result.txid ? (
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Transaction ID</dt>
+                        <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
+                    </dl>
+                ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>
@@ -271,6 +300,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             : null;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Transfer list"
             onSubmit={handleReview}
             status={sdkSupported === false || formError ? (
@@ -293,9 +323,9 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -304,14 +334,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             </dl>
 
             {ownershipReason ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{ownershipReason}</p>
-                </div>
+                <FormNotice variant="warning" role="alert">{ownershipReason}</FormNotice>
             ) : null}
 
             <Input
                 label="Destination"
-                hint="New owner's address on the selected chain."
+                hint="New owner's address on the selected network."
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -329,20 +357,20 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
-                    From the block this transfer confirms, only the new owner can edit, share, or transfer the list.
-                </p>
-                <p className={styles.warning}>The sender cannot undo the transfer.</p>
-                <p className={styles.warning}>A transfer cannot rescue a list whose owner key is lost.</p>
-                <p className={styles.warning}>
-                    A shared list keeps working on every chain because its versions carry members, never the owner.
-                </p>
-            </div>
+            <FormNotice
+                variant="warning"
+                role={null}
+                lines={[
+                    'From the block this transfer confirms, only the new owner can edit, share, or transfer the list.',
+                    'The sender cannot undo the transfer.',
+                    'A transfer cannot rescue a list whose owner key is lost.',
+                    'A shared list keeps working on every chain because its versions carry members, never the owner.',
+                ]}
+            />
 
             <Input
                 label="Type TRANSFER to confirm"
-                hint="Ownership transfer is permanent."
+                hint={typedConfirmationCopy.listTransferReview()}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

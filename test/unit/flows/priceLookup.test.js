@@ -151,6 +151,38 @@ describe('flows/priceLookup', () => {
         expect(urls.some((u) => u.startsWith('https://api.coingecko.com/'))).toBe(true);
     });
 
+    it('rejects an oracle snapshot timestamp far in the future', async () => {
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+            fetch: async () => snapshotResponse([
+                snapshotRow('BTC/USD', '999999', Math.floor(NOW / 1000) + 2 * 60 * 60),
+            ]),
+        });
+
+        await refreshFiatRates({
+            chainCoins: ['bitcoin'],
+            allowCoingeckoFallback: false,
+        });
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+    });
+
+    it('rejects an oracle snapshot that has no usable timestamp', async () => {
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+            fetch: async () => snapshotResponse([{
+                coin_pair: 'BTC/USD', price: '999999', status: 'FINALIZED', extra: 'ignored',
+            }]),
+        });
+
+        await refreshFiatRates({
+            chainCoins: ['bitcoin'],
+            allowCoingeckoFallback: false,
+        });
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+    });
+
     it('falls back to CoinGecko when the oracle is unreachable', async () => {
         configureFiatRateSource({
             now: () => NOW,
@@ -238,6 +270,32 @@ describe('flows/priceLookup', () => {
         });
         await refreshFiatRates({ chainCoins: ['bitcoin'] });
         expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+    });
+
+    it.each([
+        ['invalid JSON', { ok: true, status: 200, json: async () => { throw new SyntaxError('bad json'); } }, 1],
+        ['HTML error body', { ok: true, status: 200, json: async () => { throw new SyntaxError('<html>'); } }, 1],
+        ['empty 204 body', { ok: true, status: 204, json: async () => { throw new SyntaxError('empty'); } }, 1],
+        ['301 response', { ok: false, status: 301, json: async () => ({}) }, 1],
+        ['404 response', { ok: false, status: 404, json: async () => ({}) }, 1],
+        ['429 response', { ok: false, status: 429, json: async () => ({}) }, 2],
+        ['500 response', { ok: false, status: 500, json: async () => ({}) }, 2],
+        ['503 response', { ok: false, status: 503, json: async () => ({}) }, 2],
+    ])('leaves the price unavailable for %s with bounded requests', async (_label, response, calls) => {
+        const fetchImpl = vi.fn(async () => response);
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+            fetch: fetchImpl,
+        });
+
+        await refreshFiatRates({
+            chainCoins: ['bitcoin'],
+            allowCoingeckoFallback: false,
+        });
+
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+        expect(fetchImpl).toHaveBeenCalledTimes(calls);
     });
 
     it('conversion helpers keep their contract', () => {

@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
-import { Button, Checkbox, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FieldNote, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -20,9 +20,20 @@ import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
+import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import styles from './CreateWallet.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
+import '../../i18n/locales/en/createWallet.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/settings.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -54,8 +65,19 @@ function numberedWalletName(wallets) {
  * @param {() => void} props.onBack
  * @param {(wallet?: { id: string, name: string }) => void} props.onCreated
  * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
+ *
+ * `staleGuard` is passed by a shell whose windows share one vault (the
+ * extension popup): `report(hold)` says whether this window holds a phrase
+ * ('hold') or not ('idle'), and `elsewhere` turns true when another window
+ * created the wallet. A window holding a phrase then stays on a lasting
+ * notice instead of following the session to Home, because the phrase it
+ * showed belongs to no wallet.
+ *
+ * `ownWriteGuard` is told while this window writes the first wallet and
+ * until its donation notice hands back, so the unlock its own write
+ * announces does not move the window to Home first.
  */
-export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' }) {
+export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh', staleGuard, ownWriteGuard }) {
     // S4: The recovery phrase is displayed here. A screenshot of it, or the
     // recents snapshot Android persists, is a copy of the wallet.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -67,7 +89,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'|'stale'} */ ('password'),
     );
     // §19.2 / G033: verification quiz state. `quizPositions` is a sorted
     // list of 1-based word indices the user must type back; `quizAnswers`
@@ -141,7 +163,9 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         return () => clearTimeout(id);
     }, [stage]);
 
-    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice');
+    // A flow step, not an overlay: backgrounding the app keeps the stage, so
+    // the phrase being written down is never replaced on resume.
+    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice', 'screen');
 
     function clearEntrySecrets() {
         setPassword('');
@@ -161,6 +185,25 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         setQuizErrorPosition(null);
         phraseGeneratedRef.current = false;
     }
+
+    function goStale() {
+        clearWalletSecrets();
+        setPersistError(null);
+        setStage('stale');
+    }
+
+    // Another window created the wallet while this one held a phrase.
+    useEffect(() => {
+        if (staleGuard?.elsewhere && (stage === 'mnemonic' || stage === 'verify')) goStale();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [staleGuard?.elsewhere, stage]);
+
+    const holdState = (stage === 'mnemonic' || stage === 'verify' || stage === 'stale') ? 'hold' : 'idle';
+    const reportHold = staleGuard?.report;
+    useEffect(() => {
+        reportHold?.(holdState);
+    }, [holdState, reportHold]);
+    useOwnWalletWriteHold(ownWriteGuard, mode === 'fresh' && (stage === 'persisting' || stage === 'ads-notice'));
 
     function onCreated() {
         handleCreated(createdWalletRef.current || undefined);
@@ -200,6 +243,17 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         event.preventDefault();
         if (stage !== 'password' || (phraseGeneratedRef.current && !mnemonic)) return;
         setValidationAttempt((attempt) => attempt + 1);
+        // A blank name falls back to the default; a name that draws no mark or
+        // runs past the cap would read as nothing in every list.
+        const trimmedName = name.trim();
+        if (trimmedName.length > 0 && !hasVisibleText(trimmedName)) {
+            setPasswordError('Wallet name must include a visible character.');
+            return;
+        }
+        if (nameLength(trimmedName) > NAME_MAX_LENGTH) {
+            setPasswordError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
                 `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -208,6 +262,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         }
         if (password !== confirm) {
             setPasswordError('Passwords do not match.');
+            return;
+        }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setPasswordError(DURESS_PASSWORD_COLLISION_MESSAGE);
             return;
         }
         // Same rule as the import screen: a checked box with nothing typed
@@ -320,6 +378,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             clearWalletSecrets();
             setStage('ads-notice');
         } catch (err) {
+            if (staleGuard && isWalletExistsError(err)) {
+                goStale();
+                return;
+            }
             setPersistError(userFacingMessage(err, 'Failed to create wallet. Try again.'));
             setStage('verify');
         } finally {
@@ -327,9 +389,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         }
     }
 
-    const headClass = isFull ? styles.headFull : styles.headPopup;
-    const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
-    const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
     const headerTitle = stage === 'password'
         ? (isFull ? 'Create a new wallet' : 'Create wallet')
@@ -339,30 +398,50 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 ? (isFull ? 'Verify your recovery phrase' : 'Verify phrase')
                 : stage === 'persisting'
                     ? 'Creating your wallet'
-                    : 'Automatic Donation System';
+                    : stage === 'stale'
+                        ? 'Wallet already created'
+                        : 'Automatic Donation System';
+    // The window title names the step the heading shows.
+    useDocumentTitleSection(headerTitle);
     const screenHeader = (
         <PageHeader
             onBack={stage === 'verify' ? undefined : handleBack}
-            backLabel={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
-            backDisabled={stage === 'persisting' || stage === 'ads-notice'}
+            backLabel={stage === 'password' ? t('importWallet.backToSetup') : t('createWallet.backToPreviousStep')}
+            backDisabled={stage === 'persisting' || stage === 'ads-notice' || stage === 'stale'}
             title={headerTitle}
             titleRef={headingRef}
         />
     );
 
+    if (stage === 'stale') {
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                <FormPage
+                    ref={stageFormRef}
+                    label={t('createWallet.walletAlreadyCreated')}
+                    status={(
+                        <StatusMessage
+                            variant="warning"
+                            role="alert"
+                            recovery={{ label: t('adsNotice.continue'), onAction: onCreated }}
+                        >
+                            {t('createWallet.staleWindowNotice')}
+                        </StatusMessage>
+                    )}
+                />
+            </Screen>
+        );
+    }
+
     if (stage === 'ads-notice') {
         const noticeBody = (
             <AdsNotice
                 onContinue={onCreated}
-                isFull={isFull}
-                headClass={headClass}
-                subtitleClass={subtitleClass}
-                actionsClass={actionsClass}
             />
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage ref={stageFormRef} label="Automatic Donation System">
+                <FormPage ref={stageFormRef} label={t('adsNotice.title')}>
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -374,11 +453,11 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             <Screen variant={variant} header={screenHeader}>
                 <FormPage
                     ref={stageFormRef}
-                    label="Wallet creation status"
-                    description="XChain Platform is encrypting your wallet with your password. This can take a minute on some devices. Keep the app open."
-                    progress={<span aria-current="step">Step 3 of 3</span>}
+                    label={t('createWallet.walletCreationStatus')}
+                    description={t('createWallet.xchainPlatformIsEncryptingYour')}
+                    progress={<span aria-current="step">{t('createWallet.step3Of3')}</span>}
                     aria-live="polite"
-                    actions={<Button loading icon={<Icon.CheckIcon />}>Create wallet</Button>}
+                    actions={<Button loading icon={<Icon.CheckIcon />}>{t('createWallet.createWallet')}</Button>}
                 />
             </Screen>
         );
@@ -388,12 +467,12 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         const verifyBody = (
             <FormPage
                 ref={stageFormRef}
-                label="Verify recovery phrase"
+                label={t('createWallet.verifyRecoveryPhrase')}
                 onSubmit={handleSubmitVerify}
                 description={isFull
-                    ? 'Enter the requested words from the recovery phrase you wrote down.'
-                    : 'Enter the requested words to confirm your recovery phrase.'}
-                progress={<span aria-current="step">Step 3 of 3</span>}
+                    ? t('createWallet.enterTheRequestedWordsFrom')
+                    : t('createWallet.enterTheRequestedWordsTo')}
+                progress={<span aria-current="step">{t('createWallet.step3Of3')}</span>}
                 status={<FormErrorSummary
                     errors={[
                         ...(quizError ? [{
@@ -414,7 +493,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                             onClick={() => { setQuizError(null); setStage('mnemonic'); }}
                             disabled={stage === 'persisting'}
                         >
-                            Back
+                            {t('common.back')}
                         </Button>
                         <Button
                             type="submit"
@@ -422,7 +501,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                             loading={stage === 'persisting'}
                             icon={<Icon.CheckIcon />}
                         >
-                            Create wallet
+                            {t('createWallet.createWallet')}
                         </Button>
                     </>
                 )}
@@ -435,7 +514,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                             <Input
                                 id={`create-quiz-word-${p}`}
                                 ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
-                                label={`Word ${p}`}
+                                label={t('createWallet.word', { p })}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
                                     setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
@@ -466,13 +545,13 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         const mnemonicBody = (
             <FormPage
                 ref={stageFormRef}
-                label="Recovery phrase"
+                label={t('importWallet.recoveryPhrase')}
                 description={isFull
-                    ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
-                    : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
-                progress={<span aria-current="step">Step 2 of 3</span>}
+                    ? t('createWallet.theseWordsAreYourRecovery', { words: wordCount === 24 ? 'twentyFour' : 'twelve', RECOVERY_PHRASE_WARNING })
+                    : t('createWallet.writeTheseWordsOnPaper', { wordCount, RECOVERY_PHRASE_WARNING })}
+                progress={<span aria-current="step">{t('createWallet.step2Of3')}</span>}
                 status={persistError ? (
-                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
+                    <StatusMessage variant="error">{persistError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -481,7 +560,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                         disabled={!saved}
                         icon={<Icon.CheckIcon />}
                     >
-                        Verify recovery phrase
+                        {t('createWallet.verifyRecoveryPhrase')}
                     </Button>
                 )}
             >
@@ -495,12 +574,11 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                     which is what the wallet has always told users to do, and
                     what MnemonicGrid already said this UI did. */}
                 <p className={styles.copyHint}>
-                    Copying is disabled to keep your recovery phrase out of
-                    shared clipboards.
+                    {t('createWallet.copyingIsDisabledToKeep')}
                 </p>
                 <Checkbox
                     className={styles.confirmRow}
-                    label="I have saved my recovery phrase safely."
+                    label={t('createWallet.iHaveSavedMyRecovery')}
                     checked={saved}
                     onChange={(e) => setSaved(e.target.checked)}
                     disabled={stage === 'persisting'}
@@ -520,7 +598,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             ? 'Confirm your password to continue.'
             : null;
     let passwordErrorTarget;
-    if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    if (/^Wallet name/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-name', label: 'Wallet name' };
+    else if (/at least/i.test(passwordError || '') || passwordError === DURESS_PASSWORD_COLLISION_MESSAGE) passwordErrorTarget = { id: 'create-password', label: 'Password' };
     else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
     else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
     else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
@@ -530,11 +609,11 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const formBody = (
         <FormPage
             ref={stageFormRef}
-            label="Create wallet"
+            label={t('createWallet.createWallet')}
             onSubmit={handlePasswordSubmit}
             description={isFull
-                ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
-                : 'Your password encrypts this wallet on this device.'}
+                ? t('createWallet.yourPasswordEncryptsThisWallet')
+                : t('createWallet.yourPasswordEncryptsThisWallet2')}
             visual={isFull ? (
                 <img
                     src={branding.logoUrl()}
@@ -543,7 +622,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                     className={styles.logo}
                 />
             ) : null}
-            progress={<span aria-current="step">Step 1 of 3</span>}
+            progress={<span aria-current="step">{t('createWallet.step1Of3')}</span>}
             status={passwordError ? (
                 <FormErrorSummary errors={passwordErrors} focusKey={validationAttempt} />
             ) : passwordStepDisabledReason ? (
@@ -559,16 +638,18 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                     aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
                     icon={<Icon.MigrateIcon />}
                 >
-                    Next
+                    {t('onboarding.carousel.next')}
                 </Button>
             )}
         >
             <Input
-                label="Wallet name"
+                id="create-name"
+                label={t('renameWallet.name')}
                 value={name}
                 onChange={(e) => {
                     nameEditedRef.current = true;
                     setName(e.target.value);
+                    if (passwordError) setPasswordError(null);
                 }}
                 autoComplete="off"
             />
@@ -576,8 +657,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 id="create-password"
                 ref={passwordRef}
                 type="password"
-                label="Password"
-                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Use a unique password; longer is stronger.`}
+                label={t('common.password')}
+                hint={t('createWallet.atLeastCharactersUseA', { MIN_PASSWORD_LENGTH })}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -588,7 +669,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             <Input
                 id="create-confirm"
                 type="password"
-                label={isFull ? 'Confirm password' : 'Confirm'}
+                label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -598,7 +679,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             />
             <RadioGroup
                 className={styles.wordCountRow}
-                legend="Recovery phrase length"
+                legend={t('createWallet.recoveryPhraseLength')}
                 name="word-count"
                 value={String(wordCount)}
                 onChange={(nextWordCount) => setWordCount(Number(nextWordCount))}
@@ -618,7 +699,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             <div className={styles.advancedRow}>
                 <div className={styles.advancedToggle}>
                     <Switch
-                        label="Use a BIP39 passphrase (advanced)"
+                        label={t('createWallet.useABip39PassphraseAdvanced')}
                         checked={showPassphrase}
                         onChange={(e) => {
                             setShowPassphrase(e.target.checked);
@@ -629,24 +710,20 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                         }}
                     />
                     <InfoTip
-                        aria="BIP39 passphrase help"
-                        label="This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device."
+                        aria={t('importWallet.passphrase.help')}
+                        label={t('createWallet.thisExtraSecretCombinesWith')}
                     />
                 </div>
                 {showPassphrase ? (
                     <>
-                        <p className={styles.advancedWarning}>
-                            Save this passphrase separately from your recovery phrase.
-                            You need both to restore this wallet. It cannot be reset or
-                            recovered, and a missing or mistyped passphrase opens a
-                            different wallet without warning. Capitalization and spaces
-                            matter.
-                        </p>
+                        <FieldNote variant="warning" role={null}>
+                            {t('createWallet.saveThisPassphraseSeparatelyFrom')}
+                        </FieldNote>
                         <Input
                             id="create-bip39-passphrase"
                             type="password"
-                            label="BIP39 passphrase"
-                            hint="Required when enabled."
+                            label={t('importWallet.passphrase.label')}
+                            hint={t('createWallet.requiredWhenEnabled')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
@@ -657,7 +734,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                         <Input
                             id="create-bip39-confirm"
                             type="password"
-                            label="Confirm passphrase"
+                            label={t('settings.duress.confirmPassphrase')}
                             value={bip39PassphraseConfirm}
                             onChange={(e) => {
                                 setBip39PassphraseConfirm(e.target.value);

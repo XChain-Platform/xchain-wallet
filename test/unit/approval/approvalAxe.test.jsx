@@ -86,7 +86,7 @@ describe('extension approval accessibility', () => {
                 onReject={() => {}}
             />,
         );
-        await screen.findByRole('button', { name: 'Connect' });
+        await screen.findByRole('button', { name: 'Approve' });
         await expectNoSeriousAxeViolations(view.container);
     });
 

@@ -22,7 +22,7 @@
 //                               'done' records and may clear on read.
 //
 // Recipients is stored verbatim (the already-de-duped, already-
-// validated ITEM list used to build the LIST: addresses for a TYPE=2
+// validated ITEM list that builds the LIST: addresses for a TYPE=2
 // list, ticks for a TYPE=1 one - see `listType`), so the stage-5
 // review is reproducible after a restart without re-parsing.
 //
@@ -31,6 +31,12 @@
 // whether the recipient count it shows is a deterministic address
 // count or a holder-snapshot preview. Optional + defaults to '2' for
 // backward compatibility with records written before PC-11.
+//
+// `payFeeInNativeCoin` records the protocol-fee lane the signer chose for
+// the LIST, so a resumed AIRDROP pays the same way. The review stage has no
+// fee toggle of its own, so a resume that forgot the choice would silently
+// move a Bitcoin airdrop onto the XCHAIN balance. Optional: absent reads as
+// the XCHAIN lane, which is what records without it were composed for.
 
 import {
     check,
@@ -69,6 +75,7 @@ export const PENDING_AIRDROP_STAGES = /** @type {const} */ ([
  * @property {typeof PENDING_AIRDROP_STAGES[number]} stage
  * @property {string} createdAt
  * @property {string | null} memo
+ * @property {boolean} [payFeeInNativeCoin]
  */
 
 /**
@@ -82,6 +89,7 @@ export const PENDING_AIRDROP_STAGES = /** @type {const} */ ([
  * @param {string} input.listTxid
  * @param {'1' | '2'} [input.listType]   defaults to '2' (ADDRESS list)
  * @param {string} [input.memo]
+ * @param {boolean} [input.payFeeInNativeCoin]  true when the LIST paid its protocol fee in the native coin
  * @returns {PendingAirdrop}
  */
 export function createPendingAirdrop(input) {
@@ -101,6 +109,7 @@ export function createPendingAirdrop(input) {
         stage: 'waiting-index',
         createdAt: new Date().toISOString(),
         memo: input.memo ?? null,
+        payFeeInNativeCoin: input.payFeeInNativeCoin === true,
     };
 }
 
@@ -133,5 +142,11 @@ export function validatePendingAirdrop(record) {
     check(errors, 'stage', isOneOf(r.stage, PENDING_AIRDROP_STAGES), `must be one of ${PENDING_AIRDROP_STAGES.join(', ')}`);
     check(errors, 'createdAt', isIsoTimestamp(r.createdAt), 'must be an ISO timestamp');
     check(errors, 'memo', isNullableString(r.memo), 'must be null or a string');
+    check(
+        errors,
+        'payFeeInNativeCoin',
+        r.payFeeInNativeCoin === undefined || typeof r.payFeeInNativeCoin === 'boolean',
+        'must be a boolean when present',
+    );
     return result(errors);
 }

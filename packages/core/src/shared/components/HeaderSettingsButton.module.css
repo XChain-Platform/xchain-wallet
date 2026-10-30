@@ -37,30 +37,18 @@
     box-shadow: var(--xc-shadow-surface-ring);
 }
 
-/* ───── Popover ───── */
-
-.popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    inset-inline-end: 0;
-    z-index: var(--xc-z-dropdown);
-    width: 320px;
-    max-width: calc(100vw - (2 * var(--xc-space-3)));
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-popover);
-    padding: var(--xc-space-2);
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-}
-
 .section {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-1) var(--xc-space-2);
+}
+
+/* The anchored panel starts below the one-row app header. This cap uses the
+   remaining phone viewport instead of the shared 70vh popover default, while
+   compact sections keep the complete settings set inside it. */
+.popover.popover {
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-control-h-md) - var(--xc-space-6));
 }
 
 .sectionLabel {
@@ -71,37 +59,10 @@
     color: var(--xc-text-muted);
 }
 
+/* Height, padding, border, surface and chevron come from the shared
+   dropdown rule in tokens.css. */
 .networkSelect {
     width: 100%;
-    min-height: var(--xc-control-h-md);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-control-radius);
-    color: var(--xc-text);
-    background: var(--xc-bg);
-    font: inherit;
-    font-size: var(--xc-control-font);
-}
-
-.empty {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    text-align: center;
-    padding: var(--xc-space-3);
-}
-
-/* ───── Account section ───── */
-
-.accountName {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-}
-
-.walletName {
-    flex: 1 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 /* Summary row - active wallet / account, click navigates to the

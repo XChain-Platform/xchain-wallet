@@ -26,11 +26,11 @@
 //      whether to allow it. We allow `hid` globally; finer-grained
 //      filtering happens in handler 2.
 //
-//   2. `setDevicePermissionHandler`: Electron's device-picker invokes
-//      this with each candidate HID device so we can decide whether
-//      the user is allowed to select it. We allowlist Ledger + Trezor
-//      vendor IDs so unrelated HID peripherals (keyboards, mice,
-//      gamepads) don't clutter the picker.
+//   2. `setDevicePermissionHandler`: Electron asks this which devices the
+//      app may see and open without a chooser (`navigator.hid.getDevices()`
+//      and stored grants). We allowlist Ledger + Trezor vendor IDs so
+//      unrelated HID peripherals (keyboards, mice, gamepads) are never
+//      exposed to the app.
 //
 //   3. `setPermissionCheckHandler`: Chromium asks whether a frame ALREADY
 //      holds a permission before it asks to be granted one, and in
@@ -118,25 +118,24 @@
 // could reach the picker; `isAppHidSelect` now also requires a TOP-LEVEL
 // frame, which `details.frame.parent` states directly.
 //
-// §40.12: the hosted Trezor Connect script itself has since
-// moved out of this app's own renderer origin, into a dedicated Electron
-// session opened on demand by index.js (see
-// security.js#isTrezorConnectBridgeWindowOpen) that is never passed to
-// attachHidPermissions below and is instead wired to `attachHidDenial`,
-// which refuses `hid` explicitly through every handler Electron offers.
-// That session structurally cannot be granted `hid` for anything it
-// hosts, so the residual this comment used to flag (a compromised
-// connect.trezor.io script running as first-party code in the
-// HID-granted session) is closed there, not by this module. This
-// module's own guard is unchanged and was never what held that path shut.
+// §40.12: the hosted Trezor Connect script runs outside this app's own
+// renderer origin, in a window main builds on a dedicated Electron
+// session (index.js#getTrezorConnectSession, trezorBridgeWindow.js) that
+// is never passed to attachHidPermissions below and is instead wired to
+// `attachHidDenial`, which refuses `hid` explicitly through every handler
+// Electron offers. That session structurally cannot be granted `hid` for
+// anything it hosts, so a compromised connect.trezor.io script cannot run
+// as first-party code in the HID-granted session. This module's own guard
+// is not what holds that path shut.
 // The main renderer CSP (renderer/index.html) admits no remote origin:
 // `script-src 'self'` and `frame-src 'none'`.
 //
 // Outside `hid`, the app's top-level renderer may request its video camera
 // for QR scanning and its sanitized clipboard write. Other prompting
 // permissions stay refused. The check handler applies the same app-origin
-// gate to `media`, while permissions without a request allowance cannot
-// reach a prompt.
+// gate to `media` and refuses the WebUSB and Web Serial device classes
+// outright, with their pickers cancelled, as the bridge session does; the
+// other check-path permissions the shared UI reads stay granted.
 
 import { isRemoteFrameUrl } from './security.js';
 
@@ -150,6 +149,9 @@ const ALLOWED_VENDOR_IDS = new Set(Object.values(HID_VENDOR_ALLOWLIST));
 
 // List the device permissions the Trezor Connect bridge session refuses on the check path.
 const BRIDGE_DENIED_DEVICE_CLASSES = new Set(['hid', 'usb', 'serial']);
+
+// List the device permissions the default session refuses on the check path (`hid` is origin-gated instead).
+const DEFAULT_SESSION_DENIED_DEVICE_CLASSES = new Set(['usb', 'serial']);
 
 /**
  * Session-wide record of which webContents have been seen hosting a
@@ -238,6 +240,10 @@ export function observeHidFrames(contents, opts = {}) {
  * wiring time, so a caller that forgot it fails at boot rather than
  * silently widening the HID grant to every local file.
  *
+ * WebUSB and Web Serial are refused on the same Electron session too, on the check path
+ * and at their pickers: the app uses neither, and a Ledger also exposes a
+ * WebUSB interface that the HID frame checks below do not see.
+ *
  * @param {import('electron').Session} session
  * @param {{ appRoot: string, guard?: ReturnType<typeof createHidFrameGuard> }} opts
  */
@@ -300,8 +306,9 @@ export function attachHidPermissions(session, opts) {
         if (permission === 'media') {
             return isAppHidCheck(details, requestingOrigin, appRoot);
         }
-        // The request handler still refuses prompting permissions that are
-        // not explicitly allowed above.
+        // Refuse WebUSB and Web Serial outright, to every frame and origin.
+        if (DEFAULT_SESSION_DENIED_DEVICE_CLASSES.has(permission)) return false;
+        // Grant the remaining non-device check-path permissions the shared UI reads (clipboard, notifications).
         if (permission !== 'hid') return true;
         return isAppHidCheck(details, requestingOrigin, appRoot);
     });
@@ -322,14 +329,24 @@ export function attachHidPermissions(session, opts) {
 
     session.on('select-hid-device', (event, details, callback) => {
         // Refuse a frame that is not the app's, explicitly. The app's own
-        // frame is left to the session default, which grants no device
-        // until a picker exists to choose one; a device picker built on
-        // this event therefore inherits the frame check rather than having
-        // to remember it.
+        // frame is left un-prevented, which Electron answers by cancelling
+        // (hid_chooser_controller.cc, v44.7.0), so it gets no device until a
+        // picker exists; a picker built here inherits the frame check.
         if (guard.hasSubframe() || !isAppHidSelect(details, appRoot)) {
             event.preventDefault();
             callback(null);
         }
+    });
+
+    // Cancel the WebUSB and Web Serial pickers explicitly, so the Electron session never depends on how
+    // Electron treats an unhandled chooser. No argument cancels a USB pick; an empty port id cancels a serial pick.
+    session.on('select-usb-device', (event, _details, callback) => {
+        event.preventDefault();
+        callback();
+    });
+    session.on('select-serial-port', (event, _portList, _webContents, callback) => {
+        event.preventDefault();
+        callback('');
     });
 }
 
@@ -337,23 +354,23 @@ export function attachHidPermissions(session, opts) {
  * Wire an explicit, blanket HID denial onto an Electron session that must
  * never be able to reach a paired Ledger or Trezor: the isolated Trezor
  * Connect bridge session built in `index.js`
- * (`getTrezorConnectSession`/`TREZOR_CONNECT_BRIDGE_WINDOW_NAME`).
+ * (`getTrezorConnectSession`), which trezorBridgeWindow.js builds its window on.
  *
  * This is deliberately NOT the same posture as simply never calling
- * `attachHidPermissions` on a session. Electron's documented default for
- * an UNHANDLED `select-hid-device` request is to auto-select the first
- * available device - the opposite of a denial - and a session with no
- * device-permission handler at all falls back to that same
- * first-device-wins behavior. Leaving a session unwired is therefore not
- * safe by omission; a bridge session that never calls this function could
- * hand a paired Ledger or Trezor straight to whatever hosted script runs
- * inside it. Every handler Electron offers for `hid` is wired here to
- * refuse explicitly instead, and the WebUSB and Web Serial device classes
- * are refused the same way on the check path and at their pickers.
+ * `attachHidPermissions` on a session. Electron documents no default for
+ * an un-prevented `select-hid-device` (it documents first-device-wins only
+ * for Bluetooth); v44.7.0 happens to cancel one, but that is implementation,
+ * not contract. Leaving a session unwired is therefore not provably safe,
+ * and this bridge session hosts a third-party script that must not depend
+ * on an undocumented default. Every handler Electron offers
+ * for `hid` is wired here to refuse explicitly instead, and the WebUSB and
+ * Web Serial device classes are refused the same way on the check path and
+ * at their pickers.
  *
  * @param {import('electron').Session} session
+ * @param {{ env?: Record<string, string | undefined>, log?: (...args: unknown[]) => void }} [opts]
  */
-export function attachHidDenial(session) {
+export function attachHidDenial(session, opts = {}) {
     if (!session) throw new Error('attachHidDenial: session is required');
     if (typeof session.setPermissionRequestHandler !== 'function') {
         throw new Error('attachHidDenial: session.setPermissionRequestHandler is missing');
@@ -381,18 +398,23 @@ export function attachHidDenial(session) {
     // Braces: the handler Electron 43 actually consults for `hid`. Refuse
     // every device class (WebHID, WebUSB, Web Serial); other permissions stay
     // granted here, as narrowing them needs a live Trezor pairing to measure.
-    session.setPermissionCheckHandler((_webContents, permission) => !BRIDGE_DENIED_DEVICE_CLASSES.has(permission));
+    const logChecks = (opts?.env ?? process.env).XCHAIN_LOG_BRIDGE_PERMISSIONS === '1';
+    const log = opts?.log ?? console.log;
+    session.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+        const allowed = !BRIDGE_DENIED_DEVICE_CLASSES.has(permission);
+        if (logChecks) log('[bridge-session] permission check', { permission, requestingOrigin, allowed });
+        return allowed;
+    });
 
     // Refuses every device outright, regardless of vendor, origin or
     // frame - the handler `setDevicePermissionHandler` consults once a
     // permission check has passed.
     session.setDevicePermissionHandler(() => false);
 
-    // The device picker itself, and the one place explicit refusal
-    // actually matters: an unhandled `select-hid-device` auto-selects the
-    // first available device rather than denying the request, so the
-    // bridge session would otherwise hand a paired Ledger/Trezor straight to
-    // whatever runs inside it even with every handler above in place.
+    // The device picker itself, cancelled explicitly rather than left to
+    // Electron's undocumented handling of an un-prevented request, so the
+    // bridge never depends on a default to keep a paired Ledger/Trezor away
+    // from whatever runs inside it.
     session.on('select-hid-device', (event, _details, callback) => {
         event.preventDefault();
         callback();

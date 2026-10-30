@@ -35,41 +35,44 @@ const components = join(wsRoot, 'packages', 'core', 'src', 'shared', 'components
 // --- 1. VISIBLE_LIMIT constant -----------------------------------------
 
 const src = readFileSync(join(components, 'ToastHost.jsx'), 'utf8');
+// The cards render in ToastStack.jsx, which ToastHost loads on demand.
+const stackSrc = readFileSync(join(components, 'ToastStack.jsx'), 'utf8');
 assert.ok(/const VISIBLE_LIMIT = 3;/.test(src),
     'ToastHost declares VISIBLE_LIMIT = 3');
 
 // --- 2. Slice to the first N -------------------------------------------
 
 assert.ok(
-    /const visibleToasts = toasts\.slice\(0, VISIBLE_LIMIT\);/.test(src),
+    /const visibleToasts = (?:toasts|eligibleToasts)\.slice\(0, VISIBLE_LIMIT\);/.test(src),
     'ToastHost renders only the first VISIBLE_LIMIT toasts',
 );
 assert.ok(
-    /\{visibleToasts\.map\(\(t\)\s*=>/.test(src),
+    /toasts=\{visibleToasts\}/.test(src) && /\{toasts\.map\(\(toast\)\s*=>/.test(stackSrc),
     'render path maps over visibleToasts (not the raw toasts array)',
 );
 
 // --- 3. hiddenCount + conditional overflow indicator -------------------
 
 assert.ok(
-    /const hiddenCount = Math\.max\(0,\s*toasts\.length - visibleToasts\.length\);/.test(src),
+    /const hiddenCount = Math\.max\(0,\s*(?:toasts|eligibleToasts)\.length - visibleToasts\.length\);/.test(src),
     'ToastHost computes hiddenCount from the truncated render set',
 );
 assert.ok(
-    /\{hiddenCount > 0 \?[\s\S]*?\+\$\{hiddenCount\} more/.test(src),
+    /hiddenCount=\{hiddenCount\}/.test(src)
+        && /\{hiddenCount > 0 \?[\s\S]*?(?:\+\$\{hiddenCount\} more|components\.toastHost\.more', \{ hiddenCount \})/.test(stackSrc),
     'overflow indicator renders only when hiddenCount > 0',
 );
 
 // --- 4. CSS class --------------------------------------------------------
 
-const css = readFileSync(join(components, 'ToastHost.module.css'), 'utf8');
+const css = readFileSync(join(components, 'ToastStack.module.css'), 'utf8');
 assert.ok(/\.overflowBadge\b/.test(css),
-    '.overflowBadge style is defined in ToastHost.module.css');
+    '.overflowBadge style is defined in ToastStack.module.css');
 
 // --- 5. aria-hidden + queued toasts still announce ---------------------
 
 assert.ok(
-    /<div className=\{styles\.overflowBadge\}\s+aria-hidden="true">/.test(src),
+    /<div className=\{styles\.overflowBadge\}\s+aria-hidden="true">/.test(stackSrc),
     'overflow badge is aria-hidden; queued toasts continue to announce themselves',
 );
 

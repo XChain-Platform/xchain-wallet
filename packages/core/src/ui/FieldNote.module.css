@@ -1,0 +1,52 @@
+/* A field's own message line, matched to the field error under an Input:
+   a glyph and small toned text, no background and no border. */
+.note {
+    margin-block-start: var(--xc-help-gap);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    max-width: var(--xc-prose-max-width);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.glyph {
+    flex: 0 0 1.2em;
+    text-align: center;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.text > p {
+    margin: 0;
+}
+
+.text > p + p {
+    margin-top: var(--xc-space-1);
+}
+
+.warning {
+    color: var(--xc-warning-text);
+}
+
+.error {
+    color: var(--xc-danger-fg);
+}
+
+.info {
+    color: var(--xc-info-text);
+}
+
+.success {
+    color: var(--xc-success);
+}
+
+.action {
+    margin-block-start: var(--xc-space-1);
+}

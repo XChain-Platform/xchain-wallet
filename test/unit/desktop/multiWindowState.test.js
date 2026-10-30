@@ -37,6 +37,14 @@ describe('desktop multi-window state notifications', () => {
         },
     );
 
+    it.each(['wallet.add.import', 'wallet.importBackup', 'wallet.importBackupPointer'])(
+        'tells sibling windows to re-read their wallet list after a successful %s',
+        (type) => {
+            expect(stateChangeForMessage({ type }, { ok: true })).toEqual({ kind: 'wallets', change: 'added' });
+            expect(stateChangeForMessage({ type }, { ok: false })).toBeNull();
+        },
+    );
+
     it('broadcasts a validated active wallet selection', () => {
         expect(stateChangeForMessage(
             { type: 'wallet.setActive', request: { walletId: 'wallet-2' } },
@@ -48,6 +56,89 @@ describe('desktop multi-window state notifications', () => {
         expect(stateChangeForMessage({ type: 'wallet.lock' }, { ok: false })).toBeNull();
         expect(stateChangeForMessage({ type: 'wallet.list' }, { ok: true })).toBeNull();
         expect(stateChangeForMessage({ type: 'wallet.setActive', request: {} }, { ok: true })).toBeNull();
+    });
+});
+
+describe('desktop multi-window record notifications', () => {
+    it('broadcasts a renamed wallet from the record the host returns', () => {
+        expect(stateChangeForMessage(
+            { type: 'wallet.rename', request: { walletId: 'wallet-2', name: 'Savings' } },
+            { ok: true, result: { wallet: { id: 'wallet-2', name: 'Savings' } } },
+        )).toEqual({ kind: 'wallets', change: 'renamed', walletId: 'wallet-2' });
+    });
+
+    it('broadcasts a removed wallet from the removal request', () => {
+        expect(stateChangeForMessage(
+            { type: 'wallet.remove', request: { walletId: 'wallet-2' } },
+            { ok: true, result: { removed: true } },
+        )).toEqual({ kind: 'wallets', change: 'removed', walletId: 'wallet-2' });
+    });
+
+    it('broadcasts an added or renamed account with its wallet', () => {
+        const account = { id: 'account-3', walletId: 'wallet-1', index: 2, name: 'Spending' };
+        expect(stateChangeForMessage(
+            { type: 'account.create', request: { walletId: 'wallet-1' } },
+            { ok: true, result: { account, addresses: [] } },
+        )).toEqual({ kind: 'accounts', change: 'added', walletId: 'wallet-1', accountId: 'account-3' });
+        expect(stateChangeForMessage(
+            { type: 'account.rename', request: { accountId: 'account-3', name: 'Spending' } },
+            { ok: true, result: { account } },
+        )).toEqual({ kind: 'accounts', change: 'renamed', walletId: 'wallet-1', accountId: 'account-3' });
+    });
+
+    it('does not broadcast a failed record write or one with no record', () => {
+        const rename = { type: 'wallet.rename', request: { walletId: 'wallet-2', name: 'x' } };
+        expect(stateChangeForMessage(rename, { ok: false, result: { wallet: { id: 'wallet-2' } } })).toBeNull();
+        expect(stateChangeForMessage(rename, { ok: true, result: {} })).toBeNull();
+        expect(stateChangeForMessage({ type: 'wallet.remove', request: {} }, { ok: true })).toBeNull();
+        expect(stateChangeForMessage({ type: 'account.create', request: { walletId: 'wallet-1' } }, { ok: true, result: { account: { id: 'a' } } })).toBeNull();
+        expect(stateChangeForMessage({ type: 'account.rename', request: {} }, { ok: true, result: null })).toBeNull();
+    });
+});
+
+describe('desktop multi-window settings notifications', () => {
+    const saved = { schemaVersion: 2, activeNetwork: 'mainnet', theme: 'dark', fiatCurrency: 'EUR' };
+
+    it('broadcasts the saved settings for a settings.update that leaves the network alone', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { theme: 'dark' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+        // The host also accepts the patch as the request itself.
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { fiatCurrency: 'EUR' } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'settings', settings: saved });
+    });
+
+    it('broadcasts a network change for a patch that moves the active network', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { patch: { activeNetwork: 'testnet' } } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+        expect(stateChangeForMessage(
+            { type: 'settings.update', request: { activeNetwork: 'testnet', developerMode: false } },
+            { ok: true, result: saved },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('broadcasts a network change for settings.setActiveNetwork', () => {
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: { walletId: 'wallet-1', network: 'testnet' } },
+            { ok: true, result: { settings: saved, addresses: [] } },
+        )).toEqual({ kind: 'network', settings: saved });
+    });
+
+    it('does not broadcast a failed settings write or one with no settings object', () => {
+        const update = { type: 'settings.update', request: { patch: { theme: 'dark' } } };
+        expect(stateChangeForMessage(update, { ok: false, result: saved })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: null })).toBeNull();
+        expect(stateChangeForMessage(update, { ok: true, result: [saved] })).toBeNull();
+        expect(stateChangeForMessage(
+            { type: 'settings.setActiveNetwork', request: {} },
+            { ok: true, result: { addresses: [] } },
+        )).toBeNull();
     });
 });
 

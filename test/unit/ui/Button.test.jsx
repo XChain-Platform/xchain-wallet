@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '../../../packages/core/src/ui/Button.jsx';
 import styles from '../../../packages/core/src/ui/Button.module.css';
@@ -46,14 +47,14 @@ describe('<Button>', () => {
     });
 
     it('keeps audited route action labels stable while their kit buttons are busy', () => {
-        const readSource = (path) => readFileSync(`packages/core/src/shared/${path}`, 'utf8');
+        const readSource = (path) => withEnglishCopy(readFileSync(`packages/core/src/shared/${path}`, 'utf8'));
         const order = readSource('components/PlaceOrderPanel.jsx');
         const dispenser = readSource('routes/DispenserForm.jsx');
         const vote = readSource('routes/CreatePollForm.jsx');
         const create = readSource('routes/CreateWallet.jsx');
         const imported = readSource('routes/ImportWallet.jsx');
 
-        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? `Place \$\{side\} order` : 'Review'\}/);
+        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? t\('components\.placeOrderPanel\.placeOrder', \{ side \}\) : t\('common\.review'\)\}/);
         expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create\s*<\/Button>/);
         expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
         expect(create).toMatch(/<Button loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
@@ -218,8 +219,14 @@ describe('<Button>', () => {
             const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
             expect(source).toMatch(/styles\[size\] \|\| ''/);
             if (component === 'AddressField') {
+                // The end padding clears the icon action.
+                expect(source).toMatch(/'--address-end-room': endRoom/);
                 expect(source).toMatch(
-                    /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+                    /'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+                );
+            } else {
+                expect(source).toMatch(
+                    /'--address-end-room': 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
                 );
             }
             for (const size of ['sm', 'md', 'lg']) {
@@ -246,20 +253,9 @@ describe('<Button>', () => {
             expect(iconButton).toMatch(/justify-content:\s*center/);
         }
 
-        const addressComboboxCss = readCss('ui/AddressCombobox.module.css');
-        const addressComboboxSource = readFileSync('packages/core/src/ui/AddressCombobox.jsx', 'utf8');
-        const addressPaste = addressComboboxCss.match(/\.pasteAction button\s*\{[^}]*\}/s)?.[0] || '';
-        expect(addressComboboxSource).toMatch(/className=\{styles\.pasteAction\}/);
-        // Paste sits inside the field box, inset from its end edge.
-        expect(addressPaste).toMatch(/inset-inline-end:\s*var\(--xc-space-1\)/);
-        // At the field's inner height: the control height less the inset.
-        expect(addressPaste).toMatch(/height:\s*calc\(var\(--address-control-height\) - var\(--xc-space-2\)\)/);
-        expect(addressPaste).toMatch(/min-height:\s*calc\(var\(--address-control-height\) - var\(--xc-space-2\)\)/);
-
         const amountCss = readCss('shared/components/AmountField.module.css');
         const amountSource = readFileSync('packages/core/src/shared/components/AmountField.jsx', 'utf8');
-        const amountActions = amountCss.match(/\.amountFieldWrap \.pasteAction button,\s*\.amountFieldWrap \.maxAction\s*\{[^}]*\}/s)?.[0] || '';
-        expect(amountSource).toMatch(/className=\{styles\.pasteAction\}/);
+        const amountActions = amountCss.match(/\.amountFieldWrap \.maxAction\s*\{[^}]*\}/s)?.[0] || '';
         expect(amountSource).toMatch(/className=\{styles\.maxAction\}/);
         expect(amountActions).toMatch(/position:\s*absolute/);
         expect(amountActions).toMatch(/height:\s*calc\(var\(--amount-control-height\) - var\(--xc-space-2\)\)/);

@@ -52,8 +52,12 @@ export class FileStorageBackend extends StorageBackend {
         }
     }
 
-    /** @param {Uint8Array} blob */
-    async save(blob) {
+    /**
+     * Electron routes vault persistence through one main-process writer, so expected is intentionally ignored.
+     * @param {Uint8Array} blob
+     * @param {{ expected?: Uint8Array | null }} [_options]
+     */
+    async save(blob, _options) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('FileStorageBackend.save: blob must be a Uint8Array');
         }

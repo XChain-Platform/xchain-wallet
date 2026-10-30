@@ -17,6 +17,7 @@ import {
 } from '../../../packages/core/src/flows/rbfReplace.js';
 import {
     rbfFailureMessage,
+    RBF_REPLACEMENT_QUEUED_MESSAGE,
     RBF_UNAVAILABLE_MESSAGE,
 } from '../../../packages/core/src/shared/utils/rbfFailureMessage.js';
 
@@ -55,6 +56,13 @@ describe('rbfFailureMessage', () => {
 
     it('keeps a plain refusal reason the flow wrote for the user', () => {
         expect(rbfFailureMessage(new RbfInvalidEntryError('Already confirmed.'), FALLBACK)).toBe('Already confirmed.');
+    });
+
+    it('says a replacement that could not reach the network is waiting in the queue', () => {
+        const crossed = { name: 'BroadcastFailedTransientError', message: 'ETIMEDOUT' };
+        expect(rbfFailureMessage(crossed, FALLBACK)).toBe(RBF_REPLACEMENT_QUEUED_MESSAGE);
+        const refused = Object.assign(new Error('bad-txns-inputs-missingorspent'), { name: 'BroadcastFailedPermanentError' });
+        expect(rbfFailureMessage(refused, FALLBACK)).not.toBe(RBF_REPLACEMENT_QUEUED_MESSAGE);
     });
 
     it('swaps runtime internals and empty errors for the fallback', () => {

@@ -30,12 +30,114 @@
 // the cosigners have submitted and to drive transitions between
 // statuses. Cryptographic aggregation is delegated to `sdk.musig2.*`.
 
+import { secp256k1 } from '@noble/curves/secp256k1';
 import {
     createMultisigSigningSession,
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
+import { assertSigningAllowed } from './panicMode.js';
+import { assertBroadcastSignaturesVerify } from '../signers/verifyTxSignatures.js';
+import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/multisig.js';
+
+export const MULTISIG_SIGNATURE_INVALID = 'MULTISIG_SIGNATURE_INVALID';
+
+export const MULTISIG_FINALIZATION_CONFLICT = 'MULTISIG_FINALIZATION_CONFLICT';
+
+export class MultisigFinalizationConflictError extends Error {
+    constructor() {
+        super(t('multisig.finalize.conflict'));
+        this.name = 'MultisigFinalizationConflictError';
+        this.code = MULTISIG_FINALIZATION_CONFLICT;
+    }
+}
+
+// A classical reply counts toward the threshold only when it is a low-S DER
+// signature of the session's msgHash by the cosigner it names. Shape checks
+// alone let a corrupted or forged reply mark the session ready to finalize,
+// and nothing after that point can tell which reply was bad. The check is
+// pure math, so it holds while the explorer or encoder is unreachable.
+function isClassicalSignatureOf(derHex, msgHash, pubkey) {
+    try {
+        const signature = secp256k1.Signature.fromDER(derHex);
+        return secp256k1.verify(signature, msgHash, pubkey, { lowS: true });
+    } catch {
+        return false;
+    }
+}
+
+function signatureInvalidError() {
+    const err = /** @type {Error & { code?: string }} */ (new Error(t('multisig.reply.signatureInvalid')));
+    err.code = MULTISIG_SIGNATURE_INVALID;
+    return err;
+}
+
+export const MULTISIG_NONCE_INVALID = 'MULTISIG_NONCE_INVALID';
+
+// A MuSig2 step 1 reply is two compressed curve points (BIP327 pubnonce). A
+// value that is not, or that repeats a nonce another cosigner already sent
+// (a copied reply), fills that cosigner's slot with something no partial can
+// verify against, and the real reply is then refused as a repeat. Returns the
+// message for a refused nonce, or null when it counts. A step 1 reply
+// carries no cosigner signature, so a repeat cannot say which of the two is
+// genuine; its message sends the user to a new session.
+function musig2NonceProblem(session, publicNonceHex) {
+    try {
+        secp256k1.ProjectivePoint.fromHex(publicNonceHex.slice(0, 66));
+        secp256k1.ProjectivePoint.fromHex(publicNonceHex.slice(66));
+    } catch {
+        return t('multisig.reply.nonceInvalid');
+    }
+    if (session.nonces.some((n) => n.publicNonce === publicNonceHex)) {
+        return t('multisig.reply.nonceRepeated');
+    }
+    return null;
+}
+
+function nonceInvalidError(message) {
+    const err = /** @type {Error & { code?: string }} */ (new Error(message));
+    err.code = MULTISIG_NONCE_INVALID;
+    return err;
+}
+
+// A MuSig2 partial counts only when it verifies (BIP327 PartialSigVerify) under
+// the cosigner it names, that cosigner's step 1 nonce, the session's aggregate
+// nonce and msgHash. An unchecked partial fills that cosigner's slot, the
+// combined signature cannot spend, and the real partial is refused as a repeat.
+// The verifier lives on the chain SDK, so a caller without the registry is a
+// wiring fault and fails closed rather than counting the reply.
+function isMusig2PartialOf({ sdkRegistry, session, pubkey, partialHex }) {
+    if (!sdkRegistry || typeof sdkRegistry.get !== 'function') {
+        throw new Error('contributeMultisigSignature: sdkRegistry is required to verify a MuSig2 partial');
+    }
+    const sdk = sdkRegistry.get(session.chainId);
+    if (!sdk || !sdk.musig2 || typeof sdk.musig2.verifyPartial !== 'function') {
+        throw new Error(
+            `contributeMultisigSignature: sdk.musig2.verifyPartial unavailable for chainId "${session.chainId}"`,
+        );
+    }
+    const nonce = session.nonces.find((n) => n.pubkey === pubkey);
+    if (!session.aggNonce || !nonce) return false;
+    try {
+        const sessionKey = sdk.musig2.startSession(
+            hexToBytes(session.aggNonce),
+            hexToBytes(session.msgHash),
+            session.cosignerPubkeys.map(hexToBytes),
+        );
+        return sdk.musig2.verifyPartial({
+            sig: hexToBytes(partialHex),
+            publicKey: hexToBytes(pubkey),
+            publicNonce: hexToBytes(nonce.publicNonce),
+            sessionKey,
+        }) === true;
+    } catch {
+        return false;
+    }
+}
 
 const HEX_RE = /^[0-9a-f]+$/;
+const TXID_RE = /^[0-9a-fA-F]{64}$/;
 const isHexLength = (v, byteLen) =>
     typeof v === 'string' && HEX_RE.test(v.toLowerCase()) && v.length === byteLen * 2;
 
@@ -80,6 +182,31 @@ function hexToBytes(hex) {
 
 function bytesToHex(bytes) {
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Every change to a session reads the record, edits it and writes it back
+// through an asynchronous vault. Two changes in flight on one session (two
+// windows, two quick replies, a double click) would each write over the other,
+// dropping a signature, reviving a cancelled session or broadcasting twice.
+// Changes to one session therefore run one at a time: in this context through a
+// promise chain, and across tabs through the Web Locks API where it exists.
+const sessionTails = new Map();
+
+function withSessionLock(sessionId, work) {
+    const key = String(sessionId);
+    const previous = sessionTails.get(key) || Promise.resolve();
+    const run = previous.then(() => {
+        const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+        return locks && typeof locks.request === 'function'
+            ? locks.request(`xchain-multisig-session:${key}`, work)
+            : work();
+    });
+    const tail = run.then(() => undefined, () => undefined);
+    sessionTails.set(key, tail);
+    tail.then(() => {
+        if (sessionTails.get(key) === tail) sessionTails.delete(key);
+    });
+    return run;
 }
 
 async function persist(vault, session) {
@@ -178,7 +305,7 @@ export async function listMultisigSigningSessions({ vault, walletId }) {
  *
  * @param {{ vault: any, sessionId: string }} opts
  */
-export async function cancelMultisigSigningSession({ vault, sessionId }) {
+async function cancelMultisigSigningSessionLocked({ vault, sessionId }) {
     const session = ensureSession(
         await vault.multisigSigningSessions.get(sessionId),
         sessionId,
@@ -190,9 +317,10 @@ export async function cancelMultisigSigningSession({ vault, sessionId }) {
 // ─── Contributions ────────────────────────────────────────────────
 
 /**
- * MuSig2 round 1: append a cosigner's 66-byte publicNonce. Validates
- * shape only here; cryptographic aggregation happens in
- * `aggregateMultisigSession` once threshold is met.
+ * MuSig2 round 1: append a cosigner's 66-byte publicNonce once both
+ * halves decode as curve points and it repeats no other cosigner's
+ * nonce; aggregation happens in `aggregateMultisigSession` once
+ * threshold is met.
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
@@ -200,7 +328,7 @@ export async function cancelMultisigSigningSession({ vault, sessionId }) {
  * @param {string} opts.pubkey            66-char compressed pubkey hex
  * @param {string} opts.publicNonceHex    132-char (66-byte) hex
  */
-export async function contributeMultisigNonce({ vault, sessionId, pubkey, publicNonceHex }) {
+async function contributeMultisigNonceLocked({ vault, sessionId, pubkey, publicNonceHex }) {
     if (!vault) throw new Error('contributeMultisigNonce: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigNonce: sessionId is required');
     if (!isHexLength(publicNonceHex, 66)) {
@@ -218,6 +346,10 @@ export async function contributeMultisigNonce({ vault, sessionId, pubkey, public
         throw new Error(
             `contributeMultisigNonce: cosigner "${lowerPubkey}" already contributed a nonce`,
         );
+    }
+    const nonceProblem = musig2NonceProblem(session, lowerHex(publicNonceHex));
+    if (nonceProblem) {
+        throw nonceInvalidError(nonceProblem);
     }
     const nonces = [
         ...session.nonces,
@@ -237,11 +369,12 @@ export async function contributeMultisigNonce({ vault, sessionId, pubkey, public
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} [opts.sdkRegistry] required for a MuSig2 partial, which it verifies
  * @param {string} opts.sessionId
  * @param {string} opts.pubkey
  * @param {string} opts.signatureHex      DER-encoded ECDSA hex (P2SH/P2WSH) or 32-byte hex (MuSig2 partial)
  */
-export async function contributeMultisigSignature({ vault, sessionId, pubkey, signatureHex }) {
+async function contributeMultisigSignatureLocked({ vault, sdkRegistry, sessionId, pubkey, signatureHex }) {
     if (!vault) throw new Error('contributeMultisigSignature: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigSignature: sessionId is required');
     if (typeof signatureHex !== 'string' || signatureHex.length === 0
@@ -263,6 +396,9 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
             throw new Error(
                 `contributeMultisigSignature: cosigner "${lowerPubkey}" already contributed a partial sig`,
             );
+        }
+        if (!isMusig2PartialOf({ sdkRegistry, session, pubkey: lowerPubkey, partialHex: lowerSig })) {
+            throw signatureInvalidError();
         }
         const partialSigs = [
             ...session.partialSigs,
@@ -287,6 +423,9 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
         throw new Error(
             `contributeMultisigSignature: cosigner "${lowerPubkey}" already contributed a signature`,
         );
+    }
+    if (!isClassicalSignatureOf(lowerSig, session.msgHash, lowerPubkey)) {
+        throw signatureInvalidError();
     }
     const signatures = [
         ...session.signatures,
@@ -323,7 +462,7 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
  * @param {string} opts.sessionId
  */
-export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }) {
+async function aggregateMultisigSessionLocked({ vault, sdkRegistry, sessionId }) {
     if (!vault) throw new Error('aggregateMultisigSession: vault is required');
     if (!sdkRegistry) throw new Error('aggregateMultisigSession: sdkRegistry is required');
     if (typeof sessionId !== 'string') throw new Error('aggregateMultisigSession: sessionId is required');
@@ -396,7 +535,7 @@ export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }
  * @param {string} [opts.txid]
  * @param {boolean} [opts.broadcast]
  */
-export async function finalizeMultisigSigningSession({
+async function finalizeMultisigSigningSessionLocked({
     vault,
     sdkRegistry,
     sessionId,
@@ -421,12 +560,48 @@ export async function finalizeMultisigSigningSession({
         if (typeof sdk.encoder?.broadcastTx !== 'function') {
             throw new Error('finalizeMultisigSigningSession: sdk.encoder.broadcastTx is unavailable');
         }
-        const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
+        // Panic-mode freeze: pushing the finalized bytes is the irreversible
+        // step, so it is refused like every other broadcast route. The session
+        // stays 'finalized' and can be broadcast once the freeze ends.
+        assertSigningAllowed();
+        // The finalized bytes carry cosigner signatures, or came whole from
+        // another coordinator, so none of them is this wallet's own signer's
+        // output: verify every input's signature against the session PSBT's
+        // prevouts (the UTXO tracker's when the PSBT does not decompose) before
+        // anything is sent. A refusal leaves the session finalized.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex: session.finalizedTxHex,
+            psbtHex: session.psbtHex,
+            signerId: `multisig:${session.id}`,
+        });
+        let result;
+        try {
+            result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
+        } catch (err) {
+            // When the node takes the transaction but its reply is lost (a 500, a
+            // dropped connection, a timeout), the retry meets "already known" for
+            // these same bytes. The node holding the session's own finalized
+            // transaction is the broadcast having happened, so the session records
+            // it instead of offering a retry that can never succeed.
+            if (isAlreadyOnNetworkRejection(err)) {
+                return persist(vault, { ...session, status: 'broadcast' });
+            }
+            throw err;
+        }
         const broadcastTxid = typeof result === 'string' ? result : result?.txid;
-        if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {
+        // 'broadcast' is terminal and hides the retry, so only a real txid for
+        // this transaction moves the session there. Any other reply leaves it
+        // finalized: retrying the same bytes is safe, and a node that did take
+        // them answers "already known", which the branch above records.
+        if (typeof broadcastTxid !== 'string' || !TXID_RE.test(broadcastTxid)) {
             throw new Error('finalizeMultisigSigningSession: broadcast returned no txid');
         }
-        return persist(vault, { ...session, txid: broadcastTxid, status: 'broadcast' });
+        if (typeof session.txid === 'string' && TXID_RE.test(session.txid)
+            && broadcastTxid.toLowerCase() !== session.txid.toLowerCase()) {
+            throw new Error('finalizeMultisigSigningSession: broadcast returned a txid for a different transaction');
+        }
+        return persist(vault, { ...session, txid: broadcastTxid.toLowerCase(), status: 'broadcast' });
     }
 
     assertStatus(session, 'ready-to-finalize', 'finalized');
@@ -435,11 +610,22 @@ export async function finalizeMultisigSigningSession({
             || finalizedTxHex.length % 2 !== 0 || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
             throw new Error('finalizeMultisigSigningSession: finalizedTxHex must be hex');
         }
+        const normalizedTxHex = lowerHex(finalizedTxHex);
+        if (session.status === 'finalized') {
+            const suppliedTxid = typeof txid === 'string' && txid.length > 0 ? txid : undefined;
+            const sameTxid = suppliedTxid === undefined
+                || (typeof session.txid === 'string'
+                    && lowerHex(suppliedTxid) === lowerHex(session.txid));
+            if (normalizedTxHex !== lowerHex(session.finalizedTxHex) || !sameTxid) {
+                throw new MultisigFinalizationConflictError();
+            }
+            return session;
+        }
         return persist(vault, {
             ...session,
-            finalizedTxHex: lowerHex(finalizedTxHex),
+            finalizedTxHex: normalizedTxHex,
             txid: typeof txid === 'string' && txid.length > 0 ? txid : session.txid,
-            status: session.status === 'ready-to-finalize' ? 'finalized' : session.status,
+            status: 'finalized',
         });
     }
     if (session.status === 'finalized') return session;
@@ -464,6 +650,32 @@ export async function finalizeMultisigSigningSession({
             : session.txid,
         status: 'finalized',
     });
+}
+
+// Public entry points: each change to one session waits for the one before it.
+/** @param {any} opts */
+export function cancelMultisigSigningSession(opts) {
+    return withSessionLock(opts?.sessionId, () => cancelMultisigSigningSessionLocked(opts));
+}
+
+/** @param {any} opts */
+export function contributeMultisigNonce(opts) {
+    return withSessionLock(opts?.sessionId, () => contributeMultisigNonceLocked(opts));
+}
+
+/** @param {any} opts */
+export function contributeMultisigSignature(opts) {
+    return withSessionLock(opts?.sessionId, () => contributeMultisigSignatureLocked(opts));
+}
+
+/** @param {any} opts */
+export function aggregateMultisigSession(opts) {
+    return withSessionLock(opts?.sessionId, () => aggregateMultisigSessionLocked(opts));
+}
+
+/** @param {any} opts */
+export function finalizeMultisigSigningSession(opts) {
+    return withSessionLock(opts?.sessionId, () => finalizeMultisigSigningSessionLocked(opts));
 }
 
 // Surface the helper from the schema layer so UI callers don't have

@@ -11,6 +11,8 @@ import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsLis
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
+import marketsStyles from '../../../packages/core/src/shared/routes/MarketsList.module.css';
+import { readFileSync } from 'node:fs';
 
 afterEach(() => {
     cleanup();
@@ -115,6 +117,38 @@ describe('MarketsList narrow layout', () => {
         expect(onOpenMarket).toHaveBeenCalledTimes(2);
     });
 
+    it('shortens a long ticker inside the pair chip and keeps the full pair as its title', async () => {
+        const longTick = 'A'.repeat(120);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([{ tick1: longTick, tick2: 'BTC', depth: 3 }]),
+                getDispensersForToken: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const pair = (await screen.findByText(longTick)).closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveClass(marketsStyles.pairChip);
+        expect(pair).toHaveAttribute('title', `${longTick} / BTC`);
+        const css = readFileSync('packages/core/src/shared/routes/MarketsList.module.css', 'utf8');
+        expect(css).toMatch(/\.pairChip\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+        expect(css).toMatch(/\.pairTick\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // The depth pill stays on one line however long the pair name is.
+        expect(screen.getByText('depth 3')).toHaveStyle({ whiteSpace: 'nowrap' });
+        // The figures slot is not capped at half the row, so at larger text the
+        // depth pill stays inside the row padding instead of spilling past it.
+        const trailing = screen.getByText('depth 3').closest(`.${marketsStyles.marketTrailing}`);
+        expect(trailing).not.toBeNull();
+        expect(css).toMatch(/\.marketButton \.marketTrailing\s*\{[^}]*max-width:\s*none/s);
+    });
+
     it('matches market-row height and marks the results region busy on first load', () => {
         const messaging = {
             getMarkets: vi.fn(() => new Promise(() => {})),
@@ -133,8 +167,10 @@ describe('MarketsList narrow layout', () => {
 
         const region = screen.getByRole('region', { name: 'Markets results' });
         expect(region).toHaveAttribute('aria-busy', 'true');
-        const skeletonRows = screen.getByRole('status', { name: 'Loading markets' })
-            .querySelectorAll('[style*="height: 60px"]');
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent('Loading markets');
+        expect(notice.parentElement.firstElementChild).toBe(notice);
+        const skeletonRows = region.querySelectorAll('[style*="height: 60px"]');
         expect(skeletonRows).toHaveLength(5);
     });
 
@@ -237,7 +273,7 @@ describe('MarketsList narrow layout', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByRole('status', { name: 'Loading markets' })).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading markets');
         await act(async () => vi.advanceTimersByTimeAsync(15_000));
         expect(screen.getByText('Could not load markets. Try again.')).toBeInTheDocument();
 

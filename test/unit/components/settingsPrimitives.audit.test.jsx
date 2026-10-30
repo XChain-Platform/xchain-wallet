@@ -107,15 +107,16 @@ describe('shared settings row semantics', () => {
         expect(onChange).toHaveBeenCalledWith(false);
     });
 
-    it('gives appearance controls visible labels and linked descriptions', () => {
+    it('gives appearance controls visible labels without repeating them in a description', () => {
         render(<AppearanceSection />);
 
         const theme = screen.getByRole('combobox', { name: 'Theme' });
         const motion = screen.getByRole('combobox', { name: 'Reduced motion' });
-        expect(describedText(theme)).toMatch(/follow your device setting/i);
-        expect(describedText(motion)).toMatch(/device accessibility setting/i);
-        expect(theme.closest('div').style.flexWrap).toBe('wrap');
-        expect(motion.closest('div').style.flexWrap).toBe('wrap');
+        expect(describedText(theme) ?? '').not.toMatch(/follow your device setting/i);
+        expect(describedText(motion) ?? '').not.toMatch(/device accessibility setting/i);
+        // The control sits in the row's end slot; the row itself wraps.
+        expect(theme.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
+        expect(motion.closest('[data-settings-control]').parentElement.style.flexWrap).toBe('wrap');
     });
 
     it('keeps the saved appearance value and reports a failed update', async () => {
@@ -135,7 +136,7 @@ describe('shared settings row semantics', () => {
         consoleError.mockRestore();
     });
 
-    it('disambiguates fee controls by chain and connects validation errors', () => {
+    it('disambiguates fee controls by network and connects validation errors', () => {
         settings = {
             ...createDefaultSettings(),
             fees: {
@@ -177,7 +178,7 @@ describe('settings actions and mode choices', () => {
         }));
         render(<DeveloperModeSection />);
 
-        const remove = await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' });
+        const remove = await screen.findByRole('button', { name: 'Remove custom network fork-regtest' });
         expect(remove.className).toMatch(/danger/);
     });
 

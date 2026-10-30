@@ -155,7 +155,7 @@ function buildRuntime(userData, { sessionBackend } = {}) {
     try {
         seedAllStores(userData);
         const runtime = buildRuntime(userData);
-        runtime.metaBackend = {
+        runtime.storageBackend = {
             async clear() { throw new Error('EPERM: read-only volume'); },
         };
 
@@ -164,15 +164,42 @@ function buildRuntime(userData, { sessionBackend } = {}) {
         assert.equal(result.ok, false, 'a store that could not be cleared makes the wipe not-ok');
         assert.deepEqual(
             result.errors,
-            [{ store: 'meta', message: 'EPERM: read-only volume' }],
+            [{ store: 'storage', message: 'EPERM: read-only volume' }],
             'the failing store is named so the renderer can say what survived',
         );
         assert.deepEqual(
             result.cleared.sort(),
-            ['autoLock', 'session', 'storage', 'unlockThrottle'],
+            ['autoLock', 'meta', 'session', 'unlockThrottle'],
             'one unwritable file does not strand the others',
         );
-        assert.ok(!existsSync(vaultPathFor(userData)), 'vault still cleared despite the meta failure');
+        assert.ok(!existsSync(metaPathFor(userData)), 'meta still cleared despite the vault failure');
+    } finally {
+        rmSync(userData, { recursive: true, force: true });
+    }
+}
+
+// --- 3b. A meta file that will not go keeps its vault ------------------
+
+{
+    const userData = makeUserData();
+    try {
+        seedAllStores(userData);
+        const runtime = buildRuntime(userData);
+        runtime.metaBackend = {
+            async clear() { throw new Error('EPERM: read-only volume'); },
+        };
+
+        const result = await wipeRuntimeStores(runtime);
+
+        assert.equal(result.ok, false, 'a meta that could not be cleared makes the wipe not-ok');
+        assert.deepEqual(
+            result.errors,
+            [{ store: 'meta', message: 'EPERM: read-only volume' }],
+            'the failing store is named so the renderer can say what survived',
+        );
+        // Meta alone opens on onboarding, where every create refuses over it.
+        assert.ok(existsSync(vaultPathFor(userData)), 'the vault stays with the meta that opens it');
+        assert.deepEqual(result.cleared, [], 'nothing after the meta is cleared, so the wallet stays whole');
     } finally {
         rmSync(userData, { recursive: true, force: true });
     }

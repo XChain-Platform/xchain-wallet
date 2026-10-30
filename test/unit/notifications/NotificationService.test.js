@@ -198,6 +198,74 @@ describe('NotificationService', () => {
         expect(deps.sdks['litecoin-mainnet'].onAddress).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+        ['testnet', 'bitcoin-testnet'],
+        ['regtest', 'bitcoin-regtest'],
+    ])('retries a failed %s socket once per chain with backoff', async (_network, chainId) => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const deps = makeDeps({ now: () => Date.now() });
+        const sdk = makeSdk();
+        sdk.connectWs.mockRejectedValueOnce(new Error('endpoint unavailable'));
+        deps.addresses.splice(0, 1,
+            { address: 'addr1', chainId, label: 'Bitcoin', network: _network },
+            { address: 'addr2', chainId, label: 'Bitcoin', network: _network },
+        );
+        deps.sdks[chainId] = sdk;
+
+        const svc = makeService(deps, { logger });
+        try {
+            await svc.start();
+            await svc.refresh();
+            expect(sdk.connectWs).toHaveBeenCalledTimes(1);
+            expect(sdk.onAddress).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(999);
+            expect(sdk.connectWs).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(1);
+
+            expect(sdk.connectWs).toHaveBeenCalledTimes(2);
+            expect(sdk.onAddress).toHaveBeenCalledTimes(2);
+            expect(logger.warn).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
+        } finally {
+            svc.stop();
+            vi.useRealTimers();
+        }
+    });
+
+    it('caps failed socket attempts and emits one sanitized warning', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const deps = makeDeps({ now: () => Date.now() });
+        deps.addresses.push({ address: 'addrBTC2', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' });
+        deps.sdks['bitcoin-mainnet'].connectWs.mockRejectedValue(
+            new Error('password=hunter2 body={"address":"addrBTC"}'),
+        );
+
+        const svc = makeService(deps, { logger });
+        try {
+            await svc.start();
+            await vi.advanceTimersByTimeAsync(1_000);
+            await vi.advanceTimersByTimeAsync(2_000);
+            await vi.advanceTimersByTimeAsync(60_000);
+            await svc.refresh();
+
+            expect(deps.sdks['bitcoin-mainnet'].connectWs).toHaveBeenCalledTimes(3);
+            expect(deps.sdks['bitcoin-mainnet'].onAddress).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalledTimes(1);
+            expect(logger.warn.mock.calls[0][0]).toMatch(/^\[notify\] NotificationService: WebSocket unavailable/);
+            expect(logger.warn.mock.calls[0][1]).toBe('<Error>');
+            expect(JSON.stringify(logger.warn.mock.calls)).not.toMatch(/addrBTC|hunter2|body=/);
+            expect(logger.error).not.toHaveBeenCalled();
+        } finally {
+            svc.stop();
+            vi.useRealTimers();
+        }
+    });
+
     it('stop() unsubscribes everything and disconnects each chain', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);
@@ -360,6 +428,97 @@ describe('NotificationService', () => {
             type: 'COINPAY_REQUIRED',
             data: { action_index: 33 },
         });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    // The explorer sends COINPAY_REQUIRED to both the payer's and the payee's
+    // address, so the copy must tell each side what is actually expected of it.
+    const coinpayRequired = (payer, payee) => ({
+        type: 'COINPAY_REQUIRED',
+        data: {
+            obligation_action_index: 340,
+            order_match_action_index: 339,
+            payer_address: payer,
+            payee_address: payee,
+            coin_amount: '15000',
+            expiration: 1760000000,
+        },
+    });
+
+    it('tells the payer a coin payment is due for a matched order', async () => {
+        const deps = makeDeps();
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', coinpayRequired('addrBTC', 'sellerAddr'));
+        await flush();
+
+        expect(deps.notify).toHaveBeenCalledTimes(1);
+        const n = deps.notify.mock.calls[0][0];
+        expect(n).toMatchObject({ kind: 'coinpay-required', title: 'Payment due for a matched order' });
+        expect(n.body).toContain('Send the coin payment');
+        expect(n.body).not.toMatch(/swap/i);
+        expect(n.title).not.toContain('CoinPay');
+    });
+
+    it('tells the payee it is waiting on the buyer, never to send a payment', async () => {
+        const deps = makeDeps();
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', coinpayRequired('buyerAddr', 'addrBTC'));
+        await flush();
+
+        expect(deps.notify).toHaveBeenCalledTimes(1);
+        const n = deps.notify.mock.calls[0][0];
+        expect(n).toMatchObject({ kind: 'coinpay-required', title: 'Order matched, awaiting payment' });
+        expect(n.body).toContain('The buyer has until');
+        expect(n.body).not.toContain('Send the coin payment');
+        expect(n.body).not.toMatch(/swap/i);
+    });
+
+    it('keeps the coin-payment copy neutral when the event names neither party', async () => {
+        const deps = makeDeps();
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', coinpayRequired(undefined, undefined));
+        await flush();
+
+        expect(deps.notify).toHaveBeenCalledTimes(1);
+        const n = deps.notify.mock.calls[0][0];
+        expect(n).toMatchObject({ kind: 'coinpay-required', title: 'Coin payment due' });
+        expect(n.body).not.toContain('Send the coin payment');
+        expect(n.body).not.toMatch(/swap/i);
+    });
+
+    it('names a matched swap as a swap and a matched order as an order', async () => {
+        const deps = makeDeps();
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', { type: 'SWAP_MATCH', data: { action_index: 35 } });
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', { type: 'ORDER_MATCH', data: { action_index: 36 } });
+        await flush();
+
+        expect(deps.notify).toHaveBeenCalledTimes(2);
+        expect(deps.notify.mock.calls[0][0]).toMatchObject({
+            kind: 'order-fill', title: 'Swap matched', body: 'Your swap on Bitcoin was matched.',
+        });
+        expect(deps.notify.mock.calls[1][0]).toMatchObject({
+            kind: 'order-fill', title: 'Order matched', body: 'Your order on Bitcoin was matched.',
+        });
+    });
+
+    it('suppresses swap matches when orderFills is off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.orderFills = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', { type: 'SWAP_MATCH', data: { action_index: 37 } });
         await flush();
 
         expect(deps.notify).not.toHaveBeenCalled();

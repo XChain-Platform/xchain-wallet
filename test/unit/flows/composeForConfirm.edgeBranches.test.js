@@ -4,12 +4,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
 
+const BITCOIN_REGTEST_FEE_DESTINATION = 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim';
+
 function harness({ createTx, quoteNativeFee, releaseInputs } = {}) {
     const encoder = {
         createTx: createTx || vi.fn(async () => ({ psbt: 'PSBT', encoding: 'OP_RETURN' })),
         ...(releaseInputs === undefined ? {} : { releaseInputs }),
     };
     const sdk = {
+        options: { network: 'bitcoin-regtest' },
         encoder,
         actions: {
             createAction: vi.fn(() => ({ actionString: 'BET|2|42|0|1', action: 'BET', version: 2 })),
@@ -41,7 +44,7 @@ describe('composeForConfirm encoder failure and fallback branches', () => {
             quoteNativeFee: vi.fn(async () => ({
                 supported: true,
                 valid: true,
-                feeDestination: 'fee-address',
+                feeDestination: BITCOIN_REGTEST_FEE_DESTINATION,
                 requiredFeeSats: 100_000,
                 requiredFeeNative: '0.001',
             })),

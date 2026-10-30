@@ -8,11 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -24,7 +27,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -36,8 +39,8 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { compareAmounts } from '../../market/orderMath.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -103,6 +106,7 @@ export function ContractStakeForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -136,6 +140,7 @@ export function ContractStakeForm({
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -158,7 +163,7 @@ export function ContractStakeForm({
                     : null;
                 const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to stake from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -232,7 +237,9 @@ export function ContractStakeForm({
     const [stakedAvailable, setStakedAvailable] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
-        if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
+        // A demo wallet cannot unstake, and a demo wallet's addresses never go
+        // to an explorer (issue #82).
+        if (mode !== 'unstake' || !address || !chainId || demoGuard.blocked) { setStakedAvailable(null); return undefined; }
         let cancelled = false;
         Promise.all([
             messaging.getContractStakesForAddress({ chainId, address }),
@@ -254,7 +261,7 @@ export function ContractStakeForm({
             })
             .catch(() => { if (!cancelled) setStakedAvailable(null); });
         return () => { cancelled = true; };
-    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging]);
+    }, [mode, chainId, fromAddress?.address, contractActionIndex, tick, signingPubkey, messaging, demoGuard.blocked]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -320,6 +327,8 @@ export function ContractStakeForm({
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No Bitcoin address available to stake from.');
             return;
@@ -412,6 +421,9 @@ export function ContractStakeForm({
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        // A second press while the confirm page is still composing is the same request.
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const wireAction = mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE';
         const wireVersion = mode === 'stake' ? '3' : '1';
         const from = {
@@ -450,6 +462,8 @@ export function ContractStakeForm({
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || `${mode} failed.`,
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -540,7 +554,7 @@ export function ContractStakeForm({
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -550,7 +564,7 @@ export function ContractStakeForm({
     if (!contractMeta.valid) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     Contract #{contractActionIndex} is not stakeable. Its deploy
                     transaction did not set a cooldown duration. Staking is only
                     available on contracts that explicitly opted in at deploy time.
@@ -565,11 +579,12 @@ export function ContractStakeForm({
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result?.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result?.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -597,10 +612,11 @@ export function ContractStakeForm({
         const verb = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`${verb} review`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -633,7 +649,7 @@ export function ContractStakeForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>
@@ -678,9 +694,12 @@ export function ContractStakeForm({
                             valueClassName={styles.detailsValue}
                         />
                     ) : null}
-                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Slash risk</dt>
+                    {/* A contract slash can take a staker's whole balance, cooldown
+                        included, so the warning says so in plain words. */}
+                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Penalty risk</dt>
                     <dd className={styles.detailsValue} style={{ color: 'var(--xc-danger-text)' }}>
-                        Funds slashed by this contract are sent to{' '}
+                        This contract can take some or all of your staked tokens as a penalty.
+                        {' '}Penalties are sent to{' '}
                         {contractMeta.slashDestination
                             ? <AddressText address={contractMeta.slashDestination} />
                             : 'the contract-configured destination'}.
@@ -775,10 +794,11 @@ export function ContractStakeForm({
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Contract stake"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -796,7 +816,7 @@ export function ContractStakeForm({
                 <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
                 <dt className={styles.detailsLabel}>Cooldown</dt>
                 <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
-                <dt className={styles.detailsLabel}>Slashed funds</dt>
+                <dt className={styles.detailsLabel}>Penalty destination</dt>
                 <dd className={styles.detailsValue}>
                     {contractMeta.slashDestination
                         ? <AddressText address={contractMeta.slashDestination} truncate={false} />
@@ -815,9 +835,9 @@ export function ContractStakeForm({
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain yet. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             <RadioGroup

@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -49,6 +50,9 @@ const CONTRIBUTION_LABELS = {
     'classical-signature': 'Signature',
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
+
+// Host refusals of a reply's content; the same reply can never pass, so no retry.
+const REFUSED_REPLY_CODES = new Set(['MULTISIG_SIGNATURE_INVALID', 'MULTISIG_NONCE_INVALID']);
 
 // Count each configured identity once so duplicated records cannot satisfy a threshold.
 function contributionProgress(session) {
@@ -120,6 +124,16 @@ function replyMismatchMessage(envelope, session) {
     }
     if (envelope.kind !== expectedKind) {
         return 'This cosigner reply is for a different signing step. Import the reply requested by the step shown on this session.';
+    }
+    // The host refuses both of these too, but with a developer message the
+    // screen reduces to a generic failure and a retry that cannot succeed.
+    const pubkey = String(envelope.contribution?.pubkey || '').toLowerCase();
+    if (!(session.cosignerPubkeys || []).includes(pubkey)) {
+        return 'This reply is signed by a key that is not one of this multisig\'s cosigners. Ask a listed cosigner for their reply.';
+    }
+    const { contributed } = contributionProgress(session);
+    if (contributed.includes(pubkey)) {
+        return 'This cosigner\'s reply is already applied to this step. Import a reply from a pending cosigner.';
     }
     return null;
 }
@@ -220,6 +234,27 @@ export function MultisigSigningSession({ walletId, onBack }) {
         await refreshList();
     }, [refreshActive, refreshList]);
 
+    // Two surfaces can apply the same reply at once, and the one that loses
+    // holds a stale session: its refusal is developer text and a retry of the
+    // same reply can never pass. Reload the session and re-run the reply check
+    // so the screen says where the session stands. Returns the check's message,
+    // or null when the reply still fits (the failure was something else).
+    const recheckReply = useCallback(async (envelope, sessionId) => {
+        if (!envelope || !mountedRef.current) return null;
+        const requestId = ++activeRequestId.current;
+        let fresh;
+        try {
+            fresh = await messaging.getMultisigSigningSession({ sessionId });
+        } catch (err) {
+            console.error('Multisig session reload failed:', err); // eslint-disable-line no-console
+            return null;
+        }
+        if (!fresh || requestId !== activeRequestId.current || !mountedRef.current) return null;
+        setActive(fresh);
+        refreshList();
+        return replyMismatchMessage(envelope, fresh);
+    }, [messaging, refreshList]);
+
     useEffect(() => {
         mountedRef.current = true;
         return () => { mountedRef.current = false; };
@@ -273,7 +308,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         setError(null);
         try {
-            await messaging.finalizeMultisigSigningSession({ sessionId: active.id });
+            await withAutoLockHold(() => messaging.finalizeMultisigSigningSession({ sessionId: active.id }));
             await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig finalization failed:', err); // eslint-disable-line no-console
@@ -288,10 +323,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         setError(null);
         try {
-            await messaging.finalizeMultisigSigningSession({
+            await withAutoLockHold(() => messaging.finalizeMultisigSigningSession({
                 sessionId: active.id,
                 broadcast: true,
-            });
+            }));
             await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig broadcast failed:', err); // eslint-disable-line no-console
@@ -385,8 +420,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
         // dispatch + busy / refresh choreography).
         setScannerOpen(false);
         setBusy(true);
+        let envelope = null;
         try {
-            const envelope = decodeMultisigEnvelope(next.psbt);
+            envelope = decodeMultisigEnvelope(next.psbt);
             const mismatch = replyMismatchMessage(envelope, active);
             if (mismatch) {
                 fail(mismatch, null);
@@ -424,11 +460,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setPasteInput('');
         } catch (err) {
             console.error('Multisig scanned contribution failed:', err); // eslint-disable-line no-console
-            fail(userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
+            const recheck = REFUSED_REPLY_CODES.has(err?.code) ? null : await recheckReply(envelope, active.id);
+            fail(recheck || userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
         } finally {
             setBusy(false);
         }
-    }, [active, busy, collectorState, messaging, refreshAfterAction, fail]);
+    }, [active, busy, collectorState, messaging, refreshAfterAction, recheckReply, fail]);
 
     async function handleSignLocally() {
         if (!active || busy || signPassword.length === 0) return;
@@ -436,10 +473,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setError(null);
         setSignResult(null);
         try {
-            const result = await messaging.signMultisigLocally({
+            const result = await withAutoLockHold(() => messaging.signMultisigLocally({
                 sessionId: active.id,
                 password:  signPassword,
-            });
+            }));
             setSignResult(
                 `${contributionLabel(result?.contributionKind)} from ${shortPk(result?.pubkey || '')} added.`,
             );
@@ -530,7 +567,17 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setPasteInput('');
         } catch (err) {
             console.error('Multisig contribution apply failed:', err); // eslint-disable-line no-console
-            fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+            if (REFUSED_REPLY_CODES.has(err?.code)) {
+                // Submitting the same reply again cannot pass the reply check.
+                fail(userFacingMessage(err, 'Failed to apply contribution.'), null);
+            } else {
+                const recheck = await recheckReply(envelope, active.id);
+                if (recheck) {
+                    fail(recheck, null);
+                } else {
+                    fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+                }
+            }
         } finally {
             setBusy(false);
         }
@@ -580,36 +627,36 @@ export function MultisigSigningSession({ walletId, onBack }) {
             );
         }
         return wrap(
-            <ul className={styles.list} aria-label="Multisig sessions">
-                    {/* Session entries stay native buttons because each control is the complete clickable row. */}
-                    {sessions.map((s) => {
-                        const summary = signingProgressSummary(s);
-                        return (
-                            <li key={s.id}>
-                                <button
-                                    type="button"
-                                    className={styles.row}
-                                    onClick={() => setActiveId(s.id)}
-                                >
-                                    <span className={styles.rowTitle}>
-                                        <MultisigBadge
-                                            threshold={s.threshold}
-                                            cosignerCount={s.cosignerPubkeys.length}
-                                            scheme={s.scheme}
-                                            size="sm"
-                                        />
-                                    </span>
-                                    <span className={styles.rowMeta}>
+            <ul
+                aria-label="Multisig sessions"
+                style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}
+            >
+                {sessions.map((s) => {
+                    const summary = signingProgressSummary(s);
+                    return (
+                        <li key={s.id}>
+                            <ListRow
+                                onClick={() => setActiveId(s.id)}
+                                chevron
+                                title={(
+                                    <MultisigBadge
+                                        threshold={s.threshold}
+                                        cosignerCount={s.cosignerPubkeys.length}
+                                        scheme={s.scheme}
+                                        size="sm"
+                                    />
+                                )}
+                                subtitle={(
+                                    <>
                                         {summary?.label}: {summary?.current} of {summary?.threshold}
                                         {' · '}{statusLabel(s.status)}
-                                    </span>
-                                    {s.actionSummary
-                                        ? <span className={styles.rowSubtle}>{s.actionSummary}</span>
-                                        : null}
-                                </button>
-                            </li>
-                        );
-                    })}
+                                        {s.actionSummary ? <><br />{s.actionSummary}</> : null}
+                                    </>
+                                )}
+                            />
+                        </li>
+                    );
+                })}
             </ul>,
         );
     }
@@ -850,7 +897,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
                     <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
                         {contributed.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>
@@ -862,7 +909,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
                     <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
                         {unsigned.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>

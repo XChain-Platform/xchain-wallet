@@ -29,7 +29,7 @@
 // screen rendered or sent, not in a helper.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -89,7 +89,12 @@ function mount(Component, props, messaging) {
     return messaging;
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    __clearTokenInfoCache();
+});
 
 // LIST #2700 from the testnet repro: created SWAPTEST, MGRTEST (plus an
 // unknown tick the network left out), then edited to DOGESWAP, SWAPTEST.
@@ -147,6 +152,36 @@ describe('ListDetail membership under list-edit resolution', () => {
         mountDetail({ ...LIST_2700, state: ACTIVE_STATE });
         expect(await screen.findByText('Left out by the network (1)')).toBeTruthy();
         expect(screen.getByText('NOSUCHTICKQA')).toBeTruthy();
+        const row = screen.getByText('NOSUCHTICKQA').closest('li');
+        expect(row.textContent).toBe('NOSUCHTICKQA (token not found)');
+        expect(row.getAttribute('title')).toBe('invalid: TICK (unknown)');
+    });
+
+    it('says why a fork edit item was left out in plain words', async () => {
+        mountDetail({
+            ...LIST_2700,
+            action_index: 2703,
+            list_action_index: 2700,
+            edit: 1,
+            edits: [{ tick: 'FORKADDED', status: 'valid' }, { address: 'notanaddress', status: 'invalid: ADDRESS (format)' }],
+        });
+        const row = (await screen.findByText('notanaddress')).closest('li');
+        expect(row.textContent).toBe('notanaddress (not a valid address for this network)');
+        expect(screen.getByText('FORKADDED').closest('li').textContent).toBe('FORKADDED');
+    });
+
+    it('says why the network refused a list in its status row', async () => {
+        mountDetail({ ...LIST_2700, status: 'invalid: LIST_ACTION_INDEX (not owner)' });
+        const value = (await screen.findByText('Status')).nextElementSibling;
+        expect(value.textContent).toBe('Rejected: sent by an address that does not own the list');
+        expect(value.getAttribute('title')).toBe('invalid: LIST_ACTION_INDEX (not owner)');
+    });
+
+    it('reads a valid list status as Valid with no tooltip', async () => {
+        mountDetail({ ...LIST_2700 });
+        const value = (await screen.findByText('Status')).nextElementSibling;
+        expect(value.textContent).toBe('Valid');
+        expect(value.getAttribute('title')).toBeNull();
     });
 
     it('labels a numeric remove edit as removed items', async () => {
@@ -483,17 +518,22 @@ describe('ListCreateForm checks token items before publishing', () => {
     const KNOWN = { creator: 'nowner', totalSupply: '100', canonicalTick: 'SWAPTEST' };
     const UNKNOWN = { creator: null, totalSupply: null, canonicalTick: null };
 
-    it('counts valid, duplicate and malformed names, and flags a tick the chain does not know', async () => {
+    it('counts valid, duplicate and malformed names, and flags a tick the network does not know', async () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(tick === 'SWAPTEST' ? KNOWN : UNKNOWN));
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith({ getTokenInfo }));
-        fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), {
+        const input = await screen.findByLabelText(/Tokens \(one per line\)/);
+        vi.useFakeTimers();
+        fireEvent.change(input, {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
         });
-        const counts = await screen.findByText(/2 valid token names/);
+        const counts = screen.getByText(/2 valid token names/);
         expect(counts.textContent).toMatch(/1 duplicate ignored/);
         expect(counts.textContent).toMatch(/1 invalid/);
-        await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
-        expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected chain: NOSUCHTICKQA/);
+        await act(async () => { await vi.advanceTimersByTimeAsync(349); });
+        expect(getTokenInfo).not.toHaveBeenCalled();
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        expect(counts.textContent).toMatch(/1 found · 1 not found/);
+        expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected network: NOSUCHTICKQA/);
         expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA', demo: false });
     });
 
@@ -504,7 +544,7 @@ describe('ListCreateForm checks token items before publishing', () => {
         expect(tickLookupVerdict(KNOWN)).toBe('found');
     });
 
-    it('classifies token-list items with the chain ticker grammar', () => {
+    it('classifies token-list items with the network ticker grammar', () => {
         expect(classifyTickItems('FLAM1N-H0T-CHEET0S, Wow!, c#, .A, A..B, A.')).toEqual({
             valid: ['FLAM1N-H0T-CHEET0S', 'Wow!', 'c#'],
             invalid: ['.A', 'A..B', 'A.'],
@@ -536,7 +576,7 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     });
 
     it('ProjectRosterForm, unlocked', async () => {
-        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', onBack() {} }, messagingWith({
+        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', issuerAddress: BY_CHAIN[DOGE][0].address, onBack() {} }, messagingWith({
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getGenesisForToken: vi.fn().mockResolvedValue({ action_index: 77 }),
         }));
@@ -565,7 +605,7 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
             checkInputLiveness: vi.fn().mockResolvedValue({ live: true }),
             requoteNativeFee: vi.fn().mockResolvedValue(null),
         });
-        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', onBack() {} }, messaging);
+        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', issuerAddress: BY_CHAIN[DOGE][0].address, onBack() {} }, messaging);
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), { target: { value: 'SWAPTEST' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Review list' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Publish list' }));
@@ -634,8 +674,8 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     });
 });
 
-describe('ListCreateForm chain default', () => {
-    it('opens on the last-used chain, not the first-created one', async () => {
+describe('ListCreateForm network default', () => {
+    it('opens on the last-used network, not the first-created one', async () => {
         const messaging = mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith({
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet', lastUsedChain: { mainnet: DOGE } }),
         }));
@@ -644,7 +684,7 @@ describe('ListCreateForm chain default', () => {
         expect(messaging.getSettings).toHaveBeenCalled();
     });
 
-    it('falls back to the first chain when nothing was used yet', async () => {
+    it('falls back to the first network when nothing was used yet', async () => {
         mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith());
         const button = await screen.findByRole('button', { name: /^Network: / });
         expect(button.getAttribute('aria-label') || button.textContent).toMatch(/^Network: Bitcoin/);

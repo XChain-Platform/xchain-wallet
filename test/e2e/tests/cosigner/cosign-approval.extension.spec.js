@@ -138,11 +138,11 @@ async function approveConnection(approval) {
     // Wait for React to mount before querying: the window is created, then the
     // approval bundle renders into it.
     try {
-        await approval.getByRole('button', { name: 'Connect', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
+        await approval.getByRole('button', { name: 'Approve', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
     } catch (e) {
         const text = await approval.locator('body').innerText().catch(() => '<unreadable>');
         const btns = await approval.getByRole('button').allInnerTexts().catch(() => []);
-        throw new Error(`connect approval never rendered Connect.\n  url: ${approval.url()}\n  buttons: ${JSON.stringify(btns)}\n  text: ${JSON.stringify(text.slice(0, 500))}`);
+        throw new Error(`connect approval never rendered Approve.\n  url: ${approval.url()}\n  buttons: ${JSON.stringify(btns)}\n  text: ${JSON.stringify(text.slice(0, 500))}`);
     }
     const bitcoin = approval.getByRole('checkbox', { name: /^Allow Bitcoin\b/i }).first();
     if (await bitcoin.count() === 0) {
@@ -152,7 +152,7 @@ async function approveConnection(approval) {
     }
     await bitcoin.waitFor({ state: 'attached', timeout: 30_000 });
     if (!(await bitcoin.isChecked())) await bitcoin.check({ force: true });
-    await clickAndLetItClose(approval.getByRole('button', { name: 'Connect', exact: true }));
+    await clickAndLetItClose(approval.getByRole('button', { name: 'Approve', exact: true }));
 }
 
 
@@ -187,6 +187,19 @@ async function clickAndLetItClose(locator) {
     }
 }
 
+// The popup header keeps Search in its action menu; the hero's own search
+// button folds into "Balance actions" at popup width, so the header menu is
+// the one visible route to the palette at every popup size.
+async function openAllActions(page) {
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    await page.getByRole('menu', { name: 'Header actions' }).getByRole('menuitem', { name: /^Search/ }).click();
+    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(palette).toBeVisible();
+    await palette.getByRole('combobox').fill('All actions');
+    await palette.getByRole('option', { name: /All actions/ }).first().click();
+    await expect(palette).toBeHidden();
+}
+
 test.describe('passive co-signer, in a browser', () => {
 
     test('a dApp co-sign request is approved and returns a partial over OUR sighash', async ({ page, context }) => {
@@ -202,9 +215,7 @@ test.describe('passive co-signer, in a browser', () => {
         // "Agent accounts" is an entry on the All-actions menu rather than a
         // palette command of its own, and it only appears once the wallet is
         // known to hold a Bitcoin address (the feature is BTC-only at launch).
-        await page.getByRole('button', { name: 'Open command palette' }).click();
-        await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('All actions');
-        await page.getByRole('option', { name: /All actions/ }).first().click();
+        await openAllActions(page);
         await page.getByRole('button', { name: /Agent accounts/ }).first().click();
 
         // The list screen offers provisioning; the button wording is the one the
@@ -222,7 +233,9 @@ test.describe('passive co-signer, in a browser', () => {
         // compose. SEND is the canonical co-signable shape.
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
 
-        await page.getByRole('button', { name: 'Create agent account' }).click();
+        // The form is two steps: review the exact values, then create.
+        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
 
         // The success screen shows the funded 2-of-2 address. AddressText
         // TRUNCATES for display but carries the full string in aria-label, so
@@ -326,16 +339,16 @@ test.describe('passive co-signer, in a browser', () => {
         // "Agent accounts" is an entry on the All-actions menu rather than a
         // palette command of its own, and it only appears once the wallet is
         // known to hold a Bitcoin address (the feature is BTC-only at launch).
-        await page.getByRole('button', { name: 'Open command palette' }).click();
-        await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('All actions');
-        await page.getByRole('option', { name: /All actions/ }).first().click();
+        await openAllActions(page);
         await page.getByRole('button', { name: /Agent accounts/ }).first().click();
         await page.getByRole('button', { name: /Create agent account|New agent account|Provision/ }).first().click();
         await page.getByLabel("This wallet's key").selectOption({ index: 1 });
         await page.getByLabel(/Agent public key/).fill(agentPk.toString('hex'));
         await page.getByLabel('Account name').fill('E2E agent');
         await page.getByRole('checkbox', { name: 'Send', exact: true }).check();          // SEND only
-        await page.getByRole('button', { name: 'Create agent account' }).click();
+        // The form is two steps: review the exact values, then create.
+        await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+        await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
 
         await expect(page.getByText('Agent account created')).toBeVisible({ timeout: 60_000 });
         const aggregateAddress = await readAggregateAddress(page);
@@ -396,8 +409,11 @@ test.describe('passive co-signer, in a browser', () => {
             new Promise((r) => setTimeout(() => r({ ok: false, e: 'request never settled' }), 60_000)),
         ]);
         if (outcome.ok) {
-            expect(outcome.r.approved, 'an out-of-policy action was SIGNED').toBe(false);
+            // The provider resolves a user rejection as { ok: false, error: 'USER_REJECTED' }
+            // rather than throwing; anything that signed would carry approved: true.
+            expect(outcome.r.approved, 'an out-of-policy action was SIGNED').not.toBe(true);
             expect(outcome.r.signatures).toBeUndefined();
+            expect(outcome.r).toMatchObject({ ok: false, error: 'USER_REJECTED' });
         } else {
             expect(outcome.e, 'the request failed for an unexpected reason')
                 .toMatch(/rejected|POLICY_ACTION_DENIED|DECODE_|denied/i);

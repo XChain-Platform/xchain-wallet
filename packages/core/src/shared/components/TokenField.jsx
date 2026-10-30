@@ -14,6 +14,9 @@ import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import styles from './TokenField.module.css';
 import inputStyles from '../../ui/Input.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * TokenField: the canonical inline token/asset selector for forms.
@@ -42,11 +45,11 @@ import inputStyles from '../../ui/Input.module.css';
  * @param {string} [props.id]
  */
 export function TokenField({
-    label = 'Token',
+    label = t('send.fields.token'),
     size = 'md',
     value = null,
     onOpenPicker,
-    placeholder = 'Select a token',
+    placeholder = t('components.tokenField.selectAToken'),
     disabled = false,
     error,
     id,

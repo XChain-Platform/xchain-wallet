@@ -31,9 +31,12 @@ export const SHORTCUTS = /** @type {const} */ ([
     // General
     { id: 'command-palette', binding: 'mod+k', label: 'Open command palette', action: 'palette', group: 'General', dispatch: false },
     { id: 'shortcut-help', binding: '?', altBinding: 'mod+/', label: 'Keyboard shortcuts', action: 'help', group: 'General', dispatch: true },
-    { id: 'lock', binding: 'mod+l', label: 'Lock wallet', action: 'lock', group: 'General', dispatch: true },
-    { id: 'settings', binding: 'mod+,', label: 'Open settings', action: 'nav:settings', group: 'General', dispatch: true },
-    { id: 'new-send', binding: 'mod+n', label: 'New send', action: 'nav:send', group: 'General', dispatch: true },
+    // The browser keeps Cmd/Ctrl+L, +N and +comma in a web tab, so these three
+    // defaults are keys the page receives. `family: 'combo'` keeps Settings →
+    // Keyboard recording a Cmd/Ctrl combo when a user rebinds one.
+    { id: 'lock', binding: 'g l', label: 'Lock wallet', action: 'lock', group: 'General', dispatch: true, family: 'combo' },
+    { id: 'settings', binding: 'g e', label: 'Open settings', action: 'nav:settings', group: 'General', dispatch: true, family: 'combo' },
+    { id: 'new-send', binding: 'g n', label: 'New send', action: 'nav:send', group: 'General', dispatch: true, family: 'combo' },
     // Go to (g-leader)
     { id: 'go-balances', binding: 'g b', label: 'Go to balances', action: 'nav:home', group: 'Go to', dispatch: true },
     { id: 'go-history', binding: 'g h', label: 'Go to history', action: 'nav:history', group: 'Go to', dispatch: true },
@@ -58,6 +61,47 @@ export const SHORTCUTS = /** @type {const} */ ([
 export const SHORTCUT_GROUPS = /** @type {const} */ (['General', 'Go to', 'Balances', 'History', 'Send']);
 
 // ---- §34.1 rebinding ------------------------------------------------------
+
+// Select-all and the clipboard combos stay the platform's own. A wallet
+// shortcut on one of them takes the keypress on every non-editable target, so
+// copying an address from a page (or pasting, which users do with the native
+// shortcut) would lock the wallet or navigate instead.
+const RESERVED_COMBO_KEYS = new Set(['a', 'c', 'v', 'x']);
+
+// Browser and desktop chords never reach a page in a normal tab: close tab or
+// window (W), new tab (T), new window (N), quit (Q), reload (R), address bar
+// (L) and the browser or app settings (comma). Cmd+Shift+T, Cmd+Shift+N and
+// F5 are outside the binding grammar, and the capture refuses them by name.
+const BROWSER_RESERVED_KEYS = new Set(['w', 't', 'n', 'q', 'r', 'l', ',']);
+const BROWSER_RESERVED_SHIFTED_KEYS = new Set(['t', 'n']);
+
+/**
+ * Name the browser- or desktop-reserved chord a keydown spells, or null. The
+ * Settings → Keyboard capture refuses these with an "already used" message
+ * instead of recording a binding that never fires.
+ *
+ * @param {{ key?: string, metaKey?: boolean, ctrlKey?: boolean, altKey?: boolean, shiftKey?: boolean }} e
+ * @param {boolean} [mac]
+ * @returns {string | null}
+ */
+export function reservedChordLabel(e, mac = false) {
+    const key = String(e.key || '').toLowerCase();
+    if (key === 'f5') return 'F5';
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return null;
+    const keys = e.shiftKey ? BROWSER_RESERVED_SHIFTED_KEYS : BROWSER_RESERVED_KEYS;
+    if (!keys.has(key)) return null;
+    return formatBinding(`mod+${key}`, mac).replace('+', e.shiftKey ? '+Shift+' : '+');
+}
+
+/**
+ * The binding family a rebind keeps. An entry names its family when its
+ * default sits in a different one from the chords users may record for it.
+ * @param {{ binding: string, family?: string }} s
+ * @returns {'combo' | 'single' | 'leader'}
+ */
+export function bindingFamily(s) {
+    return /** @type {any} */ (s.family) || parseBinding(s.binding).kind;
+}
 
 /**
  * True for entries the Settings → Keyboard UI may rebind: the globally
@@ -86,6 +130,7 @@ export function isValidBinding(binding, kind) {
         const key = binding.slice(4);
         // One printable key, or a named key like Enter. Never bare 'mod+'.
         if (!/^[a-z0-9,./;'[\]\\`=-]$/.test(key) && !/^(enter|escape|backspace|tab|space)$/.test(key)) return false;
+        if (RESERVED_COMBO_KEYS.has(key) || BROWSER_RESERVED_KEYS.has(key)) return false;
         return !kind || kind === 'combo';
     }
     if (/^[a-z0-9] [a-z0-9]$/.test(binding)) return !kind || kind === 'leader';
@@ -107,11 +152,31 @@ export function resolveBindings(overrides) {
     return SHORTCUTS.map((s) => {
         const o = map[s.id];
         if (isRebindable(s) && typeof o === 'string' && o !== s.binding
-            && isValidBinding(o, parseBinding(s.binding).kind)) {
+            && isValidBinding(o, bindingFamily(s))) {
             return { ...s, binding: o, altBinding: undefined, overridden: true };
         }
         return { ...s, overridden: false };
     });
+}
+
+/**
+ * True when two bindings claim the same keypress. Besides an exact match, a
+ * single key collides with a leader sequence that starts on it: the dispatcher
+ * arms the leader on that key, so the single-key shortcut would never fire,
+ * and a screen's single key (History 'e', Balances 'h') would fire alongside
+ * the armed leader.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function bindingsCollide(a, b) {
+    if (a === b) return true;
+    const pa = parseBinding(a);
+    const pb = parseBinding(b);
+    if (pa.kind === 'leader' && pb.kind === 'single') return pa.lead === pb.key.toLowerCase();
+    if (pa.kind === 'single' && pb.kind === 'leader') return pb.lead === pa.key.toLowerCase();
+    return false;
 }
 
 /**
@@ -126,10 +191,17 @@ export function resolveBindings(overrides) {
 export function findBindingConflict(id, binding, overrides) {
     for (const s of resolveBindings(overrides)) {
         if (s.id === id) continue;
-        if (s.binding === binding || s.altBinding === binding) return s.id;
+        if ([s.binding, s.altBinding].some((other) => other && bindingsCollide(other, binding))) return s.id;
     }
     return null;
 }
+
+// Input types that take no typed text. Focus lands on a radio or a checkbox
+// after a click, and treating those as typing left Cmd/Ctrl+K dead until the
+// user clicked somewhere else (the Wallet mode radios, 2026-10-14).
+const NON_TEXT_INPUT_TYPES = new Set([
+    'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit',
+]);
 
 /**
  * True when the element should swallow global shortcuts because the user is
@@ -142,7 +214,11 @@ export function isEditableTarget(el) {
     if (!el || typeof el !== 'object') return false;
     const node = /** @type {HTMLElement} */ (el);
     const tag = node.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (tag === 'INPUT') {
+        const type = String(/** @type {HTMLInputElement} */ (node).type || 'text').toLowerCase();
+        return !NON_TEXT_INPUT_TYPES.has(type);
+    }
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
     return node.isContentEditable === true;
 }
 

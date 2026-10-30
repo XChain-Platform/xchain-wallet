@@ -18,11 +18,15 @@
 // a healthy send and for one that never reached a node.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -120,7 +124,7 @@ function rowFor(view, state) {
 async function openRow(view, state) {
     await waitFor(() => expect(rowFor(view, state)).toBeTruthy());
     fireEvent.click(rowFor(view, state));
-    return screen.getByRole('region', { name: 'Action detail' });
+    return screen.getByRole('region', { name: 'Transaction details' });
 }
 
 /**
@@ -132,7 +136,24 @@ function panelIn(region) {
     return within(region).getByRole('region', { name: 'Pending transaction' });
 }
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+    cleanup();
+    resetBackStackForTests();
+    vi.useRealTimers();
+});
+
+
+/**
+ * The decoded output line reading "<amount> to <address>". The address keeps
+ * both ends on screen and the whole value in its title.
+ */
+function outputLine(container, amount, address) {
+    const short = `${address.slice(0, 6)}…${address.slice(-6)}`;
+    return within(container).getAllByRole('listitem').find((li) => (
+        li.textContent.startsWith(`${amount} to ${short}`)
+        && li.querySelector(`[title="${address}"]`)
+    )) || null;
+}
 
 describe('History row labels a pending transaction by state', () => {
     it('never prints the word "unconfirmed" at the user', async () => {
@@ -171,9 +192,33 @@ describe('History row labels a pending transaction by state', () => {
         await waitFor(() => expect(rowFor(view, 'replaced')).toBeTruthy());
         expect(rowFor(view, 'replaced').textContent).toContain('replaced');
     });
+
+    it('reads a send another transaction spent around as replaced, never as pending', async () => {
+        // The coins this send spends are gone from the sender's unspent
+        // outputs and nothing lists it: it can never confirm, so neither the
+        // row's status nor the detail may call it pending.
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend({ replacedElsewhere: true })] });
+        await waitFor(() => expect(rowFor(view, 'replaced-elsewhere')).toBeTruthy());
+        const row = rowFor(view, 'replaced-elsewhere');
+        expect(row.textContent).toMatch(/replaced/i);
+        expect(row.textContent).not.toMatch(/\bPending\b/);
+        const region = await openRow(view, 'replaced-elsewhere');
+        const panel = panelIn(region);
+        expect(within(panel).getByText('Another transaction spent the same coins. This one won\'t confirm.')).toBeTruthy();
+        expect(panel.textContent).not.toContain('Pending, not yet validated by the service.');
+    });
 });
 
 describe('History pending detail branch', () => {
+    it('keeps the selected transaction open when the native app pauses', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        await openRow(view, 'seen');
+
+        act(() => dismissAllOverlays());
+
+        expect(screen.getByRole('region', { name: 'Transaction details' })).toBeInTheDocument();
+    });
+
     it('says the indexer has not validated the action', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
@@ -191,8 +236,8 @@ describe('History pending detail branch', () => {
         // one output's amount with another output's destination.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`+7 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(region, `+100 XCHAIN`, OURS)).toBeTruthy();
+        expect(outputLine(region, `+7 SPARE`, THEIRS)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {
@@ -216,7 +261,47 @@ describe('History pending detail branch', () => {
             'Taken from this wallet\'s own record of the send. '
             + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
-        expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
+        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
+            .toHaveTextContent(/^Copy$/);
+    });
+
+    it('names an incoming transfer Receive in the action chip', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const chip = within(region).getByText('Receive', { selector: 'span[class*="actionTag"]' });
+        expect(chip).toBeTruthy();
+        expect(within(region).queryByText('Send', { selector: 'span[class*="actionTag"]' })).toBeNull();
+    });
+
+    it('names an outgoing transfer Send in the action chip', async () => {
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
+        const region = await openRow(view, 'not-seen');
+        expect(within(region).getByText('Send', { selector: 'span[class*="actionTag"]' })).toBeTruthy();
+        expect(within(panelIn(region)).getByText(/record of the send\./)).toBeTruthy();
+    });
+
+    it('swaps an explorer favicon that fails to load for the explorer initial', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const favicons = Array.from(region.querySelectorAll('img[class*="detailActionFavicon"]'));
+        expect(favicons.length).toBeGreaterThan(0);
+        const label = favicons[0].closest('a, button').textContent.trim().charAt(0);
+        fireEvent.error(favicons[0]);
+        expect(region.querySelectorAll('img[class*="detailActionFavicon"]').length)
+            .toBe(favicons.length - 1);
+        expect(within(region).getAllByText(label, { selector: 'span[class*="detailActionIcon"]' }).length)
+            .toBeGreaterThan(0);
+    });
+
+    it('labels the action by direction only for plain transfers', () => {
+        expect(detailActionLabel({ action: 'SEND' }, 'in')).toBe('Receive');
+        expect(detailActionLabel({ action: 'SEND' }, 'out')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, 'self')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, null)).toBe('Send');
+        // A non-transfer keeps its protocol name whichever way it points.
+        expect(detailActionLabel({ action: 'ISSUE' }, 'in')).toBe('Issue');
+        expect(detailActionLabel({ action: 'DISPENSER' }, 'out')).toBe('Dispenser');
     });
 
     it('upgrades the open detail in place when the transaction confirms', async () => {
@@ -240,7 +325,7 @@ describe('History pending detail branch', () => {
             expect(screen.queryByText('Pending, not yet validated by the service.')).toBeNull();
         });
         // Same view, still open, now showing the confirmed form.
-        const upgraded = screen.getByRole('region', { name: 'Action detail' });
+        const upgraded = screen.getByRole('region', { name: 'Transaction details' });
         expect(within(upgraded).getAllByText('Confirmed').length).toBeGreaterThan(0);
         expect(view.container.querySelector('[data-pending-state]')).toBeNull();
     });
@@ -257,7 +342,7 @@ describe('History offers replacement only where it can still work', () => {
         // but it must not offer a replacement this shell cannot run.
         fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Copy receipt')).toBeTruthy();
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 
@@ -268,7 +353,7 @@ describe('History offers replacement only where it can still work', () => {
         });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        expect(within(region).getByText('Speed up')).toBeTruthy();
+        expect(within(region).getByText('Speed up transaction')).toBeTruthy();
         expect(within(region).getByText('Cancel transaction')).toBeTruthy();
     });
 
@@ -280,7 +365,7 @@ describe('History offers replacement only where it can still work', () => {
         });
         const region = await openRow(view, 'seen');
         fireEvent.click(within(region).getByText('More'));
-        expect(within(region).getByText('Speed up')).toBeTruthy();
+        expect(within(region).getByText('Speed up transaction')).toBeTruthy();
     });
 
     it.each([false, null])('withholds replacement when the recorded RBF flag is %s', async (rbf) => {
@@ -291,7 +376,7 @@ describe('History offers replacement only where it can still work', () => {
         const region = await openRow(view, 'not-seen');
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 
@@ -304,7 +389,7 @@ describe('History offers replacement only where it can still work', () => {
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        fireEvent.click(within(region).getByText('Speed up'));
+        fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
         expect(within(dialog).getByText(
@@ -313,7 +398,7 @@ describe('History offers replacement only where it can still work', () => {
         expect(replaceTx).toHaveBeenCalledTimes(1);
         expect(replaceTx.mock.calls[0][0]).toMatchObject({ strategy: 'speedup', preview: true });
 
-        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        fireEvent.click(within(dialog).getByText('Broadcast replacement'));
         await waitFor(() => expect(replaceTx).toHaveBeenCalledTimes(2));
         expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
     });
@@ -329,10 +414,10 @@ describe('History offers replacement only where it can still work', () => {
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
-        fireEvent.click(within(region).getByText('Speed up'));
+        fireEvent.click(within(region).getByText('Speed up transaction'));
 
         const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
-        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        fireEvent.click(within(dialog).getByText('Broadcast replacement'));
 
         expect(await within(region).findByText('This transaction is already confirmed.')).toBeTruthy();
     });
@@ -351,7 +436,7 @@ describe('History offers replacement only where it can still work', () => {
         // button comes back carrying exactly the option under test.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 });
@@ -393,7 +478,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         // And a mined transaction is not offered a fee bump.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
-        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Speed up transaction')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 
@@ -404,7 +489,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
-        expect(within(panel).getByText(`-30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-30 LTC`, THEIRS)).toBeTruthy();
         expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });

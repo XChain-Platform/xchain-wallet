@@ -21,6 +21,7 @@ import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
+import { RUNTIME_MESSAGE_TIMEOUT_MS, sendMessage } from '../shared/chromeMessaging.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
 import { installShellErrorCapture } from './errorCapture.js';
 import { isToolbarPopupView } from './launchState.js';
@@ -39,9 +40,12 @@ installShellErrorCapture();
 installExtensionWipeHook();
 
 // §26.5 panic-mode freeze. Share the freeze state with the background worker
-// and the approval window via chrome.storage.local: activating panic here must
-// be visible to the enforcement gate that runs in the service worker.
-void initPanicModePersistence(flows);
+// and the approval window via chrome.storage.local, and tell the worker
+// directly too: activating panic here must stop the signer in the service
+// worker even when storage refuses the record.
+void initPanicModePersistence(flows, {
+    notifyWorker: (type, request) => sendMessage(type, request, { timeoutMs: RUNTIME_MESSAGE_TIMEOUT_MS }),
+});
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
 // registry snapshot, the same fire-and-forget sync web/src/main.jsx runs.

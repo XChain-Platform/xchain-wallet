@@ -51,6 +51,7 @@
 // order-fill notifications.
 
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
+import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
@@ -127,6 +128,8 @@ export class DeadlineWatcher {
 
         this._timer = null;
         this._ticking = false;
+        // Bumped by stop() so a tick still awaiting the network delivers nothing after a lock.
+        this._generation = 0;
         /** @type {Map<string, Set<string>>} chainId -> announced `kind:actionIndex` keys */
         this._seen = new Map();
         this._seenLoaded = false;
@@ -146,6 +149,7 @@ export class DeadlineWatcher {
 
     /** Stop polling and clear session state. */
     stop() {
+        this._generation += 1;
         if (this._timer) {
             clearInterval(this._timer);
             this._timer = null;
@@ -163,6 +167,7 @@ export class DeadlineWatcher {
     async pollOnce() {
         if (this._ticking) return;
         this._ticking = true;
+        const generation = this._generation;
         try {
             let settings;
             try {
@@ -214,6 +219,8 @@ export class DeadlineWatcher {
                     this._log.warn(`DeadlineWatcher: chain ${chainId} tick failed`, e);
                 }
             }
+            // A lock cleared the seen-state; saving it would erase the stored one.
+            if (generation !== this._generation) return;
             if (changed && this._saveSeen) this._seenDirty = true;
             if (this._seenDirty && this._saveSeen) {
                 try {
@@ -234,6 +241,7 @@ export class DeadlineWatcher {
      * One chain's cycle. Returns true when the seen-set changed.
      */
     async _tickChain(chainId, chainLabel, addrs) {
+        const generation = this._generation;
         const sdk = this._getSdkForChain(chainId);
         if (!sdk) return false;
 
@@ -267,6 +275,7 @@ export class DeadlineWatcher {
         this._seen.set(chainId, seen);
         if (fresh.length === 0) return changed;
 
+        if (generation !== this._generation) return changed;
         if (fresh.length > MAX_NOTIFICATIONS_PER_TICK) {
             const delivered = await this._safeNotify({
                 kind: 'deadline-summary',
@@ -285,6 +294,7 @@ export class DeadlineWatcher {
         }
 
         for (const d of fresh) {
+            if (generation !== this._generation) return changed;
             if (seen.size >= SEEN_CAP_PER_CHAIN) break;
             const delivered = await this._safeNotify({
                 kind: 'deadline',
@@ -312,7 +322,7 @@ export class DeadlineWatcher {
         if (typeof sdk.getStatus !== 'function') return { blockTime: null, height: null };
         let status;
         try {
-            status = await sdk.getStatus({ noRetry: true });
+            status = await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
         } catch (e) {
             this._log.warn('DeadlineWatcher: getStatus failed', e);
             return { blockTime: null, height: null };

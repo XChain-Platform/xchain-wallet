@@ -35,6 +35,9 @@ import {
     STACK,
     Status,
 } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
 
 const CONTACT_ACTIONS = {
     display: 'flex',
@@ -157,21 +160,35 @@ export function ContactsSection() {
             });
             if (!confirmed) return;
             let imported = 0;
-            for (const { record, line } of rows) {
-                try {
-                    await messaging.saveContact({ record });
-                    imported += 1;
-                } catch (err) {
-                    const message = err instanceof Error
-                        ? err.message
-                        : (String(err || '') || 'The wallet returned no explanation.');
-                    if (isDuplicateFailure(message)) duplicates += 1;
-                    failures.push({
-                        subject: record?.name || record?.id || `Line ${line}`,
-                        message: `${csv ? `Line ${line}: ` : ''}${message}`,
-                    });
-                    // eslint-disable-next-line no-console
-                    console.warn('contacts.import: skipping invalid record:', err);
+            const recordFailure = ({ record, line }, message) => {
+                if (isDuplicateFailure(message)) duplicates += 1;
+                failures.push({
+                    subject: record?.name || record?.id || `Line ${line}`,
+                    message: `${csv ? `Line ${line}: ` : ''}${message}`,
+                });
+            };
+            if (typeof messaging.saveContacts === 'function') {
+                // One vault write for the whole file: saving record by record
+                // re-encrypts the vault once per contact.
+                const batch = await messaging.saveContacts({ records: rows.map(({ record }) => record) });
+                const failed = Array.isArray(batch?.failures) ? batch.failures : [];
+                imported = Array.isArray(batch?.saved) ? batch.saved.length : 0;
+                for (const { index, message } of failed) {
+                    if (rows[index]) recordFailure(rows[index], message || 'The wallet returned no explanation.');
+                }
+            } else {
+                for (const { record, line } of rows) {
+                    try {
+                        await messaging.saveContact({ record });
+                        imported += 1;
+                    } catch (err) {
+                        const message = err instanceof Error
+                            ? err.message
+                            : (String(err || '') || 'The wallet returned no explanation.');
+                        recordFailure({ record, line }, message);
+                        // eslint-disable-next-line no-console
+                        console.warn('contacts.import: skipping invalid record:', err);
+                    }
                 }
             }
             setImportResult({ imported, failures, duplicates });
@@ -220,9 +237,9 @@ export function ContactsSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Contacts in this wallet</span>
+                    <span style={ROW_VALUE}>{t('settings.contacts.contactsInThisWallet')}</span>
                     <span style={ROW_HINT}>
-                        {count === null ? 'Loading…' : `${count} contact${count === 1 ? '' : 's'} stored`}
+                        {count === null ? t('common.loading') : t('settings.contacts.storedCount', { count })}
                     </span>
                 </div>
             </div>
@@ -235,10 +252,9 @@ export function ContactsSection() {
                 }}
             >
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Export and import</span>
+                    <span style={ROW_VALUE}>{t('settings.contacts.exportAndImport')}</span>
                     <span style={ROW_HINT}>
-                        Saves or reads plain JSON and spreadsheet-compatible CSV. Neither format is encrypted.
-                        Choose a file or drop one here to import it. Existing contacts with the same id are overwritten.
+                        {t('settings.contacts.savesOrReadsPlainJson')}
                     </span>
                 </div>
                 <input
@@ -246,7 +262,7 @@ export function ContactsSection() {
                     type="file"
                     accept="application/json,text/csv,.json,.csv"
                     onChange={(e) => onImportFile(e.target.files?.[0])}
-                    aria-label="Import contacts JSON"
+                    aria-label={t('settings.contacts.importContactsJson')}
                     style={{ display: 'none' }}
                 />
                 <div style={CONTACT_ACTIONS}>
@@ -258,7 +274,7 @@ export function ContactsSection() {
                         onClick={onExport}
                         disabled={count === 0}
                     >
-                        Export…
+                        {t('history.export.open')}
                     </Button>
                     <Button
                         type="button"
@@ -268,7 +284,7 @@ export function ContactsSection() {
                         onClick={onExportCsv}
                         disabled={count === 0}
                     >
-                        Export CSV…
+                        {t('settings.contacts.exportCsv')}
                     </Button>
                     <Button
                         type="button"
@@ -277,17 +293,21 @@ export function ContactsSection() {
                         variant="secondary"
                         style={CONTACT_ACTION_BUTTON}
                     >
-                        Import…
+                        {t('settings.contacts.import')}
                     </Button>
                 </div>
             </div>
             {importResult ? (
                 <>
                     <Status
-                        text={`Imported ${importResult.imported} contact${importResult.imported === 1 ? '' : 's'}${importResult.failures.length > 0 ? `; ${importResult.failures.length} skipped` : ''}${importResult.duplicates > 0 ? `; ${importResult.duplicates} duplicate${importResult.duplicates === 1 ? '' : 's'}` : ''}.`}
+                        text={t('settings.contacts.importedSummary', {
+                            imported: importResult.imported,
+                            skipped: importResult.failures.length,
+                            duplicates: importResult.duplicates,
+                        })}
                     />
                     <DiagnosticDetails
-                        summary={`Skipped contacts (${importResult.failures.length})`}
+                        summary={t('settings.contacts.skippedContacts', { length: importResult.failures.length })}
                         items={importResult.failures}
                     />
                 </>
@@ -363,7 +383,7 @@ function jsonRecordProblem(record) {
         const chain = String(entry.chain || '').trim().toLowerCase();
         const address = String(entry.address || '').trim();
         if (!SUPPORTED_CHAINS.has(chain)) {
-            return `address chain must be bitcoin, litecoin, or dogecoin, not "${chain || 'empty'}".`;
+            return `address network must be bitcoin, litecoin, or dogecoin, not "${chain || 'empty'}".`;
         }
         if (!isValidAddressAnyNetwork(address)) return `"${address}" is not a valid supported address.`;
         const addressCoin = detectAddressCoin(address);

@@ -131,6 +131,38 @@ describe('NetworkEndpointsSection', () => {
         );
     });
 
+    it('saves an explorer edit on a chain that has no hub endpoint', () => {
+        // Testnet chains ship without a hub, so their Hub URL field starts
+        // empty; an untouched empty field is the chain's default, not an error.
+        render(<NetworkEndpointsSection />);
+        const block = screen.getByRole('region', { name: 'Bitcoin · testnet' });
+        expect(within(block).getByRole('textbox', { name: 'Hub URL' })).toHaveValue('');
+        fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
+            target: { value: 'https://explorer.example.com' },
+        });
+        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+
+        expect(within(block).queryByRole('alert')).toBeNull();
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-testnet']).toMatchObject({
+            explorerUrl: 'https://explorer.example.com',
+            hubUrl: '',
+            custom: true,
+        });
+    });
+
+    it('still checks a hub URL typed on a chain that has no hub endpoint', () => {
+        render(<NetworkEndpointsSection />);
+        const block = screen.getByRole('region', { name: 'Bitcoin · testnet' });
+        fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
+            target: { value: 'hub.example.com' },
+        });
+        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
+    });
+
     it('removes trailing slashes before saving an override', () => {
         render(<NetworkEndpointsSection />);
         const block = bitcoinMainnetBlock();
@@ -164,8 +196,8 @@ describe('NetworkEndpointsSection', () => {
             target: { value: 'https://private.example.com/BTC' },
         });
 
-        expect(within(block).getByText(/host is not contacted/)).toHaveTextContent(
-            /If it is unreachable, this chain's balances, history and transactions may be unavailable\./,
+        expect(within(block).getByText(/host isn't contacted/)).toHaveTextContent(
+            /If it's unreachable, this network's balances, history and transactions may be unavailable\./,
         );
     });
 

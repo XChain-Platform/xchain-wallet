@@ -19,7 +19,8 @@
 // its current status; callers filter to `pending_coinpay` on the
 // payer side to build the queue.
 
-import { obligationBaseUnits } from '../market/obligationStatus.js';
+import { classifyObligation, obligationBaseUnits } from '../market/obligationStatus.js';
+import { OFFER_LIFECYCLE_REFUSAL } from './marketExpiry.js';
 import {
     BATCH_FEATURE_COINPAY,
     isBatchShape,
@@ -133,7 +134,9 @@ async function runCoinpayChunk({ sdk, addresses, resolvers, opts }) {
 // COINPAY_BATCH_MAX_ADDRESSES, and answer each caller from its own slot.
 function flushWindow(w) {
     openWindows.delete(w);
-    const { sdk, addresses, resolvers, opts } = w;
+    const { sdk, addresses, resolvers } = w;
+    // A window a fresh caller joined reads fresh for all of its callers.
+    const opts = w.fresh ? { ...(w.opts || {}), fresh: true } : w.opts;
     for (let i = 0; i < addresses.length; i += COINPAY_BATCH_MAX_ADDRESSES) {
         const chunkResolvers = resolvers.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES);
         runCoinpayChunk({
@@ -170,9 +173,13 @@ function flushWindow(w) {
  * re-read below). A caller that needs its own paging should read the SDK
  * directly rather than expect a window to keep two sets of query options.
  *
- * @param {SdkCtx & { address: string, opts?: object }} params
+ * `fresh` is the one per-caller flag a window keeps: the sign-time re-read
+ * passes it, and the window's reads (the batch POST and any per-address
+ * fallback) then go past the explorer wrapper's read reuse and the HTTP cache.
+ *
+ * @param {SdkCtx & { address: string, opts?: object, fresh?: boolean }} params
  */
-export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, address, opts }) {
+export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, address, opts, fresh = false }) {
     if (!sdkRegistry) throw new Error('getCoinpayObligationsForAddress: sdkRegistry is required');
     if (!chainId) throw new Error('getCoinpayObligationsForAddress: chainId is required');
     if (typeof address !== 'string' || address.length === 0) {
@@ -181,7 +188,7 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
     const sdk = sdkRegistry.get(chainId);
     const canBatch = sdk && typeof sdk.getCoinpayObligationsBatch === 'function'
         && !isBatchUnsupported(sdk, BATCH_FEATURE_COINPAY);
-    if (!canBatch) return readOneAddress(sdk, address, opts);
+    if (!canBatch) return readOneAddress(sdk, address, fresh ? { ...(opts || {}), fresh: true } : opts);
     return new Promise((resolve, reject) => {
         let w = null;
         for (const open of openWindows) {
@@ -192,6 +199,7 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
             openWindows.add(w);
             w.timer = setTimeout(() => flushWindow(w), COINPAY_BATCH_WINDOW_MS);
         }
+        if (fresh) w.fresh = true;
         w.addresses.push(address);
         w.resolvers.push({ resolve, reject });
     });
@@ -250,10 +258,13 @@ export async function verifyCoinpayObligation({
     payeeAddress,
     coinAmount,
 }) {
+    // Fresh, so an obligation paid or expired a moment ago is never judged on
+    // the badge scan's answer.
     const resp = await getCoinpayObligationsForAddress({
         sdkRegistry,
         chainId,
         address: payerAddress,
+        fresh: true,
     });
     const rows = extractRows(resp);
     const want = String(orderMatchActionIndex);
@@ -271,6 +282,17 @@ export async function verifyCoinpayObligation({
         throw new Error(
             `verifyCoinpayObligation: ORDER_MATCH #${want} is "${status}", not pending; refusing to pay it`,
         );
+    }
+
+    // The indexer keeps a match pending_coinpay until the first block past its
+    // deadline, so the status alone cannot say the window is still open. The
+    // deadline can pass while the confirm screen is open, and a payment that
+    // confirms after it sends the coin and settles nothing.
+    if (classifyObligation(row.expiration).state === 'expired') {
+        const expired = new Error('This payment window has expired. Nothing was sent: a payment '
+            + 'confirming after the deadline sends your coin without receiving the tokens.');
+        expired.name = OFFER_LIFECYCLE_REFUSAL;
+        throw expired;
     }
 
     const payer = row.payer_address ?? row.payerAddress;

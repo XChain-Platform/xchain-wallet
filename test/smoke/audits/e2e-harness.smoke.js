@@ -44,10 +44,12 @@ const cfg = readFileSync(join(e2e, 'playwright.config.js'), 'utf8');
 assert.ok(/testDir:\s*'\.\/tests'/.test(cfg), 'testDir points at ./tests');
 assert.ok(/workers:\s*1/.test(cfg), 'workers=1 (single vault per run)');
 assert.ok(
-    /command:\s*'pnpm -C \.\.\/\.\.\/packages\/web dev'/.test(cfg),
-    'webServer spawns the web Vite dev server',
+    /command:\s*`pnpm -C \.\.\/\.\.\/packages\/web dev --port \$\{PORT\} --strictPort --host 127\.0\.0\.1`/.test(cfg),
+    'webServer spawns the web Vite dev server on its own strict port',
 );
-assert.ok(/url:\s*'http:\/\/localhost:5173'/.test(cfg), 'webServer url is 5173');
+assert.ok(/url:\s*BASE_URL/.test(cfg), 'webServer url is the suite-owned base URL');
+assert.ok(/E2E_DEV_PORT\) \|\| 5473/.test(cfg), 'suite port is 5473, not the shared 5173');
+assert.ok(/reuseExistingServer:\s*false/.test(cfg), 'webServer never reuses a listener');
 assert.ok(/retries:\s*process\.env\.CI \? 2 : 0/.test(cfg), 'retries only on CI');
 assert.ok(
     /trace:\s*'retain-on-failure'/.test(cfg),
@@ -152,9 +154,37 @@ assert.ok(
 const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationNotice'));
 const consentBody = consentFn.slice(0, consentFn.indexOf('\n}\n') + 2);
 assert.ok(consentBody.length > 100, 'located acknowledgeDonationNotice in the fixture');
+// Use two independent waits. A locator union followed by first() is not a
+// race: DOM order can select a hidden notice while the shell is already
+// visible, or select a hidden shell while the notice is already visible.
 assert.ok(
-    /\.or\(unlockedShell\(page\)\)/.test(consentBody),
-    'donation-notice wait races the notice heading against the unlocked shell',
+    /Promise\.race\(\[/.test(consentBody),
+    'donation-notice wait uses an explicit promise race',
+);
+assert.ok(
+    /notice\.waitFor\(\{\s*state:\s*'visible',\s*timeout:\s*KDF_STEP_MS\s*\}\)/.test(consentBody),
+    'donation-notice race waits independently for the notice heading',
+);
+assert.ok(
+    /createdWalletShell\(page, waitForBalances\)\s*\.waitFor\(\{\s*state:\s*'visible',\s*timeout:\s*KDF_STEP_MS\s*\}\)/
+        .test(consentBody),
+    'donation-notice race waits independently for the created-wallet shell',
+);
+assert.ok(
+    /if \(outcome === 'shell'\) return false;/.test(consentBody),
+    'donation-notice race returns false only when the shell wins',
+);
+const shellFn = fixture.slice(fixture.indexOf('function createdWalletShell'));
+const shellBody = shellFn.slice(0, shellFn.indexOf('\n}\n') + 2);
+assert.ok(
+    /waitForBalances \? openedWalletHome\(page\) : unlockedAnyScreen\(page\)/.test(shellBody),
+    'the created-wallet shell is the opened wallet Home unless the balances wait is off',
+);
+const homeFn = fixture.slice(fixture.indexOf('export function openedWalletHome'));
+const homeBody = homeFn.slice(0, homeFn.indexOf('\n}\n') + 2);
+assert.ok(
+    /return unlockedShell\(page\)\s*\.or\(page\.getByRole\('main'\)\.getByText\(OFFLINE_HOME_EMPTY, \{ exact: true \}\)\)\s*\.first\(\);/.test(homeBody),
+    'an opened wallet Home is the balance hero or Home\'s offline message, nothing wider',
 );
 assert.ok(
     /timeout:\s*KDF_STEP_MS/.test(consentBody),

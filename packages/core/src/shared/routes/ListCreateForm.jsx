@@ -9,16 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -31,11 +32,13 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { qualifyTickItem } from '../utils/listTickCoin.js';
+import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import {
@@ -46,7 +49,6 @@ import {
 } from '../../flows/listMetaInput.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -54,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
     semicolon: 'Cannot contain the ; character.',
+    unsafe: 'Cannot contain control, text-direction, or zero-width characters.',
     length: 'Too long.',
     format: 'A single - is not allowed.',
 };
@@ -87,6 +90,7 @@ function metaFieldError(field, value) {
 export function ListCreateForm({ walletId, chainId: initialChainId, initialType, editResolutionActive = null, onBack }) {
     const [chainId, setChainId] = useState(initialChainId || null);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -113,8 +117,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // detection, drag-and-drop) matches exactly.
     const [pasteText, setPasteText] = useState('');
     const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
-        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], addressRefs: string[] }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], addressRefs: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
     // TYPE=1 (token list) member entry: same free-text tick parsing as
@@ -125,6 +129,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
     const [memo, setMemo] = useState('');
     const [metaSupported, setMetaSupported] = useState(false);
     const [listName, setListName] = useState('');
@@ -161,7 +166,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 // creation order, so its first key is the wallet's OLDEST chain.
                 const picked = pickDefaultChainId(byChain, { explicitChainId: chainId, settings });
                 if (!chainId && picked) setChainId(picked);
-                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any network yet. Use Receive to generate one first.');
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -197,6 +202,22 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (!chainId || !recipientCoin || !recipientNetwork) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({ chainId, coin: recipientCoin, networkKind: recipientNetwork })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, recipientCoin, recipientNetwork, messaging]);
+
     useEffect(() => {
         let cancelled = false;
         setMetaSupported(false);
@@ -218,8 +239,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         setRecipients(airdropLib.classifyRecipients(
             parts,
             { coin: recipientCoin, network: recipientNetwork },
+            { anyCoins },
         ));
-    }, [pasteText, listType, recipientCoin, recipientNetwork]);
+    }, [pasteText, listType, recipientCoin, recipientNetwork, anyCoins]);
 
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain || !chainId) return null;
@@ -304,8 +326,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ITEM: items,
     }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
     const actionSize = useMemo(
-        () => listActionSize(wireParams, descriptor, isWatcherMode ? null : fromAddress),
-        [wireParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(wireParams),
+        [wireParams],
     );
 
     const recipientsDrop = useDropZone({
@@ -400,14 +422,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }
 
     function validate() {
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            setFormError(rate > 0
-                ? 'Custom fee rate can have no more than 8 decimal places.'
-                : 'Custom fee rate must be greater than zero.');
-            return false;
-        }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
@@ -435,6 +450,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!validate()) return;
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -504,7 +521,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -513,13 +530,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     if (stage === 'done') {
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
         }
         // Signed but never broadcast. "List published... is on its
         // way" is the one thing that did not happen.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="list" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="list" unsaved={result.unsaved} />,
             );
         }
         return wrap(
@@ -532,7 +549,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 {listType === '1' && missingTicks.length > 0 ? (
                     <p className={styles.hint}>
                         {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
-                        found on the selected chain; the network leaves an unknown token out of the list.
+                        found on the selected network; unknown tokens are left out of the list.
                         Check the members in My Lists once it's indexed.
                     </p>
                 ) : null}
@@ -575,10 +592,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review list"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -607,8 +625,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Type</dt>
@@ -635,9 +653,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -713,10 +729,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // stage === 'form'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create list"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -747,7 +764,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
             <Select
@@ -808,7 +825,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <p className={styles.hint}>
                             {recipients.valid.length} valid address{recipients.valid.length === 1 ? '' : 'es'}
                             {recipients.duplicates > 0 ? ` · ${recipients.duplicates} duplicate${recipients.duplicates === 1 ? '' : 's'} removed` : ''}
-                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid skipped` : ''}
+                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid` : ''}
                         </p>
                     ) : null}
                     {recipients.invalid.length > 0 ? (
@@ -824,22 +841,37 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <FieldNote variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
-                                network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on the selected chain.
+                                network. This list is published on the selected network, so remove
+                                {recipients.wrongNetwork.length === 1 ? ' it' : ' them'} to continue.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: 'Does not belong to the selected chain.',
+                                    message: 'Does not belong to the selected network.',
                                 }))}
                             />
-                        </div>
+                        </FieldNote>
+                    ) : null}
+                    {/* A ^<index> entry is an address reference, not a typo; this
+                        form needs the address itself, so say that instead. */}
+                    {recipients.addressRefs.length > 0 ? (
+                        <FieldNote variant="warning" role="alert">
+                            <p>{addressReferenceNote(recipients.addressRefs.length)}</p>
+                            <DiagnosticDetails
+                                summary={`Address references (${recipients.addressRefs.length})`}
+                                keepAddresses
+                                items={recipients.addressRefs.map((ref) => ({
+                                    subject: ref,
+                                    message: ADDRESS_REFERENCE_ITEM_MESSAGE,
+                                }))}
+                            />
+                        </FieldNote>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}
@@ -849,10 +881,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <p className={styles.hint}>
                         These addresses become permanent public on-chain data once the list is published.
                         {editResolutionActive === true
-                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the chain\'s history.'
+                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the network\'s history.'
                             : editResolutionActive === false
                                 ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
-                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the chain\'s history.'}
+                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the network\'s history.'}
                     </p>
                     {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
                         an address list is the thing IssueTokenForm/TokenAdminForm point
@@ -864,7 +896,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         block, in the same voice IssueTokenForm already uses. */}
                     <p className={styles.hint}>
                         If you later point a token&apos;s allow-list or block-list at this
-                        list, that token can never be bridged to another chain, and the
+                        list, that token can never be bridged to another network, and the
                         binding itself can never be cleared once set.
                     </p>
                 </>
@@ -874,7 +906,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
-                    chainLabel="the selected chain"
+                    chainLabel="the selected network"
                     listCoin={coinTicker}
                     coinQualified={tickCoinSupported}
                     messaging={messaging}
@@ -989,10 +1021,10 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this network appear here." />);
     }
 
     return wrap(

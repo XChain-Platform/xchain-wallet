@@ -8,13 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useRef } from 'react';
+import { useRouteIsNavDestination } from '../shared/components/navSurface.js';
 import { useBackHandler } from './backStack.js';
 import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
 import styles from './PageHeader.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * Shared secondary-toolbar header used by every routed screen.
+ *
+ * The Back chevron is left out on a screen the visible navigation already
+ * links to (a sidebar destination while the sidebar shows, a bottom-bar tab
+ * while the tab bar shows); see NAV_SURFACE_DESTINATIONS in
+ * routeRegistry.js. The system Back gesture still runs `onBack` there, and
+ * the leading lane keeps its width so the title stays centred.
  *
  * Encapsulates the 3-column grid layout, chevron alignment (lines up
  * under the AppHeader logo via a negative margin-inline-start), title
@@ -31,33 +40,51 @@ import styles from './PageHeader.module.css';
  *   button. Defaults to "Back to previous screen".
  * @param {boolean} [props.backDisabled]              disables the back button
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
+ * @param {boolean} [props.nested]                    marks a sub-screen that
+ *   shares its parent's route id (a Settings section, a Contacts detail, a
+ *   review step). Such a screen always shows Back, even when the visible
+ *   navigation links to the route itself.
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
- * @param {import('react').ReactNode} [props.titleIcon]   optional inline icon
- *   placed immediately to the left of the title (e.g. a route-action glyph
- *   like Send / Receive).
  * @param {import('react').ReactNode} [props.trailing]    right-side slot for
  *   page-scoped actions (filter buttons, scan, etc.). Omit to render an
  *   empty spacer for symmetry.
  */
 export function PageHeader({
     onBack,
-    backLabel = 'Back to previous screen',
+    backLabel = t('ui.pageHeader.backToPreviousScreen'),
     backDisabled = false,
+    nested = false,
     title,
     titleId,
     titleRef,
-    titleIcon = null,
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
+    const reachableFromNav = useRouteIsNavDestination();
+    const showBack = Boolean(onBack) && !(reachableFromNav && !nested);
+    const headerRef = useRef(null);
+    // A screen opened from a control on another screen (a detail, a picker)
+    // unmounts that control, and focus would fall to <body> and restart Tab at
+    // the top of the page. Every screen takes it on its heading, with or
+    // without a Back button, unless focus is still on a live control.
+    useEffect(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        const heading = headerRef.current?.querySelector('h1');
+        if (!heading) return;
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+        // A screen that swaps its content in place (a list becoming its edit
+        // form) keeps this header mounted and changes only the title.
+    }, [typeof title === 'string' ? title : null]); // eslint-disable-line react-hooks/exhaustive-deps
     const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
         ? 'Back to previous screen'
         : backLabel;
     return (
-        <div className={styles.header}>
-            {onBack ? (
+        <div ref={headerRef} className={styles.header}>
+            {showBack ? (
                 <Button
                     size="sm"
                     variant="secondary"
@@ -70,11 +97,6 @@ export function PageHeader({
                 <span className={styles.spacer} />
             )}
             <span className={styles.titleGroup}>
-                {titleIcon ? (
-                    <span className={styles.titleIcon} aria-hidden="true">
-                        {titleIcon}
-                    </span>
-                ) : null}
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
                 <h1

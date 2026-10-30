@@ -25,7 +25,7 @@
  * THE CAMPAIGN'S OWN MAP SAYS WHY THERE ARE TWO OF THEM. Its widget table
  * records that forms pick a chain three different ways and that a grep for one
  * reports the others as "has no picker". `CrossChainSwapForm` uses two of the
- * three AT ONCE: `ChainPicker`s labelled `Give chain` / `Get chain`
+ * three AT ONCE: `ChainPicker`s labelled `Give network` / `Get network`
  * (:628, :678) and `TokenField`s labelled `Give token` / `Get token`
  * (:646, :697). The frontier row for this area recorded that ONE helper was
  * missing; measured at HEAD it is two, and the second is the widget class that
@@ -56,7 +56,7 @@ import { expect } from '@playwright/test';
  * option is matched on both halves and the trigger is asserted whole.
  *
  * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
- * @param {string} field       the picker's label, e.g. 'Get chain'
+ * @param {string} field       the picker's label, e.g. 'Get network'
  * @param {string} chainLabel  the chain's display name, e.g. 'Dogecoin'
  * @param {string} [networkKind]  the network suffix the picker renders, e.g. 'regtest'
  */
@@ -113,9 +113,11 @@ export async function selectNamedChain(scope, field, chainLabel, networkKind = '
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} field   the field's label, e.g. 'Give token' / 'Get token'
- * @param {{chainId: string, chainLabel: string, tick: string}} target
+ * @param {{chainId: string, chainLabel: string, tick: string, timeoutMs?: number}} target
  */
-export async function selectNamedToken(page, field, { chainId, chainLabel, tick }) {
+export async function selectNamedToken(page, field, {
+    chainId, chainLabel, tick, timeoutMs = 30_000,
+}) {
     const main = page.getByRole('main');
     const trigger = () => main.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
     await expect(trigger(), `no "${field}" token field on this screen`)
@@ -142,7 +144,7 @@ export async function selectNamedToken(page, field, { chainId, chainLabel, tick 
     await expect(row, `the asset picker lists no ${tick} on ${chainLabel}. On the GIVE side that `
         + 'means the source address does not hold it; on the GET side it means platform discovery '
         + 'returned nothing, which is a venue answer rather than a wallet one')
-        .toBeVisible({ timeout: 30_000 });
+        .toBeVisible({ timeout: timeoutMs });
     await row.click();
 
     // Assert the selection took, for the same reason the chain helper does:

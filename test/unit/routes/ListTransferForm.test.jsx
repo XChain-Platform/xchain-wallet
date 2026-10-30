@@ -145,14 +145,19 @@ describe('ListTransferForm', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('requires typing TRANSFER before Review', async () => {
+    it('requires exact uppercase TRANSFER before Review', async () => {
         const messaging = mount();
         fireEvent.change(await screen.findByLabelText('Destination'), { target: { value: DESTINATION } });
 
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'transfer' } });
+        const confirm = screen.getByLabelText('Type TRANSFER to confirm');
+        for (const value of ['transfer', ' TRANSFER', 'TRANSFER ', 'Transfer']) {
+            fireEvent.change(confirm, { target: { value } });
+            expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        }
+        fireEvent.change(confirm, { target: { value: 'TRANSFER' } });
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(false);
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
@@ -201,7 +206,7 @@ describe('ListTransferForm', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledOnce());
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.createList).not.toHaveBeenCalled();
@@ -222,5 +227,34 @@ describe('ListTransferForm', () => {
         expect(screen.getByLabelText('Destination').disabled).toBe(true);
         expect(screen.getByLabelText('Type TRANSFER to confirm').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('stops before signing when the list changed owner after the form opened', async () => {
+        const messaging = mount();
+        await fillTransfer();
+        messaging.getListByActionIndex.mockResolvedValueOnce({
+            action_index: 2700,
+            source: OWNER,
+            state: { owner: ACTIVE_RECORD.address },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            'This list has a different owner than when this screen opened. Review the owner and try again.',
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
+    it('stops before signing when the current owner cannot be read again', async () => {
+        const messaging = mount();
+        await fillTransfer();
+        messaging.getListByActionIndex.mockRejectedValueOnce(new Error('Explorer returned HTTP 502'));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            "Couldn't confirm this list's current owner. Check your connection and try again.",
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

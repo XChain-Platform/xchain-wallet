@@ -10,7 +10,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
+import { FormNotice } from './FormNotice.jsx';
+import { StatusMessage } from './StatusMessage.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
+import { beginCameraRequest, CAMERA_START_TIMEOUT_MS, waitForCamera } from './cameraWait.js';
+import styles from './QrScanner.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 export const MAX_SCANNED_QR_CHARS = 8 * 1024;
 
@@ -38,6 +44,24 @@ function rememberedCameraFailure() {
         // Storage can be unavailable in privacy-restricted or opaque contexts.
     }
     return null;
+}
+
+/**
+ * Whether an ended camera track means camera access was taken away. A
+ * permission still granted (or back to asking) means the device went away
+ * instead. Without a permission reading the loss counts as withdrawn.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function cameraAccessWithdrawn() {
+    try {
+        const query = globalThis.navigator?.permissions?.query;
+        if (typeof query !== 'function') return true;
+        const status = await query.call(globalThis.navigator.permissions, { name: 'camera' });
+        return status?.state !== 'granted' && status?.state !== 'prompt';
+    } catch {
+        return true;
+    }
 }
 
 function rememberCameraFailure(e) {
@@ -111,6 +135,9 @@ function deliverFrame(text, onFrame, setError) {
  *     `detector.detect(video)` on each frame.
  *   - a denied or absent camera stays remembered for the browsing session,
  *     so returning to a scanner shows the paste guidance without prompting.
+ *   - in the Android app, a camera still not started after 10 s in front
+ *     shows the could-not-start text; that is not remembered, so the next
+ *     scanner asks again.
  *   - an ended camera track stops the loop and becomes the same plain error.
  *   - on unmount: stop every track + cancel the RAF loop.
  *
@@ -287,28 +314,15 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 loading={phase === 'starting'}
                 disabled={phase !== 'idle'}
             >
-                Scan with camera
+                {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
-                <p
-                    role="alert"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-sm)',
-                        lineHeight: 1.4,
-                        color: 'var(--xc-text)',
-                        background: 'var(--xc-bg-muted)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                    }}
-                >
-                    {error}
-                </p>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
-                        ? 'Scanning… point the camera at a QR code.'
-                        : 'Opens the camera to read a QR code.'}
+                        ? t('ui.qrScanner.scanningPointTheCameraAt')
+                        : t('ui.qrScanner.opensTheCameraToRead')}
                 </p>
             )}
         </div>
@@ -319,7 +333,7 @@ export function QrScanner({
     onFrame: onFrameHandler,
     autoStart = true,
     width = 320,
-    alt = 'QR scanner',
+    alt = t('ui.qrScanner.qrScanner'),
     previewState,
 }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
@@ -366,6 +380,7 @@ export function QrScanner({
         let rafId = null;
         /** @type {any} */
         let detector = null;
+        let endCameraRequest = () => {};
 
         function stopBrowserCamera() {
             if (rafId !== null) {
@@ -385,14 +400,26 @@ export function QrScanner({
         }
 
         function showCameraFailure(e) {
+            // Remember a denial even when the scanner has gone, so the next
+            // scanner shows the denied message instead of asking a WebView
+            // that may leave the request unanswered.
+            const terminal = rememberCameraFailure(e);
             if (cancelled) return;
-            terminalFailureRef.current = rememberCameraFailure(e);
+            terminalFailureRef.current = terminal;
             stopBrowserCamera();
             setError(cameraErrorText(e));
         }
 
+        // A track also ends when the camera is unplugged, suspended by the
+        // system or taken by another app. Only a withdrawn permission is
+        // remembered as denied; any other loss lets the next scanner try again.
         function handleTrackEnded() {
-            showCameraFailure({ name: 'NotAllowedError' });
+            if (cancelled) return;
+            stopBrowserCamera();
+            cameraAccessWithdrawn().then((withdrawn) => {
+                if (withdrawn) showCameraFailure({ name: 'NotAllowedError' });
+                else if (!cancelled) setError(nativeScanClosedText('error'));
+            });
         }
 
         async function start() {
@@ -426,11 +453,25 @@ export function QrScanner({
                     if (!cancelled) setError(cameraErrorText({ name: 'NotAllowedError' }));
                     return;
                 }
-                stream = await navigator.mediaDevices.getUserMedia({
+                endCameraRequest = beginCameraRequest();
+                const request = navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment' },
                 });
+                // The Android WebView can leave a later request unanswered
+                // after a denial, so the app bounds the wait; a browser's
+                // permission bubble does not pause the page, so it waits.
+                stream = await (isNativeApp()
+                    ? waitForCamera(request, CAMERA_START_TIMEOUT_MS)
+                    : request);
             } catch (e) {
                 showCameraFailure(e);
+                return;
+            } finally {
+                endCameraRequest();
+            }
+            if (cancelled) {
+                stream.getTracks().forEach((track) => track.stop());
+                stream = null;
                 return;
             }
 
@@ -486,6 +527,7 @@ export function QrScanner({
 
         return () => {
             cancelled = true;
+            endCameraRequest();
             stopBrowserCamera();
         };
     }, [supported, autoStart, previewState, cameraRationaleAccepted]);
@@ -504,13 +546,12 @@ export function QrScanner({
             const origin = typeof window !== 'undefined' ? window.location?.origin : '';
             reason = (
                 <>
-                    Camera scanning requires a <strong>secure context</strong>{' '}
-                    (HTTPS, or <code>localhost</code>). This page is loaded from{' '}
-                    <code>{origin}</code> which browsers treat as insecure, so
-                    <code>getUserMedia</code> and <code>BarcodeDetector</code> are
-                    blocked. Either open the wallet via <code>https://</code> or
-                    <code>http://localhost</code>, or add this origin to Chrome's
-                    {' '}<code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>.
+                    {t('ui.qrScanner.cameraScanningRequiresA')} <strong>{t('ui.qrScanner.secureContext')}</strong>{' '}
+                    {t('ui.qrScanner.httpsOr')} <code>{t('ui.qrScanner.localhost')}</code>{t('ui.qrScanner.thisPageIsLoadedFrom')}{' '}
+                    <code>{origin}</code> {t('ui.qrScanner.whichBrowsersTreatAsInsecure')}
+                    <code>{t('ui.qrScanner.getusermedia')}</code> {t('ui.qrScanner.and')} <code>{t('ui.qrScanner.barcodedetector')}</code> {t('ui.qrScanner.areBlockedEitherOpenThe')} <code>{t('ui.qrScanner.https')}</code> {t('ui.qrScanner.or')}
+                    <code>{t('ui.qrScanner.httpLocalhost')}</code>{t('ui.qrScanner.orAddThisOriginTo')}
+                    {' '}<code>{t('ui.qrScanner.chromeFlagsUnsafelyTreatInsecure')}</code>.
                 </>
             );
         } else if (!hasBarcodeDetector) {
@@ -520,40 +561,22 @@ export function QrScanner({
             // advice is to paste.
             reason = isNativeApp() ? (
                 <>
-                    Scanning with the camera is not available on this device yet.
-                    Paste the code below instead.
+                    {t('ui.qrScanner.scanningWithTheCameraIs')}
                 </>
             ) : (
                 <>
-                    This browser cannot scan QR codes with the camera. Chrome, Edge
-                    and other Chromium browsers can; here, paste the code below
-                    instead.
+                    {t('ui.qrScanner.thisBrowserCannotScanQr')}
                 </>
             );
         } else {
             reason = (
                 <>
-                    Camera access is not available in this browser. Paste the code
-                    below instead.
+                    {t('ui.qrScanner.cameraAccessIsNotAvailable')}
                 </>
             );
         }
         return (
-            <div
-                role="status"
-                aria-label={`${alt} (unsupported)`}
-                data-testid="qr-scanner-unsupported"
-                style={{
-                    padding: 'var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text)',
-                    lineHeight: 1.4,
-                    background: 'var(--xc-bg-muted)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                }}
-            >
-                {reason}
-            </div>
+            <StatusMessage variant="warning" role="status" testId="qr-scanner-unsupported">{reason}</StatusMessage>
         );
     }
 
@@ -563,28 +586,16 @@ export function QrScanner({
                 role="region"
                 aria-label={alt}
                 data-testid="qr-scanner-camera-rationale"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                    padding: 'var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text)',
-                    lineHeight: 1.4,
-                    background: 'var(--xc-bg-muted)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                }}
+                className={styles.rationale}
             >
-                <p style={{ margin: 0 }}>
-                    XChain Wallet uses the camera only to scan QR codes while this scanner is open.
-                    You can paste the code instead.
+                <p>
+                    {t('ui.qrScanner.xchainWalletUsesTheCamera')}
                 </p>
                 <Button
                     variant="secondary"
                     onClick={() => setCameraRationaleAccepted(true)}
                 >
-                    Continue to camera
+                    {t('ui.qrScanner.continueToCamera')}
                 </Button>
             </div>
         );
@@ -622,23 +633,10 @@ export function QrScanner({
                 }}
             />
             {error ? (
-                <p
-                    role="alert"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-sm)',
-                        lineHeight: 1.4,
-                        color: 'var(--xc-text)',
-                        background: 'var(--xc-bg-muted)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                    }}
-                >
-                    {error}
-                </p>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                    {running ? 'Scanning… point the camera at a QR code.' : 'Starting camera…'}
+                    {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}
                 </p>
             )}
         </div>

@@ -40,6 +40,7 @@
 // second copy of the wording here would drift from the one on screen. Only the
 // subject differs ("The transaction service").
 import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors.js';
+import { encoderFieldError } from './encoderFieldErrors.js';
 
 // Suffix `annotateEncoderFeeRequirement` appends; `requiredFeeFromError` parses
 // it back. Only the AMOUNT rides along: the quote has no ticker field, and the
@@ -83,8 +84,12 @@ const WALLET_BUG_CODES = new Set([
     'MISSING_TX_HEX', 'MISSING_P2SH_HASH', 'MISSING_P2SH_HEX',
 ]);
 
-const UNKNOWN_ENCODER_FAILURE = 'This transaction could not be built. Nothing was signed or sent, so nothing was spent.';
+const NOTHING_SPENT = 'Nothing was signed or sent, so nothing was spent.';
+const UNKNOWN_ENCODER_FAILURE = `This transaction could not be built. ${NOTHING_SPENT}`;
+const TEMPORARY_ENCODER_FAILURE = 'The transaction service could not complete this request. Nothing was signed or sent, '
+    + 'so nothing was spent. Try again in a moment.';
 const UNINFORMATIVE_RPC_REASON = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal))\.?$/i;
+const INTERNAL_RPC_FAILURE = /^internal (?:server )?error\b/i;
 
 /**
  * The SDK encoder error code, however the error reached us.
@@ -212,6 +217,7 @@ function encoderServiceMessage(code, err) {
 
     if (code === 'ENCODER_RPC_ERROR') {
         const reason = rpcReasonFromError(err);
+        if (isInternalRpcFailure(err, reason)) return TEMPORARY_ENCODER_FAILURE;
         if (reason && !UNINFORMATIVE_RPC_REASON.test(reason)) {
             return `This transaction could not be built. Nothing was signed or sent, so nothing was spent. `
                 + `The service reported: ${reason}`;
@@ -221,8 +227,19 @@ function encoderServiceMessage(code, err) {
 
     // An ENCODER_* code minted after this mapper was written. Say the safe,
     // true thing rather than fall through to the wire wording.
-    return 'The transaction service could not complete this request. Nothing was signed or sent, so nothing '
-        + 'was spent. Try again in a moment.';
+    return TEMPORARY_ENCODER_FAILURE;
+}
+
+/** A JSON-RPC service failure, not a protocol verdict the person can act on. */
+function isInternalRpcFailure(err, reason) {
+    if (INTERNAL_RPC_FAILURE.test(String(reason || ''))) return true;
+    const e = /** @type {any} */ (err || {});
+    const rpcError = e.details?.rpcError || e.rpcError;
+    const rpcCode = Number(rpcError?.code);
+    if (rpcCode === -32603) return true;
+    if (!Number.isInteger(rpcCode) || rpcCode < -32099 || rpcCode > -32000) return false;
+    const protocolReason = rpcError?.data?.reason || e.details?.context?.reason || e.data?.reason;
+    return !String(protocolReason || '').trim();
 }
 
 /**
@@ -240,6 +257,13 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
         return isEncoderError(err)
             ? 'The transaction service could not complete this request. Nothing was signed or sent, so nothing was spent.'
             : null;
+    }
+    // A fee under the relay minimum or an amount the inputs cannot cover is the
+    // person's to fix, in a field they can see; say that in the coin's units,
+    // closed by the same pre-signature reassurance every other refusal here gives.
+    if (code === 'ENCODER_RPC_ERROR') {
+        const fieldError = encoderFieldError(err, { coinTicker });
+        if (fieldError) return `${fieldError.message} ${NOTHING_SPENT}`;
     }
     const coin = coinTicker || 'native coin';
     const needed = trimAmount(requiredNative) || requiredFeeFromError(err);

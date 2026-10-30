@@ -41,7 +41,7 @@
 #   --tag <vX.Y.Z>     release this manifest must claim to describe
 #   --artifact <name>  check ONLY this artifact, not the whole manifest
 #   --key <fpr>        fingerprint the signature must come from
-#                      (default: docs/release-key-pin.json; env
+#                      (default: tools/release/pins/release-key-pin.json; env
 #                      XCHAIN_VERIFY_KEY)
 #
 # WHICH KEY SIGNED IT IS PART OF THE CHECK, NOT A DETAIL AROUND IT
@@ -439,7 +439,7 @@ fi
 # https://xchain.io/security are the two channels, and release-key-pin
 # .smoke.js compares them against it); it is used here because it is the
 # one value in this repo that only an observed signing run can write.
-PIN_FILE="$HERE/../../docs/release-key-pin.json"
+PIN_FILE="$HERE/pins/release-key-pin.json"
 PIN_SOURCE="--key"
 PIN_FPR=""
 PIN_SUBKEY=""
@@ -454,7 +454,7 @@ if [[ -f "$PIN_FILE" ]]; then
 fi
 if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
     EXPECT_KEY="$PIN_FPR"
-    PIN_SOURCE="docs/release-key-pin.json"
+    PIN_SOURCE="tools/release/pins/release-key-pin.json"
 fi
 EXPECT_KEY="$(printf '%s' "$EXPECT_KEY" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
 PIN_FPR="$(printf '%s' "$PIN_FPR" | tr '[:lower:]' '[:upper:]')"
@@ -465,7 +465,7 @@ if [[ -z "$EXPECT_KEY" ]]; then
     echo "  project has three GPG keys in its orbit and they are not" >&2
     echo "  interchangeable." >&2
     echo "  Pass --key <fingerprint>, taking it from https://xchain.io/security," >&2
-    echo "  or run from a checkout carrying docs/release-key-pin.json." >&2
+    echo "  or run from a checkout carrying tools/release/pins/release-key-pin.json." >&2
     exit 1
 fi
 if [[ ! "$EXPECT_KEY" =~ ^[0-9A-F]{40}$ ]]; then
@@ -520,7 +520,7 @@ IMPORT_KEY=1
 
 if [[ "$EXPECT_KEY" == "$PIN_FPR" || "$EXPECT_KEY" == "$PIN_SUBKEY" ]]; then
     if [[ -z "$PIN_PUBLIC_KEY" ]]; then
-        echo "verify.sh: docs/release-key-pin.json does not name its public key." >&2
+        echo "verify.sh: tools/release/pins/release-key-pin.json does not name its public key." >&2
         exit 1
     fi
     PIN_PUBLIC_KEY="$(dirname "$PIN_FILE")/$PIN_PUBLIC_KEY"

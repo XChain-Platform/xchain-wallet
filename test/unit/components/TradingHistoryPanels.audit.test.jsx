@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { OpenOrdersPanel } from '../../../packages/core/src/shared/components/OpenOrdersPanel.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
 import { TradeHistoryPanel } from '../../../packages/core/src/shared/components/TradeHistoryPanel.jsx';
 
@@ -117,7 +118,7 @@ describe('trading history panel display states', () => {
         const side = screen.getByText('Sell');
         expect(price.closest('td')).toHaveAttribute('data-label', 'Price');
         expect(price.className).toMatch(/numeric/);
-        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(side.style.color).toBe('var(--xc-danger-fg)');
         expect(screen.getByRole('columnheader', { name: 'Price' }).closest('table').parentElement.style.overflowX).toBe('auto');
         expect(screen.getByRole('region', { name: 'Trade history' })).not.toHaveAttribute('aria-busy');
     });
@@ -189,4 +190,45 @@ describe('trading history panel display states', () => {
         expect(screen.queryByText('3.5')).toBeNull();
         expect(screen.queryByText('No trades on this market yet.')).toBeNull();
     });
+
+    it('reports a malformed Recent Trades response and retries inline', async () => {
+        const getMarketHistory = vi.fn()
+            .mockResolvedValueOnce({ unexpected: true })
+            .mockResolvedValueOnce([]);
+        render(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory }}>
+                <RecentTradesPanel chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load recent trades.");
+        expect(alert).not.toHaveTextContent('Malformed');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No trades yet.')).toBeInTheDocument();
+        expect(getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries an open-orders address failure instead of replacing it with an empty state', async () => {
+        const getAddressesByChain = vi.fn()
+            .mockResolvedValueOnce('not an address map')
+            .mockResolvedValueOnce({ [CHAIN]: [] });
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain,
+                getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            }}>
+                <OpenOrdersPanel walletId="wallet-1" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load your open orders.");
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No open orders on this market.')).toBeInTheDocument();
+        expect(getAddressesByChain).toHaveBeenCalledTimes(2);
+    });
+
 });

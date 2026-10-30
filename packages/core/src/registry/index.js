@@ -14,7 +14,7 @@
 // filters, or forms.
 
 import { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
-import { validateChainDescriptor } from './validate.js';
+import { customChainReservedIdError, validateChainDescriptor } from './validate.js';
 import { counterwalletDerivationPath } from '../crypto/counterwallet.js';
 
 export class ChainRegistry {
@@ -69,6 +69,10 @@ export class ChainRegistry {
             throw new Error(
                 `ChainRegistry: invalid descriptor "${descriptor?.id}": ${res.errors.join('; ')}`,
             );
+        }
+        const reserved = isUserAdded ? customChainReservedIdError(descriptor) : null;
+        if (reserved) {
+            throw new Error(`ChainRegistry: invalid descriptor "${descriptor?.id}": ${reserved}`);
         }
         if (this._entries.has(descriptor.id)) {
             throw new Error(
@@ -296,10 +300,6 @@ export {
 } from './validate.js';
 export { filterChainsForUser, isChainVisibleToUser, coinFamiliesForUser } from './visibility.js';
 export { hydrateCustomChainsFromSettings } from './hydrateCustomChains.js';
-export {
-    verifyChainRegistry,
-    syncChainRegistryFromHub,
-    REGISTRY_SIGNING_DOMAIN,
-    REGISTRY_PINNED_PUBKEY_HEX,
-    REGISTRY_DEFAULT_URL,
-} from './remote.js';
+// The signed hub sync (./remote.js) is re-exported by ./namespace.js, the core
+// barrel's `registry` namespace, not here: this module is on the web shell's
+// first paint and the sync's Ed25519 verifier is not.

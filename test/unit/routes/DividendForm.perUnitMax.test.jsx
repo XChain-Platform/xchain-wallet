@@ -185,6 +185,53 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(document.body.textContent).not.toMatch(/2,499,500/);
     });
 
+    it('keeps the live total token cost identical on watcher review', async () => {
+        mountDividend({
+            walletMode: 'watcher',
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/Total token cost ~501 XCHAIN/);
+
+        fireEvent.change(amountField(), { target: { value: '2' } });
+        await expectText(/Total token cost ~1,001 XCHAIN/);
+        fireEvent.click(submitButton());
+        await flushTimers();
+
+        const reviewTotal = screen.getByTestId('dividend-review-total-cost');
+        expect(reviewTotal).toHaveTextContent('~1,001 XCHAIN');
+        expect(screen.getByRole('form', { name: 'Review dividend' }))
+            .not.toHaveTextContent('~501 XCHAIN');
+    });
+
+    it('carries the latest live total token cost into the full signing review', async () => {
+        mountDividend({
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/Total token cost ~501 XCHAIN/);
+
+        fireEvent.change(amountField(), { target: { value: '2' } });
+        await expectText(/Total token cost ~1,001 XCHAIN/);
+        fireEvent.click(submitButton());
+        await flushTimers();
+
+        expect(screen.getByTestId('confirm-total'))
+            .toHaveTextContent('Total token cost: ~1,001 XCHAIN');
+    });
+
     it('names the per-unit ceiling next to the available balance', async () => {
         mountDividend();
         await pickDividendToken();
@@ -359,9 +406,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(alert.textContent).not.toContain('no spendable UTXOs');
     });
 
-    it('stays ungated when the holder list cannot be read', async () => {
-        // An explorer hiccup must not block every dividend; the confirm
-        // page's preflight is still behind it.
+    it('stays gated when the holder list cannot be read', async () => {
+        // An unknown holder set can understate both payout and fee, so the
+        // form waits for a complete retry before composition.
         const messaging = mountDividend();
         messaging.getHoldersForToken.mockRejectedValue(new Error('explorer down'));
         cleanup();
@@ -382,7 +429,8 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
         await flushTimers();
-        expect(messaging.composeForConfirm).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Pay dividend' }).disabled).toBe(true);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
 
@@ -415,6 +463,7 @@ describe('DividendForm review hint', () => {
         fireEvent.change(amountField(), { target: { value: '9.00' } });
         await flushTimers();
         fireEvent.click(submitButton());
+        await flushTimers();
 
         expect(screen.getByText('9.00 XCHAIN')).toBeTruthy();
         expect(screen.getByText('Eligible holders').nextElementSibling).toHaveTextContent('1');

@@ -35,9 +35,13 @@ const { populate, flowBehaviour, built, hoisted } = vi.hoisted(() => {
         }
         async open() { /* blank document */ }
         async save() { /* accepted */ }
+        setAutoSave() { /* accepted */ }
         close() { this.closes += 1; this.key.fill(0); }
     }
-    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault } };
+    const storageClear = vi.fn(async () => {});
+    const metaSave = vi.fn(async () => {});
+    const metaClear = vi.fn(async () => {});
+    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault, storageClear, metaSave, metaClear } };
 });
 
 // hostBridge imports these modules directly (not through the core barrel),
@@ -97,8 +101,12 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 });
 
 vi.mock('../../../packages/web/src/storage/backends.js', () => ({
-    createStorageBackend: () => ({ load: async () => null, save: async () => {} }),
-    createMetaBackend: () => ({ load: async () => null, save: async () => {} }),
+    createStorageBackend: () => ({ load: async () => null, save: async () => {}, clear: (...args) => hoisted.storageClear(...args) }),
+    createMetaBackend: () => ({
+        load: async () => (hoisted.metaLoad ? { kdfParams: { algorithm: 'argon2id' } } : null),
+        save: (...args) => hoisted.metaSave(...args),
+        clear: (...args) => hoisted.metaClear(...args),
+    }),
     installNativeWipeHook: () => {},
     installNativeScreenGuard: () => {},
 }));
@@ -146,6 +154,12 @@ beforeEach(async () => {
     built.length = 0;
     populate.mockReset();
     populate.mockResolvedValue({});
+    hoisted.storageClear.mockReset();
+    hoisted.storageClear.mockResolvedValue(undefined);
+    hoisted.metaSave.mockReset();
+    hoisted.metaSave.mockResolvedValue(undefined);
+    hoisted.metaClear.mockReset();
+    hoisted.metaClear.mockResolvedValue(undefined);
     for (const lane of LANES) flowBehaviour[lane.flow] = lane.ok;
     flowBehaviour.restoreLabelSyncAfterImport = async () => null;
 });
@@ -184,6 +198,53 @@ describe('web onboarding closes its Vault when the session never starts', () => 
     }
 });
 
+describe('web onboarding leaves no half-written wallet behind', () => {
+    for (const lane of LANES) {
+        it(`${lane.name}: a refused kdfParams save discards the blob and leaves the page locked`, async () => {
+            hoisted.metaSave.mockRejectedValue(new Error('metadata could not be persisted'));
+            await expect(lane.call()).rejects.toThrow('metadata could not be persisted');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+            expect(built).toHaveLength(1);
+            expect(built[0].closes).toBe(1);
+            expect((await hostError())?.name).toBe('VaultClosedError');
+        });
+
+        it(`${lane.name}: a flow that throws after its first write discards the blob`, async () => {
+            flowBehaviour[lane.flow] = async () => { throw new Error('storage is full'); };
+            await expect(lane.call()).rejects.toThrow('storage is full');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a kdfParams save that reports failure after landing discards the kdfParams too`, async () => {
+            // A native vault reply can refuse a write that already landed.
+            hoisted.metaSave.mockRejectedValue(new Error('saveMeta was not accepted'));
+            await expect(lane.call()).rejects.toThrow('saveMeta was not accepted');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+            expect(hoisted.metaClear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a wallet already on the device is never discarded`, async () => {
+            hoisted.metaLoad = true;
+            await expect(lane.call()).rejects.toThrow(/already exists/);
+            hoisted.metaLoad = false;
+            expect(hoisted.storageClear).not.toHaveBeenCalled();
+            expect(hoisted.metaClear).not.toHaveBeenCalled();
+        });
+
+        it(`${lane.name}: a blob clear that also fails still reports the original error`, async () => {
+            hoisted.metaSave.mockRejectedValue(new Error('metadata could not be persisted'));
+            hoisted.storageClear.mockRejectedValue(new Error('clear refused'));
+            await expect(lane.call()).rejects.toThrow('metadata could not be persisted');
+        });
+
+        it(`${lane.name}: the success path keeps the blob`, async () => {
+            await lane.call();
+            expect(hoisted.storageClear).not.toHaveBeenCalled();
+            expect(hoisted.metaClear).not.toHaveBeenCalled();
+        });
+    }
+});
+
 describe('web mnemonic import restores labels after returning', () => {
     it('resolves the import before restore finishes and exposes the applied result', async () => {
         let finishRestore;
@@ -218,5 +279,29 @@ describe('web mnemonic import restores labels after returning', () => {
         await expect(sendMessage('wallet.labelSyncRestoreResult', {
             token: imported.labelSyncToken,
         })).resolves.toBeNull();
+    });
+});
+
+describe('web mnemonic import lands on the network the caller asked for', () => {
+    // Demo mode asks for mainnet. Without `activeNetwork` the import flow
+    // infers the network from the first chain id, so the field must reach it.
+    it('forwards activeNetwork to the import flow', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Demo Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await importMnemonicLocal({
+            password: 'pw',
+            mnemonic: PHRASE,
+            origin: 'demo',
+            activeChainIds: ['bitcoin-mainnet', 'bitcoin-regtest'],
+            activeNetwork: 'mainnet',
+        });
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ activeNetwork: 'mainnet' }));
+    });
+
+    it('leaves activeNetwork unset when the caller names none', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Imported Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await importMnemonicLocal({ password: 'pw', mnemonic: PHRASE });
+        expect(importMnemonic.mock.calls[0][0].activeNetwork).toBeUndefined();
     });
 });

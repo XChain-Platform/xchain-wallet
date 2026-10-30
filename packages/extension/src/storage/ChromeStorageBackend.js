@@ -21,7 +21,7 @@
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
 
-const { StorageBackend, VaultCorruptError } = coreStorage;
+const { StorageBackend, VaultConflictError, VaultCorruptError } = coreStorage;
 const { bytesToBase64, base64ToBytes } = coreCrypto;
 
 export const DEFAULT_STORAGE_KEY = 'xchain-wallet:vault';
@@ -84,8 +84,11 @@ export class ChromeStorageBackend extends StorageBackend {
         }
     }
 
-    /** @param {Uint8Array} blob */
-    async save(blob) {
+    /**
+     * @param {Uint8Array} blob
+     * @param {{ expected?: Uint8Array | null }} [options]
+     */
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error(
                 'ChromeStorageBackend.save: blob must be a Uint8Array',
@@ -96,10 +99,30 @@ export class ChromeStorageBackend extends StorageBackend {
                 'ChromeStorageBackend.save: refusing to persist an empty blob',
             );
         }
-        await this._storage.set({ [this._key]: bytesToBase64(blob) });
+        const write = async () => {
+            if (Object.hasOwn(options, 'expected')) {
+                const expected = options.expected ?? null;
+                if (expected !== null && !(expected instanceof Uint8Array)) {
+                    throw new TypeError('ChromeStorageBackend.save: expected must be a Uint8Array or null');
+                }
+                const result = await this._storage.get(this._key);
+                const current = result?.[this._key] ?? null;
+                const encodedExpected = expected === null ? null : bytesToBase64(expected);
+                if (current !== encodedExpected) throw new VaultConflictError();
+            }
+            await this._storage.set({ [this._key]: bytesToBase64(blob) });
+        };
+        return this._withWriteLock(write);
     }
 
     async clear() {
-        await this._storage.remove(this._key);
+        await this._withWriteLock(() => this._storage.remove(this._key));
+    }
+
+    async _withWriteLock(operation) {
+        const locks = globalThis.navigator?.locks;
+        // Extension pages share an origin-wide Web Lock, so saves and wipes cannot interleave.
+        if (locks?.request) return locks.request(`xchain-wallet-storage:${this._key}`, operation);
+        return operation();
     }
 }

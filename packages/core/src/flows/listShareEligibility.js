@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 // Mirrors LIST_SHARE_MAX_MEMBERS in xchain-documentation/protocol/constants.js.
+import { isExactTypedConfirmation } from './typedConfirmation.js';
+
 export const LIST_SHARE_MAX_MEMBERS = 10000;
 
 /**
@@ -56,5 +58,5 @@ export function listShareEligibility({ type, memberCount, isShared }) {
  * @returns {boolean}
  */
 export function isShareConfirmed(typed) {
-    return String(typed).trim() === 'SHARE';
+    return isExactTypedConfirmation(typed, 'SHARE');
 }

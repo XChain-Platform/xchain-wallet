@@ -202,6 +202,9 @@ describe('balance row sorting', () => {
         expect(narrowRules).toMatch(/\.tabsRow\s*>\s*\[role='tablist'\]\s*\{[^}]*width:\s*100%;/s);
         expect(narrowRules).toMatch(/\.sortControl\s*\{[^}]*align-self:\s*flex-end;/s);
         expect(compactRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
+        // The visible label survives the compact layout: no visually-hidden clip.
+        expect(compactRules).not.toMatch(/\.sortLabel\s*\{[^}]*(?:clip:|width:\s*1px)/s);
+        expect(compactRules).toMatch(/\.sortLabel\s*\{[^}]*white-space:\s*nowrap;/s);
         expect(tabsCss).toMatch(/\.sortControl\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*var\(--xc-control-h-md\);/s);
         expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/s);
         expect(renderedKeys()).toEqual([

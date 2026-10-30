@@ -23,6 +23,7 @@
 // fails loudly if the output is missing.
 
 import { defineConfig, devices } from '@playwright/test';
+import { PRODUCTION_BLOCK_ARG } from './host-block.js';
 
 export default defineConfig({
     testDir: './tests',
@@ -45,6 +46,9 @@ export default defineConfig({
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
         ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        // The specs reach a regtest venue: the production hosts fail to resolve.
+        launchOptions: { args: [PRODUCTION_BLOCK_ARG] },
     },
     projects: [{ name: 'chromium-extension' }],
 });

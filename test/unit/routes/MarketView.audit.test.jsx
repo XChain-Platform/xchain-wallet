@@ -156,7 +156,7 @@ describe('MarketView market state', () => {
 
         await act(async () => request.reject(new Error('network unavailable')));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this market.");
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load market details.");
         expect(screen.queryByRole('status', { name: 'Loading market' })).toBeNull();
     });
 
@@ -288,7 +288,7 @@ describe('MarketView market state', () => {
         widgetFailure.current = failure;
         renderMarket();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('tablist', { name: 'Market panels' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 

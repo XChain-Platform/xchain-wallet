@@ -101,6 +101,25 @@ describe('ConfirmActionModal', () => {
         expect(intentSummary.querySelector('[title]')).toHaveAttribute('title', destination);
     });
 
+    it('shows an order expiration as the moment it names, not as Unix seconds', () => {
+        const seconds = '4118400000';
+        render(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Create swap on Bitcoin: give 1 AAA for 1 BBB',
+                details: [
+                    { label: 'Give', value: '1 AAA' },
+                    { label: 'Get', value: '1 BBB' },
+                    { label: 'Expiration', value: seconds },
+                ],
+                warnings: [],
+            },
+        })} />);
+
+        const row = screen.getByText('Expiration').closest('div');
+        expect(row.textContent).not.toContain(seconds);
+        expect(row.textContent).toMatch(/2100/);
+    });
+
     it('shows the hardware output caveat only for a hardware signer', () => {
         const { rerender } = render(<ConfirmActionModal {...base()} />);
         expect(screen.queryByText(/A hardware device verifies native outputs/i)).toBeNull();
@@ -445,6 +464,8 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.credentials dl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
         expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
+        // A stacked footer sizes each button by its content, so a wrapped label never spills over its neighbour.
+        expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer > \*\s*\{[^}]*flex:\s*0 0 auto/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

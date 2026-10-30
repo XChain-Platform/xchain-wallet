@@ -41,6 +41,14 @@
     height: var(--network-filter-control-height, var(--xc-control-h-sm));
     border-radius: var(--xc-control-radius);
     font-size: var(--network-filter-font, var(--xc-control-font-sm));
+    font-weight: 400;
+}
+
+/* With no filter on, the trigger paints on the field surface like the
+   Network picker and every Select. The pressed fill stays the sign that a
+   filter is on, and the Chip's hover rule still outranks this one. */
+.wrap .idle {
+    background: var(--xc-surface);
 }
 
 .triggerIcon {
@@ -71,7 +79,7 @@
 }
 
 .triggerLabel {
-    font-weight: 600;
+    font-weight: inherit;
     font-size: inherit;
     overflow: hidden;
     text-overflow: ellipsis;

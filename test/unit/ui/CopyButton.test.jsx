@@ -37,6 +37,13 @@ describe('<CopyButton>', () => {
         delete globalThis.Capacitor;
     });
 
+    it('stays filled by default and takes the outlined look only when asked', () => {
+        const { rerender } = render(<CopyButton value="abc" label="Copy" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).not.toMatch(/outlined/);
+        rerender(<CopyButton value="abc" label="Copy" appearance="outlined" />);
+        expect(screen.getByRole('button', { name: 'Copy' }).className).toMatch(/outlined/);
+    });
+
     it('renders its label and calls clipboard.writeText on click', async () => {
         render(<CopyButton value="abc123" label="Copy address" />);
         const btn = screen.getByRole('button', { name: 'Copy address' });
@@ -219,5 +226,42 @@ describe('<CopyButton>', () => {
             });
         });
         expect(clipboard.writeText).not.toHaveBeenCalled();
+    });
+    // A reset timer left pending past unmount fired after jsdom was torn down
+    // and failed the develop coverage run with "window is not defined"
+    // (CopyButton.jsx setState inside the timeout, from AddressList.actions).
+    it('clears its pending reset when it unmounts', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        try {
+            const view = render(<CopyButton value="x" feedbackMs={60_000} />);
+            fireEvent.click(screen.getByRole('button'));
+            await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied: value'));
+            expect(vi.getTimerCount()).toBe(1);
+            view.unmount();
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('restarts the confirmation window on a second click', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        try {
+            render(<CopyButton value="x" feedbackMs={1000} />);
+            const button = screen.getByRole('button');
+            fireEvent.click(button);
+            await waitFor(() => expect(button).toHaveTextContent('Copied: value'));
+            act(() => { vi.advanceTimersByTime(600); });
+            fireEvent.click(button);
+            await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledTimes(2));
+            expect(vi.getTimerCount()).toBe(1);
+            // The first click's timer would have reset the label here.
+            act(() => { vi.advanceTimersByTime(500); });
+            expect(button).toHaveTextContent('Copied: value');
+            act(() => { vi.advanceTimersByTime(600); });
+            expect(button).toHaveTextContent('Copy value');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

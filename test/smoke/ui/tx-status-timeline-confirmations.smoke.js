@@ -24,8 +24,10 @@ const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const timelineSrc = read('packages/core/src/shared/components/TxStatusTimeline.jsx');
-const historySrc = read('packages/core/src/shared/routes/History.jsx');
-const enSrc = read('packages/core/src/i18n/locales/en/index.js');
+const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => read(`packages/core/src/shared/routes/${n}.jsx`))
+    .join('\n');
+const enSrc = read('packages/core/src/i18n/locales/en/transactionStatus.js');
 
 // 1. The component declares chainTip + indexerWatermark in its prop list
 //    and JSDoc.

@@ -26,12 +26,14 @@ const VIEWPORT = { width: 360, height: 800 };
 
 // Root destinations mirror ROUTE_NAV_GROUPS. Marketplace uses the command
 // palette because compact navigation intentionally keeps it out of More.
+// `tab` marks the bottom-bar tabs: the tab bar already links to them, so
+// their header shows no Back control at this width.
 const ROUTES = [
     { name: 'Home' },
-    { name: 'History', back: true },
-    { name: 'Send', back: true },
+    { name: 'History', tab: true },
+    { name: 'Send', tab: true },
     { name: 'Receive', back: true },
-    { name: 'Scan', back: true },
+    { name: 'Scan', tab: true },
     { name: 'DEX', back: true },
     { name: 'Marketplace', back: true, palette: true },
     { name: 'Dispensers', back: true },
@@ -53,7 +55,7 @@ async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
     await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
 
-    const developerMode = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
@@ -62,20 +64,44 @@ async function enablePseudoRtl(page) {
     await page.getByRole('button', { name: 'Back to settings' }).click();
     await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('pseudo-rtl');
+    // The field's own label is localized too, so in the pseudo locale it reads
+    // as the wrapped pseudo string rather than "Language".
+    await expect(page.getByLabel(/^\u200F?⟦Language⟧$/)).toHaveValue('pseudo-rtl');
+}
+
+// The pseudo locale wraps every translated string, the navigation and the
+// palette chrome and command titles included, as RLM + "⟦" + English + "⟧".
+// Match that form, so the walk still proves each label went through translation.
+function pseudoName(name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^\\u200F?⟦${escaped}⟧`);
+}
+
+async function gotoPseudoSection(page, name) {
+    const navItem = page.getByRole('navigation').getByRole('button', { name: pseudoName(name) }).first();
+    if (await navItem.isVisible().catch(() => false)) {
+        await navItem.click();
+        return;
+    }
+    await page.getByRole('navigation').getByRole('button', { name: pseudoName('More') }).first().click();
+    const sheet = page.getByRole('dialog', { name: pseudoName('More') });
+    await expect(sheet, `no More sheet to find "${name}" in`).toBeVisible();
+    await sheet.getByRole('button', { name: pseudoName(name) }).first().click();
 }
 
 async function gotoRoute(page, route) {
     if (!route.palette) {
-        await gotoSection(page, route.name);
+        await gotoPseudoSection(page, route.name);
         return;
     }
 
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: pseudoName('Command palette') });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route.name);
-    await palette.getByRole('option', { name: new RegExp(`^${route.name}\\b`) }).first().click();
+    // Command titles go through translation now, so in the pseudo locale they
+    // carry the same RLM and bracket wrapper as the navigation labels.
+    await palette.getByRole('option', { name: new RegExp(`^\\u200F?⟦?${route.name}\\b`) }).first().click();
     await expect(palette).toBeHidden();
 }
 
@@ -102,7 +128,10 @@ async function expectBackAtStartWithMirroredChevrons(page, label) {
     const back = page.locator('button:has(svg[data-xc-directional]):visible').first();
     await expect(back, `${label}: the route has no visible back control`).toBeVisible();
 
-    const geometry = await back.evaluate((button) => {
+    // A lazy route paints its loading skeleton first, and the first visible
+    // directional button can belong to the screen being left. Poll until the
+    // route's own header owns the first one.
+    const readGeometry = () => back.evaluate((button) => {
         const buttonBox = button.getBoundingClientRect();
         const headerBox = button.parentElement.getBoundingClientRect();
         return {
@@ -110,11 +139,13 @@ async function expectBackAtStartWithMirroredChevrons(page, label) {
             startGap: Math.round(headerBox.right - buttonBox.right),
         };
     });
+    await expect
+        .poll(async () => Math.abs((await readGeometry()).startGap), {
+            message: `${label}: the back control is not at the RTL start edge`,
+        })
+        .toBeLessThanOrEqual(1);
+    const geometry = await readGeometry();
     expect(geometry.direction, `${label}: the route header is not RTL`).toBe('rtl');
-    expect(
-        Math.abs(geometry.startGap),
-        `${label}: the back control is ${geometry.startGap}px from the RTL start edge`,
-    ).toBeLessThanOrEqual(1);
 
     const chevrons = page.locator('svg[data-xc-directional]:visible');
     const transforms = await chevrons.evaluateAll((icons) => icons.map((icon) => {
@@ -146,6 +177,14 @@ test.describe('responsive RTL route sweep', () => {
 
                 if (route.back) {
                     await expectBackAtStartWithMirroredChevrons(page, route.name);
+                } else if (route.tab) {
+                    const heading = page.getByRole('heading', { level: 1 }).first();
+                    await expect(heading).toBeVisible();
+                    // h1 > title group > PageHeader row
+                    await expect(
+                        heading.locator('xpath=../..').locator('button:has(svg[data-xc-directional])'),
+                        `${route.name}: a bottom-bar tab shows a redundant back control`,
+                    ).toHaveCount(0);
                 } else {
                     await expect(unlockedShell(page)).toBeVisible();
                 }

@@ -26,10 +26,12 @@ import {
     UNDO_SEND_SECONDS_MAX,
     UNDO_SEND_SECONDS_MIN,
 } from '../../../schemas/settings.js';
+import { Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function UndoSendRow() {
@@ -59,32 +61,39 @@ export function UndoSendRow() {
             />
             <div style={ROW}>
                 <span style={ROW_TITLE}>{t('settings.undoSend.durationLabel')}</span>
-                <input
-                    key={seconds}
-                    type="number"
-                    inputMode="numeric"
-                    enterKeyHint="done"
-                    autoComplete="off"
-                    min={UNDO_SEND_SECONDS_MIN}
-                    max={UNDO_SEND_SECONDS_MAX}
-                    step={1}
-                    defaultValue={seconds}
-                    disabled={!enabled}
-                    onBlur={(e) => {
-                        const raw = e.target.value.trim();
-                        const n = /^\d+$/.test(raw)
-                            ? Math.min(Number(raw), UNDO_SEND_SECONDS_MAX)
-                            : UNDO_SEND_SECONDS_DEFAULT;
-                        update({ grace: { undoSendSeconds: n } }).catch((err) => {
-                            // eslint-disable-next-line no-console
-                            console.error('grace.undoSendSeconds update failed:', err);
-                        });
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    onWheel={blurNumberInputOnWheel}
-                    aria-label={t('settings.undoSend.durationAriaLabel')}
-                    style={{ ...INPUT, width: 100, textAlign: 'right' }}
-                />
+                <div data-settings-control="">
+                    <Input
+                        key={seconds}
+                        type="number"
+                        inputMode="numeric"
+                        enterKeyHint="done"
+                        autoComplete="off"
+                        min={UNDO_SEND_SECONDS_MIN}
+                        max={UNDO_SEND_SECONDS_MAX}
+                        step={1}
+                        defaultValue={seconds}
+                        disabled={!enabled}
+                        onBlur={(e) => {
+                            const input = e.currentTarget;
+                            const raw = input.value.trim();
+                            const n = /^\d+$/.test(raw)
+                                ? Math.min(Number(raw), UNDO_SEND_SECONDS_MAX)
+                                : UNDO_SEND_SECONDS_DEFAULT;
+                            // The stored value can already equal n (99 clamps to a stored 30),
+                            // which leaves the field's key unchanged, so show n here.
+                            input.value = String(n);
+                            update({ grace: { undoSendSeconds: n } }).catch((err) => {
+                                if (input.value === String(n)) input.value = String(seconds);
+                                // eslint-disable-next-line no-console
+                                console.error('grace.undoSendSeconds update failed:', err);
+                            });
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                        onWheel={blurNumberInputOnWheel}
+                        aria-label={t('settings.undoSend.durationAriaLabel')}
+                        style={{ width: 100, textAlign: 'right' }}
+                    />
+                </div>
             </div>
         </>
     );

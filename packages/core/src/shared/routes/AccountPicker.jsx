@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/accountPicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
@@ -24,9 +25,9 @@ function runRouteAction(action, ...args) {
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with thumb-reachable add and current-account management
- * actions. Reached from the gear popover's Account summary row. Picking
- * an account calls `onSwitch`
- * and returns to home.
+ * actions pinned in the footer, as on the Wallets screen. Reached from
+ * the gear popover's Account summary row. Picking an account calls
+ * `onSwitch` and returns to home.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -75,7 +76,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         />
     );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
-    const actions = (
+    const footer = (
         <div className={pickerStyles.footerActions}>
             <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
@@ -93,7 +94,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     );
 
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} footer={footer}>
             <ListPage>
                 {error ? (
                     <StatusMessage
@@ -129,7 +130,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         <div key={a.id} className={pickerStyles.rowWrap}>
                             <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
-                                style={{ width: '100%', paddingRight: '56px' }}
+                                style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => {
                                     if (!active) runRouteAction(onSwitch, a.id);
                                     runRouteAction(onBack);
@@ -166,7 +167,6 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         </div>
                     );
                 })}
-                {actions}
             </ListPage>
         </Screen>
     );

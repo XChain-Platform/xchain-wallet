@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RouteErrorBoundary } from '../../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
+import { ShellRouteOutlet } from '../../../packages/core/src/shared/components/ShellRouteOutlet.jsx';
 import { logConsole } from '../../../packages/core/src/shared/utils/logConsole.js';
 
 let consoleError;
@@ -54,7 +55,7 @@ describe('RouteErrorBoundary', () => {
     it('replaces a throwing route and returns Home without unmounting the session', async () => {
         render(<TestRouter />);
 
-        expect(screen.getByRole('heading', { name: 'This screen could not be shown' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeTruthy();
         expect(screen.getByText('Something went wrong while showing this screen. Try again or go to Home.')).toBeTruthy();
         expect(screen.getByTestId('session-provider')).toBeTruthy();
 
@@ -130,9 +131,80 @@ describe('RouteErrorBoundary', () => {
             </RouteErrorBoundary>,
         );
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Go to Home' })).toBeNull();
-        expect(screen.queryByRole('heading', { name: 'This screen could not be shown' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'This screen couldn\'t be shown' })).toBeNull();
+    });
+
+    it('draws the Home icon, not the external-link icon, on Go to Home', () => {
+        render(
+            <RouteErrorBoundary onHome={() => {}}>
+                <ThrowingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        const button = screen.getByRole('button', { name: 'Go to Home' });
+        expect(button.querySelector('svg')).not.toBeNull();
+        expect(button.querySelector('svg').innerHTML).not.toContain('m20 4-9 9');
+    });
+
+    it('offers only Try again when the failing route is Home itself', async () => {
+        let failed = true;
+        function HomeRoute() {
+            if (failed) throw new Error('home failed');
+            return <h1>Wallet Home</h1>;
+        }
+        render(
+            <ShellRouteOutlet routeKey="home" onHome={() => {}}>
+                <HomeRoute />
+            </ShellRouteOutlet>,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Go to Home' })).toBeNull();
+        failed = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Wallet Home' })).toBeTruthy());
+    });
+
+    it('keeps Go to Home on other routes', () => {
+        render(
+            <ShellRouteOutlet routeKey="history" onHome={() => {}}>
+                <ThrowingRoute />
+            </ShellRouteOutlet>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Go to Home' })).toBeTruthy();
+    });
+
+    it('reloads on Try again after a route chunk failed to load', () => {
+        const onReload = vi.fn();
+        const onRetry = vi.fn();
+        function ChunkRoute() {
+            throw new TypeError('Failed to fetch dynamically imported module: http://localhost/CreateWallet.jsx');
+        }
+        render(
+            <RouteErrorBoundary onReload={onReload} onRetry={onRetry}>
+                <ChunkRoute />
+            </RouteErrorBoundary>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(onReload).toHaveBeenCalledOnce();
+        expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('retries in place after any other route failure', () => {
+        const onReload = vi.fn();
+        const onRetry = vi.fn();
+        render(
+            <RouteErrorBoundary onReload={onReload} onRetry={onRetry}>
+                <ThrowingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(onRetry).toHaveBeenCalledOnce();
+        expect(onReload).not.toHaveBeenCalled();
     });
 });

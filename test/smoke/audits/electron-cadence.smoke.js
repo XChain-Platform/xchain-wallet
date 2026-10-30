@@ -54,6 +54,8 @@ assert.equal(POLICY.MAJOR_GRACE_DAYS, 28,
     "§9: upgrade to each new stable major within 4 weeks of upstream release");
 assert.equal(POLICY.SUPPORTED_MAJORS, 3,
     'Electron maintains the newest three stable majors; older ones get no fixes at all');
+assert.equal(POLICY.PATCH_GRACE_DAYS, 7,
+    'a patch on our own major is owed once it has been out a week');
 
 /** A registry document shaped like npm's, with the clock pinned. */
 function packument({ tags, time = {} }) {
@@ -77,13 +79,40 @@ function packument({ tags, time = {} }) {
 {
     const doc = packument({
         tags: { latest: '43.2.0', '43-x-y': '43.2.0' },
-        time: { '43.2.0': daysAgo(3) },
+        time: { '43.2.0': daysAgo(POLICY.PATCH_GRACE_DAYS + 3) },
     });
     const r = assess('43.0.0', doc);
-    assert.equal(r.ok, false, 'a newer patch on our own major is a failure, not a note');
+    assert.equal(r.ok, false, 'a newer patch on our own major past the grace is a failure, not a note');
     assert.equal(r.problems.length, 1);
     assert.equal(r.problems[0].kind, 'patch');
     assert.match(r.problems[0].detail, /43\.2\.0 exists/);
+}
+
+// ------------------------------ a fresh patch inside its grace, and one owed under it
+
+{
+    // pnpm refuses an entry less than a day old, so a patch that shipped this
+    // morning cannot be pinned yet: it is a note, not a failure.
+    const fresh = assess('43.1.0', packument({
+        tags: { latest: '43.2.0', '43-x-y': '43.2.0' },
+        time: { '43.1.0': daysAgo(20), '43.2.0': daysAgo(1) },
+    }));
+    assert.equal(fresh.ok, true, 'a patch still inside its grace does not fail the run');
+    assert.deepEqual(fresh.problems.map((p) => p.kind), ['patch-pending']);
+
+    // A fresh newest patch does not hide an older one that is already owed.
+    const owed = assess('43.0.0', packument({
+        tags: { latest: '43.2.0', '43-x-y': '43.2.0' },
+        time: { '43.0.0': daysAgo(40), '43.1.0': daysAgo(POLICY.PATCH_GRACE_DAYS + 2), '43.2.0': daysAgo(1) },
+    }));
+    assert.equal(owed.ok, false, 'an owed patch fails the run while a newer one is pending');
+    assert.equal(owed.problems[0].kind, 'patch');
+    assert.match(owed.problems[0].detail, /behind 43\.1\.0/);
+
+    // No release date for the newest patch means it is owed at once.
+    const undated = assess('43.0.0', packument({ tags: { latest: '43.2.0', '43-x-y': '43.2.0' } }));
+    assert.equal(undated.ok, false, 'a newest patch with no date cannot buy a quiet week');
+    assert.equal(undated.problems[0].kind, 'patch');
 }
 
 // -------------------------------------- a newer major, inside and outside grace

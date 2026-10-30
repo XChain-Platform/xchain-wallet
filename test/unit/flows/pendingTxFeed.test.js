@@ -162,6 +162,16 @@ describe('dismissFailedPendingTx', () => {
         expect(out).toHaveLength(0);
     });
 
+    it('marks a record whose coins another transaction spent at this read, and nothing else', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([record(), record({ id: 'ptx-2', txid: 'DDEEFF' })]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            replaced: new Set(['aabbcc']),
+        });
+        expect(out.map((s) => [s.txid, s.replacedElsewhere])).toEqual([['AABBCC', true], ['DDEEFF', false]]);
+    });
+
     it('marks a record the UTXO set held at this read, and nothing else', async () => {
         const out = await livePendingTxs({
             vault: vaultOf([record(), record({ id: 'ptx-2', txid: 'DDEEFF' })]),
@@ -345,5 +355,49 @@ describe('confirmed PendingTx retention', () => {
         expect(await pruneConfirmedPendingTxs({ vault, now: NOW, retentionMs: 3600_000 }))
             .toEqual(['hour-old']);
         expect(vault.store.size).toBe(0);
+    });
+});
+
+describe('livePendingTxs and a confirmed fee bump', () => {
+    it('drops the replaced original once its replacement is confirmed', async () => {
+        const vault = vaultOf([
+            record({ id: 'orig', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'bump', txid: 'bb', status: 'indexed', confirmedAt: '2026-08-27T01:00:00.000Z' }),
+            record({ id: 'live', txid: 'cc' }),
+        ]);
+        const rows = await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID });
+        expect(rows.map((r) => r.id)).toEqual(['live']);
+    });
+
+    it('drops every original in a chain of bumps', async () => {
+        const vault = vaultOf([
+            record({ id: 'o', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'b1', txid: 'bb', status: 'rbf-replaced', rbfReplacement: 'cc' }),
+            record({ id: 'b2', txid: 'CC', status: 'indexed' }),
+        ]);
+        expect(await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID })).toEqual([]);
+    });
+
+    it('keeps the replaced original while its replacement is still in flight', async () => {
+        const vault = vaultOf([
+            record({ id: 'orig', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'bump', txid: 'bb' }),
+        ]);
+        const rows = await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID });
+        expect(rows.map((r) => r.id).sort()).toEqual(['bump', 'orig']);
+    });
+});
+
+describe('livePendingTxs lists a pasted raw transaction under every address', () => {
+    it('keeps an unknown-sender record that has a txid and drops one without', async () => {
+        const raw = record({ id: 'raw-1', fromAddress: 'unknown', txid: 'abc123', action: 'BROADCAST_SIGNED_TX' });
+        const noId = record({ id: 'raw-2', fromAddress: 'unknown', txid: null, status: 'broadcasting' });
+        const out = await livePendingTxs({
+            vault: vaultOf([raw, noId]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            address: OURS,
+        });
+        expect(out.map((r) => r.id)).toEqual(['raw-1']);
     });
 });

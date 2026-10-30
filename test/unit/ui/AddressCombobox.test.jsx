@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
 
 const suggestions = [
@@ -85,36 +85,6 @@ describe('<AddressCombobox>', () => {
         expect(input).toHaveValue('bc1qfromuri');
     });
 
-    it('trims clipboard button text and explains denied clipboard access', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('  bc1qclipboard\n') },
-        });
-        const view = render(<ControlledCombobox />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qclipboard'));
-
-        navigator.clipboard.readText.mockResolvedValueOnce(' bitcoin:bc1qfromuri?amount=1 ');
-        view.rerender(
-            <ControlledCombobox
-                onPaste={(event) => {
-                    event.preventDefault();
-                    event.currentTarget.value = 'bc1qfromuri';
-                    fireEvent.change(event.currentTarget);
-                }}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qfromuri'));
-
-        navigator.clipboard.readText.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Clipboard access was denied. Paste manually instead.',
-        );
-    });
-
     it('clears the value and resets keyboard selection', () => {
         render(<ControlledCombobox value="Alice" />);
         const input = screen.getByLabelText('To');
@@ -149,5 +119,17 @@ describe('<AddressCombobox>', () => {
 
         expect(onIconClick).toHaveBeenCalledOnce();
         expect(screen.queryByRole('listbox')).toBeNull();
+    });
+
+    it('keeps suggestion addresses out of the tab order', () => {
+        render(
+            <ControlledCombobox
+                suggestions={[{ address: 'demo1erincallowaybtc0000000000000000001', label: 'Erin', source: 'contact' }]}
+            />,
+        );
+        fireEvent.focus(screen.getByLabelText('To'));
+
+        const option = screen.getByRole('option');
+        expect(option.querySelectorAll('[tabindex]')).toHaveLength(0);
     });
 });

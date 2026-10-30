@@ -1,7 +1,7 @@
 {
     "name": "xchain-wallet",
     "description": "Self-custodial multi-chain wallet for the XChain Platform (browser, Chrome extension, and desktop)",
-    "version": "0.341.4",
+    "version": "0.342.0",
     "private": true,
     "type": "module",
     "license": "AGPL-3.0-or-later",
@@ -20,7 +20,7 @@
         "lint": "pnpm -r --if-present lint",
         "build": "pnpm -r --if-present build",
         "ci": "pnpm test:unit && pnpm test:integration && pnpm test:security && pnpm test:fuzz && pnpm test:smoke && pnpm test:tools",
-        "ci:full": "bash bin/ci-full.sh",
+        "ci:full": "bash tools/ci-full.sh",
         "test": "pnpm test:unit && pnpm test:fuzz && pnpm test:smoke && pnpm test:tools",
         "test:unit": "vitest run --config test/vitest/unit.config.js",
         "test:unit:watch": "vitest --config test/vitest/unit.config.js",
@@ -49,8 +49,8 @@
         "release:sign": "bash tools/release/sign.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
         "release:verify": "bash tools/release/verify.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
         "release:verify-controls": "node tools/release/verify-ci-controls.mjs",
-        "visual:compare": "node scripts/visual-compare.mjs",
-        "visual:clean": "node scripts/visual-clean.mjs",
+        "visual:compare": "node tools/visual-compare.mjs",
+        "visual:clean": "node tools/visual-clean.mjs",
         "sdk:check": "node tools/dev/sdk-installed-guard.mjs",
         "sdk:link": "node tools/dev/sdk-link.mjs link",
         "sdk:unlink": "node tools/dev/sdk-link.mjs unlink",
@@ -70,12 +70,12 @@
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/react": "^16.0.1",
         "@vitejs/plugin-react": "^4.3.0",
-        "@vitest/coverage-v8": "^4.1.11",
+        "@vitest/coverage-v8": "^4.1.12",
         "axe-core": "^4.10.0",
         "fast-check": "^4.6.0",
         "jsdom": "^25.0.0",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "vitest": "^4.1.11"
+        "vitest": "^4.1.12"
     }
 }

@@ -8,8 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { chooseFirstOfferedToken, reachKnownScreen } from '../../e2e/layout/crawl.js';
+import { measureInPage, measureRulings, recordMeasuredScreen } from '../../e2e/layout/sweep.js';
 
 describe('click crawler form and screen helpers', () => {
     it('opens an empty token field and chooses the first offered balance', async () => {
@@ -70,5 +74,56 @@ describe('click crawler form and screen helpers', () => {
         expect(open).not.toHaveBeenCalled();
         expect(reopen).toHaveBeenCalledOnce();
         expect(settle).toHaveBeenLastCalledWith(100);
+    });
+
+    it('writes extension measurements in the web sweep record shape', async () => {
+        const outDir = mkdtempSync(join(tmpdir(), 'xc-extension-measure-'));
+        const measured = {
+            vw: 360,
+            vh: 600,
+            title: 'Home',
+            pageScrollX: 0,
+            pageScrollY: 12,
+            offscreen: [],
+            clipped: [],
+            unreachable: [],
+            xScrollers: [],
+            yScrollers: [],
+            layout: { expectedGutter: 12 },
+            narrow: [],
+            overlaps: [],
+        };
+        const rulings = { borderlessFields: ['input "Amount"'] };
+        const page = {
+            evaluate: vi.fn(async (fn) => {
+                if (fn === measureInPage) return measured;
+                if (fn === measureRulings) return rulings;
+                return 16;
+            }),
+            screenshot: vi.fn().mockResolvedValue(undefined),
+        };
+
+        await recordMeasuredScreen(page, {
+            venue: 'extension-popup-360x600',
+            outDir,
+            n: 3,
+            label: 'palette: Send',
+            shot: '003-palette-send.png',
+            onScreen: async (p) => ({ rulings: await p.evaluate(measureRulings) }),
+        });
+
+        const record = JSON.parse(readFileSync(join(outDir, 'results.jsonl'), 'utf8').trim());
+        expect(record).toEqual({
+            venue: 'extension-popup-360x600',
+            n: 3,
+            label: 'palette: Send',
+            shot: '003-palette-send.png',
+            ...measured,
+            rootFontPx: 16,
+            rulings,
+        });
+        expect(page.evaluate).toHaveBeenNthCalledWith(1, measureInPage, { contrast: false });
+        expect(page.evaluate).toHaveBeenNthCalledWith(3, measureRulings);
+        expect(page.screenshot).toHaveBeenCalledWith({ path: join(outDir, '003-palette-send.png') });
     });
 });

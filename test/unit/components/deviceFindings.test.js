@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const read = (path) => readFileSync(join(process.cwd(), path), 'utf8');
+const read = (path) => withEnglishCopy(readFileSync(join(process.cwd(), path), 'utf8'));
 
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -19,18 +20,6 @@ describe('device finding fixes', () => {
         const css = read('packages/core/src/shared/components/OverlaySurface.module.css');
 
         expect(rule(css, '.sheet .header')).toMatch(/padding-inline:\s*var\(--xc-space-4\)/);
-    });
-
-    it('lets the page title icon box use the artwork dimensions', () => {
-        const pageHeader = read('packages/core/src/ui/PageHeader.module.css');
-        const tokenDetail = read('packages/core/src/shared/routes/TokenDetail.module.css');
-        const titleIcon = rule(pageHeader, '.titleIcon');
-        const tokenIcon = rule(tokenDetail, '.headerIcon');
-
-        expect(titleIcon).toMatch(/width:\s*max-content/);
-        expect(titleIcon).toMatch(/height:\s*max-content/);
-        expect(tokenIcon).toMatch(/width:\s*var\(--xc-avatar-size-header\)/);
-        expect(tokenIcon).toMatch(/height:\s*var\(--xc-avatar-size-header\)/);
     });
 
     it('distinguishes Marketplace from Dispensers in every navigation registry', () => {

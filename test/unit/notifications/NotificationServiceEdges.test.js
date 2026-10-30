@@ -88,7 +88,10 @@ describe('NotificationService synchronization edges', () => {
         expect(bad.connectWs).toHaveBeenCalledTimes(1);
         expect(good.connectWs).toHaveBeenCalledTimes(1);
         expect(good.onAddress).toHaveBeenCalledWith('mine', expect.any(Function));
-        expect(logger.error).toHaveBeenCalledTimes(1);
+        // The first failure only arms a bounded retry; the warning comes once
+        // the attempts run out (NotificationService.test.js covers the cap).
+        expect(logger.error).not.toHaveBeenCalled();
+        service.stop();
     });
 
     it('warns at the twenty-first subscription boundary', async () => {
@@ -181,5 +184,33 @@ describe('NotificationService event and cache edges', () => {
         expect(service._announced.size).toBe(500);
         expect(service._announced.has('tx-0')).toBe(false);
         expect(service._announced.get('tx-new')).toBe(3_601_000);
+    });
+});
+
+describe('NotificationService lock race', () => {
+    it('delivers nothing for a frame still in flight when the service stops', async () => {
+        let releaseSettings;
+        const settingsGate = new Promise((resolve) => { releaseSettings = resolve; });
+        let handler;
+        const sdk = makeSdk({ onAddress: vi.fn((_addr, cb) => { handler = cb; return vi.fn(); }) });
+        const { service, notify } = makeService({
+            sdk,
+            getSettings: vi.fn(async () => {
+                await settingsGate;
+                return { notifications: { incomingReceipts: true } };
+            }),
+        });
+        await service.start();
+
+        handler({
+            type: 'NEW_ACTION',
+            timestamp: 1,
+            data: { action: 'SEND', action_index: 7, source: 'other', destinations: ['mine'], amount: '2', tick: 'XCH' },
+        });
+        service.stop();
+        releaseSettings();
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(notify).not.toHaveBeenCalled();
     });
 });

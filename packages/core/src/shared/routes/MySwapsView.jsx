@@ -38,15 +38,15 @@ import {
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -63,12 +63,13 @@ import S from './MySwapsView.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.swaps)) return resp.swaps;
-    return [];
+    let rows = [];
+    if (Array.isArray(resp)) rows = resp;
+    else if (Array.isArray(resp?.data)) rows = resp.data;
+    else if (Array.isArray(resp?.rows)) rows = resp.rows;
+    else if (Array.isArray(resp?.swaps)) rows = resp.swaps;
+    // A null or scalar entry from the explorer would throw while reading a row field.
+    return rows.filter((row) => row !== null && typeof row === 'object' && !Array.isArray(row));
 }
 
 function sideLabel(tick, coin, amount, ownership) {
@@ -79,6 +80,7 @@ function sideLabel(tick, coin, amount, ownership) {
 
 const CLOSED_LABELS = Object.freeze({
     settled: 'Settled',
+    cancelling: 'Cancelling',
     cancelled: 'Cancelled',
     expired: 'Expired',
     invalid: 'Invalid',
@@ -98,11 +100,21 @@ function swapStateOf(detail) {
     };
 }
 
+// The list feed hydrates each row with its detail's `state` block when the
+// chain clock is current, so only a row without a lifecycle status costs a
+// swaps.detail read.
 async function readSwapStates(messaging, candidates) {
     const states = new Map();
+    const unread = [];
+    for (const item of candidates) {
+        const status = item.row?.state?.status;
+        const own = typeof status === 'string' && status.trim() ? swapStateOf(item.row) : null;
+        if (own) states.set(item.key, own);
+        else unread.push(item);
+    }
     if (typeof messaging?.getSwapDetail !== 'function') return states;
-    for (let i = 0; i < candidates.length; i += STATE_READ_CONCURRENCY) {
-        const slice = candidates.slice(i, i + STATE_READ_CONCURRENCY);
+    for (let i = 0; i < unread.length; i += STATE_READ_CONCURRENCY) {
+        const slice = unread.slice(i, i + STATE_READ_CONCURRENCY);
         const details = await Promise.all(slice.map((item) => messaging.getSwapDetail({
             chainId: item.chainId,
             actionIndex: String(item.row.action_index),
@@ -206,6 +218,8 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [activeAction, setActiveAction] = useState(/** @type {{ type: 'cancel' | 'edit', item: any } | null} */ (null));
     // PC-21: which swap's lifecycle timeline is expanded inline (by row key).
+    // Swaps whose cancel was broadcast; the explorer feed lags the broadcast.
+    const [cancellingKeys, setCancellingKeys] = useState(/** @type {Set<string>} */ (new Set()));
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
     const loadRequestId = useRef(0);
@@ -217,6 +231,12 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
 
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setByChain({});
+            setItems([]);
+            setLoadError(null);
+            return;
+        }
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;
@@ -274,21 +294,23 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            trailing={onCreateSwap ? (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Icon.PlusIcon />}
-                    onClick={onCreateSwap}
-                    aria-label="New swap"
-                    title="New swap"
-                />
-            ) : undefined}
         />
     );
-    const wrap = (children) => (
+    // The page header holds only the title and Back, so New swap sits in
+    // the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage
+                notices={notices}
+                actions={onCreateSwap && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateSwap}>
+                        New swap
+                    </Button>
+                ) : null}
+            >
+                {children}
+            </ListPage>
         </Screen>
     );
 
@@ -302,6 +324,11 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 walletId={walletId}
                 messaging={messaging}
                 onDone={() => { setActiveAction(null); load(); }}
+                onCancelBroadcast={() => setCancellingKeys((current) => {
+                    const next = new Set(current);
+                    next.add(activeAction.item.key);
+                    return next;
+                })}
                 onBack={() => setActiveAction(null)}
             />
         );
@@ -315,15 +342,17 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     }
     if (loadError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={L.hint}
-                recovery={{ label: 'Try again', onAction: load }}
-            >
-                {loadError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={L.hint}
+                    recovery={{ label: 'Try again', onAction: load }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ),
+        });
     }
     if (items.length === 0) {
         return wrap(
@@ -333,14 +362,19 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 actionLabel={onCreateSwap ? 'Create a swap' : undefined}
                 onAction={onCreateSwap}
             />,
+            { emptyOffersCreate: true },
         );
     }
 
-    const openItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) === 'open');
-    const closedItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) !== 'open');
+    const statusOf = (it) => {
+        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
+    };
+    const openItems = items.filter((it) => statusOf(it) === 'open');
+    const closedItems = items.filter((it) => statusOf(it) !== 'open');
 
     const renderRow = (it) => {
-        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        const status = statusOf(it);
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
@@ -437,7 +471,10 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
  * its network pre-flight, or, in watcher mode, the form builds an unsigned
  * transaction.
  */
-function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
+function SwapActionPanel({
+    type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
+}) {
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { chainId, owner, row } = item;
     const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
@@ -515,10 +552,12 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
         try {
+            // Fresh reads, so a cancel or fill since the list loaded is never
+            // answered from the list's own reads.
             let freshCancelledKeys = item.cancelledKeys || new Set();
             if (typeof messaging.getSwapCancelsForAddress === 'function') {
                 try {
-                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address });
+                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address, fresh: true });
                     freshCancelledKeys = collectCancelledKeys([{
                         p: { chainId, owner },
                         cancels: extractRows(response),
@@ -531,7 +570,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             if (typeof messaging.getSwapDetail === 'function') {
                 let freshDetail;
                 try {
-                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx });
+                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx, fresh: true });
                 } catch {
                     setError('Could not refresh this swap. Try again.');
                     return;
@@ -558,6 +597,8 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: { params },
             });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (isCancel && txid && typeof onCancelBroadcast === 'function') onCancelBroadcast();
             setResult(res || {});
         } catch (err) {
             if (!isUserRejection(err)) {
@@ -621,7 +662,8 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onDone}
                     what={isCancel ? 'swap cancel' : 'swap edit'}
                     unsaved={result.unsaved}
@@ -629,7 +671,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             );
         }
         if (result.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
         }
         return wrap(
             <>
@@ -657,10 +699,11 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
             status={validationError || error ? (
-                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+                <StatusMessage variant="error">{validationError || error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -686,7 +729,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             <dl className={F.detailsList}>
                 {descriptor ? (
                     <>
-                        <dt className={F.detailsLabel}>Chain</dt>
+                        <dt className={F.detailsLabel}>Network</dt>
                         <dd className={F.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                     </>
                 ) : null}

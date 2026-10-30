@@ -68,7 +68,7 @@ assert.match(recvSrc, /QRCode\.toDataURL\(qrUri/, 'request URI rendered to QR');
 
 assert.match(recvSrc, /copyQrImage = useCallback/, 'copy callback memoized');
 assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
-assert.match(recvSrc, /import \{ shareContent, ShareOutcome \}/, 'imports platform share selection');
+assert.match(recvSrc, /import \{ shareContent, ShareOutcome, toWebShareData \}/, 'imports platform share selection');
 // Every shell's CSP limits connect-src to wallet hosts, so the PNG decoder
 // stays in-process instead of relying on `fetch(dataUrl)`.
 assert.doesNotMatch(recvSrc, /fetch\(qrDataUrl\)/, 'never fetches the QR data URL');
@@ -91,13 +91,13 @@ assert.match(recvSrc, /title: `Receive \$\{asset\} with XChain`/, 'shares a usef
 assert.match(recvSrc, /url: qrUri/, 'shares the exact payment request URL');
 assert.match(
     recvSrc,
-    /nav\.canShare\(withFile\)/,
+    /nav\.canShare\(toWebShareData\(withFile\)\)/,
     'attaches the QR image only when file sharing is supported',
 );
 assert.match(recvSrc, /fallbackText: qrUri/, 'provides the payment request as the share fallback');
 assert.match(recvSrc, /ShareOutcome\.CANCELED/, 'treats share-sheet cancellation quietly');
 const nativeShare = shareSrc.indexOf("getNativePlugin('App'");
-const webShare = shareSrc.indexOf('await nav.share(data)');
+const webShare = shareSrc.indexOf('await nav.share(toWebShareData(data))');
 const copyFallback = shareSrc.indexOf('await copyText(fallbackText');
 assert.ok(nativeShare >= 0, 'platform share finds the native App bridge');
 assert.ok(nativeShare < webShare, 'native share precedes Web Share');
@@ -105,8 +105,10 @@ assert.ok(webShare < copyFallback, 'Web Share precedes clipboard fallback');
 
 // --- buttons ---------------------------------------------------------
 
-assert.match(recvSrc, /Copy QR/, 'Copy QR button');
-assert.match(recvSrc, /Share QR/, 'Share QR button is always offered for a rendered request');
+// The smoke runner reads wallet source with each t() key replaced by its
+// English copy, so the buttons are matched by the label a user reads.
+assert.match(recvSrc, /Copy QR\b/, 'Copy QR button');
+assert.match(recvSrc, /Share QR\b/, 'Share QR button is always offered for a rendered request');
 assert.doesNotMatch(
     recvSrc,
     /\{canShareFiles \? \(/,
@@ -115,7 +117,7 @@ assert.doesNotMatch(
 
 // --- CSS hooks -------------------------------------------------------
 
-for (const cls of ['qrBox', 'qr', 'qrActions', 'assetCard']) {
+for (const cls of ['qrSurface', 'qr', 'qrActions', 'assetCard']) {
     assert.match(recvCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

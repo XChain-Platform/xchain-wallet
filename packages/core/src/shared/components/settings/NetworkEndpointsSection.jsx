@@ -38,14 +38,19 @@ import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import styles from './NetworkEndpointsSection.module.css';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 export function NetworkEndpointsSection() {
-    const { settings, loading, error, update } = useSettings();
-    if (loading) return <Status text="Loading…" />;
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const descriptors = registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)
         .slice()
@@ -56,7 +61,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <EmptyState title="No chains registered" titleAs="p" body="Registered chains and their endpoints appear here." />;
+        return <EmptyState title={t('settings.endpoints.noChainsRegistered')} titleAs="p" body={t('settings.endpoints.registeredChainsAndTheirEndpoints')} />;
     }
 
     return (
@@ -111,7 +116,7 @@ function ChainRegistryRefreshRow() {
             if (request !== requestRef.current) return;
             setStatus({
                 ok: false,
-                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+                error: userFacingMessage(err, 'Could not refresh the network registry. Try again.'),
             });
             setManualResult(true);
         } finally {
@@ -122,7 +127,7 @@ function ChainRegistryRefreshRow() {
     return (
         <FormSection
             headingLevel="h3"
-            title="Chain registry refresh"
+            title={t('settings.endpoints.chainRegistryRefresh')}
             description={registryStatusText(status, manualResult)}
             className={styles.endpointCard}
         >
@@ -134,7 +139,7 @@ function ChainRegistryRefreshRow() {
                     size="sm"
                     variant="secondary"
                 >
-                    {refreshing ? 'Refreshing…' : 'Refresh now'}
+                    {refreshing ? t('settings.endpoints.refreshing') : t('settings.endpoints.refreshNow')}
                 </Button>
             </div>
         </FormSection>
@@ -143,13 +148,15 @@ function ChainRegistryRefreshRow() {
 
 function registryStatusText(status, manualResult) {
     if (status?.ok) {
-        const networks = `${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'}`;
         return manualResult
-            ? `Refresh complete: ${networks} available from the registry.`
-            : `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${networks} in the registry`;
+            ? t('settings.endpoints.refreshComplete', { count: status.descriptorCount })
+            : t('settings.endpoints.lastRefreshed', {
+                when: formatRelative(status.lastRefreshedAt),
+                count: status.descriptorCount,
+            });
     }
     if (!status?.error) {
-        return 'No refresh yet; the networks bundled with this wallet are active.';
+        return t('settings.endpoints.noRefreshYet');
     }
     const raw = userFacingMessage(status.error, 'The registry could not be refreshed.');
     const unreachable = /fetch|network|timed? out|timeout|unreachable|econn|enotfound|connection/i.test(raw);
@@ -178,21 +185,30 @@ function formatRelative(iso) {
 // Anything else would be handed straight to the SDK now that overrides
 // are live, so it is refused at the edit surface instead.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// The longest URL the editor stores; real endpoints are far shorter, and
+// a multi-kilobyte value only bloats the settings record.
+const URL_MAX_LENGTH = 2048;
+// What a DNS name, IPv4 address or bracketed IPv6 literal can contain. The
+// URL parser percent-encodes a space inside a host instead of refusing it.
+const HOSTNAME_RE = /^(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])$/i;
 
 function endpointError(value, descriptor) {
+    if (value.length > URL_MAX_LENGTH) return t('settings.endpoints.errorTooLong', { max: URL_MAX_LENGTH });
     let parsed;
     try {
         parsed = new URL(value);
     } catch {
-        return 'Enter a full URL, for example http://localhost:18080';
+        return t('settings.endpoints.errorFullUrl');
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return 'Only http:// and https:// URLs are supported.';
+        return t('settings.endpoints.errorScheme');
     }
-    if (!parsed.hostname) return 'That URL has no host.';
+    if (!parsed.hostname) return t('settings.endpoints.errorNoHost');
+    if (!HOSTNAME_RE.test(parsed.hostname)) return t('settings.endpoints.errorBadHost');
+    if (parsed.username || parsed.password) return t('settings.endpoints.errorCredentials');
     const allowsHttp = descriptor?.networkKind === 'regtest' || LOOPBACK_HOSTS.has(parsed.hostname);
     if (parsed.protocol === 'http:' && !allowsHttp) {
-        return 'Use https:// for remote hosts. http:// is allowed only for regtest and local hosts.';
+        return t('settings.endpoints.errorHttpRemote');
     }
     return null;
 }
@@ -201,6 +217,9 @@ function canonicalEndpoint(value) {
     const trimmed = value.trim();
     try {
         const parsed = new URL(trimmed);
+        // Rebuilding from the origin would drop a user name and password
+        // silently; keep the text so the validator can refuse it.
+        if (parsed.username || parsed.password) return trimmed;
         parsed.pathname = parsed.pathname.replace(/\/+$/, '');
         const path = parsed.pathname === '/' ? '' : parsed.pathname;
         return `${parsed.origin}${path}${parsed.search}${parsed.hash}`;
@@ -270,11 +289,14 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
         const bad = [
-            ['Explorer URL', next.explorerUrl],
-            ['Encoder URL', next.encoderUrl],
-            ['Hub URL', next.hubUrl],
+            [t('settings.endpoints.explorerUrl'), next.explorerUrl, defaults.explorerUrl],
+            [t('settings.endpoints.encoderUrl'), next.encoderUrl, defaults.encoderUrl],
+            [t('settings.endpoints.hubUrl'), next.hubUrl, defaults.hubUrl],
         ]
-            .map(([label, value]) => {
+            .map(([label, value, fallback]) => {
+                // A chain that ships without this endpoint (testnet has no hub)
+                // seeds the field empty; left empty, it keeps that default.
+                if (value === '' && fallback === '') return null;
                 const err = endpointError(value, descriptor);
                 return err ? `${label}: ${err}` : null;
             })
@@ -327,56 +349,54 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         <FormSection
             headingLevel="h3"
             title={`${descriptor.displayName}${networkSuffix}`}
-            description={isCustom ? 'Custom' : 'Default'}
+            description={isCustom ? t('ui.feeSelector.custom') : t('settings.endpoints.default')}
             className={styles.endpointCard}
         >
             <UrlField
-                label="Explorer URL"
+                label={t('settings.endpoints.explorerUrl')}
                 value={draft.explorerUrl}
                 placeholder={defaults.explorerUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, explorerUrl: v })); setEditing(true); }}
             />
             <UrlField
-                label="Encoder URL"
+                label={t('settings.endpoints.encoderUrl')}
                 value={draft.encoderUrl}
                 placeholder={defaults.encoderUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, encoderUrl: v })); setEditing(true); }}
             />
             <UrlField
-                label="Hub URL"
+                label={t('settings.endpoints.hubUrl')}
                 value={draft.hubUrl}
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
-            {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
-                    {saveError}
-                </div>
-            ) : null}
+            {saveError ? <Status text={saveError} tone="error" /> : null}
             {dirty ? (
                 <div style={ROW_HINT}>
-                    Saving points this chain&apos;s balances, history and broadcasts at these
-                    addresses right away.
+                    {t('settings.endpoints.savingPointsThisChainS')}
                 </div>
             ) : null}
             {isCustom || dirty ? (
                 <div style={ROW_HINT}>
-                    URL format is checked here, but the host is not contacted until the wallet uses it.
-                    If it is unreachable, this chain&apos;s balances, history and transactions may be unavailable.
+                    {t('settings.endpoints.urlFormatIsCheckedHere')}
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                {isCustom || dirty ? (
-                    <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
-                        Reset to default
-                    </Button>
-                ) : null}
-                {dirty || editing ? (
-                    <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
-                        {saving ? 'Saving…' : 'Save'}
-                    </Button>
-                ) : null}
-            </div>
+            {/* The action row renders only with an action in it, so an untouched
+                default card keeps even padding instead of a blank gap at its foot. */}
+            {isCustom || dirty || editing ? (
+                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                    {isCustom || dirty ? (
+                        <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                            {t('settings.endpoints.resetToDefault')}
+                        </Button>
+                    ) : null}
+                    {dirty || editing ? (
+                        <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
+                            {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
         </FormSection>
     );
 }

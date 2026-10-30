@@ -16,6 +16,7 @@ import {
     FormPage,
     Input,
     Icon,
+    SectionHeader,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import {
@@ -396,9 +397,10 @@ export function PairSignerForm({
         <FormPage
             label="Confirm hardware signer"
             onSubmit={handleSave}
-            status={error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            ) : null}
+            status={[
+                error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                verdict ? <FirmwareBanner key="firmware" verdict={verdict} vendor={pairingInfo?.vendor} /> : null,
+            ]}
             actions={(
                 <>
                     <Button variant="ghost" onClick={handleCancel} disabled={stage === 'saving'}>
@@ -432,7 +434,6 @@ export function PairSignerForm({
                     <code className={styles.code}>{pairingInfo?.deviceIdentifier}</code>
                 </dd>
             </dl>
-            {verdict ? <FirmwareBanner verdict={verdict} vendor={pairingInfo?.vendor} /> : null}
             <Input
                 label="Label"
                 hint="Shows wherever this signer appears in the UI."
@@ -462,12 +463,12 @@ function isPairingCancellation(err) {
 
 function FirmwareBanner({ verdict, vendor }) {
     if (verdict.status === 'ok') return null;
-    const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
-        ? styles.errorBanner
-        : styles.warningBanner;
+    const tone = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
+        ? 'error'
+        : 'warning';
     const updateUrl = safeHttpUrl(verdict.updateUrl);
     return (
-        <StatusMessage variant="error" className={variantClass}>
+        <StatusMessage variant={tone} role="alert">
             <p className={styles.bannerDetail}>
                 {verdict.status === 'unsupported'
                     ? firmwareUpdateAdvice(vendor, verdict.recommended)
@@ -490,7 +491,7 @@ function FirmwareBanner({ verdict, vendor }) {
 function PairedDeviceList({ records, unpairingId, onUnpair }) {
     return (
         <section className={styles.pairedSection} aria-labelledby="paired-devices-heading">
-            <h2 id="paired-devices-heading" className={styles.pairedHeading}>Paired devices</h2>
+            <SectionHeader id="paired-devices-heading" title="Paired devices" />
             <ul className={styles.pairedList}>
                 {records.map((record) => (
                     <li key={record.id} className={styles.pairedRow}>
@@ -521,8 +522,14 @@ function pairingErrorMessage(err, vendor) {
     if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware/i.test(raw)) {
         return firmwareUpdateAdvice(vendor);
     }
-    if (/wrong app|app.*(?:not|isn't).*open|app is open|0x6a82|0x6e00|cla_not_supported|(?:bitcoin test|testnet).*app/i.test(raw)) {
+    if (/wrong app|app.*(?:not|isn't).*open|app is open|0x6a82|0x6e00|0x6d00|0x6511|cla_not_supported|ins_not_supported|(?:bitcoin test|testnet).*app/i.test(raw)) {
         return 'The Bitcoin app is not open on your Ledger. Open the Bitcoin app on the device, then try again.';
+    }
+    if (/locked device|device (?:is )?locked|pin locked|0x5515|LockedDevice/i.test(raw)) {
+        return `Your ${labelFor(vendor)} is locked. Enter the PIN on the device, then try again.`;
+    }
+    if (/already open|failed to open the device|device is busy|in use by another/i.test(raw)) {
+        return `Another app or browser tab is using this ${labelFor(vendor)}. Close ${vendor === 'trezor' ? 'Trezor Suite' : 'Ledger Live'} and any other wallet tab, then try again.`;
     }
     if (/cancel|reject|denied|declined|user.*closed|popup.*closed/i.test(raw)) {
         return `Pairing was canceled. Approve the connection on your ${labelFor(vendor)} and in any browser prompt, then try again.`;

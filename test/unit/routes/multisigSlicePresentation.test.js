@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 
 const route = (name) => readFileSync(join(
     process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', name,
@@ -18,14 +19,15 @@ const route = (name) => readFileSync(join(
 
 describe('multisig slice presentation safeguards', () => {
     it('uses theme tokens for status and accent colors', () => {
-        const compose = route('ComposeMessage.jsx');
+        const compose = withEnglishCopy(route('ComposeMessage.jsx'));
         const parallel = route('ParallelComposer.jsx');
         const parallelStyles = route('ParallelComposer.module.css');
         const inbox = route('MessagingInbox.jsx');
 
         expect(compose).not.toMatch(/#ef5350|#f59e0b/i);
-        expect(compose).toContain("color: 'var(--xc-danger-fg)'");
-        expect(compose).toContain("border: '1px solid var(--xc-warning)'");
+        // The key-request warning and its failure use the shared status tones.
+        expect(compose).toMatch(/<StatusMessage key="key-missing" variant="warning" role="alert">[\s\S]*?We don't know the recipient's public key/);
+        expect(compose).toContain('<StatusMessage key="key-request-error" variant="error" testId="key-request-error">{handshakeError}</StatusMessage>');
         expect(parallel + parallelStyles).not.toContain("color: '#b00'");
         expect(parallelStyles).toContain('color: var(--xc-danger-fg);');
         expect(inbox).not.toContain("color: isOutgoing ? '#FFFFFF'");

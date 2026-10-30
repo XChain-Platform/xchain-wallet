@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent as keyboardUser } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
@@ -26,6 +26,10 @@ import {
 } from '../../../packages/core/src/shared/routeRegistry.js';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => cleanup());
 
@@ -449,13 +453,29 @@ describe('route scroll position', () => {
         const view = render(<Route routeKey="history" />);
         const main = document.getElementById('xc-main');
         main.scrollTop = 418;
+        fireEvent.scroll(main);
 
         view.rerender(<Route routeKey="action-detail" />);
         expect(document.getElementById('xc-main').scrollTop).toBe(0);
         document.getElementById('xc-main').scrollTop = 73;
+        fireEvent.scroll(document.getElementById('xc-main'));
 
         view.rerender(<Route routeKey="history" />);
         expect(document.getElementById('xc-main').scrollTop).toBe(418);
+    });
+
+    it('keeps the offset the user scrolled to when the view swap clamps the body first', () => {
+        const view = render(<Route routeKey="settings-list" />);
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 586;
+        fireEvent.scroll(main);
+        // The browser clamps the offset to the incoming, shorter content
+        // before the outgoing view's cleanup runs; no scroll event yet.
+        main.scrollTop = 0;
+
+        view.rerender(<Route routeKey="settings-privacy" />);
+        view.rerender(<Route routeKey="settings-list" />);
+        expect(document.getElementById('xc-main').scrollTop).toBe(586);
     });
 
     it('scrolls the active bottom tab to the top', () => {

@@ -177,4 +177,32 @@ describe('useUndoSend', () => {
         expect(h.onElapsed).not.toHaveBeenCalled();
         expect(h.onCancelHold).not.toHaveBeenCalled();
     });
+
+    it('reset ends a running countdown without a cancel or an elapse', () => {
+        const h = setup();
+        act(() => h.result.current.start(5));
+        act(() => h.result.current.reset());
+        expect(h.result.current.status).toBe('idle');
+        expect(h.result.current.remaining).toBe(0);
+        expect(h.ticks.cleared).toBe(1);
+        expect(h.onCancelHold).not.toHaveBeenCalled();
+        expect(h.onElapsed).not.toHaveBeenCalled();
+    });
+
+    it('starts a new countdown after reset', () => {
+        const h = setup();
+        act(() => h.result.current.start(5));
+        act(() => h.result.current.reset());
+        act(() => h.result.current.start(5));
+        expect(h.result.current.status).toBe('counting');
+        expect(h.result.current.remaining).toBe(5);
+        expect(h.ticks.armed).toBe(2);
+    });
+
+    it('reset with nothing counting changes nothing', () => {
+        const h = setup();
+        act(() => h.result.current.reset());
+        expect(h.result.current.status).toBe('idle');
+        expect(h.ticks.cleared).toBe(0);
+    });
 });

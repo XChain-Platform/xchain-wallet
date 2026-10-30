@@ -1,0 +1,35 @@
+/* The notice's own text, list and action. It sits in a FormPage like every
+   other onboarding screen, so the page template owns the gaps and the wide
+   card; nothing here sets a margin or a surface of its own. */
+
+.subtitle {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+    text-align: center;
+}
+
+/* Each item carries the start inset the bullets hang in. A list card inside the wide form
+   card flattens through the shared card rule instead of drawing a second box. */
+.list {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.list > li {
+    margin-inline-start: var(--xc-space-3);
+}
+
+.actions {
+    display: flex;
+}
+
+.actions > * {
+    flex: 1 1 auto;
+}

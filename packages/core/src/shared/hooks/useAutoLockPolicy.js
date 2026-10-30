@@ -42,6 +42,21 @@ import {
 // than inferred so a future shell has to opt in deliberately.
 export const AUTO_LOCK_SHELLS = /** @type {const} */ (['popup', 'web', 'desktop']);
 
+// The backstop's reply reason when storage refused the arm and the shell
+// locked the wallet instead (extension background/autoLockState.js).
+export const AUTO_LOCK_UNSAVED = 'auto-lock-unsaved';
+
+/**
+ * Whether a backstop reply says the arm was refused and the wallet locked.
+ *
+ * @param {unknown} reply
+ * @returns {boolean}
+ */
+export function isAutoLockArmRefused(reply) {
+    const r = /** @type {any} */ (reply);
+    return Boolean(r) && r.ok === false && r.reason === AUTO_LOCK_UNSAVED;
+}
+
 /**
  * Normalise the stored `autolockMinutes` into a usable timeout.
  *
@@ -77,15 +92,25 @@ export function resolveAutoLockMinutes(raw) {
  * @param {string | null | undefined} [opts.activeWalletId]
  * @param {(() => void) | undefined} [opts.onLocked] shell refresh, run after a
  *   successful lock so the view switches to the Locked screen.
+ * @param {(() => unknown) | undefined} [opts.lock] the shell's own Lock action.
+ *   Given, an idle lock runs it in place of `lockWallet` + `onLocked`, so the
+ *   unlocked screen and its transient route and prefill state go before the
+ *   host round-trip, exactly as they do when the user presses Lock.
+ * @param {(() => void) | undefined} [opts.onArmRefused] run when the backstop
+ *   could not save the arm and locked the wallet, so the shell can say why.
  * @returns {{ armed: boolean, idleMs: number, minutes: number, checkNow: () => boolean }}
  */
-export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {}) {
+export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock: shellLock, onArmRefused } = {}) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const { showToast } = useToast();
 
     const onLockedRef = useRef(onLocked);
     onLockedRef.current = onLocked;
+    const shellLockRef = useRef(shellLock);
+    shellLockRef.current = shellLock;
+    const onArmRefusedRef = useRef(onArmRefused);
+    onArmRefusedRef.current = onArmRefused;
     // Re-entrancy guard. A ref, not state: nothing renders from it, and
     // this hook sits above the whole shell tree where an extra render is
     // expensive.
@@ -95,6 +120,10 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         if (lockingRef.current) return;
         lockingRef.current = true;
         try {
+            if (typeof shellLockRef.current === 'function') {
+                await shellLockRef.current();
+                return;
+            }
             await messaging.lockWallet();
             onLockedRef.current?.();
         } catch {
@@ -132,14 +161,13 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         showToast({
             id: 'auto-lock-signing-deferred',
             message: 'Auto-lock is waiting for the current signing request to finish.',
-            durationMs: 8000,
         });
     }, [showToast]);
 
     const reportActivity = useCallback(() => {
         if (!armed || typeof messaging?.reportAutoLock !== 'function') return;
         Promise.resolve()
-            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true }))
+            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true, issuedAt: Date.now() }))
             .catch(() => { /* best-effort */ });
     }, [messaging, armed, idleMs]);
 
@@ -164,11 +192,20 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
     // Skipped while the session status is still resolving: reporting a
     // premature `armed: false` there would disarm the backstop for a
     // wallet that turns out to be unlocked a tick later.
+    //
+    // Each report carries the moment it was issued; the extension messaging
+    // layer repeats a report whose port dropped with the same stamp, so the
+    // service worker drops a disarm that reaches it after a newer arm (the
+    // Locked screen's disarm, repeated across the unlock).
     useEffect(() => {
         if (sessionState === 'loading') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
+        const issuedAt = Date.now();
         Promise.resolve()
-            .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .then(() => messaging.reportAutoLock({ armed, idleMs, issuedAt }))
+            .then((reply) => {
+                if (isAutoLockArmRefused(reply)) onArmRefusedRef.current?.();
+            })
             .catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 

@@ -142,7 +142,7 @@ describe('submitWithSigner refuses a reveal that moves other coin', () => {
         expect(result.txid).toBe('cc'.repeat(32));
     });
 
-    it('never signs a tampered reveal, and hands back what a clean one needs', async () => {
+    it('never signs a tampered reveal, and broadcasts nothing before it is refused', async () => {
         const c = commit('P2SH');
         const tampered = reveal(c, 'P2SH', [{ hash: c.txid, index: 2, witnessUtxo: { script: KEY_P2WPKH.output, value: 40000 } }]);
         const h = harness('P2SH', tampered, c);
@@ -156,6 +156,6 @@ describe('submitWithSigner refuses a reveal that moves other coin', () => {
         });
         expect(h.signPsbt).toHaveBeenCalledTimes(1);
         expect(h.signPsbt.mock.calls[0][0].psbtHex).toBe(c.psbtHex);
-        expect(h.broadcastTx).toHaveBeenCalledTimes(1);
+        expect(h.broadcastTx).not.toHaveBeenCalled();
     });
 });

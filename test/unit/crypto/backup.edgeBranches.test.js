@@ -5,7 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../packages/core/src/crypto/aead.js', () => ({
+// Only the cipher calls are mocked; the real layout lengths stay, because
+// backup.js splits and checks the envelope on them.
+vi.mock('../../../packages/core/src/crypto/aead.js', async (importOriginal) => ({
+    ...(await importOriginal()),
     encrypt: vi.fn(),
     decrypt: vi.fn(),
 }));
@@ -17,7 +20,7 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', () => ({
     makeFreshKdfParams: vi.fn(),
 }));
 
-import { decrypt as aeadDecrypt, encrypt as aeadEncrypt } from '../../../packages/core/src/crypto/aead.js';
+import { AeadAuthError, decrypt as aeadDecrypt, encrypt as aeadEncrypt } from '../../../packages/core/src/crypto/aead.js';
 import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../../packages/core/src/crypto/kdf.js';
 import {
     BACKUP_FORMAT_VERSION,
@@ -184,9 +187,26 @@ describe('crypto/backup uncovered branches', () => {
     it('maps authentication failure to BackupPasswordError and clears the key', async () => {
         const masterKey = new Uint8Array(32).fill(4);
         vi.mocked(deriveMasterKeyAsync).mockResolvedValueOnce(masterKey);
-        vi.mocked(aeadDecrypt).mockRejectedValueOnce(new Error('auth failed'));
+        vi.mocked(aeadDecrypt).mockRejectedValueOnce(new AeadAuthError(new Error('auth failed')));
         await expect(decodeBackupEnvelope({ password: 'p', envelope: validEnvelope() }))
             .rejects.toBeInstanceOf(BackupPasswordError);
+        expect(masterKey.every((byte) => byte === 0)).toBe(true);
+    });
+
+    it('maps an authentication failure known only by its name to BackupPasswordError', async () => {
+        const crossed = Object.assign(new Error('auth failed'), { name: 'AeadAuthError' });
+        vi.mocked(aeadDecrypt).mockRejectedValueOnce(crossed);
+        await expect(decodeBackupEnvelope({ password: 'p', envelope: validEnvelope() }))
+            .rejects.toBeInstanceOf(BackupPasswordError);
+    });
+
+    it('passes a non-authentication decrypt fault through unchanged and clears the key', async () => {
+        const masterKey = new Uint8Array(32).fill(5);
+        const fault = new Error('aead: key must be a 32-byte Uint8Array');
+        vi.mocked(deriveMasterKeyAsync).mockResolvedValueOnce(masterKey);
+        vi.mocked(aeadDecrypt).mockRejectedValueOnce(fault);
+        await expect(decodeBackupEnvelope({ password: 'p', envelope: validEnvelope() }))
+            .rejects.toBe(fault);
         expect(masterKey.every((byte) => byte === 0)).toBe(true);
     });
 
