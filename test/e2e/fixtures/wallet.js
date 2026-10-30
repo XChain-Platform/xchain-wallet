@@ -201,13 +201,23 @@ export function commandPalette(page) {
  * query. Bounded, so a palette that never opens fails in seconds with that
  * sentence instead of waiting out the test timeout.
  *
+ * Global shortcuts deliberately ignore keys typed into an editable field, and
+ * some screens focus one on arrival (Send's asset search), so focus is released
+ * before the shortcut is pressed.
+ *
  * @returns {Promise<import('@playwright/test').Locator>} the open dialog
  */
 export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}) {
     const dialog = commandPalette(page);
     const search = dialog.getByRole('combobox', { name: 'Search commands' });
     await expect(async () => {
-        if (!(await dialog.isVisible())) await page.keyboard.press('ControlOrMeta+k');
+        if (!(await dialog.isVisible())) {
+            await page.evaluate(() => {
+                const active = document.activeElement;
+                if (active instanceof HTMLElement && active !== document.body) active.blur();
+            });
+            await page.keyboard.press('ControlOrMeta+k');
+        }
         await expect(search, 'the command palette did not open').toBeEditable({ timeout: 3_000 });
         await search.fill(query, { timeout: 3_000 });
         await expect(search).toHaveValue(query, { timeout: 2_000 });
