@@ -169,7 +169,9 @@ describe('offline route behavior from reachability', () => {
         const send = screen.getByRole('button', { name: 'Send' });
         expect(send).toBeDisabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
-        expect(screen.getByText(/cached balance remains available/i)).toBeInTheDocument();
+        // The cached balance is read after the address list, so under load the
+        // no-cache wording can still be on screen when the inputs first appear.
+        expect(await screen.findByText(/cached balance remains available/i)).toBeInTheDocument();
         // Offline already explains why sending is blocked, so the fee source
         // notice is not a second message for the same state.
         expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();
