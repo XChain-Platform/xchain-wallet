@@ -529,13 +529,16 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 .or(page.getByText('Manage Token').first()))
                 .toBeVisible({ timeout: 30_000 });
 
+            // Issuer actions stay hidden until the page has confirmed this
+            // address created the token, so the heading alone is too early.
             const mintAction = page.getByRole('button', { name: 'Mint', exact: true })
                 .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            expect(await mintAction.count(),
-                'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
-                + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
-                + 'freezing the metadata should not retire the mint button')
-                .toBeGreaterThan(0);
+            await expect.poll(() => mintAction.count(), {
+                message: 'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
+                    + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
+                    + 'freezing the metadata should not retire the mint button',
+                timeout: 60_000,
+            }).toBeGreaterThan(0);
         });
     });
 
