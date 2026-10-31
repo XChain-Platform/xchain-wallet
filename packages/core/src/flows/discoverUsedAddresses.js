@@ -30,8 +30,8 @@
 // are isolated from the scan.
 //
 // Timeouts: two tiers. `perQueryTimeoutMs` bounds a single explorer
-// call; exceeded → that address counts as "unknown" and CANNOT be used
-// to reset the gap counter (conservative: don't let a flaky response
+// call; exceeded → that address counts as "unknown" and CANNOT reset
+// the gap counter (conservative: don't let a flaky response
 // mask a used address). `chainTimeoutMs` bounds the whole per-chain
 // scan; exceeded → the chain result is `incomplete`.
 //
@@ -45,19 +45,23 @@
 // by default. Opt-in to scanning every supported type via
 // `addressTypes: 'all'`. Users who had BIP49 addresses from an older
 // FreeWallet flow, for example, supply `addressTypes: 'all'` during
-// their first migration scan.
+// their first migration scan. Legacy formats count one gap across all
+// requested encodings because those encodings share the same key index.
 
 import {
     bip39MnemonicToSeed,
     counterwalletMnemonicToSeedBytes,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
-    derive,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
-    isValidCounterwalletMnemonic,
-    zeroDerivedKey,
+    validateCounterwalletMnemonic,
 } from '../crypto/index.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
+import { indexSpaceSharedAcrossTypes } from './_addressIndexSpace.js';
+import {
+    scanChainType,
+    scanSharedChainTypes,
+} from './addressDiscovery/usedAddressScan.js';
 
 export const DEFAULT_GAP_LIMIT = 20;
 export const DEFAULT_PER_QUERY_TIMEOUT_MS = 5000;
@@ -207,8 +211,9 @@ export async function discoverUsedAddresses(opts) {
                 'discoverUsedAddresses: counterwallet-legacy does not support a BIP39 passphrase',
             );
         }
-        if (!isValidCounterwalletMnemonic(normalized)) {
-            throw new InvalidMnemonicError('counterwallet-legacy', ['word not in Counterwallet wordlist']);
+        const validation = validateCounterwalletMnemonic(normalized);
+        if (!validation.ok) {
+            throw new InvalidMnemonicError('counterwallet-legacy', validation.errors);
         }
         seed = counterwalletMnemonicToSeedBytes(normalized);
     } else {
@@ -231,6 +236,16 @@ export async function discoverUsedAddresses(opts) {
                 throw new Error(`discoverUsedAddresses: unknown chain "${chainId}"`);
             }
             const types = resolveAddressTypes(descriptor, addressTypes, format);
+            if (types.length > 1 && indexSpaceSharedAcrossTypes(format)) {
+                const shared = await scanSharedTypesSafely({
+                    chainId, descriptor, addressTypes: types, format, chainRegistry,
+                    sdkRegistry, hdRoot, accountIndex, change, startIndex, gapLimit,
+                    perQueryTimeoutMs, chainTimeoutMs, isUsedProbe, onProgress, signal,
+                });
+                perChain.push(...shared);
+                totalUsedFound += countUsed(shared);
+                continue;
+            }
             for (const addressType of types) {
                 let chainResult;
                 try {
@@ -281,146 +296,28 @@ export async function discoverUsedAddresses(opts) {
     }
 }
 
-/**
- * @returns {Promise<DiscoveredChain>}
- */
-async function scanChainType({
-    chainId,
-    descriptor,
-    addressType,
-    format,
-    chainRegistry,
-    sdkRegistry,
-    hdRoot,
-    accountIndex,
-    change,
-    startIndex,
-    gapLimit,
-    perQueryTimeoutMs,
-    chainTimeoutMs,
-    isUsedProbe,
-    onProgress,
-    signal,
-}) {
-    const sdk = sdkRegistry.get(chainId);
-    safeCallback(onProgress, { phase: 'chain-start', chainId, addressType });
-    throwIfAborted(signal);
-
-    /** @type {DiscoveredAddress[]} */
-    const addresses = [];
-    let highestUsedIndex = -1;
-    let consecutiveUnused = 0;
-    let scannedCount = 0;
-    /** @type {string | null} */
-    let error = null;
-    let incomplete = false;
-    const chainDeadline = Date.now() + chainTimeoutMs;
-
-    for (let index = startIndex; ; index++) {
-        throwIfAborted(signal);
-        if (Date.now() >= chainDeadline) {
-            incomplete = true;
-            error = `chain scan exceeded ${chainTimeoutMs}ms`;
-            break;
-        }
-        const path = chainRegistry.derivationPathFor(
-            chainId,
-            addressType,
-            accountIndex,
-            change,
-            index,
-            { format },
-        );
-        if (!path) {
-            error = `no derivation path for ${chainId}/${addressType}`;
-            incomplete = true;
-            break;
-        }
-        const dk = derive(hdRoot, path);
-        let address;
-        let publicKey;
-        try {
-            publicKey = dk.publicKeyHex;
-            address = sdk.wallet.deriveAddress(publicKey, { type: addressType });
-        } finally {
-            zeroDerivedKey(dk);
-        }
-
-        let used = false;
-        let unknown = false;
-        try {
-            const probeResult = await runWithTimeout(
-                () => isUsedProbe(sdk, address),
-                Math.min(perQueryTimeoutMs, Math.max(1, chainDeadline - Date.now())),
-                signal,
-            );
-            if (typeof probeResult?.used !== 'boolean') {
-                throw new Error('probe returned an invalid result');
-            }
-            used = probeResult.used;
-        } catch (e) {
-            if (signal?.aborted) throw e;
-            unknown = true;
-            // A single probe failure doesn't fail the whole chain:
-            // record the address as `unknown` (doesn't reset gap count
-            // but doesn't advance it either, so gap-limit stop is
-            // conservative). If the failures are persistent the
-            // chainTimeoutMs will still bound the work.
-            if (!error) error = `probe failed for index ${index}: ${e?.message ?? e}`;
-        }
-        scannedCount += 1;
-
-        addresses.push({ index, path, addressType, address, publicKey, used, unknown });
-
-        if (used) {
-            highestUsedIndex = index;
-            consecutiveUnused = 0;
-        } else if (!unknown) {
-            consecutiveUnused += 1;
-        }
-        // `unknown` addresses hold the position without advancing or
-        // resetting; conservative.
-
-        safeCallback(onProgress, {
-            phase: 'scan-progress',
-            chainId,
-            addressType,
-            index,
-            data: { used, unknown, consecutiveUnused },
-        });
-        throwIfAborted(signal);
-
-        if (consecutiveUnused >= gapLimit) break;
-        if (index === MAX_DERIVATION_INDEX) {
-            incomplete = true;
-            error = `derivation index limit ${MAX_DERIVATION_INDEX} reached before the gap limit`;
-            break;
-        }
-    }
-
-    if (incomplete) {
-        safeCallback(onProgress, { phase: 'chain-failed', chainId, addressType, error });
-    } else {
-        safeCallback(onProgress, {
-            phase: 'chain-complete',
-            chainId,
-            addressType,
-            data: { highestUsedIndex, scannedCount },
+async function scanSharedTypesSafely(opts) {
+    try {
+        return await scanSharedChainTypes(opts);
+    } catch (error) {
+        if (opts.signal?.aborted) throw error;
+        const message = error?.message ? String(error.message) : String(error);
+        return opts.addressTypes.map((addressType) => {
+            safeCallback(opts.onProgress, {
+                phase: 'chain-failed', chainId: opts.chainId, addressType, error: message,
+            });
+            return {
+                chainId: opts.chainId, addressType, addresses: [], highestUsedIndex: -1,
+                scannedCount: 0, incomplete: true, error: message,
+            };
         });
     }
+}
 
-    return {
-        chainId,
-        addressType,
-        addresses,
-        highestUsedIndex,
-        scannedCount,
-        incomplete,
-        // Preserve a non-fatal error even when the scan completed: a
-        // caller that sees `error != null && incomplete === false` knows
-        // individual probes hiccuped but the gap-limit was still reached.
-        error,
-    };
+function countUsed(results) {
+    return results.reduce((total, result) => (
+        total + result.addresses.filter((address) => address.used).length
+    ), 0);
 }
 
 function resolveAddressTypes(descriptor, addressTypes, format) {
@@ -451,31 +348,6 @@ function safeCallback(fn, event) {
     try { fn(event); } catch { /* caller bugs do not derail the scan */ }
 }
 
-function runWithTimeout(fn, timeoutMs, signal) {
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (callback, value) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            signal?.removeEventListener('abort', onAbort);
-            callback(value);
-        };
-        const onAbort = () => finish(reject, abortError(signal));
-        const timer = setTimeout(() => {
-            finish(reject, new Error(`probe timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-        if (signal?.aborted) {
-            onAbort();
-            return;
-        }
-        signal?.addEventListener('abort', onAbort, { once: true });
-        Promise.resolve()
-            .then(fn)
-            .then((value) => finish(resolve, value))
-            .catch((error) => finish(reject, error));
-    });
-}
 
 function throwIfAborted(signal) {
     if (signal?.aborted) throw abortError(signal);

@@ -348,4 +348,16 @@ describe('dispenserAddress index space by wallet format', () => {
         );
         expect(rec.derivationPath.endsWith('/0')).toBe(true);
     });
+
+    it('rejects before deriving when the wallet lookup fails', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [LEGACY_RECEIVE] });
+        vault.wallets = { get: async () => { throw new Error('read failed'); } };
+        const signer = makeSigner();
+
+        await expect(dispenserAddress(
+            base(vault, signer, { addressType: 'p2wpkh' }),
+        )).rejects.toThrow('read failed');
+        expect(signer.calls).toHaveLength(0);
+        expect(await vault.addresses.list()).toHaveLength(1);
+    });
 });

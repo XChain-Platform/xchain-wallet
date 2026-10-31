@@ -20,7 +20,8 @@
 // Derivation goes through the wallet's own unlocked signer, so the paths are
 // exactly the ones the wallet derives for receive and change addresses (BIP39
 // purpose paths, or m/0'/C/I for a FreeWallet wallet). Nothing is derived
-// anywhere else.
+// anywhere else. FreeWallet encodings share one gap counter because they also
+// share one key index space.
 //
 // Usage is read through the explorer's batch route: one request answers 20
 // addresses with their token ledger and their native-coin figures. An explorer
@@ -32,7 +33,6 @@
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import {
-    BALANCES_BATCH_MAX_ADDRESSES,
     BATCH_FEATURE_BALANCES,
     isBatchShape,
     isBatchUnsupported,
@@ -40,6 +40,11 @@ import {
     rememberBatchUnsupported,
 } from './balances.js';
 import { branchOf } from './changeAddress.js';
+import { indexSpaceSharedAcrossTypes } from './_addressIndexSpace.js';
+import {
+    scanBranch,
+    scanSharedBranch,
+} from './addressDiscovery/walletBranchScan.js';
 
 /** BIP44 standard gap limit: this many unused addresses in a row end a branch. */
 export const DISCOVERY_GAP_LIMIT = 20;
@@ -233,7 +238,9 @@ export async function discoverWalletAddresses({
 
     const plan = await discoveryPlan({ vault, walletId, chainRegistry, activeNetwork });
     if (!plan) return { found: 0, chains: [] };
-    const { scopes, knownAddresses, changeCounts, accountById } = plan;
+    const {
+        scopes, knownAddresses, changeCounts, accountById, heldIndices, sharedIndexSpace,
+    } = plan;
 
     /** @type {DiscoveryChainResult[]} */
     const chains = [];
@@ -248,13 +255,26 @@ export async function discoverWalletAddresses({
         try {
             for (const [accountId, types] of byAccount) {
                 const account = accountById.get(accountId);
-                for (const addressType of types) {
+                const typeGroups = sharedIndexSpace && types.size > 1
+                    ? [[...types]]
+                    : [...types].map((addressType) => [addressType]);
+                for (const addressTypes of typeGroups) {
                     for (const branch of [RECEIVE_BRANCH, CHANGE_BRANCH]) {
-                        const records = await scanBranch({
-                            chainId, account, addressType, branch, signer, sdk,
-                            gapLimit, readTimeoutMs, knownAddresses, signal,
-                        });
+                        const common = {
+                            chainId, account, branch, signer, sdk, gapLimit, readTimeoutMs,
+                            knownAddresses, signal, readUsage: readAddressUsage,
+                        };
+                        const records = addressTypes.length > 1
+                            ? await scanSharedBranch({
+                                ...common,
+                                addressTypes,
+                                heldIndices: heldIndices.get(
+                                    `${chainId}|${account.id}|${branch}`,
+                                ) ?? new Set(),
+                            })
+                            : await scanBranch({ ...common, addressType: addressTypes[0] });
                         for (const derived of records) {
+                            const addressType = derived.addressType ?? addressTypes[0];
                             const countKey = `${chainId}|${account.id}`;
                             let label;
                             if (branch === CHANGE_BRANCH) {
@@ -311,6 +331,7 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
     const scopes = new Map();
     const knownAddresses = new Set();
     const changeCounts = new Map();
+    const heldIndices = new Map();
     for (const a of await vault.addresses.list()) {
         const account = a.accountId ? accountById.get(a.accountId) : null;
         if (!account || !HD_SOURCES.has(a.source)) continue;
@@ -321,6 +342,11 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
         if (activeNetwork && descriptor.networkKind !== activeNetwork) continue;
         knownAddresses.add(`${chainId}|${a.address}`);
         const parsed = branchOf(a.derivationPath);
+        if (parsed) {
+            const heldKey = `${chainId}|${account.id}|${parsed.branch}`;
+            if (!heldIndices.has(heldKey)) heldIndices.set(heldKey, new Set());
+            heldIndices.get(heldKey).add(parsed.index);
+        }
         if (parsed?.branch === String(CHANGE_BRANCH)) {
             const key = `${chainId}|${account.id}`;
             changeCounts.set(key, (changeCounts.get(key) ?? 0) + 1);
@@ -331,7 +357,14 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
         if (!byAccount.has(account.id)) byAccount.set(account.id, new Set());
         byAccount.get(account.id).add(a.addressType);
     }
-    return { scopes, knownAddresses, changeCounts, accountById };
+    return {
+        scopes,
+        knownAddresses,
+        changeCounts,
+        accountById,
+        heldIndices,
+        sharedIndexSpace: indexSpaceSharedAcrossTypes(wallet.format),
+    };
 }
 
 /**
@@ -345,60 +378,6 @@ export async function discoveryChainIds(opts) {
     return plan ? [...plan.scopes.keys()] : [];
 }
 
-// Walk one branch in windows of 20 until `gapLimit` addresses in a row are
-// neither used on chain nor already held. Returns the used addresses the
-// wallet does not hold yet, in index order.
-async function scanBranch({
-    chainId, account, addressType, branch, signer, sdk, gapLimit, readTimeoutMs, knownAddresses, signal,
-}) {
-    const fresh = [];
-    let unusedRun = 0;
-    for (let start = 0; unusedRun < gapLimit; start += BALANCES_BATCH_MAX_ADDRESSES) {
-        throwIfAborted(signal);
-        const derived = await signer.getAddresses({
-            chainId,
-            accountIndex: account.index,
-            change: branch,
-            startIndex: start,
-            count: BALANCES_BATCH_MAX_ADDRESSES,
-            addressType,
-        });
-        if (!Array.isArray(derived) || derived.length !== BALANCES_BATCH_MAX_ADDRESSES) {
-            throw new Error('The signer did not derive the requested addresses.');
-        }
-        for (const d of derived) {
-            // A signer that answered on another branch would write a receive
-            // address as change or the reverse.
-            const parsed = branchOf(d?.path);
-            if (!d?.address || !d?.publicKey || !parsed || parsed.branch !== String(branch)) {
-                throw new Error('The signer derived an address outside the requested branch.');
-            }
-        }
-        const used = await withTimeout(
-            readAddressUsage(sdk, derived.map((d) => d.address)),
-            readTimeoutMs,
-        );
-        throwIfAborted(signal);
-        for (let i = 0; i < derived.length && unusedRun < gapLimit; i++) {
-            const held = knownAddresses.has(`${chainId}|${derived[i].address}`);
-            if (used[i] || held) {
-                unusedRun = 0;
-                if (used[i] && !held) fresh.push(derived[i]);
-            } else {
-                unusedRun += 1;
-            }
-        }
-    }
-    return fresh;
-}
-
-function withTimeout(promise, ms) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`The explorer did not answer within ${Math.round(ms / 1000)} seconds.`)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
 
 function safeCallback(fn, event) {
     if (typeof fn !== 'function') return;

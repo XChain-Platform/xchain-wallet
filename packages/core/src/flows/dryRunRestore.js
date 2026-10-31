@@ -31,9 +31,10 @@ import {
     derive,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
-    isValidCounterwalletMnemonic,
+    validateCounterwalletMnemonic,
     zeroDerivedKey,
 } from '../crypto/index.js';
+import { isUnknownAddressTypeError } from './sdkAddressTypes.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
 export const DEFAULT_DRY_RUN_GAP = 10;
@@ -60,7 +61,7 @@ export const DEFAULT_DRY_RUN_GAP = 10;
 
 /**
  * @typedef {Object} DryRunRestoreResult
- * @property {boolean} overallMatch               true iff every comparison with an existing record matched
+ * @property {boolean} overallMatch               true iff at least one comparison matched and none diverged
  * @property {DryRunChainMatch[]} perChain
  */
 
@@ -78,6 +79,52 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {number} [accountIndex]              default 0
  * @property {0 | 1} [change]                     default 0; BIP44 branch (0 external, 1 internal change) (§16)
  */
+
+function deriveStoredType(entry, record, sdk) {
+    if (record.addressType === entry.addressType) return entry.address;
+    try {
+        return sdk.wallet.deriveAddress(entry.publicKey, { type: record.addressType });
+    } catch (err) {
+        if (isUnknownAddressTypeError(err)) return null;
+        throw err;
+    }
+}
+
+function compareDerivedAddresses(derived, walletAddresses, descriptor, sdk) {
+    const comparisons = [];
+    let matchedCount = 0;
+    let divergentCount = 0;
+    let missingCount = 0;
+    for (const entry of derived) {
+        const existing = walletAddresses.filter(
+            (address) =>
+                address.derivationPath === entry.path &&
+                address.chain === descriptor.coin &&
+                address.network === descriptor.networkKind,
+        );
+        const checked = existing.flatMap((record) => {
+            const address = deriveStoredType(entry, record, sdk);
+            return address === null ? [] : [{ record, derived: address }];
+        });
+        const mismatch = checked.find(({ record, derived: address }) => record.address !== address);
+        const reported = mismatch ?? checked.find(({ record }) => (
+            record.addressType === entry.addressType
+        )) ?? checked[0];
+        const expected = reported?.record.address ?? null;
+        const derivedAddress = reported?.derived ?? entry.address;
+        const match = checked.length > 0 && !mismatch;
+        if (checked.length === 0) missingCount += 1;
+        else if (match) matchedCount += 1;
+        else divergentCount += 1;
+        comparisons.push({
+            index: entry.index,
+            expected,
+            derived: derivedAddress,
+            match,
+        });
+    }
+    return { derived, comparisons, matchedCount, divergentCount, missingCount };
+}
 
 /**
  * @param {DryRunRestoreOpts} opts
@@ -122,8 +169,9 @@ export async function dryRunRestore({
         }
         seed = await bip39MnemonicToSeed(normalized, bip39Passphrase);
     } else if (format === 'counterwallet-legacy') {
-        if (!isValidCounterwalletMnemonic(normalized)) {
-            throw new InvalidMnemonicError('counterwallet-legacy', ['word not in Counterwallet wordlist']);
+        const validation = validateCounterwalletMnemonic(normalized);
+        if (!validation.ok) {
+            throw new InvalidMnemonicError('counterwallet-legacy', validation.errors);
         }
         seed = counterwalletMnemonicToSeedBytes(normalized);
     } else {
@@ -135,7 +183,11 @@ export async function dryRunRestore({
         // keys are zeroed inside the per-path loop.
         const hdRoot = hdKeyFromSeed(seed);
 
-        const allAddresses = await vault.addresses.list();
+        const accounts = await vault.accounts.findBy('walletId', walletId);
+        const accountIds = new Set(accounts.map((account) => account.id));
+        const walletAddresses = (await vault.addresses.list()).filter(
+            (address) => accountIds.has(address.accountId),
+        );
         const chainIds = activeChainIds ?? chainRegistry.supportedChains().map((d) => d.id);
 
         /** @type {DryRunChainMatch[]} */
@@ -177,30 +229,7 @@ export async function dryRunRestore({
                 }
             }
 
-            const comparisons = [];
-            let matchedCount = 0;
-            let divergentCount = 0;
-            let missingCount = 0;
-            for (const entry of derived) {
-                const existing = allAddresses.find(
-                    (a) =>
-                        a.derivationPath === entry.path &&
-                        a.chain === descriptor.coin &&
-                        a.network === descriptor.networkKind,
-                );
-                const expected = existing ? existing.address : null;
-                const match = expected !== null && expected === entry.address;
-                if (!existing) missingCount += 1;
-                else if (match) matchedCount += 1;
-                else divergentCount += 1;
-                comparisons.push({
-                    index: entry.index,
-                    expected,
-                    derived: entry.address,
-                    match,
-                });
-            }
-            return { derived, comparisons, matchedCount, divergentCount, missingCount };
+            return compareDerivedAddresses(derived, walletAddresses, descriptor, sdk);
         };
 
         for (const chainId of chainIds) {
@@ -230,13 +259,10 @@ export async function dryRunRestore({
             perChain.push(chainMatch);
         }
 
-        // If the wallet has addresses but NONE matched, the seed does
-        // not correspond to this wallet, so flip overallMatch to false.
-        const anyWalletAddressExists = allAddresses.some(
-            (a) => a.derivationPath !== null,
-        );
+        // A backup check must never pass without evidence from at least
+        // one persisted address belonging to the selected wallet.
         const anyMatch = perChain.some((c) => c.matchedCount > 0);
-        if (anyWalletAddressExists && !anyMatch) overallMatch = false;
+        if (!anyMatch) overallMatch = false;
 
         return { overallMatch, perChain };
     } finally {

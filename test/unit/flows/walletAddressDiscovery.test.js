@@ -13,7 +13,9 @@ import { createRequire } from 'node:module';
 import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
+import { COUNTERWALLET_WORDLIST } from '../../../packages/core/src/crypto/counterwallet-wordlist.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { createAddress } from '../../../packages/core/src/schemas/address.js';
 import { adaptXChainSDK } from '../../../packages/core/src/sdk/defaultFactory.js';
 import { SDKRegistry } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
@@ -67,14 +69,18 @@ function fakeExplorer(reply) {
     return { sdk, requests, sdkRegistry: { get: () => sdk } };
 }
 
-async function restoredWallet() {
+async function restoredWallet({
+    mnemonic = generateBip39Mnemonic(128),
+    format,
+} = {}) {
     const chainRegistry = defaultRegistry();
     const sdkRegistry = new SDKRegistry({ chainRegistry, sdkFactory: adaptXChainSDK(XChainSDK), rateLimiter: null });
     const vault = new Vault({ backend: new InMemoryBackend(), masterKey: randomBytes(32), autoSave: false });
     await vault.open();
     const r = await importMnemonic({
         password: PASSWORD,
-        mnemonic: generateBip39Mnemonic(128),
+        mnemonic,
+        format,
         vault,
         chainRegistry,
         sdkRegistry,
@@ -84,6 +90,26 @@ async function restoredWallet() {
     const signer = await unlockWallet({ vault, walletId: r.wallet.id, password: PASSWORD, chainRegistry, sdkRegistry });
     const [first] = await vault.addresses.list();
     return { chainRegistry, vault, walletId: r.wallet.id, signer, addressType: first.addressType };
+}
+
+async function restoredLegacyWallet() {
+    const mnemonic = COUNTERWALLET_WORDLIST.slice(0, 12).join(' ');
+    const wallet = await restoredWallet({ mnemonic, format: 'counterwallet-legacy' });
+    const [first] = await wallet.vault.addresses.list();
+    const segwit = await deriveAt(wallet.signer, 'p2wpkh', 0, 1);
+    await wallet.vault.addresses.put(createAddress({
+        accountId: first.accountId,
+        chain: first.chain,
+        network: first.network,
+        source: 'hd',
+        addressType: 'p2wpkh',
+        derivationPath: segwit.path,
+        address: segwit.address,
+        publicKey: segwit.publicKey,
+        label: 'BTC Address #2',
+        signerId: wallet.signer.id,
+    }));
+    return wallet;
 }
 
 async function deriveAt(signer, addressType, change, index) {
@@ -139,6 +165,32 @@ describe('discoverWalletAddresses', () => {
         const stored = (await w.vault.addresses.list()).map((a) => a.address);
         expect(stored).toContain(receive7.address);
         expect(stored).not.toContain(beyondGap.address);
+    });
+
+    it('counts the legacy discovery gap across every held address type', async () => {
+        const w = await restoredLegacyWallet();
+        const funded = new Set();
+        for (let index = 1; index <= 22; index++) {
+            funded.add((await deriveAt(w.signer, 'p2pkh', 0, index)).address);
+        }
+        const segwit23 = await deriveAt(w.signer, 'p2wpkh', 0, 23);
+        funded.add(segwit23.address);
+        const explorer = fakeExplorer((address) => (
+            funded.has(address) ? usedBody(address) : unusedBody(address)
+        ));
+
+        const result = await discoverWalletAddresses({
+            vault: w.vault, walletId: w.walletId, signer: w.signer,
+            chainRegistry: w.chainRegistry, sdkRegistry: explorer.sdkRegistry,
+        });
+
+        expect(result.chains[0]).toMatchObject({ status: 'complete' });
+        const stored = await w.vault.addresses.list();
+        expect(stored).toContainEqual(expect.objectContaining({
+            address: segwit23.address,
+            addressType: 'p2wpkh',
+            derivationPath: segwit23.path,
+        }));
     });
 
     it('stops the chain with a failure on a reply it does not recognise, never reading it as unused', async () => {
