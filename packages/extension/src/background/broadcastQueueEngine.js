@@ -120,7 +120,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 continue;
             }
             const held = new Set(live.map((e) => e.id));
-            const byPendingTx = new Map(live.filter((e) => e.pendingTxId).map((e) => [e.pendingTxId, e]));
+            const byPendingTx = new Map();
+            for (const entry of live) {
+                for (const pendingTxId of pendingTxIdsOf(entry)) byPendingTx.set(pendingTxId, entry);
+            }
             const missing = [];
             for (const e of restorable) {
                 if (held.has(e.id)) continue;

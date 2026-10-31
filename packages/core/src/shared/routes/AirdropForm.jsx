@@ -81,6 +81,8 @@ import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 const OWNED_LIST_REVALIDATE_MS = 16_000;
+const UNION_LIST_UNSUPPORTED = 'This list combines other lists, so this wallet cannot count its recipients. '
+    + 'Pick a plain address or token list.';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -215,7 +217,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // "address list" (deterministic count) vs "token list" (holder-
     // snapshot preview) branch in the review-airdrop stage.
     const [existingListDetail, setExistingListDetail] = useState(
-        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null, items: string[], name: string | null, error: string | null } | null} */
+        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null,
+         * items: string[], name: string | null, error: string | null,
+         * unsupported?: boolean } | null} */
         (null),
     );
     // Best-effort holder-count preview for whichever tick set is in play
@@ -454,10 +458,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
+                const name = typeof row?.name === 'string' && row.name.length > 0 ? row.name : null;
+                if (Number(row?.type) === 3) {
+                    setExistingListDetail({
+                        loading: false, kind: null, items: [], name,
+                        error: UNION_LIST_UNSUPPORTED, unsupported: true,
+                    });
+                    return;
+                }
                 const kind = String(row?.type) === '1' ? 'tick' : 'address';
                 // The airdrop pays the list's newest valid edit, not its created members
                 const items = currentListItems(row) || [];
-                const name = typeof row?.name === 'string' && row.name.length > 0 ? row.name : null;
                 setExistingListDetail({ loading: false, kind, items, name, error: null });
             })
             .catch((err) => {
@@ -1015,6 +1026,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setFormError('The selected list has an invalid action index. Choose the list again.');
                 return;
             }
+            if (!existingListDetail || existingListDetail.loading) {
+                setFormError('Still loading the selected list. Try again in a moment.');
+                return;
+            }
+            if (existingListDetail.unsupported) {
+                setFormError(existingListDetail.error);
+                return;
+            }
             setFormError(null);
             setStage('review-airdrop');
             return;
@@ -1331,6 +1350,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     async function handleSignAirdrop(event) {
         event.preventDefault();
+        if (sourceMode === 'existing' && existingListDetail?.unsupported) {
+            setSubmitError(existingListDetail.error);
+            return;
+        }
         if (singleEncode) { openAirdropConfirm(); return; }
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
@@ -1685,6 +1708,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             loading={submitting || actionConfirm.composing}
                             disabled={
                                 !listActionIndex
+                                || (sourceMode === 'existing' && existingListDetail?.unsupported)
                                 || (singleEncode
                                     ? actionConfirm.composing
                                     : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
@@ -2233,7 +2257,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {listActionIndex ? 'Change list' : 'Choose list'}
                         </Button>
                     </div>
-                    {existingListDetail?.error ? (
+                    {existingListDetail?.unsupported ? (
+                        <p className={styles.hint}>{existingListDetail.error}</p>
+                    ) : existingListDetail?.error ? (
                         <p className={styles.hint}>Couldn't load this list: {existingListDetail.error}</p>
                     ) : existingListDetail?.kind === 'tick' ? (
                         <p className={styles.hint}>
@@ -2427,6 +2453,8 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {rows.map((row) => {
                 const isTick = String(row.type) === '1';
+                const isUnion = String(row.type) === '3';
+                const typeLabel = isTick ? 'Token' : isUnion ? 'Union' : 'Address';
                 const statusWhy = row.status ? listStatusText(row.status) : 'status unknown';
                 return (
                     <li
@@ -2439,7 +2467,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                             style={{ width: '100%', textAlign: 'left' }}
                             onClick={() => onSelect(row)}
                         >
-                            {isTick ? 'Token' : 'Address'} list #{row.action_index ?? '?'}
+                            {typeLabel} list #{row.action_index ?? '?'}
                             {statusWhy ? ` (${statusWhy})` : ''}
                         </Button>
                     </li>

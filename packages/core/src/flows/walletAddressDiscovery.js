@@ -317,14 +317,11 @@ export async function discoverWalletAddresses({
     return { found, chains };
 }
 
-/**
- * The chains, accounts and address types a scan of this wallet reads, or null
- * for a wallet that is never scanned. A demo wallet's addresses never go to an
- * explorer, and an imported-key wallet has no branches to walk.
- */
+// Build the scan scopes, or return null for wallets that must not be scanned.
 async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) {
     const wallet = await vault.wallets.get(walletId);
     if (!wallet || wallet.origin === 'demo' || wallet.format === 'wif-only') return null;
+    const sharedIndexSpace = indexSpaceSharedAcrossTypes(wallet.format);
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountById = new Map(accounts.map((a) => [a.id, a]));
     // Every chain, account and address type the wallet already derives on.
@@ -355,7 +352,9 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
         if (!scopes.has(chainId)) scopes.set(chainId, new Map());
         const byAccount = scopes.get(chainId);
         if (!byAccount.has(account.id)) byAccount.set(account.id, new Set());
-        byAccount.get(account.id).add(a.addressType);
+        const types = byAccount.get(account.id);
+        if (sharedIndexSpace) descriptor.addressTypes.forEach((type) => types.add(type));
+        else types.add(a.addressType);
     }
     return {
         scopes,
@@ -363,7 +362,7 @@ async function discoveryPlan({ vault, walletId, chainRegistry, activeNetwork }) 
         changeCounts,
         accountById,
         heldIndices,
-        sharedIndexSpace: indexSpaceSharedAcrossTypes(wallet.format),
+        sharedIndexSpace,
     };
 }
 
@@ -377,7 +376,6 @@ export async function discoveryChainIds(opts) {
     const plan = await discoveryPlan(opts);
     return plan ? [...plan.scopes.keys()] : [];
 }
-
 
 function safeCallback(fn, event) {
     if (typeof fn !== 'function') return;

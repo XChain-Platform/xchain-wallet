@@ -20,6 +20,7 @@ const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const TOKEN = 'DROP';
 const LIST_INDEX = '2700';
+const UNION_COPY = 'This list combines other lists, so this wallet cannot count its recipients.';
 const ADDRESS = {
     id: 'addr-btc',
     address: SOURCE,
@@ -91,8 +92,9 @@ async function chooseExistingList(row) {
         target: { value: 'existing' },
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+    const typeLabel = row.type === '1' ? 'Token' : row.type === '3' ? 'Union' : 'Address';
     fireEvent.click(await screen.findByRole('button', {
-        name: new RegExp(`${row.type === '1' ? 'Token' : 'Address'} list #${row.action_index}`),
+        name: new RegExp(`${typeLabel} list #${row.action_index}`),
     }));
 }
 
@@ -113,6 +115,20 @@ describe('AirdropForm existing-list name', () => {
         await chooseExistingList(listRow({ type: '1', name: 'Token holders' }));
 
         expect(await screen.findByText('Token holders (List #2700) (token list)')).toBeTruthy();
+    });
+
+    it('labels a union and refuses to review an uncountable recipient set', async () => {
+        await chooseExistingList(listRow({ type: '3', name: 'Combined recipients' }));
+
+        expect(await screen.findByText(new RegExp(UNION_COPY))).toBeTruthy();
+        expect(screen.queryByText(/0 addresses on this list/)).toBeNull();
+        expect(screen.queryByText(/address list/)).toBeNull();
+
+        fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent(UNION_COPY);
+        expect(screen.getByRole('form', { name: 'Token airdrop' })).toBeTruthy();
     });
 
     it.each([

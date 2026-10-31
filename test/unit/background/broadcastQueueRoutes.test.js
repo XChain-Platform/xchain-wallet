@@ -521,6 +521,24 @@ describe('the host queue settles the PendingTx half it was handed', () => {
         expect(await h.vault.pendingTxs.get('p2')).toMatchObject({ status: 'queued' });
     });
 
+    it('discard retires every PendingTx represented by a deduplicated row', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(),
+            ...ownedWalletTables(),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        await h.vault.pendingTxs.put(queuedRecord('p2'));
+        await h.list();
+
+        const res = await h.call('broadcast.queue.discard', { walletId: W, id: 'A' });
+
+        expect(res.result).toEqual({ discarded: true });
+        expect(await h.vault.pendingTxs.get('p1')).toBeNull();
+        expect(await h.vault.pendingTxs.get('p2')).toBeNull();
+        expect(await h.list()).toEqual([]);
+    });
+
     it('a record that already left queued is not rewritten', async () => {
         const h = makeHost({
             entries: [entry('A', { pendingTxId: 'p1' })],

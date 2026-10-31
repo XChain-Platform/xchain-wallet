@@ -33,6 +33,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EXAMPLE_CONNECT_OPTS } from '../../../packages/test-dapp/src/example.ts';
+import { readFileSync } from 'node:fs';
 
 const { sendToken } = vi.hoisted(() => ({ sendToken: vi.fn() }));
 
@@ -49,6 +50,11 @@ const ORIGIN = 'https://dapp.example';
 const CHAIN = 'bitcoin-regtest';
 const FROM = 'bcrt1qfromaddress';
 const TO = 'bcrt1qtoaddress';
+const SPEC_SOURCE = readFileSync('packages/bridge-spec/src/index.ts', 'utf8');
+
+function interfaceBody(name) {
+    return SPEC_SOURCE.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
+}
 
 const DESCRIPTORS = {
     [CHAIN]: { id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' },
@@ -208,6 +214,12 @@ describe('Connect never persists a wildcard account grant', () => {
 });
 
 describe('Connect reads the option names ConnectOpts publishes', () => {
+    it('types connect chain lists as full chain ids', () => {
+        expect(interfaceBody('ConnectOpts')).toMatch(/requestedChains\?: ChainId\[\]/);
+        expect(interfaceBody('SitePermissions')).toMatch(/chains: ChainId\[\]/);
+        expect(interfaceBody('ConnectSuccess')).toMatch(/chains: ChainId\[\]/);
+    });
+
     it('forwards requestedChains to the approval screen for preselection', async () => {
         const approvals = recordingApprovals();
         const host = buildHost(makeVault(), approvals);

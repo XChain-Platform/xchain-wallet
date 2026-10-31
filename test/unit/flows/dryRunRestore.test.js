@@ -39,12 +39,13 @@ function pathFor(index) {
 
 function createHarness(addresses = [], accounts = [
     { id: 'acct-1', walletId: 'wallet-1', index: 0 },
-]) {
+], walletFormat = 'bip39') {
     const vault = {
         accounts: {
             findBy: vi.fn(async (field, value) => accounts.filter((a) => a[field] === value)),
         },
         addresses: { list: vi.fn().mockResolvedValue(addresses) },
+        wallets: { get: vi.fn().mockResolvedValue({ id: 'wallet-1', format: walletFormat }) },
     };
     const descriptor = { id: 'bitcoin', coin: 'BTC', networkKind: 'mainnet', defaultAddressType: 'p2wpkh' };
     const chainRegistry = {
@@ -84,6 +85,28 @@ it('rejects an invalid BIP39 mnemonic with InvalidMnemonicError', async () => {
 
     await expect(restore(createHarness())).rejects.toBeInstanceOf(InvalidMnemonicError);
     expect(cryptoMocks.bip39MnemonicToSeed).not.toHaveBeenCalled();
+});
+
+it('defaults to the stored legacy format when the caller omits format', async () => {
+    cryptoMocks.counterwalletMnemonicToSeedBytes.mockReturnValue(new Uint8Array([4, 5, 6]));
+    const harness = createHarness([], undefined, 'counterwallet-legacy');
+
+    const result = await restore(harness, { gapLimit: 1 });
+
+    expect(result.perChain[0].addressType).toBe('p2pkh');
+    expect(cryptoMocks.counterwalletMnemonicToSeedBytes).toHaveBeenCalledWith(MNEMONIC);
+    expect(harness.chainRegistry.derivationPathFor.mock.calls[0][5])
+        .toEqual({ format: 'counterwallet-legacy' });
+    expect(cryptoMocks.bip39MnemonicToSeed).not.toHaveBeenCalled();
+});
+
+it('rejects a caller format that disagrees with the stored wallet format', async () => {
+    const harness = createHarness([], undefined, 'counterwallet-legacy');
+
+    await expect(restore(harness, { format: 'bip39' }))
+        .rejects.toThrow('requested format does not match the wallet format');
+    expect(cryptoMocks.bip39MnemonicToSeed).not.toHaveBeenCalled();
+    expect(cryptoMocks.counterwalletMnemonicToSeedBytes).not.toHaveBeenCalled();
 });
 
 it('derives exactly the default count and reports stored-address comparisons', async () => {
@@ -211,7 +234,7 @@ it('verifies each legacy record in its own address type', async () => {
             chain: 'BTC', network: 'mainnet', derivationPath: legacyPath(1),
         },
     ];
-    const harness = createHarness(addresses);
+    const harness = createHarness(addresses, undefined, 'counterwallet-legacy');
     harness.chainRegistry.derivationPathFor.mockImplementation(
         (_chainId, _type, _account, _change, index) => legacyPath(index),
     );
@@ -235,7 +258,7 @@ it('still reports divergence for the same legacy address type', async () => {
         accountId: 'acct-1', address: 'wrong-legacy-address', addressType: 'p2pkh',
         chain: 'BTC', network: 'mainnet', derivationPath: legacyPath,
     }];
-    const harness = createHarness(addresses);
+    const harness = createHarness(addresses, undefined, 'counterwallet-legacy');
     harness.chainRegistry.derivationPathFor.mockReturnValue(legacyPath);
 
     const result = await restore(harness, { format: 'counterwallet-legacy', gapLimit: 1 });
@@ -258,7 +281,7 @@ it('returns evidence instead of deriving a retired stored address type', async (
             chain: 'BTC', network: 'mainnet', derivationPath: legacyPath(1),
         },
     ];
-    const harness = createHarness(addresses);
+    const harness = createHarness(addresses, undefined, 'counterwallet-legacy');
     harness.chainRegistry.derivationPathFor.mockImplementation(
         (_chainId, _type, _account, _change, index) => legacyPath(index),
     );
@@ -293,7 +316,7 @@ it('accepts a legacy backup whose stored records are all nondefault types', asyn
         network: 'mainnet',
         derivationPath: legacyPath(index),
     }));
-    const harness = createHarness(addresses);
+    const harness = createHarness(addresses, undefined, 'counterwallet-legacy');
     harness.chainRegistry.derivationPathFor.mockImplementation(
         (_chainId, _type, _account, _change, index) => legacyPath(index),
     );
@@ -310,7 +333,8 @@ it.each([
 ])('passes through the Counterwallet %s validation reason', async (_label, errors) => {
     cryptoMocks.validateCounterwalletMnemonic.mockReturnValue({ ok: false, errors });
 
-    const error = await restore(createHarness(), { format: 'counterwallet-legacy' }).catch((e) => e);
+    const harness = createHarness([], undefined, 'counterwallet-legacy');
+    const error = await restore(harness, { format: 'counterwallet-legacy' }).catch((e) => e);
 
     expect(error).toBeInstanceOf(InvalidMnemonicError);
     expect(error).toMatchObject({ format: 'counterwallet-legacy', errors });

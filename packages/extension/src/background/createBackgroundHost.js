@@ -3338,7 +3338,8 @@ export function createBackgroundHost(deps) {
                 ...(Array.isArray(req.ownAddresses) && { ownAddresses: req.ownAddresses }),
             },
         );
-        return decoder.withListRemovalDescriptions(described, parsed);
+        const withListDescriptions = decoder.withListRemovalDescriptions(described, parsed);
+        return decoder.withContractCallDescriptions(withListDescriptions, parsed);
     });
 
     // Confirm-session persistence.

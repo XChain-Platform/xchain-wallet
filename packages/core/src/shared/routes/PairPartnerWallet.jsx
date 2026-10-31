@@ -31,6 +31,11 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import {
+    importPhraseFormat,
+    importPhraseFormatArg,
+    importPhraseRefusal,
+} from '../utils/importPhraseCheck.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -261,6 +266,11 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
             return;
         }
+        const acceptedFormat = importPhraseFormat(trimmed, false);
+        if (!acceptedFormat) {
+            setError(importPhraseRefusal(trimmed, false));
+            return;
+        }
         if (password.length < MIN_PASSWORD_LENGTH) {
             setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
             return;
@@ -280,7 +290,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         setError(null);
         setBusy(true);
         try {
-            const r = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName });
+            const formatArg = importPhraseFormatArg(acceptedFormat, false);
+            const r = await messaging.importMnemonic({
+                password, mnemonic: trimmed, name: walletName, ...formatArg,
+            });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
                 throw new Error('The wallet imported but the shell returned no wallet id, so pairing cannot continue.');

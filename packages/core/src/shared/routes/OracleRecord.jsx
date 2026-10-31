@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 function extractRows(resp) {
@@ -83,7 +84,9 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
         }
         messaging.betOracle({ chainId, address })
             .then((resp) => { if (!cancelled) setRecord(unwrap(resp) || {}); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load the oracle record.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Failed to load the oracle record.'));
+            });
         return () => { cancelled = true; };
     }, [chainId, address, messaging]);
 

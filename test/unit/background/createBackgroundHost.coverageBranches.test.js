@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
+import { decoder } from '@xchain-wallet/core';
 import {
     changeWalletPassword,
+    createBackgroundHost,
     PasswordChangeConflictError,
     PasswordChangeUnavailableError,
 } from '../../../packages/extension/src/background/createBackgroundHost.js';
@@ -95,5 +97,42 @@ describe('background host password change edge branches', () => {
             .rejects.toBeInstanceOf(PasswordChangeConflictError);
         expect([...oldKey]).toEqual([0, 0]);
         expect([...newKey]).toEqual([0, 0]);
+    });
+});
+
+describe('action.describe contract call details', () => {
+    it('matches the in-wallet post-processing for ambiguous and hidden arguments', async () => {
+        const hidden = `x${String.fromCharCode(0x200B)}y`;
+        const request = {
+            chainId: 'bitcoin-regtest',
+            action: 'EXECUTE',
+            params: { PARAMS: ['a, b', hidden] },
+        };
+        const parsed = { action: request.action, version: undefined, params: request.params };
+        const describe = (action) => ({
+            summary: 'Call flags() on contract #12',
+            details: [{ label: 'Arguments', value: action.params.PARAMS.join(', ') }],
+            warnings: [],
+        });
+        const host = createBackgroundHost({
+            vault: {},
+            chainRegistry: { get: () => ({ id: request.chainId }) },
+            sdkRegistry: { get: () => ({ decoder: { describe } }) },
+            broadcastQueueStorage: null,
+            signThrottleStorage: null,
+            logConsoleStorage: null,
+        });
+        const expected = decoder.withContractCallDescriptions(
+            decoder.withListRemovalDescriptions(describe(parsed), parsed),
+            parsed,
+        );
+
+        const response = await host.handle({ type: 'action.describe', request });
+
+        expect(response).toEqual({ ok: true, result: expected });
+        expect(response.result.details).toEqual([
+            { label: 'Argument 1', value: 'a, b' },
+            { label: 'Argument 2', value: 'x[U+200B]y' },
+        ]);
     });
 });

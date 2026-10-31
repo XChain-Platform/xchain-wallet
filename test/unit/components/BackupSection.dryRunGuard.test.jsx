@@ -31,11 +31,11 @@ afterEach(() => {
     __resetScreenGuardForTests();
 });
 
-function mount() {
+function mount(activeWallet = { id: 'w1', name: 'Cold' }) {
     const messaging = { dryRunRestoreRequest: vi.fn(async () => ({ overallMatch: true, chains: [] })) };
     return render(
         <MessagingProvider shell="popup" messaging={messaging}>
-            <BackupSection activeWallet={{ id: 'w1', name: 'Cold' }} />
+            <BackupSection activeWallet={activeWallet} />
         </MessagingProvider>,
     );
 }
@@ -54,5 +54,14 @@ describe('BackupSection Test backup: screen guard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByLabelText('Recovery phrase to test')).not.toBeInTheDocument();
         expect(guard).toHaveBeenLastCalledWith(false);
+    });
+
+    it('starts the form with the stored legacy format selected', () => {
+        mount({ id: 'w1', name: 'Legacy', format: 'counterwallet-legacy' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
+
+        expect(screen.getByLabelText('Phrase format')).toHaveValue('counterwallet-legacy');
+        expect(screen.queryByLabelText('BIP39 passphrase')).not.toBeInTheDocument();
     });
 });

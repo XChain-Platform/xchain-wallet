@@ -33,6 +33,7 @@ const { XChainSDK } = require('xchain-sdk');
 
 const CHAIN_ID = 'bitcoin-regtest';
 const PASSWORD = 'discovery-test-pw';
+const LEGACY_MNEMONIC = 'explode gaze wolf admit nice charm except three any guitar into color';
 const KDF = { algorithm: 'argon2id', salt: Buffer.alloc(16, 7).toString('base64'), iterations: 1, memory: 8192, parallelism: 1 };
 
 function unusedBody(address) {
@@ -120,6 +121,29 @@ async function deriveAt(signer, addressType, change, index) {
 beforeEach(() => _resetBatchSupportMemo());
 
 describe('discoverWalletAddresses', () => {
+    it('scans every encoding in a legacy shared index space and counts one gap per index', async () => {
+        const w = await restoredWallet({
+            mnemonic: LEGACY_MNEMONIC,
+            format: 'counterwallet-legacy',
+        });
+        const segwit2 = await deriveAt(w.signer, 'p2wpkh', 0, 2);
+        const legacy4 = await deriveAt(w.signer, 'p2pkh', 0, 4);
+        const funded = new Set([segwit2.address, legacy4.address]);
+        const explorer = fakeExplorer((address) => (
+            funded.has(address) ? usedBody(address) : unusedBody(address)
+        ));
+
+        const result = await discoverWalletAddresses({
+            vault: w.vault, walletId: w.walletId, signer: w.signer,
+            chainRegistry: w.chainRegistry, sdkRegistry: explorer.sdkRegistry, gapLimit: 3,
+        });
+
+        expect(result.found).toBe(2);
+        const stored = new Map((await w.vault.addresses.list()).map((a) => [a.address, a]));
+        expect(stored.get(segwit2.address)?.addressType).toBe('p2wpkh');
+        expect(stored.get(legacy4.address)?.addressType).toBe('p2pkh');
+    });
+
     it('finds funds at receive index 7 and change index 3 and writes both', async () => {
         const w = await restoredWallet();
         const receive7 = await deriveAt(w.signer, w.addressType, 0, 7);

@@ -210,10 +210,12 @@ describe('OracleRecord (P8)', () => {
 
     it('reports a failed record read instead of hanging on the loader', async () => {
         const { messaging } = harness({
-            betOracle: () => Promise.reject(new Error('explorer down')),
+            betOracle: () => Promise.reject(new Error('oracleStats: sdk.getOracleStats is unavailable')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(utils.getByRole('alert').textContent).toMatch(/explorer down/);
+        const alert = utils.getByRole('alert').textContent;
+        expect(alert).toMatch(/Failed to load the oracle record/);
+        expect(alert).not.toMatch(/oracleStats|sdk\.getOracleStats/);
     });
 
     it('opens one of the oracle\'s markets on the chain the record was read from', async () => {

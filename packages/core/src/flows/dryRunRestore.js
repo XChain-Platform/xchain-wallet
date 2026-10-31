@@ -70,7 +70,7 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId                    current wallet whose addresses we compare against
  * @property {string} mnemonic
- * @property {'bip39' | 'counterwallet-legacy'} [format]   default 'bip39'
+ * @property {'bip39' | 'counterwallet-legacy'} [format]   defaults to the stored wallet format
  * @property {string} [bip39Passphrase]           ignored for counterwallet-legacy
  * @property {string[]} [activeChainIds]          default: every descriptor in the registry
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -134,7 +134,7 @@ export async function dryRunRestore({
     vault,
     walletId,
     mnemonic,
-    format = 'bip39',
+    format,
     bip39Passphrase = '',
     activeChainIds,
     chainRegistry,
@@ -152,6 +152,15 @@ export async function dryRunRestore({
     }
     if (!chainRegistry) throw new Error('dryRunRestore: chainRegistry is required');
     if (!sdkRegistry) throw new Error('dryRunRestore: sdkRegistry is required');
+    const wallet = await vault.wallets?.get?.(walletId);
+    if (!wallet) throw new Error(`dryRunRestore: wallet "${walletId}" was not found`);
+    if (wallet.format !== 'bip39' && wallet.format !== 'counterwallet-legacy') {
+        throw new Error(`dryRunRestore: unsupported stored format "${wallet.format}"`);
+    }
+    if (format !== undefined && format !== wallet.format) {
+        throw new Error('dryRunRestore: requested format does not match the wallet format');
+    }
+    format = wallet.format;
     if (format === 'counterwallet-legacy' && bip39Passphrase.length > 0) {
         throw new Error(
             'dryRunRestore: counterwallet-legacy wallets do not support a BIP39 passphrase',

@@ -637,6 +637,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                 <DryRunForm
                     busy={dryRunStage === 'running'}
                     error={dryRunError}
+                    walletFormat={activeWallet?.format}
                     onCancel={resetDryRun}
                     onSubmit={runDryRun}
                 />
@@ -940,13 +941,16 @@ function RevealedMnemonic({
  * Dry-run restore form: paste mnemonic, pick format / passphrase /
  * gap limit, fire the comparison.
  */
-function DryRunForm({ busy, error, onCancel, onSubmit }) {
+function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     // The form takes a whole recovery phrase in clear text, so it is
     // mnemonic entry under the screenGuard policy: no screenshot, no
     // recents thumbnail, for as long as the field is on screen.
     useProtectedScreen();
     const [mn, setMn] = useState('');
-    const [format, setFormat] = useState(/** @type {'bip39' | 'counterwallet-legacy'} */ ('bip39'));
+    const initialFormat = walletFormat === 'counterwallet-legacy'
+        ? 'counterwallet-legacy'
+        : 'bip39';
+    const [format, setFormat] = useState(initialFormat);
     const [passphrase, setPassphrase] = useState('');
     const [gapLimit, setGapLimit] = useState('10');
 

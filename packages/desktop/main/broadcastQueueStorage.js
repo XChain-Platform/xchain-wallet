@@ -63,8 +63,13 @@ export class FileBroadcastQueueStorage {
             raw = await fs.readFile(this._filePath, 'utf8');
         } catch (err) {
             if (err?.code === 'ENOENT') return { ok: true, blob: undefined };
-            this._warn(err);
-            return { ok: true, blob: {} };
+            this._logger?.warn?.(
+                '[xchain] broadcast queue file could not be read; keeping the queue in memory and retrying:',
+                err,
+            );
+            // The file may still contain every wallet's entries, so a failed
+            // read must not expose an empty snapshot that a later save can replace.
+            return { ok: false };
         }
         try {
             return { ok: true, blob: JSON.parse(raw) };

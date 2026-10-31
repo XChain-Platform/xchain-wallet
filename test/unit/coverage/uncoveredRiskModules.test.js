@@ -277,6 +277,20 @@ describe('test-dApp runtime modules', () => {
             .rejects.toThrow('not connected');
     });
 
+    it('grants requested chain ids and refuses coin-family ids', async () => {
+        const provider = new MockXChainProvider();
+        await expect(provider.connect({ requestedChains: ['bitcoin-regtest'] }))
+            .resolves.toMatchObject({
+                ok: true,
+                chains: ['bitcoin-regtest'],
+                permissions: { chains: ['bitcoin-regtest'] },
+            });
+        await provider.disconnect();
+
+        await expect(provider.connect({ requestedChains: ['bitcoin'] }))
+            .resolves.toEqual({ ok: false, error: 'USER_REJECTED' });
+    });
+
     it('runs the public example end to end through the package runtime entry', async () => {
         const provider = new MockXChainProvider();
         const uninstall = provider.install();
@@ -299,6 +313,7 @@ describe('test-dApp runtime modules', () => {
         const disconnect = vi.fn(async () => {});
         const provider = {
             isXChainWallet: true,
+            getSupportedChains: vi.fn(async () => [{ id: 'bitcoin-regtest', coin: 'bitcoin' }]),
             connect: vi.fn(async () => ({
                 ok: true,
                 version: '0.1.0',

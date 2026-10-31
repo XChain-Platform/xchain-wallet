@@ -332,13 +332,45 @@ describe('dispenserAddress index space by wallet format', () => {
         return vault;
     }
 
+    function legacySigner() {
+        return {
+            id: 'legacy-signer',
+            kind: 'software',
+            async getAddresses({ startIndex, addressType }) {
+                return [{
+                    index: startIndex,
+                    address: `${addressType}_${startIndex}`,
+                    publicKey: `pub_${startIndex}`,
+                    path: `m/0'/0/${startIndex}`,
+                }];
+            },
+            lock() {},
+        };
+    }
+
     it('does not reuse the legacy receive index for a p2wpkh dispenser', async () => {
         const vault = vaultWithFormat('counterwallet-legacy');
+        const emptyHistory = { get: () => ({ explorer: { getHistory: async () => [] } }) };
         const rec = await dispenserAddress(
-            base(vault, makeSigner(), { addressType: 'p2wpkh' }),
+            base(vault, makeSigner(), { addressType: 'p2wpkh', sdkRegistry: emptyHistory }),
         );
         expect(rec.derivationPath.endsWith('/1')).toBe(true);
         expect(rec.address).not.toBe(LEGACY_RECEIVE.address);
+    });
+
+    it('skips a frontier index funded under another encoding in a legacy wallet', async () => {
+        const vault = vaultWithFormat('counterwallet-legacy');
+        const fundedSdkRegistry = {
+            get: () => ({
+                explorer: { getHistory: async (address) => (address === 'p2wpkh_1' ? [{}] : []) },
+            }),
+        };
+        const rec = await dispenserAddress(base(vault, legacySigner(), {
+            addressType: 'p2pkh', sdkRegistry: fundedSdkRegistry,
+        }));
+
+        expect(rec.derivationPath).toBe("m/0'/0/2");
+        expect(rec.address).toBe('p2pkh_2');
     });
 
     it('keeps per-type index spaces for a BIP39 wallet', async () => {

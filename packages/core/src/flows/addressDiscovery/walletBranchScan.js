@@ -2,6 +2,7 @@
 
 import { BALANCES_BATCH_MAX_ADDRESSES } from '../balances.js';
 import { branchOf } from '../changeAddress.js';
+import { isUnknownAddressTypeError } from '../sdkAddressTypes.js';
 
 export async function scanBranch(opts) {
     const fresh = [];
@@ -31,7 +32,13 @@ export async function scanSharedBranch(opts) {
         throwIfAborted(opts.signal);
         const windows = [];
         for (const addressType of opts.addressTypes) {
-            const derived = await deriveWindow(opts, addressType, start);
+            let derived;
+            try {
+                derived = await deriveWindow(opts, addressType, start);
+            } catch (err) {
+                if (isUnknownAddressTypeError(err)) continue;
+                throw err;
+            }
             windows.push({ addressType, derived, used: await timedUsage(opts, derived) });
         }
         throwIfAborted(opts.signal);
