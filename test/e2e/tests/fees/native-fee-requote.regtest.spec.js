@@ -52,6 +52,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
 } from '../../fixtures/regtest.js';
+import { freshMempoolSize } from '../../fixtures/venueHealth.js';
 import { feeQuoteAtCoinPriceFactor } from '../../fixtures/feeQuoteAtPrice.js';
 import { EXPLORER_RATE_LIMIT_DEFAULTS } from '../../../../packages/core/src/sdk/explorerRateLimit.js';
 
@@ -85,7 +86,7 @@ async function coinBalanceSats(address) {
 
 async function mempoolSize() {
     const status = await minerRpc('status', {});
-    return Number(status?.mempool_size ?? -1);
+    return freshMempoolSize(status);
 }
 
 /**

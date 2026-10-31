@@ -233,12 +233,18 @@ for (const [shell, appPath, offersTrezor] of [
         `${shell} App.jsx injects the Ledger factory into PairSignerForm`,
     );
     if (offersTrezor) {
+        const hasProfileGatedFactory = /const\s+pairTrezorSigner\s*=\s*TREZOR_PAIRING_ENABLED[\s\S]*?hardwareFactories\.load\('trezor'\)[\s\S]*?:\s*null;/.test(app);
         assert.ok(
             (/import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
                 || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(/.test(app)
-                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('trezor'\)/.test(app))
+                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('trezor'\)/.test(app)
+                || hasProfileGatedFactory)
                 && /pairTrezor=\{pairTrezorSigner\}/.test(app),
             `${shell} App.jsx imports + injects the Trezor factory`,
+        );
+        assert.ok(
+            /pairsTrezor:\s*TREZOR_PAIRING_ENABLED/.test(app),
+            `${shell} App.jsx reports the build-profile Trezor capability`,
         );
     } else {
         assert.ok(

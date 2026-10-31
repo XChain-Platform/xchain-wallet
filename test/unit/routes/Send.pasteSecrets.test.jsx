@@ -96,6 +96,9 @@ describe('secret material pasted into the To field', () => {
         ['a private key as a payment link address', () => `bitcoin:${WIF}?amount=1`],
         ['a recovery phrase', () => PHRASE],
         ['an upper-case recovery phrase', () => PHRASE.toUpperCase()],
+        ['a numbered recovery phrase', () => PHRASE.split(' ').map((word, index) => `${index + 1}. ${word}`).join(' ')],
+        ['a numbered recovery phrase on separate lines', () => PHRASE.split(' ').map((word, index) => `${index + 1}. ${word}`).join('\n')],
+        ['a recovery phrase containing a soft hyphen', () => PHRASE.replace('abandon', 'ab\u00ADandon')],
         ['a recovery phrase as a payment link address', () => `bitcoin:${PHRASE.replace(/ /g, '%20')}`],
     ])('keeps %s out of the field and the saved draft', async (_name, build) => {
         const to = await pasteIntoTo(build());
@@ -104,6 +107,7 @@ describe('secret material pasted into the To field', () => {
         expect(drafts).not.toContain(WIF.toLowerCase());
         expect(drafts).not.toContain(PHRASE.split(' ')[0] + ' ' + PHRASE.split(' ')[1]);
         expect(drafts).not.toContain(PHRASE.split(' ')[0] + '%20' + PHRASE.split(' ')[1]);
+        expect(drafts).not.toContain(`1. ${PHRASE.split(' ')[0]}`);
     });
 
     it('still fills the field from an ordinary payment link', async () => {

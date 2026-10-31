@@ -287,6 +287,10 @@ importers:
       '@xchain-wallet/bridge-spec':
         specifier: workspace:*
         version: link:../bridge-spec
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
   packages/web:
     dependencies:
@@ -3944,6 +3948,11 @@ packages:
 
   typeforce@1.18.0:
     resolution: {integrity: sha512-7uc1O8h1M1g0rArakJdf0uLRSSgFcYexrVoKo+bzJd32gd4gDy2L/Z+8/FjPnU9ydY3pEnVPtr9FyscYY60K1g==}
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
 
   uint8array-tools@0.0.10:
     resolution: {integrity: sha512-sSbrZqlr04w4p8KKpHw0ME/R4JzQaadum+BWhMlk2M7LrDyXWTfJOco3d1jNMdQNxgk5DDm88R3IWYH0nR+tzQ==}
@@ -8270,6 +8279,8 @@ snapshots:
       underscore: 1.13.8
 
   typeforce@1.18.0: {}
+
+  typescript@5.9.3: {}
 
   uint8array-tools@0.0.10: {}
 

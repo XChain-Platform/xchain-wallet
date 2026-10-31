@@ -157,7 +157,7 @@ assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors 'none'/, 'the header poli
 
 assert.match(
     viteSrc,
-    /import \{ metaContentSecurityPolicyFor \} from '\.\/src\/csp\.js'/,
+    /import \{[^}]*\bmetaContentSecurityPolicyFor\b[^}]*\} from '\.\/src\/csp\.js'/,
     'vite imports the meta policy builder',
 );
 // The injected policy is the one for THIS build's profile, and the

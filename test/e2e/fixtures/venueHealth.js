@@ -219,3 +219,14 @@ export function rateLimitDelayMs(status, headers, { capMs = RATE_LIMIT_WINDOW_MS
     }
     return Math.min(RATE_LIMIT_WINDOW_MS, capMs);
 }
+
+export function freshMempoolSize(status) {
+    if (Number(status?.consecutive_errors) !== 0) throw new Error('miner mempool status is stale');
+    const observedAt = Number(status?.mempool_size_at);
+    if (!Number.isSafeInteger(observedAt) || observedAt <= 0 || Date.now() - observedAt > 5000) {
+        throw new Error('miner mempool status is stale');
+    }
+    const size = Number(status?.mempool_size);
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error('miner mempool status is invalid');
+    return size;
+}

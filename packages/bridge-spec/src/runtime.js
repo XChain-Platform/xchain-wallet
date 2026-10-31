@@ -38,7 +38,8 @@
 
 // Semver for the bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
-// Kept in sync with this package's package.json version.
+// Maintained by hand. It deliberately does not track package.json, which
+// follows the wallet release train. Update the supported list with changes.
 export const BRIDGE_SPEC_VERSION = '0.1.0';
 
 // Cluster F FOLLOWUP 3 - version negotiation. Versions a wallet
@@ -141,8 +142,8 @@ function satisfiesTerm(target, term) {
 // to validate a code it was handed.
 //
 // This array and the `BridgeErrorCode` union in index.ts are one contract in
-// two syntaxes and must be edited together; test/unit/bridge/bridge-error-codes
-// pins them to each other so a code added to one and not the other fails.
+// two syntaxes and must be edited together;
+// test/unit/bridge/bridge-envelope-contract.test.js pins them to each other.
 /** @type {readonly string[]} */
 export const BRIDGE_ERROR_CODES = Object.freeze([
     'USER_REJECTED',
@@ -213,6 +214,7 @@ export function isXChainAvailable() {
 
 /**
  * Await the injected provider, or return null when the timeout expires.
+ * The default gives delayed extension and iframe injection a short window.
  *
  * @param {{timeoutMs?: number}} [opts]
  * @returns {Promise<import('./index.ts').XChainProvider | null>}
@@ -278,6 +280,8 @@ export function makeSignInParams(appId, opts = {}) {
 
 /**
  * Validate the signed challenge fields before a caller verifies its signature.
+ * expected.origin is mandatory because the wallet stamps the requesting page's
+ * origin into the challenge. A mismatch means it was signed on another site.
  *
  * @param {import('./index.ts').SignInChallengeV2} parts
  * @param {{appId: string, origin: string, nonce?: string, now?: number}} expected

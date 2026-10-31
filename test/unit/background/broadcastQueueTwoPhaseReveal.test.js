@@ -44,6 +44,19 @@ function memCollection() {
     };
 }
 
+function refusableCollection() {
+    const base = memCollection();
+    let refused = false;
+    const guarded = (method) => async (...args) => {
+        if (refused) throw new Error('VaultStateError: vault is closed');
+        return base[method](...args);
+    };
+    return {
+        pendingTxs: Object.fromEntries(Object.keys(base).map((method) => [method, guarded(method)])),
+        refuse() { refused = true; },
+    };
+}
+
 const chainRegistry = {
     get: () => ({ id: CHAIN, coin: 'litecoin', networkKind: 'regtest' }),
     list: () => [],
@@ -51,7 +64,7 @@ const chainRegistry = {
 };
 
 /** A fresh host, as a reload builds one, over the vault records `pendingTxs` holds. */
-function bootHost({ pendingTxs, broadcastTx, entries = [] }) {
+function bootHost({ pendingTxs, broadcastTx, entries = [], queueStorage = null }) {
     const vault = {
         pendingTxs,
         wallets: { list: async () => [{ id: W }], get: async (id) => ({ id, importedKeys: [] }) },
@@ -72,7 +85,7 @@ function bootHost({ pendingTxs, broadcastTx, entries = [] }) {
         approvals: { request: async () => ({ approved: true }) },
         bridgeEvents: { emit() {} },
         getDiagnosticContext: () => ({}),
-        broadcastQueueStorage: {
+        broadcastQueueStorage: queueStorage ?? {
             load: async () => ({ [W]: entries }),
             save: async () => {},
             clear: async () => {},
@@ -230,6 +243,38 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex, REVEAL.txHex]);
         expect(await pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE2' });
         expect(await h.list()).toEqual([]);
+    });
+
+    it('journals a refused reveal promotion without either signed transaction', async () => {
+        const controlled = refusableCollection();
+        await controlled.pendingTxs.put(record());
+        let settlements = [];
+        const queueStorage = {
+            load: async () => ({ [W]: [pair] }),
+            loadSettlements: async () => [],
+            save: async () => {},
+            saveSettlements: async (next) => { settlements = structuredClone(next); },
+            clear: async () => {},
+        };
+        const h = bootHost({
+            pendingTxs: controlled.pendingTxs,
+            entries: [pair],
+            queueStorage,
+            broadcastTx: async (hex) => {
+                if (hex === COMMIT.txHex) {
+                    controlled.refuse();
+                    return { txid: 'txid-PHASE1' };
+                }
+                throw new Error('ETIMEDOUT');
+            },
+        });
+
+        const result = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+
+        expect(result.ok).toBe(false);
+        expect(settlements[0]).toMatchObject({ op: 'reveal', patch: { status: 'queued' } });
+        expect(JSON.stringify(settlements)).not.toContain(COMMIT.txHex);
+        expect(JSON.stringify(settlements)).not.toContain(REVEAL.txHex);
     });
 
     // Two windows press Send now on one entry: the second is refused by name, so

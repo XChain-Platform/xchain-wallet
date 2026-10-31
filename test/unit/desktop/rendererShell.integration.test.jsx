@@ -229,6 +229,18 @@ describe('desktop renderer shell', () => {
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
 
+    it('explains a refused auto-lock arm on the locked screen', async () => {
+        window.xchainWalletBridge = createPreloadBridge();
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+
+        act(() => { boot.autoLockOpts.onArmRefused(); });
+
+        expect(await screen.findByText(
+            "The wallet locked because its auto-lock timer couldn't be saved.",
+        )).toBeInTheDocument();
+    });
+
     it('keeps the locked screen usable when the preload IPC call rejects', async () => {
         const bridge = createPreloadBridge();
         bridge.failures.set('wallet.unlock', new Error('IPC channel unavailable'));

@@ -62,10 +62,10 @@ describe('regression/web-entry-chunk-lazy-home', () => {
         // resets the loaded ones on lock, never from the entry chunk.
         for (const [factoryName, vendor, modulePath] of lazySignerFactories) {
             expect(eagerImports).not.toContain(modulePath);
-            expect(appSource).toContain(`    ${vendor}: () => import('${modulePath}'),`);
-            expect(appSource).toContain(
-                `const ${factoryName} = (...args) => hardwareFactories.load('${vendor}')`,
-            );
+            expect(appSource).toContain(`${vendor}: () => import('${modulePath}')`);
+            expect(appSource).toContain(`const ${factoryName}`);
+            expect(appSource).toContain(`hardwareFactories.load('${vendor}')`);
         }
+        expect(appSource).toContain('const pairTrezorSigner = TREZOR_PAIRING_ENABLED');
     });
 });

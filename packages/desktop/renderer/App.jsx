@@ -275,6 +275,9 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 function AppInner() {
     const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    const [lockReason, setLockReason] = useState(
+        /** @type {'auto-lock-unsaved' | null} */ (null),
+    );
     useClearToastsOnLock(status.state);
     const statusRequest = useRef(0);
     // Keyboard-binding overrides for the palette + shortcuts live in
@@ -628,6 +631,10 @@ function AppInner() {
                 });
             });
     }, []);
+    const noteAutoLockUnsaved = useCallback(() => {
+        setLockReason('auto-lock-unsaved');
+        refresh();
+    }, [refresh]);
     useDemoAutoWipe(activeWalletId, refresh);
 
     function clearTransientActionState() {
@@ -1025,6 +1032,7 @@ function AppInner() {
         activeWalletId,
         onLocked: refresh,
         lock: handleLock,
+        onArmRefused: noteAutoLockUnsaved,
     });
 
     switch (status.state) {
@@ -1082,7 +1090,12 @@ function AppInner() {
                 />
             );
         case 'locked':
-            return <Locked onUnlocked={refresh} />;
+            return (
+                <Locked
+                    lockReason={lockReason}
+                    onUnlocked={() => { setLockReason(null); refresh(); }}
+                />
+            );
         case 'unlocked': {
             // §24.2 / G053: wrap the unlocked-route render tree in
             // <FullLayoutWithNav> so the left nav is always visible at

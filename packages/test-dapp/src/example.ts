@@ -29,6 +29,7 @@ import {
     validateSignInChallenge,
     type BridgeErrorCode,
     type BridgeErrorResult,
+    type ConnectOpts,
     type SendActionParams,
     type SignActionParams,
     type SignActionResult,
@@ -36,6 +37,11 @@ import {
 import { MockXChainProvider } from './mock-provider.js';
 
 const APP_ID = 'example.com';
+
+export const EXAMPLE_CONNECT_OPTS: ConnectOpts = {
+    appName: 'Example dApp',
+    requestedChains: ['bitcoin-regtest'],
+};
 
 export interface ExampleReport {
     providerFound: boolean;
@@ -61,10 +67,7 @@ export async function runExample(): Promise<ExampleReport> {
     if (!provider) return report;
     report.providerFound = true;
 
-    const conn = await provider.connect({
-        appName: 'Example dApp',
-        requestedChains: ['bitcoin'],
-    });
+    const conn = await provider.connect(EXAMPLE_CONNECT_OPTS);
     if (!conn.ok) return report;
     report.connected = true;
     report.accountCount = conn.accounts.length;

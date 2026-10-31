@@ -64,7 +64,10 @@ import {
 import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
 // The pure idle decision, shared with the extension backstop so the two
 // shells cannot drift on what "idle" means.
-import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
+import {
+    AUTO_LOCK_UNSAVED,
+    shouldAutoLock,
+} from '@xchain-wallet/extension/src/background/autoLockState.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wallet/extension/src/background/broadcastQueueStore.js';
 import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
 import { restoreLabelSyncBestEffort } from '@xchain-wallet/extension/src/background/walletCreate.js';
@@ -792,7 +795,21 @@ export async function handleIpcMessage(runtime, message) {
             if (runtime.autoLockCleanupPending) {
                 return { ok: true, result: { armed: false } };
             }
-            await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
+            try {
+                await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
+            } catch (err) {
+                const refusedArm = message.request?.armed === true
+                    && message.request?.activity !== true;
+                if (!refusedArm) throw err;
+                console.error('[xchain] auto-lock arm could not be saved:', err);
+                await lockRuntimeForAutoLock(runtime, runtime.autoLockStore, 'arm-refused');
+                try {
+                    await runtime.autoLockStore?.clear();
+                } catch (clearErr) {
+                    console.error('[xchain] refused auto-lock arm record could not be cleared:', clearErr);
+                }
+                return { ok: true, result: { ok: false, reason: AUTO_LOCK_UNSAVED } };
+            }
             return { ok: true, result: { armed: message.request?.armed === true } };
         }
         // Panic-mode freeze, also ahead of both lanes: the duress passphrase

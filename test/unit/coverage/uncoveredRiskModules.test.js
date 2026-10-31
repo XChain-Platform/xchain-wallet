@@ -203,7 +203,7 @@ describe('test-dApp runtime modules', () => {
         const connected = await provider.connect({ appName: 'Unit dApp' });
         expect(connected).toMatchObject({
             ok: true,
-            chains: ['bitcoin'],
+            chains: ['bitcoin-regtest'],
             permissions: { canSignMessage: true },
         });
         expect(accountsChanged).toHaveBeenCalledOnce();
@@ -226,6 +226,55 @@ describe('test-dApp runtime modules', () => {
 
         await provider.disconnect();
         await expect(provider.getAccounts()).rejects.toThrow('not connected');
+    });
+
+    it('models sign-only PSBT responses and required signing paths', async () => {
+        const provider = new MockXChainProvider();
+        await provider.connect();
+        const valid = {
+            chainId: 'bitcoin-regtest',
+            psbtHex: '70736274',
+            signingPaths: [{ inputIndex: 0, address: 'bcrt1qfrom' }],
+        };
+
+        await expect(provider.signPsbt({
+            chainId: valid.chainId,
+            psbtHex: valid.psbtHex,
+        })).resolves.toMatchObject({ ok: false, error: 'INVALID_PARAMS' });
+        await expect(provider.signPsbt(valid)).resolves.toEqual({
+            ok: true,
+            signedPsbtHex: '70736274deadbeef',
+            txHex: 'mock-txhex',
+        });
+        await expect(provider.signPsbt({ ...valid, broadcast: true }))
+            .resolves.toMatchObject({ ok: false, error: 'INVALID_PARAMS' });
+    });
+
+    it('models single-input and multi-input coSign approvals', async () => {
+        const provider = new MockXChainProvider();
+        await provider.connect();
+        const base = {
+            chainId: 'bitcoin-regtest',
+            aggregateAddress: 'bcrt1paggregate',
+            psbtHex: '70736274',
+        };
+
+        await expect(provider.coSign({ ...base, inputIndex: 2 }))
+            .resolves.toMatchObject({ ok: true, approved: true, action: 'SEND' });
+        await expect(provider.coSign({
+            ...base,
+            inputs: [{ index: 1, agentPublicNonce: '02aa' }],
+        })).resolves.toMatchObject({
+            ok: true,
+            approved: true,
+            signatures: [{ index: 1 }],
+        });
+
+        const rejecting = new MockXChainProvider({ rejectAll: true });
+        await expect(rejecting.coSign(base))
+            .resolves.toEqual({ ok: false, error: 'USER_REJECTED' });
+        await expect(new MockXChainProvider().coSign(base))
+            .rejects.toThrow('not connected');
     });
 
     it('runs the public example end to end through the package runtime entry', async () => {

@@ -32,6 +32,7 @@
 // without a real seed or SDK; every layer above it is the real one.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { EXAMPLE_CONNECT_OPTS } from '../../../packages/test-dapp/src/example.ts';
 
 const { sendToken } = vi.hoisted(() => ({ sendToken: vi.fn() }));
 
@@ -212,9 +213,11 @@ describe('Connect reads the option names ConnectOpts publishes', () => {
         const host = buildHost(makeVault(), approvals);
         await host.handle({
             type: 'bridge.connect',
-            request: { origin: ORIGIN, appName: 'dApp', requestedChains: [CHAIN] },
+            request: { origin: ORIGIN, ...EXAMPLE_CONNECT_OPTS },
         });
-        expect(approvals._seen[0].requestedChains).toEqual([CHAIN]);
+        expect(approvals._seen[0].requestedChains).toEqual(EXAMPLE_CONNECT_OPTS.requestedChains);
+        expect(approvals._seen[0].requestedChains.every((id) => chainRegistry.get(id)))
+            .toBe(true);
     });
 
     it('still accepts the legacy `chains` name', async () => {

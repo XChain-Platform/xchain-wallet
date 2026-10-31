@@ -19,6 +19,17 @@
 // MESSAGE from a device address composed a PSBT the device could not sign.
 
 import { describe, it, expect, vi } from 'vitest';
+
+const { sendTokenMock } = vi.hoisted(() => ({ sendTokenMock: vi.fn() }));
+
+vi.mock('@xchain-wallet/core', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        flows: { ...actual.flows, sendToken: sendTokenMock },
+    };
+});
+
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 
 function memCollection(initial = []) {
@@ -52,6 +63,11 @@ const chainRegistry = {
 };
 
 const SOURCE = 'addr_0_0_0';
+const HELD_TXID = 'aa'.repeat(32);
+const SOURCE_UTXOS = [
+    { txid: HELD_TXID, vout: 0, value: 100000 },
+    { txid: 'bb'.repeat(32), vout: 1, value: 50000 },
+];
 const SOURCE_ROW = {
     schemaVersion: 4, id: 'addr-src', accountId: 'acct-1', chain: 'bitcoin', network: 'regtest',
     source: 'hd', addressType: 'p2wpkh', derivationPath: "m/84'/1'/0'/0/0",
@@ -69,7 +85,7 @@ function makeSdk(createTx) {
         encoder: {
             createTx,
             // quoteMaxSendable probes the address's own utxo total first.
-            getUTXOs: vi.fn(async () => ([{ txid: 't', vout: 0, value: 100000 }])),
+            getUTXOs: vi.fn(async () => SOURCE_UTXOS.map((row) => ({ ...row }))),
         },
         actions: { createAction: vi.fn(() => ({ actionString: 'ACT|0|x', action: 'ACT', version: 0 })) },
         voting: {
@@ -78,8 +94,20 @@ function makeSdk(createTx) {
         betting: {
             placeBetParams: vi.fn((p) => ({ VERSION: '0', MARKET: p?.MARKET || 'mkt1', AMOUNT: '1' })),
         },
+        gatedFile: {
+            generateKey: vi.fn(() => ({ key: Buffer.alloc(32, 7), keyHash: 'ab'.repeat(32) })),
+            encryptWithKey: vi.fn((plain) => Buffer.from(plain)),
+            serializeKeyPayload: vi.fn((keys) => Buffer.concat(keys)),
+        },
+        messaging: { eciesEncryptBytes: vi.fn(() => ({ ciphertext: 'ciphertext' })) },
         wallet: {
-            decomposePsbt: vi.fn(() => ({
+            decomposePsbt: vi.fn((hex) => (hex === 'held-psbt' || hex === 'free-psbt' ? {
+                inputs: [{
+                    prevTxHash: hex === 'held-psbt' ? HELD_TXID : SOURCE_UTXOS[1].txid,
+                    prevTxIndex: hex === 'held-psbt' ? 0 : 1,
+                }],
+                outputs: [],
+            } : {
                 inputs: [{ value: 5000 }],
                 outputs: [
                     { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
@@ -163,6 +191,10 @@ const ROUTES = {
         walletId: 'w1', chainId: 'bitcoin-regtest', from: from(src),
         destination: 'bcrt1qdest', message: 'hello', method: null,
     }),
+    'action.gatedPublish.composeForConfirm': (src) => ({
+        walletId: 'w1', chainId: 'bitcoin-regtest', from: from(src),
+        gateTicker: 'JDOG', name: 'pack.bin', type: 'application/octet-stream', plainData: 'payload',
+    }),
 };
 
 // The quote route swallows every failure and returns null, so it is driven for
@@ -173,6 +205,23 @@ async function drive(host, type, request) {
         expect(res.ok, `${type}: ${JSON.stringify(res.error ?? {})}`).toBe(true);
     }
     return res;
+}
+
+async function holdCoin(host, psbtHex, txid) {
+    sendTokenMock.mockResolvedValueOnce({ txid });
+    const res = await host.handle({
+        type: 'action.send',
+        request: {
+            walletId: 'w1', chainId: 'bitcoin-regtest', from: from('hd'),
+            prebuiltPsbt: { psbtHex },
+        },
+    });
+    expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+}
+
+async function holdFirstCoin(host) {
+    sendTokenMock.mockReset();
+    await holdCoin(host, 'held-psbt', 'broadcast-txid');
 }
 
 describe('every confirm-compose route hardens the PSBT for a device source', () => {
@@ -208,5 +257,38 @@ describe('every confirm-compose route hardens the PSBT for a device source', () 
         });
         expect(createTx.mock.calls[0][0].payFeeInNativeCoin).toBe(false);
         expect(createTx.mock.calls[0][0].attachPrevTx).toBe(true);
+    });
+});
+
+describe('every confirm-compose route excludes coins held by another send', () => {
+    for (const [type, build] of Object.entries(ROUTES).filter(([name]) => name !== 'action.quoteMaxSendable')) {
+        it(`${type} passes only free coins to the encoder`, async () => {
+            const { host, createTx } = makeHost();
+            await holdFirstCoin(host);
+            await drive(host, type, build('hd'));
+            expect(createTx.mock.calls[0][0].utxos).toEqual([SOURCE_UTXOS[1]]);
+        });
+    }
+
+    it('preserves caller-selected coins even when another send holds them', async () => {
+        const { host, createTx } = makeHost();
+        await holdFirstCoin(host);
+        await drive(host, 'action.composeForConfirm', {
+            ...ROUTES['action.composeForConfirm']('hd'),
+            utxos: [SOURCE_UTXOS[0]],
+        });
+        expect(createTx.mock.calls[0][0].utxos).toEqual([SOURCE_UTXOS[0]]);
+    });
+
+    it('refuses before encoding when another send holds every coin', async () => {
+        const { host, createTx } = makeHost();
+        await holdFirstCoin(host);
+        await holdCoin(host, 'free-psbt', 'second-broadcast-txid');
+        const res = await host.handle({
+            type: 'action.composeForConfirm',
+            request: ROUTES['action.composeForConfirm']('hd'),
+        });
+        expect(res).toMatchObject({ ok: false, error: { name: 'CoinsHeldError' } });
+        expect(createTx).not.toHaveBeenCalled();
     });
 });

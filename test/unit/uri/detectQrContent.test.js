@@ -95,6 +95,43 @@ describe('detectQrContent', () => {
     });
 
     it.each([
+        ['spaces', (word, index) => `${index + 1}. ${word}`, ' '],
+        ['newlines and upper case', (word, index) => `${index + 1}. ${word.toUpperCase()}`, '\n'],
+    ])('classifies a numbered BIP39 mnemonic with %s', (_label, renderWord, separator) => {
+        const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        const numbered = mnemonic.split(' ').map(renderWord).join(separator);
+
+        expect(detectQrContent(numbered)).toEqual({
+            type: 'mnemonic-bip39',
+            mnemonic,
+        });
+    });
+
+    it('classifies a numbered Counterwallet mnemonic', () => {
+        const mnemonic = COUNTERWALLET_WORDLIST.slice(0, 12).join(' ');
+        const numbered = mnemonic.split(' ').map((word, index) => `${index + 1}. ${word}`).join(' ');
+
+        expect(detectQrContent(numbered)).toEqual({
+            type: 'mnemonic-counterwallet',
+            mnemonic,
+        });
+    });
+
+    it.each(['\u00AD', '\u200E'])('classifies a BIP39 mnemonic containing U+%s', (mark) => {
+        const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        const marked = mnemonic.replace('abandon', `ab${mark}andon`);
+
+        expect(detectQrContent(marked)).toEqual({ type: 'mnemonic-bip39', mnemonic });
+    });
+
+    it('does not strip incomplete recovery phrase numbering', () => {
+        const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        const partiallyNumbered = `1. ${phrase}`;
+
+        expect(detectQrContent(partiallyNumbered)).toEqual({ type: 'unknown' });
+    });
+
+    it.each([
         `${PARTNER_PAIRING_PREFIX}ZmFrZQ`,
         `${PARTNER_PAIRING_PREFIX}!!!not-base64!!!`,
         PARTNER_PAIRING_PREFIX,

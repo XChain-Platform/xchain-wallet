@@ -45,7 +45,7 @@ import {
     removeSidecarLoader,
     stripRegtestSidecar,
 } from '../../../packages/web/regtestSidecar.js';
-import { BUILD_PROFILES } from '../../../packages/web/buildProfile.js';
+import { BUILD_PROFILES, STORE_BUILD_PROFILE } from '../../../packages/web/buildProfile.js';
 
 const require = createRequire(import.meta.url);
 
@@ -61,6 +61,10 @@ const SDK_SOURCES = new Map(SDK_COIN_FILES.map((file) => [
 const SIDECAR_CARRIERS = SDK_COIN_FILES.filter((file) => file !== 'index.js'
     && SDK_SOURCES.get(file).includes(SIDECAR_KEY));
 const SDK_FIXTURE_TIMEOUT = 60_000;
+const WEB_VITE_SOURCE = readFileSync(
+    join(dirname(require.resolve('../../../packages/web/package.json')), 'vite.config.js'),
+    'utf8',
+);
 
 // Run a source through the store plugin's own transform, gate included, so the
 // stripped copy is what a store build emits (a null return keeps the source as is).
@@ -105,6 +109,13 @@ describe('the markers a store build must not contain', { timeout: SDK_FIXTURE_TI
 
     it('apply to a profile the build system actually knows', () => {
         expect(BUILD_PROFILES).toContain(STORE_PROFILE);
+        expect(STORE_PROFILE).toBe(STORE_BUILD_PROFILE);
+    });
+
+    it('keeps every web build-profile gate on the shared store constant', () => {
+        expect(WEB_VITE_SOURCE).toContain('BUILD_PROFILE === STORE_BUILD_PROFILE');
+        expect(WEB_VITE_SOURCE).toContain('BUILD_PROFILE !== STORE_BUILD_PROFILE');
+        expect(WEB_VITE_SOURCE).not.toMatch(/BUILD_PROFILE\s*[!=]==?\s*['"]store['"]/);
     });
 
     it('are found in text and reported in declaration order', () => {

@@ -309,9 +309,9 @@ const SHELL_ONLY = {
             reason: 'The web loading screen does not yet expose the recovery action that desktop and extension show.',
         },
         'Locked.lockReason': {
-            shells: ['extension'],
+            shells: ['desktop', 'extension'],
             kind: 'intended',
-            reason: 'Only the extension service worker locks the wallet when storage refuses its auto-lock record, so only its Locked screen says why.',
+            reason: 'Persistent auto-lock backstops can refuse an arm and explain the resulting lock; the plain web shell has no persistent backstop.',
         },
         'VaultUnavailable.onRetry': {
             shells: ['desktop'],

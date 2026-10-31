@@ -252,12 +252,15 @@ const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
 
 // Loaded on first pairing; a lock or wallet switch resets the loaded ones.
+const TREZOR_PAIRING_ENABLED = import.meta.env.XCHAIN_TREZOR_PAIRING !== false;
 const hardwareFactories = trackHardwareFactories({
-    trezor: () => import('./signers/trezorFactory.js'),
+    ...(TREZOR_PAIRING_ENABLED ? { trezor: () => import('./signers/trezorFactory.js') } : {}),
     ledger: () => import('./signers/ledgerFactory.js'),
 });
-const pairTrezorSigner = (...args) => hardwareFactories.load('trezor')
-    .then((module) => module.pairTrezorSigner(...args));
+const pairTrezorSigner = TREZOR_PAIRING_ENABLED
+    ? (...args) => hardwareFactories.load('trezor')
+        .then((module) => module.pairTrezorSigner(...args))
+    : null;
 const pairLedgerSigner = (...args) => hardwareFactories.load('ledger')
     .then((module) => module.pairLedgerSigner(...args));
 const resetHardwareSessions = () => hardwareFactories.reset();
@@ -2779,7 +2782,7 @@ function AppInner() {
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
-                        }, { pairsTrezor: true })}
+                        }, { pairsTrezor: TREZOR_PAIRING_ENABLED })}
                         onBack={() => setUnlockedView('home')}
                     />
                 );

@@ -33,9 +33,10 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
 
 /**
  * Internal entry shape (mirrors what createBackgroundHost pushes). The optional
- * `pendingTxId`, `resumedClaim` and `adsCommit` tie an entry to its vault record and
- * its ADS verdict, so `coerceSnapshot` must keep them.
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string, revealTxHex?: string, revealTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
+ * `pendingTxId`, `resumedClaim` and `adsCommit` tie a stored entry to its vault
+ * record and ADS verdict. `siblingPendingTxIds` is a live-only link rebuilt
+ * from owned PendingTx records and is never authoritative storage data.
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string, revealTxHex?: string, revealTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
  */
 
 /**
@@ -46,7 +47,8 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
 /**
  * One PendingTx write the vault refused, held until a vault that accepts it.
  * Carries the record's id and the write to apply, never signed bytes.
- * @typedef {{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt?: number }} OwedSettlement
+ * Reveal promotion rebuilds its bytes from the PendingTx's `revealTxHex`.
+ * @typedef {{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard' | 'reveal', patch?: object, reveal?: { txid?: string | null, commitTxid?: string | null }, discard?: true, recordedAt?: number }} OwedSettlement
  */
 
 /**
@@ -314,14 +316,28 @@ function splitBlob(blob) {
  */
 function coerceSettlements(v) {
     if (!Array.isArray(v)) return [];
-    return v.filter((s) => (
-        s
-        && typeof s === 'object'
-        && typeof s.id === 'string'
-        && typeof s.pendingTxId === 'string'
-        && s.pendingTxId
-        && (s.op === 'discard' || (s.op === 'patch' && !!s.patch && typeof s.patch === 'object'))
-    ));
+    return v.flatMap((s) => {
+        if (!s || typeof s !== 'object' || typeof s.id !== 'string'
+            || typeof s.pendingTxId !== 'string' || !s.pendingTxId) return [];
+        if (s.op === 'discard') return [s];
+        if (s.op === 'patch' && s.patch && typeof s.patch === 'object') return [s];
+        if (s.op !== 'reveal' || !s.reveal || typeof s.reveal !== 'object') return [];
+        const sourcePatch = s.patch && typeof s.patch === 'object' ? s.patch : {};
+        const { txHex: _tx, signedTxHex: _signed, revealTxHex: _reveal, ...patch } = sourcePatch;
+        return [{
+            id: s.id,
+            ...(typeof s.walletId === 'string' && s.walletId ? { walletId: s.walletId } : {}),
+            pendingTxId: s.pendingTxId,
+            op: 'reveal',
+            reveal: {
+                txid: typeof s.reveal.txid === 'string' ? s.reveal.txid : null,
+                commitTxid: typeof s.reveal.commitTxid === 'string' ? s.reveal.commitTxid : null,
+            },
+            ...(Object.keys(patch).length > 0 ? { patch } : {}),
+            ...(s.discard === true ? { discard: true } : {}),
+            ...(typeof s.recordedAt === 'number' ? { recordedAt: s.recordedAt } : {}),
+        }];
+    });
 }
 
 /**

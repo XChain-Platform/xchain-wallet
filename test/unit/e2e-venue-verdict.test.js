@@ -27,10 +27,47 @@ import { describe, it, expect } from 'vitest';
 import {
     RATE_LIMIT_WINDOW_MS,
     createOutageWatch,
+    freshMempoolSize,
     probeVerdict,
     rateLimitDelayMs,
     venueVerdict,
 } from '../e2e/fixtures/venueHealth.js';
+
+describe('regtest miner mempool status', () => {
+    it('accepts a successful zero-size poll', () => {
+        expect(freshMempoolSize({
+            mempool_size: 0,
+            mempool_size_at: Date.now(),
+            consecutive_errors: 0,
+        })).toBe(0);
+    });
+
+    it('rejects the prior size after a mempool poll error', () => {
+        expect(() => freshMempoolSize({
+            mempool_size: 0,
+            mempool_size_at: Date.now(),
+            consecutive_errors: 1,
+        })).toThrow(/stale/);
+    });
+
+    it('rejects a missing or invalid size', () => {
+        expect(() => freshMempoolSize({ mempool_size_at: Date.now(), consecutive_errors: 0 })).toThrow(/invalid/);
+        expect(() => freshMempoolSize({
+            mempool_size: -1,
+            mempool_size_at: Date.now(),
+            consecutive_errors: 0,
+        })).toThrow(/invalid/);
+    });
+
+    it('rejects a zero from before the current status request', () => {
+        expect(() => freshMempoolSize({ mempool_size: 0, consecutive_errors: 0 })).toThrow(/stale/);
+        expect(() => freshMempoolSize({
+            mempool_size: 0,
+            mempool_size_at: Date.now() - 6000,
+            consecutive_errors: 0,
+        })).toThrow(/stale/);
+    });
+});
 
 // Recorded 2026-08-27: all three chains as the explorer reported them, with
 // RLTC healthy and RBTC's decoder crash-looping on a REORG_HALT marker.

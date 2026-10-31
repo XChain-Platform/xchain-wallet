@@ -257,6 +257,7 @@ export function NotificationsSection({ walletId } = {}) {
     if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const permissionBlocksDelivery = permission !== 'unsupported' && permission !== 'granted';
+    const notificationFlags = settings.notifications || {};
 
     const onToggle = async (key, label, next) => {
         setPendingKey(key);
@@ -282,7 +283,7 @@ export function NotificationsSection({ walletId } = {}) {
                             label={f.label}
                             description={f.hint}
                             checked={!permissionBlocksDelivery
-                                && (f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key]))}
+                                && (f.defaultOn ? notificationFlags[f.key] !== false : Boolean(notificationFlags[f.key]))}
                             disabled={permissionBlocksDelivery || pendingKey !== null}
                             onChange={(event) => onToggle(f.key, f.label, event.target.checked)}
                         />
@@ -292,7 +293,7 @@ export function NotificationsSection({ walletId } = {}) {
                         <PriceAlertsManager
                             walletId={walletId}
                             settings={settings}
-                            enabled={!permissionBlocksDelivery && Boolean(settings.notifications.priceAlerts)}
+                            enabled={!permissionBlocksDelivery && Boolean(notificationFlags.priceAlerts)}
                         />
                     ) : null}
                 </div>
@@ -551,13 +552,24 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     const hasOriginalCurrencyAlert = alerts.some((alert) =>
         String(alert.fiatCurrency || 'usd').toLowerCase() !== fiatCurrency.toLowerCase());
 
-    if (!walletId || !supported) {
+    if (!walletId) {
+        return (
+            <div style={MANAGER}>
+                <span style={ROW_HINT}>
+                    <strong>{t('settings.notifications.noWalletSelected')}.</strong>{' '}
+                    {t('settings.notifications.chooseAWalletToManage')}
+                </span>
+            </div>
+        );
+    }
+
+    if (!supported) {
         return (
             <div style={MANAGER}>
                 <EmptyState
-                    title={!walletId ? t('settings.notifications.noWalletSelected') : t('settings.notifications.priceAlertsUnavailable')}
+                    title={t('settings.notifications.priceAlertsUnavailable')}
                     titleAs="p"
-                    body={!walletId ? t('settings.notifications.chooseAWalletToManage') : t('settings.notifications.priceAlertsAreNotSupported')}
+                    body={t('settings.notifications.priceAlertsAreNotSupported')}
                 />
             </div>
         );

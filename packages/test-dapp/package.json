@@ -6,7 +6,13 @@
     "description": "Reference dApp exercising the window.xchain bridge - mock wallet provider + worked usage examples for third-party integrators",
     "main": "./src/index.ts",
     "type": "module",
+    "scripts": {
+        "typecheck": "tsc --noEmit -p ."
+    },
     "dependencies": {
         "@xchain-wallet/bridge-spec": "workspace:*"
+    },
+    "devDependencies": {
+        "typescript": "5.9.3"
     }
 }

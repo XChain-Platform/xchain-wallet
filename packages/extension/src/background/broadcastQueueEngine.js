@@ -110,7 +110,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             if (queueStore.prunedWallets?.has(walletId)) continue;
             const arr = snapshot[walletId];
             if (!Array.isArray(arr) || arr.length === 0) continue;
-            const restorable = arr.filter((e) => e && typeof e === 'object');
+            const restorable = arr
+                .filter((e) => e && typeof e === 'object')
+                .map(({ siblingPendingTxIds: _storedLinks, ...entry }) => entry);
             if (restorable.length === 0) continue;
             const live = queuedBroadcasts.get(walletId);
             if (!live) {
@@ -136,6 +138,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // only from a record that names it, so the blob copy fills it for the rest.
     function adoptSnapshotVerdict(live, persisted) {
         if (live.signedTxHex !== persisted.signedTxHex) return;
+        mergePendingTxIds(live, persisted);
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
         const verdict = persisted.adsCommit;
@@ -207,6 +210,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                     }
                     if (queueStore.sealed) return false;
                 }
+                // A different load may have completed while these reads were
+                // pending. Its live state is authoritative; never merge this
+                // older snapshot after `loaded` has latched.
+                if (queueStore.loaded) return false;
                 // Re-sample the journal after the reads: a record made while
                 // one was in flight had its own persist refused, so the
                 // write-back below is its only route to storage.
@@ -235,10 +242,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 return true;
             })();
         }
-        const loaded = await queueStore.loadPromise;
+        const pendingLoad = queueStore.loadPromise;
+        const loaded = await pendingLoad;
         // Drop the single-flight latch on failure so the next access retries
         // rather than resolving forever against the same dead read.
-        if (!loaded) queueStore.loadPromise = null;
+        if (!loaded && queueStore.loadPromise === pendingLoad) queueStore.loadPromise = null;
     }
     // Resolve true only when the snapshot reached storage; every skip or refusal is false.
     /** @returns {Promise<boolean>} */
@@ -256,7 +264,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         /** @type {Record<string, any[]>} */
         const snapshot = {};
         for (const [walletId, entries] of queuedBroadcasts.entries()) {
-            if (entries.length > 0) snapshot[walletId] = [...entries];
+            if (entries.length > 0) {
+                snapshot[walletId] = entries.map(({ siblingPendingTxIds: _runtimeLinks, ...entry }) => entry);
+            }
         }
         try {
             await queueStore.storage.save(snapshot);
@@ -328,15 +338,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     }
     // Record what the replay needs and nothing else: a journal record names a
     // PendingTx and the write to apply, never signed bytes, and never enters
-    // `queuedBroadcasts`, so no route can list or broadcast one.
-    function recordOwedSettlement(walletId, pendingTxId, op, patch) {
-        if (typeof pendingTxId !== 'string' || !pendingTxId) return;
+    // `queuedBroadcasts`, so no route can list or broadcast one. Reveal records
+    // rebuild their transaction bytes from the PendingTx during replay.
+    function recordOwedSettlement(walletId, pendingTx, op, payload) {
+        const pendingTxIds = typeof pendingTx === 'string' ? [pendingTx] : pendingTxIdsOf(pendingTx);
+        for (const pendingTxId of pendingTxIds) recordOneOwedSettlement(walletId, pendingTxId, op, payload);
+    }
+    function recordOneOwedSettlement(walletId, pendingTxId, op, payload) {
+        if (!pendingTxId) return;
         const record = {
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             ...(typeof walletId === 'string' && walletId ? { walletId } : {}),
             pendingTxId,
             op,
-            ...(patch ? { patch } : {}),
+            ...(payload ? (op === 'reveal' ? { reveal: payload } : { patch: payload }) : {}),
             recordedAt: Date.now(),
         };
         // One record per PendingTx, folding this write onto the one already owed.
@@ -366,7 +381,19 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             const settled = new Set();
             for (const owed of [...queueStore.owed]) {
                 let verdict;
-                if (owed.op === 'discard') {
+                if (owed.op === 'reveal') {
+                    verdict = await applyRevealPromotion(vault, owed.pendingTxId, owed.reveal);
+                    if (verdict === 'settled' && owed.patch) {
+                        verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
+                    }
+                    if (verdict === 'settled' && owed.discard === true) {
+                        try {
+                            await discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
+                        } catch (_e) {
+                            verdict = 'unreachable';
+                        }
+                    }
+                } else if (owed.op === 'discard') {
                     // Apply the patch a folded discard carries first, so the
                     // discard reads the commit-landed state it recorded.
                     if (owed.patch) verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
@@ -483,6 +510,28 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             queuedBroadcasts.set(walletId, q);
         }
         return q;
+    }
+    // One queue row may represent the same transaction signed under multiple
+    // PendingTx records. Sibling links are derived only from primary ids the
+    // live merge sees; queue storage and callers cannot nominate extra records.
+    function pendingTxIdsOf(entry) {
+        const ids = [];
+        if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) ids.push(entry.pendingTxId);
+        if (Array.isArray(entry?.siblingPendingTxIds)) {
+            for (const id of entry.siblingPendingTxIds) {
+                if (typeof id === 'string' && id && !ids.includes(id)) ids.push(id);
+            }
+        }
+        return ids;
+    }
+    function mergePendingTxIds(target, source) {
+        const primary = target?.pendingTxId;
+        const siblings = new Set(Array.isArray(target?.siblingPendingTxIds)
+            ? target.siblingPendingTxIds.filter((id) => typeof id === 'string' && id && id !== primary)
+            : []);
+        const sourceId = source?.pendingTxId;
+        if (typeof sourceId === 'string' && sourceId && sourceId !== primary) siblings.add(sourceId);
+        if (siblings.size > 0) target.siblingPendingTxIds = [...siblings];
     }
     // Wallets whose durable records this process has already reconciled. The
     // scan reads four collections, and one pass per wallet per process covers
@@ -665,7 +714,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // PendingTx ids a live queue entry or an owed settlement names right now.
     function heldPendingTxIds(walletId) {
         const live = queuedBroadcasts.get(walletId) ?? [];
-        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
+        const held = new Set(live.flatMap(pendingTxIdsOf));
         for (const owed of queueStore.owed) held.add(owed.pendingTxId);
         return held;
     }
@@ -878,7 +927,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `revealTxHex` is the signed reveal of a two-phase action whose commit is
      * `signedTxHex`: the broadcast route sends the commit and then the reveal.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -888,6 +937,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const sameTx = liveEntryForTx(walletId, entry);
         if (sameTx) {
             adoptSnapshotVerdict(sameTx, entry);
+            mergePendingTxIds(sameTx, entry);
             return sameTx;
         }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -950,14 +1000,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * fail permanently.
      *
      * @param {any} vault
-     * @param {{ pendingTxId?: string }} entry
+     * @param {{ pendingTxId?: string, siblingPendingTxIds?: string[] }} entry
      * @param {object} patch
      * @returns {Promise<'settled' | 'unowned' | 'closed' | 'unreachable'>}
      */
     async function settleQueuedPendingTx(vault, entry, patch) {
-        const pendingTxId = entry?.pendingTxId;
-        if (typeof pendingTxId !== 'string' || !pendingTxId) return 'unowned';
-        return applyPendingTxPatch(vault, pendingTxId, patch);
+        const pendingTxIds = pendingTxIdsOf(entry);
+        if (pendingTxIds.length === 0) return 'unowned';
+        const verdicts = [];
+        for (const pendingTxId of pendingTxIds) {
+            verdicts.push(await applyPendingTxPatch(vault, pendingTxId, patch));
+        }
+        if (verdicts.includes('unreachable')) return 'unreachable';
+        if (verdicts.includes('settled')) return 'settled';
+        return 'closed';
     }
     /**
      * Apply one patch to a PendingTx the queue still owns, reporting which of
@@ -990,6 +1046,38 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         }
         return 'settled';
     }
+    /** Promote a two-phase record from its commit to the reveal already held in the vault. */
+    async function applyRevealPromotion(vault, pendingTxId, reveal) {
+        let existing;
+        try {
+            existing = await vault?.pendingTxs?.get(pendingTxId);
+        } catch (_e) {
+            return 'unreachable';
+        }
+        if (!existing) return 'closed';
+        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
+        if (existing.commitLanded === true) return 'settled';
+        const revealTxid = typeof existing.revealTxid === 'string' && existing.revealTxid
+            ? existing.revealTxid
+            : null;
+        const expectedTxid = typeof reveal?.txid === 'string' && reveal.txid ? reveal.txid : null;
+        if (typeof existing.revealTxHex !== 'string' || !existing.revealTxHex) return 'closed';
+        if (expectedTxid && revealTxid && expectedTxid !== revealTxid) return 'closed';
+        try {
+            await vault.pendingTxs.put({
+                ...existing,
+                status: 'broadcasting',
+                txHex: existing.revealTxHex,
+                txid: expectedTxid ?? revealTxid ?? null,
+                commitLanded: true,
+                commitTxid: reveal?.commitTxid ?? existing.commitTxid ?? null,
+                error: null,
+            });
+        } catch (_e) {
+            return 'unreachable';
+        }
+        return 'settled';
+    }
     return {
         ensureQueueLoaded,
         persistQueue,
@@ -1004,6 +1092,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
         pushQueueEntry,
+        pendingTxIdsOf,
         settleQueuedPendingTx,
         applyPendingTxPatch,
     };

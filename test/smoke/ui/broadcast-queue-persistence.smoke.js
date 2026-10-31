@@ -229,7 +229,7 @@ assert.ok(
     'the shared onBroadcastFailure hook returns the queue save verdict',
 );
 assert.ok(
-    /async function enqueueSignedBroadcast\(walletId, entry\) \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engineSrc),
+    /async function enqueueSignedBroadcast\(walletId, entry\) \{[\s\S]*?await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engineSrc),
     'the shared enqueue path loads, deduplicates, and persists signed broadcasts',
 );
 assert.ok(

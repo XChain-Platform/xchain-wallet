@@ -13,14 +13,7 @@
 //
 //   - dApp integration tests that don't want to spin up the extension
 //   - Worked examples for third-party integrators
-//   - Type conformance check: if the mock compiles against XChainProvider,
-//     the interface is coherent
-//
-// This is NOT the wallet's production inject script - that lives in
-// @xchain-wallet/extension once implemented. The shapes here are what a
-// well-behaved provider should return; they are not authoritative responses
-// for any real chain state.
-
+//   - Type conformance, enforced by the workspace typecheck gate
 import {
     formatSignInChallenge,
     SIGN_IN_CHALLENGE_VERSION,
@@ -41,12 +34,15 @@ import {
     type SignActionResult,
     type SignPsbtParams,
     type SignPsbtResult,
+    type CoSignParams,
+    type CoSignResult,
     type SignInParams,
     type SignInResult,
     type BridgeEventMap,
     type BridgeEvent,
     type SitePermissions,
 } from '@xchain-wallet/bridge-spec';
+import { approvedCoSign, signingPathsError } from './mock-signing.js';
 
 export interface MockProviderOptions {
     accounts?: Account[];
@@ -77,22 +73,8 @@ export interface MockProviderOptions {
     supportedActions?: string[];
 }
 
-// Two distinct action contracts, kept apart exactly as the real extension
-// bridge keeps them (extension/src/bridge/handlers.js):
-//
-//   - ChainDescriptor.supportedActions advertises what the CHAIN'S PROTOCOL
-//     accepts. The live bridge returns the registry's full set verbatim from
-//     getSupportedChains (30+ actions on a bitcoin chain).
-//   - The wallet's SIGNABLE set is much smaller (SUPPORTED_BRIDGE_ACTIONS =
-//     ['SEND', 'SWEEP']) and is only reported on an UNSUPPORTED_ACTION refusal
-//     from signAction.
-//
-// A dApp that reads the descriptor as "actions this wallet will sign" is wrong
-// against the live extension, so the mock advertises the registry-shaped set
-// here and refuses everything outside the signable set in signAction. Source
-// of truth for the protocol list: packages/core/src/registry/actions.js
-// (BITCOIN_ACTIONS); this package depends only on @xchain-wallet/bridge-spec,
-// so the list is a literal here rather than an import of wallet internals.
+// Descriptor actions are the chain protocol set. The smaller signable set is
+// returned only when signAction refuses an unsupported action.
 export const DEFAULT_PROTOCOL_ACTIONS: readonly string[] = [
     'ADDRESS', 'AIRDROP', 'BATCH', 'BET', 'BROADCAST', 'CALLBACK', 'COINPAY',
     'COLLECT', 'DELEGATE', 'DEPLOY', 'DEPOSIT', 'DESTROY', 'DISPENSER',
@@ -212,15 +194,20 @@ export class MockXChainProvider implements XChainProvider {
         };
     }
 
-    async connect(_opts?: ConnectOpts): Promise<ConnectResult> {
+    async connect(opts: ConnectOpts = {}): Promise<ConnectResult> {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
         if (!this.opts.autoApprove) {
             return { ok: false, error: 'USER_REJECTED' };
         }
+        const supportedIds = this.opts.supportedChains.map((c) => c.id);
+        const chains = opts.requestedChains === undefined
+            ? supportedIds
+            : supportedIds.filter((id) => opts.requestedChains?.includes(id));
+        if (chains.length === 0) return { ok: false, error: 'USER_REJECTED' };
         this.connected = true;
         this.grantedPermissions = {
-            chains: this.opts.supportedChains.map((c) => c.coin),
+            chains,
             accounts: this.opts.accounts.map((a) => a.id),
             canSignMessage: true,
             canSignAction: { SEND: 'ask', SWEEP: 'ask' },
@@ -230,7 +217,7 @@ export class MockXChainProvider implements XChainProvider {
             ok: true,
             version: this.version,
             accounts: this.opts.accounts,
-            chains: this.opts.supportedChains.map((c) => c.coin),
+            chains,
             permissions: this.grantedPermissions,
         };
     }
@@ -306,18 +293,26 @@ export class MockXChainProvider implements XChainProvider {
     async signPsbt(params: SignPsbtParams): Promise<SignPsbtResult> {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
+        this.assertConnected();
+        const shapeError = signingPathsError(params.signingPaths);
+        if (shapeError) return { ok: false, error: 'INVALID_PARAMS', message: shapeError };
+        if (params.broadcast !== undefined && typeof params.broadcast !== 'boolean') {
+            return { ok: false, error: 'INVALID_PARAMS', message: 'broadcast must be a boolean' };
+        }
+        if (params.broadcast === true) {
+            return { ok: false, error: 'INVALID_PARAMS', message: 'signPsbt does not broadcast' };
+        }
+        if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
+        const signed = params.psbtHex + 'deadbeef';
+        return { ok: true, signedPsbtHex: signed, txHex: 'mock-txhex' };
+    }
+
+    async coSign(params: CoSignParams): Promise<CoSignResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
-        const signed = params.psbtHex + 'deadbeef';
-        if (params.broadcast === false) {
-            return { ok: true, signedPsbtHex: signed };
-        }
-        return {
-            ok: true,
-            signedPsbtHex: signed,
-            txHex: 'mock-txhex',
-            txid: `mock-txid-${Date.now().toString(16)}`,
-        };
+        return approvedCoSign(params);
     }
 
     async signIn(params: SignInParams): Promise<SignInResult> {

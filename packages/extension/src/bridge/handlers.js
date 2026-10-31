@@ -618,6 +618,15 @@ export function registerBridgeHandlers(host, opts = {}) {
         // per-account grant scope after the approval, like sign-in and
         // signMessage, so USER_REJECTED still precedes ADDRESS_NOT_FOUND.
         assertBridgeSigningPathsShape(req.signingPaths);
+        if (req.broadcast !== undefined && typeof req.broadcast !== 'boolean') {
+            throw bridgeError('INVALID_PARAMS', 'broadcast must be a boolean');
+        }
+        if (req.broadcast === true) {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                'signPsbt does not broadcast; pass false or omit broadcast and send the returned txHex',
+            );
+        }
         const decision = await approvals.signPsbt({
             origin: req.origin,
             kind: 'signPsbt',
@@ -639,10 +648,8 @@ export function registerBridgeHandlers(host, opts = {}) {
             psbtHex: req.psbtHex,
             signingPaths: resolved.signingPaths,
         });
-        // SignPsbtSuccess: signedPsbtHex always, txHex only when the wallet
-        // finalized, txid only when it broadcast. Copied field by field rather
-        // than spread so an internal field the signer grows later cannot leak
-        // to a page by default.
+        // signPsbt never broadcasts. A signer-calculated txid is not a
+        // broadcast receipt, so only the signed payloads cross the bridge.
         if (typeof signed?.signedPsbtHex !== 'string' || signed.signedPsbtHex.length === 0) {
             throw bridgeError('UNREACHABLE', 'signPsbt returned no signed PSBT');
         }
@@ -650,7 +657,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             ok: true,
             signedPsbtHex: signed?.signedPsbtHex,
             ...(signed?.txHex ? { txHex: signed.txHex } : {}),
-            ...(signed?.txid ? { txid: signed.txid } : {}),
         };
     });
 

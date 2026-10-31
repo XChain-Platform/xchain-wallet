@@ -24,8 +24,7 @@ function memStorage() {
     };
 }
 
-async function boot() {
-    const storage = memStorage();
+async function boot(storage = memStorage()) {
     const store = createBroadcastQueueStore({ storage, prunedLedger: null });
     const engine = createBroadcastQueueEngine({
         store,
@@ -48,8 +47,34 @@ describe('broadcast queue rows are unique by txid', () => {
         await hook(entry({ pendingTxId: 'p2', signedAt: 2 }));
 
         expect(engine.getQueue(W)).toHaveLength(1);
-        expect(engine.getQueue(W)[0]).toMatchObject({ txid: 'tx-a', pendingTxId: 'p1' });
+        expect(engine.getQueue(W)[0]).toMatchObject({
+            txid: 'tx-a', pendingTxId: 'p1', siblingPendingTxIds: ['p2'],
+        });
         expect(storage.read()[W]).toHaveLength(1);
+        expect(storage.read()[W][0]).not.toHaveProperty('siblingPendingTxIds');
+    });
+
+    it('keeps the extra PendingTx id through a queue restart', async () => {
+        const storage = memStorage();
+        const first = await boot(storage);
+        await first.engine.enqueueOnBroadcastFailure(W)(entry({ pendingTxId: 'p1' }));
+        await first.engine.enqueueOnBroadcastFailure(W)(entry({ pendingTxId: 'p2' }));
+
+        const restarted = await boot(storage);
+        expect(restarted.engine.getQueue(W)[0]).not.toHaveProperty('siblingPendingTxIds');
+        await restarted.engine.enqueueOnBroadcastFailure(W)(entry({ pendingTxId: 'p2' }));
+
+        expect(restarted.engine.getQueue(W)).toEqual([expect.objectContaining({
+            pendingTxId: 'p1', siblingPendingTxIds: ['p2'],
+        })]);
+    });
+
+    it('ignores sibling PendingTx ids supplied by a caller', async () => {
+        const { engine } = await boot();
+
+        engine.pushQueueEntry(W, entry({ siblingPendingTxIds: ['unrelated'] }));
+
+        expect(engine.getQueue(W)[0]).not.toHaveProperty('siblingPendingTxIds');
     });
 
     it('matches on the txid when the second signature differs only in witness bytes', async () => {
@@ -59,6 +84,7 @@ describe('broadcast queue rows are unique by txid', () => {
         await hook(entry({ pendingTxId: 'p2', signedTxHex: 'hex-a-witness-2' }));
 
         expect(engine.getQueue(W)).toHaveLength(1);
+        expect(engine.getQueue(W)[0].siblingPendingTxIds).toEqual(['p2']);
     });
 
     it('keeps two rows for two different transactions', async () => {

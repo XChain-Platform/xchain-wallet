@@ -3147,6 +3147,7 @@ export function createBackgroundHost(deps) {
         } else if (encoderOpts.change === undefined) {
             encoderOpts = { ...encoderOpts, change };
         }
+        encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -3196,16 +3197,11 @@ export function createBackgroundHost(deps) {
             encoderOpts = { ...encoderOpts, change };
         }
 
-        // Coins another send or action from this wallet holds are not this
-        // send's to spend, so Max prices the rest (see ownSpends.js).
-        if (!Array.isArray(encoderOpts.utxos)) {
-            const free = await unclaimedUtxos(chainId, source.address, sdkRegistry);
-            // Every coin is held: there is nothing for Max to offer, and the
-            // form must not fall back to the balance less a fee estimate.
-            if (free?.length === 0) {
-                return { maxSats: '0', feeSats: '0', inputSats: '0', otherOutputSats: '0', source: 'encoder-quote', coinsHeld: true };
-            }
-            if (free) encoderOpts = { ...encoderOpts, utxos: free };
+        try {
+            encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
+        } catch (err) {
+            if (err?.name !== 'CoinsHeldError') throw err;
+            return { maxSats: '0', feeSats: '0', inputSats: '0', otherOutputSats: '0', source: 'encoder-quote', coinsHeld: true };
         }
 
         return flows.quoteMaxSendable({
@@ -3230,6 +3226,19 @@ export function createBackgroundHost(deps) {
         if (!Array.isArray(rows)) return null;
         const free = rows.filter((row) => !taken.has(`${String(row?.txid ?? '').toLowerCase()}:${Number(row?.vout)}`));
         return free.length === rows.length ? null : free;
+    }
+
+    async function withoutHeldCoins(chainId, address, encoderOpts, sdkRegistry) {
+        if (Array.isArray(encoderOpts.utxos)) return encoderOpts;
+        const free = await unclaimedUtxos(chainId, address, sdkRegistry);
+        if (free === null) return encoderOpts;
+        if (free.length === 0) {
+            throw Object.assign(
+                new Error('Every coin at this address is held by another send. Wait for it to broadcast or discard it, then try again.'),
+                { name: 'CoinsHeldError' },
+            );
+        }
+        return { ...encoderOpts, utxos: free };
     }
 
     // VOTE's wire params are built by sdk.voting.*Params, which lives
@@ -3270,19 +3279,21 @@ export function createBackgroundHost(deps) {
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
 
+        let encoderOpts = deviceHardenedEncoderOpts(req, {
+            pubkey: source.publicKey,
+            change,
+            ...(req?.fee !== undefined && { fee: req.fee }),
+            ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+            ...(req?.rbf !== undefined && { rbf: req.rbf }),
+        });
+        encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
             chainRegistry,
             sdkRegistry,
             chainId,
             actionData: { action: 'VOTE', params },
-            encoderOpts: deviceHardenedEncoderOpts(req, {
-                pubkey: source.publicKey,
-                change,
-                ...(req?.fee !== undefined && { fee: req.fee }),
-                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
-                ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            }),
+            encoderOpts,
             source: source.address,
             ownAddresses,
             // Decides whether an oversized poll may ride the Taproot envelope.
@@ -3683,6 +3694,7 @@ export function createBackgroundHost(deps) {
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
         pushQueueEntry,
+        pendingTxIdsOf,
         settleQueuedPendingTx,
     } = createBroadcastQueueEngine({
         store: queueStore,
@@ -4111,7 +4123,10 @@ export function createBackgroundHost(deps) {
             error: null,
         };
         if (await settleQueuedPendingTx(vault, advanced, patch) === 'unreachable') {
-            recordOwedSettlement(walletId, advanced.pendingTxId, 'patch', patch);
+            recordOwedSettlement(walletId, advanced, 'reveal', {
+                txid: advanced.txid ?? null,
+                commitTxid: entry.txid ?? null,
+            });
         }
         return advanced;
     }
@@ -4137,6 +4152,9 @@ export function createBackgroundHost(deps) {
         inFlightQueueBroadcasts.add(claim);
         try {
             await ensureQueueLoaded();
+            if (typeof walletId === 'string' && walletId) {
+                await restoreQueueFromVault(vault, chainRegistry, walletId);
+            }
             const q = getQueue(walletId);
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
@@ -4221,7 +4239,7 @@ export function createBackgroundHost(deps) {
             } catch (freezeErr) {
                 const unclaimPatch = { status: 'queued', error: null };
                 if (await settleQueuedPendingTx(vault, entry, unclaimPatch) === 'unreachable') {
-                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', unclaimPatch);
+                    recordOwedSettlement(walletId, entry, 'patch', unclaimPatch);
                 }
                 throw freezeErr;
             }
@@ -4282,7 +4300,7 @@ export function createBackgroundHost(deps) {
                         error: null,
                     };
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
-                        recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
+                        recordOwedSettlement(walletId, entry, 'patch', deliveredPatch);
                     }
                     await settleReplacedOriginal(vault, entry, entry.txid);
                     await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
@@ -4316,7 +4334,7 @@ export function createBackgroundHost(deps) {
                     ? permanentReleasePatch(entry, failure)
                     : { status: 'queued', error: failure };
                 if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
-                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
+                    recordOwedSettlement(walletId, entry, 'patch', releasePatch);
                 }
                 if (permanent) {
                     const cur = q.findIndex((e) => e.id === id);
@@ -4374,7 +4392,7 @@ export function createBackgroundHost(deps) {
             // the queue: a vault rebuild on another host treats a 'broadcasting'
             // record that neither the queue nor the journal names as orphaned.
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
-                recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
+                recordOwedSettlement(walletId, entry, 'patch', landedPatch);
             }
             await settleReplacedOriginal(vault, entry, landedPatch.txid);
             await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
@@ -4406,7 +4424,7 @@ export function createBackgroundHost(deps) {
             inFlightQueueBroadcasts.delete(claim);
         }
     });
-    host.register('broadcast.queue.discard', async (req, { vault }) => {
+    host.register('broadcast.queue.discard', async (req, { vault, chainRegistry }) => {
         // Refuse while a broadcast holds this entry, and hold the claim ourselves so
         // none starts mid-discard: a half-applied discard orphans a 'queued' record.
         const claim = `${req?.walletId}:${req?.id}`;
@@ -4416,6 +4434,9 @@ export function createBackgroundHost(deps) {
         inFlightQueueBroadcasts.add(claim);
         try {
             await ensureQueueLoaded();
+            if (typeof req?.walletId === 'string' && req.walletId) {
+                await restoreQueueFromVault(vault, chainRegistry, req.walletId);
+            }
             const q = getQueue(req?.walletId);
             const idx = q.findIndex((entry) => entry.id === req?.id);
             const entry = idx >= 0 ? q[idx] : null;
@@ -4423,16 +4444,18 @@ export function createBackgroundHost(deps) {
             // core lane's Discard uses (it deletes a record still 'queued', or one
             // an interrupted claim left at 'broadcasting'), so the record is gone or
             // journaled before the entry leaves the queue.
-            if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+            if (pendingTxIdsOf(entry).length > 0) {
                 // Replay owed writes first, so the delete reads the commit-landed
                 // state an owed advance patch carries rather than the stale record.
                 await flushOwedSettlements(vault);
-                try {
-                    await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
-                } catch (_e) {
-                    // The vault refused the delete, and the queue half is about to
-                    // go, so the journal is the route back to the record.
-                    recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
+                for (const pendingTxId of pendingTxIdsOf(entry)) {
+                    try {
+                        await flows.discardQueuedBroadcast({ vault, pendingTxId });
+                    } catch (_e) {
+                        // The vault refused the delete, and the queue half is about to
+                        // go, so the journal is the route back to the record.
+                        recordOwedSettlement(req?.walletId, pendingTxId, 'discard');
+                    }
                 }
             }
             const cur = q.findIndex((e) => e.id === req?.id);
@@ -5186,6 +5209,8 @@ export function createBackgroundHost(deps) {
             chainId: req?.chainId,
             sourceAddress: source.address,
         });
+        let confirmEncoderOpts = deviceHardenedEncoderOpts(req, {});
+        confirmEncoderOpts = await withoutHeldCoins(req?.chainId, source.address, confirmEncoderOpts, sdkRegistry);
         return composeGatedPublishForConfirm({
             ...req,
             vault,
@@ -5193,7 +5218,7 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
             change,
             ownAddresses,
-            confirmEncoderOpts: deviceHardenedEncoderOpts(req, {}),
+            confirmEncoderOpts,
         });
     });
     host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -5288,6 +5313,14 @@ export function createBackgroundHost(deps) {
             sourceAddress: source.address,
         });
 
+        let encoderOpts = deviceHardenedEncoderOpts(req, {
+            pubkey: source.publicKey,
+            change,
+            ...(req?.fee !== undefined && { fee: req.fee }),
+            ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+            ...(req?.rbf !== undefined && { rbf: req.rbf }),
+        });
+        encoderOpts = await withoutHeldCoins(broadcastChainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
             chainRegistry,
@@ -5297,13 +5330,7 @@ export function createBackgroundHost(deps) {
             // sets COIN and resolves their key).
             chainId: broadcastChainId,
             actionData: { action: 'MESSAGE', params },
-            encoderOpts: deviceHardenedEncoderOpts(req, {
-                pubkey: source.publicKey,
-                change,
-                ...(req?.fee !== undefined && { fee: req.fee }),
-                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
-                ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            }),
+            encoderOpts,
             source: source.address,
             ownAddresses,
             signer: await envelopeSignerOf(vault, req),
@@ -5597,25 +5624,24 @@ export function createBackgroundHost(deps) {
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
 
+        let encoderOpts = deviceHardenedEncoderOpts(req, {
+            pubkey: source.publicKey,
+            change,
+            ...(req?.fee !== undefined && { fee: req.fee }),
+            ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+            ...(req?.rbf !== undefined && { rbf: req.rbf }),
+            // Native fee mode must reach compose so the fee output is inside
+            // the PSBT covered by the confirm tamper check.
+            ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
+        });
+        encoderOpts = await withoutHeldCoins(chainId, source.address, encoderOpts, sdkRegistry);
         const composed = await composeActionForConfirm({
             vault,
             chainRegistry,
             sdkRegistry,
             chainId,
             actionData: { action: 'BET', params },
-            encoderOpts: deviceHardenedEncoderOpts(req, {
-                pubkey: source.publicKey,
-                change,
-                ...(req?.fee !== undefined && { fee: req.fee }),
-                ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
-                ...(req?.rbf !== undefined && { rbf: req.rbf }),
-                // The native-coin fee mode has to reach COMPOSE, not just
-                // submit, so the FEE_DESTINATION output sits inside the PSBT the
-                // user approves and is covered by the tamper check. BET is
-                // fee-bearing on create (v0) and place (v2), and on LTC/DOGE a
-                // native output is the ONLY way to pay it.
-                ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
-            }),
+            encoderOpts,
             source: source.address,
             ownAddresses,
             // Decides whether an oversized market may ride the Taproot envelope.

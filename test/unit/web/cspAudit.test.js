@@ -13,12 +13,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEMO_TOKEN_ICONS } from '../../../packages/core/src/flows/demoFixtures.js';
+import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 import { DESKTOP_RENDERER_CSP } from '../../../packages/desktop/main/security.js';
 import {
     BUILD_PROFILES,
     contentSecurityPolicyFor,
     cspMetaTag,
+    directivesFor,
     metaContentSecurityPolicyFor,
+    profileAllowsTrezorConnect,
 } from '../../../packages/web/src/csp.js';
 import { injectIntegrityImportMap } from '../../../packages/web/sri.js';
 import { findInlineCspViolations } from '../../helpers/htmlCsp.js';
@@ -111,6 +114,39 @@ function expectNoExecutableStringSources(directives) {
 }
 
 describe('built web CSPs', () => {
+    it('keeps build capability and policy aligned for Trezor pairing', () => {
+        expect(profileAllowsTrezorConnect('default')).toBe(true);
+        expect(profileAllowsTrezorConnect('store')).toBe(false);
+        expect(() => profileAllowsTrezorConnect('unknown')).toThrow(/unknown build profile/);
+
+        const app = readFileSync(resolve(REPO, 'packages/web/src/App.jsx'), 'utf8');
+        expect(app).toContain('pairsTrezor: TREZOR_PAIRING_ENABLED');
+        expect(app).not.toContain('pairsTrezor: true');
+        expect(app).toContain('pairTrezorSigner = TREZOR_PAIRING_ENABLED');
+    });
+
+    it('allows every bundled descriptor endpoint and explorer socket', () => {
+        const originFor = (endpoint) => {
+            const url = new URL(endpoint.defaultUrl);
+            if (![80, 443].includes(endpoint.defaultPort)) url.port = String(endpoint.defaultPort);
+            return url.origin;
+        };
+        for (const profile of BUILD_PROFILES) {
+            const sources = directivesFor(profile)['connect-src'];
+            for (const descriptor of BUNDLED_DESCRIPTORS) {
+                for (const name of ['explorer', 'encoder', 'hub']) {
+                    if (!descriptor[name]) continue;
+                    const origin = originFor(descriptor[name]);
+                    expect(sources, `${profile} lacks ${descriptor.id} ${origin}`).toContain(origin);
+                }
+                const socket = new URL(originFor(descriptor.explorer));
+                socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
+                expect(sources, `${profile} lacks ${descriptor.id} ${socket.origin}`)
+                    .toContain(socket.origin);
+            }
+        }
+    });
+
     for (const profile of BUILD_PROFILES) {
         it(`parses the ${profile} header and meta policies`, () => {
             const header = parsePolicy(contentSecurityPolicyFor(profile));

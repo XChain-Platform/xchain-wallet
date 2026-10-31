@@ -85,6 +85,12 @@ function boot(storage) {
     return { store, engine };
 }
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
 describe('owed settlement fold', () => {
     it('stacks a status-only patch on an owed advance patch, so a later Discard keeps the commit', async () => {
         const { store, engine } = boot(memStorage());
@@ -131,6 +137,64 @@ describe('owed settlement fold', () => {
         });
     });
 
+    it('rebuilds a byte-free reveal settlement before applying its later patch', async () => {
+        const { store, engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        const { vault, records } = memVault();
+        Object.assign(records.get(P), { revealTxHex: REVEAL_HEX, revealTxid: 'reveal-txid' });
+
+        engine.recordOwedSettlement(W, P, 'reveal', { txid: 'reveal-txid', commitTxid: 'commit-txid' });
+        engine.recordOwedSettlement(W, P, 'patch', TRANSIENT);
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', patch: TRANSIENT });
+        expect(JSON.stringify(store.owed)).not.toContain(REVEAL_HEX);
+        expect(JSON.stringify(store.owed)).not.toContain(COMMIT_HEX);
+
+        await engine.flushOwedSettlements(vault);
+        expect(records.get(P)).toMatchObject({
+            status: 'queued', txHex: REVEAL_HEX, txid: 'reveal-txid',
+            commitLanded: true, commitTxid: 'commit-txid',
+        });
+    });
+
+    it('promotes a byte-free reveal settlement before its folded discard', async () => {
+        const { store, engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        const { vault, records } = memVault();
+        Object.assign(records.get(P), { revealTxHex: REVEAL_HEX, revealTxid: 'reveal-txid' });
+
+        engine.recordOwedSettlement(W, P, 'reveal', { txid: 'reveal-txid', commitTxid: 'commit-txid' });
+        engine.recordOwedSettlement(W, P, 'discard');
+        expect(store.owed[0]).toMatchObject({ op: 'reveal', discard: true });
+
+        await engine.flushOwedSettlements(vault);
+        expect(records.get(P)).toMatchObject({ status: 'broadcast', txid: 'commit-txid', commitLanded: true });
+    });
+
+    it('does not promote a record whose reveal bytes are unavailable', async () => {
+        const { store, engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        const { vault, records } = memVault();
+        engine.recordOwedSettlement(W, P, 'reveal', { txid: 'reveal-txid', commitTxid: 'commit-txid' });
+
+        await engine.flushOwedSettlements(vault);
+
+        expect(store.owed).toHaveLength(0);
+        expect(records.get(P)).toMatchObject({ status: 'queued', txHex: COMMIT_HEX, txid: 'commit-txid' });
+        expect(records.get(P).commitLanded).toBeUndefined();
+    });
+
+    it('does not label reveal bytes with the commit txid when the reveal txid is unknown', async () => {
+        const { engine } = boot(memStorage());
+        await engine.ensureQueueLoaded();
+        const { vault, records } = memVault();
+        Object.assign(records.get(P), { revealTxHex: REVEAL_HEX });
+        engine.recordOwedSettlement(W, P, 'reveal', { txid: null, commitTxid: 'commit-txid' });
+
+        await engine.flushOwedSettlements(vault);
+
+        expect(records.get(P)).toMatchObject({ txHex: REVEAL_HEX, txid: null, commitLanded: true });
+    });
+
     it('folds a live record onto the persisted advance patch for the same entry on load', async () => {
         const persisted = [{ id: 's-old', walletId: W, pendingTxId: P, op: 'patch', patch: ADVANCE, recordedAt: 1 }];
         const { store, engine } = boot(memStorage(persisted));
@@ -168,5 +232,68 @@ describe('owed settlement fold', () => {
         expect(foldOwedSettlement(discard, later)).toBe(discard);
         expect(foldOwedSettlement(landed, later)).toBe(landed);
         expect(foldOwedSettlement(undefined, later)).toBe(later);
+    });
+
+    it('keeps a refresh load latched when an older failed load finishes later', async () => {
+        const first = deferred();
+        const refreshRead = deferred();
+        let loads = 0;
+        const storage = memStorage();
+        storage.load = async () => (++loads === 1 ? first.promise : refreshRead.promise);
+        const { store, engine } = boot(storage);
+
+        const initial = engine.ensureQueueLoaded();
+        const refresh = refreshBroadcastQueueStore(store);
+        const waiter = engine.ensureQueueLoaded();
+        first.resolve(null);
+        await initial;
+
+        expect(loads).toBe(2);
+        expect(store.loadPromise).not.toBeNull();
+        refreshRead.resolve({});
+        await Promise.all([refresh, waiter]);
+        expect(store.loaded).toBe(true);
+    });
+
+    it('does not let a failed refresh clear a newer engine load', async () => {
+        const refreshRead = deferred();
+        const engineRead = deferred();
+        let loads = 0;
+        const storage = memStorage();
+        storage.load = async () => (++loads === 1 ? refreshRead.promise : engineRead.promise);
+        const { store, engine } = boot(storage);
+
+        const refresh = refreshBroadcastQueueStore(store);
+        store.loadPromise = null;
+        const engineLoad = engine.ensureQueueLoaded();
+        refreshRead.resolve(null);
+        expect(await refresh).toBe(false);
+
+        expect(store.loadPromise).not.toBeNull();
+        engineRead.resolve({});
+        await engineLoad;
+        expect(store.loaded).toBe(true);
+    });
+
+    it('does not merge a stale load after a different load marked the store loaded', async () => {
+        const first = deferred();
+        const stale = deferred();
+        let loads = 0;
+        const storage = memStorage();
+        storage.load = async () => (++loads === 1 ? first.promise : stale.promise);
+        const { store, engine } = boot(storage);
+        const entry = { id: 'renderer-1', chainId: 'test', signedTxHex: '00' };
+
+        const refresh = refreshBroadcastQueueStore(store);
+        store.loadPromise = null;
+        const lateLoad = engine.ensureQueueLoaded();
+        first.resolve({ [W]: [entry] });
+        await refresh;
+        store.queues.get(W).splice(0, 1);
+        stale.resolve({ [W]: [entry] });
+        await lateLoad;
+
+        expect(loads).toBe(2);
+        expect(store.queues.get(W)).toEqual([]);
     });
 });
