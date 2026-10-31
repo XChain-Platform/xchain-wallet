@@ -12,7 +12,7 @@
 // identities, without network kinds, behind its disclosure.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,8 +21,12 @@ const useReachability = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ useReachability }));
 
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
-import { NoticesRouteContext } from '../../../packages/core/src/shared/components/noticesRoute.js';
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeReportContext,
+} from '../../../packages/core/src/shared/components/noticesRoute.js';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
+import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
 
 const chain = (over = {}) => ({
     chainId: 'litecoin-testnet',
@@ -70,6 +74,45 @@ describe('ReachabilityBanner', () => {
         view.rerender(<ReachabilityBanner />);
         expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
         expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
+    });
+
+    it('uses translated retry labels in the banner and reported notice', async () => {
+        registerLocale('retry-test', {
+            'common.tryAgain': 'Retry now',
+            'common.checking': 'Checking now',
+        });
+        await setLocale('retry-test');
+        const report = vi.fn();
+        const refresh = vi.fn();
+        try {
+            useReachability.mockReturnValue({
+                loading: false, overall: 'degraded', perChain: [], refresh, lastChecked: null,
+            });
+            const view = render(
+                <ReachabilityNoticeReportContext.Provider value={report}>
+                    <ReachabilityBanner />
+                </ReachabilityNoticeReportContext.Provider>,
+            );
+            await waitFor(() => expect(report).toHaveBeenLastCalledWith(
+                expect.objectContaining({ retryLabel: 'Retry now' }),
+            ));
+            expect(screen.getByRole('button', { name: 'Retry now' })).toBeEnabled();
+
+            useReachability.mockReturnValue({
+                loading: true, overall: 'degraded', perChain: [], refresh, lastChecked: null,
+            });
+            view.rerender(
+                <ReachabilityNoticeReportContext.Provider value={report}>
+                    <ReachabilityBanner />
+                </ReachabilityNoticeReportContext.Provider>,
+            );
+            await waitFor(() => expect(report).toHaveBeenLastCalledWith(
+                expect.objectContaining({ retryLabel: 'Checking now', retrying: true }),
+            ));
+            expect(screen.getByRole('button', { name: 'Checking now' })).toBeDisabled();
+        } finally {
+            await setLocale('en');
+        }
     });
 
     it('discloses each affected coin once by icon and name without a network kind', () => {

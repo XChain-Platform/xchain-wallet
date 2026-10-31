@@ -95,8 +95,23 @@ describe('ResumeConfirm transaction result details', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText(/session is not resumable/i)).toBeTruthy();
+        expect(await screen.findByText(/unfinished transaction has expired/i)).toBeTruthy();
+        expect(screen.queryByText(/confirmResume:/i)).toBeNull();
         expect(sendToken).not.toHaveBeenCalled();
+    });
+
+    it('turns password and internal failures into user-facing copy', async () => {
+        for (const [failure, expected, hidden] of [
+            [Object.assign(new Error('bad password'), { name: 'InvalidPasswordError' }), /Incorrect password/i, /bad password/i],
+            [new Error('someFlow: internal precondition failed'), /Could not finish this transaction/i, /someFlow:/i],
+            [new Error('Encoder RPC error: boom'), /transaction could not be built/i, /Encoder RPC error/i],
+        ]) {
+            cleanup();
+            mocks.confirm.mockRejectedValueOnce(failure);
+            mount();
+            expect(await screen.findByText(expected)).toBeTruthy();
+            expect(screen.queryByText(hidden)).toBeNull();
+        }
     });
 
     it('returns to home from the page header', async () => {

@@ -25,6 +25,7 @@ const messages = {
     'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
+    'common.checking': 'Checking…',
     'common.password': 'Password',
     'common.showPassword': 'Show password',
     'common.hidePassword': 'Hide password',

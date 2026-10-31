@@ -1103,6 +1103,11 @@ jobs:
              -destination 'generic/platform=iOS Simulator'
              CODE_SIGNING_ALLOWED=NO
              build
+      - name: Resolve the published app association
+        run: |
+          association_domain="$(sed -n 's|.*applinks:\([^<]*\).*|\1|p' packages/mobile/ios/App/App/App.entitlements | head -1)"
+          test -n "$association_domain"
+          echo "XCHAIN_AASA=https://${association_domain}/.well-known/apple-app-site-association" >> "$GITHUB_ENV"
       # The ARCHIVE action, on every tag, with or without Apple (row 22).
       #
       # The simulator build above and the signed archive below cover different

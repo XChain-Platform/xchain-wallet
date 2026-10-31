@@ -19,7 +19,11 @@
 #
 # Each pair names two ENVIRONMENT VARIABLES, never values: the first holds a
 # base64 .p12 (what the MACOS_CSC_LINK style secrets carry), the second its
-# passphrase. Nothing secret reaches argv or the log.
+# passphrase. No secret is an argument to this script or written to the log.
+# The `security` commands do put secrets in their child argv: import receives
+# each .p12 passphrase with -P, while keychain setup receives a random per-run
+# password with -p and -k. This is accepted only on an isolated, ephemeral
+# runner. Move those values off argv before using a shared or persistent one.
 #
 # WHY THIS EXISTS. Given CSC_LINK, app-builder-lib 26.15.7 builds its own
 # temporary keychain with a random password and then runs
@@ -47,8 +51,8 @@ esac
 KEYCHAIN="$1"
 shift
 
-# The keychain's own password: random, used only in this process, and the
-# value set-key-partition-list must be given.
+# The keychain's own password is random, made per run, and never logged or
+# exported. The `security` calls below receive it in argv as described above.
 KC_PASS="$(openssl rand -hex 32)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

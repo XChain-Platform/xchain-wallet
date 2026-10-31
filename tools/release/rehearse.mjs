@@ -75,7 +75,7 @@ import { execFileSync } from 'node:child_process';
 
 import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
-    LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS, ALL_OS_TRIGGER_PACKAGES,
+    LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PACKAGES, isAllOsTriggerPath,
     basenameGlobMatch, directLanesForArtifacts,
 } from './rehearsal-matrix.mjs';
 
@@ -167,6 +167,15 @@ export function validateSwapCheck(result) {
     if (result.from === result.to) {
         return { ok: false, reason: `from and to are both ${result.from}: nothing was swapped` };
     }
+    if (result['built-from-tag'] != null) {
+        const builtFromTag = String(result['built-from-tag']);
+        if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(builtFromTag)) {
+            return { ok: false, reason: `built-from-tag is not a release tag: "${builtFromTag}"` };
+        }
+        if (builtFromTag.replace(/^v/, '') !== result.from) {
+            return { ok: false, reason: `built-from-tag ${builtFromTag} does not match FROM ${result.from}` };
+        }
+    }
     return { ok: true };
 }
 
@@ -179,8 +188,9 @@ export function validateSwapCheck(result) {
  */
 export function makeSwapCheck({
     lane, from, to, result, runner, silicon = null, observed = {}, notes = [], at = null,
+    builtFromTag = null,
 }) {
-    return {
+    const check = {
         'check-version': SWAP_CHECK_VERSION,
         kind: 'automated-swap-check',
         lane,
@@ -196,6 +206,8 @@ export function makeSwapCheck({
         notes,
         at: at || new Date().toISOString(),
     };
+    if (builtFromTag != null) check['built-from-tag'] = builtFromTag;
+    return check;
 }
 
 // ------------------------------------------------------------ yml parsing
@@ -893,9 +905,7 @@ export function swapRequirement({ repo, tag, previousTag, run = gitRun }) {
                 + 'defaulting to the strict requirement',
         };
     }
-    const hits = changed.filter((f) => ALL_OS_TRIGGER_PATHS.some(
-        (p) => (p.endsWith('/') ? f.startsWith(p) : f === p),
-    ));
+    const hits = changed.filter(isAllOsTriggerPath);
     if (hits.length > 0) {
         return {
             requirement: 'all-os',
@@ -1909,7 +1919,13 @@ async function main(argv) {
 
         const valid = validateSwapCheck(result);
         if (!valid.ok) fail(`this is not a usable swap check: ${valid.reason}`);
-        if (result.to !== String(record.tag).replace(/^v/, '')) {
+        if (result['built-from-tag'] != null
+            && result['built-from-tag'].replace(/^v/, '') !== String(record.tag).replace(/^v/, '')) {
+            fail(`the check was built from ${result['built-from-tag']}, and this record is for ${record.tag}.\n`
+                + '  Evidence is bound to the release tree that produced its FROM build.');
+        }
+        if (result['built-from-tag'] == null
+            && result.to !== String(record.tag).replace(/^v/, '')) {
             fail(`the check updated to ${result.to}, and this record is for ${record.tag}.\n`
                 + '  Evidence is bound to the release it was produced against, the same way the\n'
                 + '  record is bound to its manifest.');

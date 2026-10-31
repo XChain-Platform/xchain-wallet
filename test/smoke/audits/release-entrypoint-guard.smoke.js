@@ -79,7 +79,8 @@ try {
             { encoding: 'utf8' });
         assert.equal(recompute.status, 0, recompute.stderr);
         for (const f of readdirSync(src)) copyFileSync(join(src, f), join(store, f));
-        const verifyStore = () => spawnSync('bash', [join(link, 'verify-store.sh'), '--input', input,
+        const legacyBash = process.platform === 'darwin' ? '/bin/bash' : 'bash';
+        const verifyStore = () => spawnSync(legacyBash, [join(link, 'verify-store.sh'), '--input', input,
             '--zip-name', 'ext.zip', '--no-sig', '--unpacked-dir', store], { encoding: 'utf8' });
 
         const match = verifyStore();

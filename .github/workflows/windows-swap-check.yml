@@ -118,7 +118,9 @@ jobs:
       # DELIBERATELY ABSENT: any call to `rehearse.mjs attest`. The evidence
       # leaves here as an artifact and a person on the release machine files
       # it into the release's record with `rehearse.mjs check --from-result`,
-      # alongside - never instead of - the DD4 attestation.
+      # alongside - never instead of - the DD4 attestation. On a tag run the
+      # drill records the CI tag name as built-from-tag, binding the result to
+      # the release tree that produced the FROM installer.
       - uses: actions/upload-artifact@v4
         if: always()
         with:

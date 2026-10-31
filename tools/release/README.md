@@ -582,8 +582,10 @@ The authoritative checklist is §6 of
    `windows-latest` runner is a free native x64 Windows machine, so the job
    builds the tree twice one patch apart, installs the first build, drives
    the real `NsisUpdater` against a local feed and requires the installed
-   binary to be replaced. File its result with `rehearse.mjs check --record
-   <record> --from-result <json>`.
+   binary to be replaced. Tag runs record `built-from-tag`, so the evidence
+   binds to the release tree that produced the FROM installer even though the
+   throwaway TO build is one patch newer. File its result with `rehearse.mjs
+   check --record <record> --from-result <json>` against that tag's record.
 
    **It is not an attestation and cannot become one.** `attest` demands
    `--by <who watched it>` because whether the download replaced the running

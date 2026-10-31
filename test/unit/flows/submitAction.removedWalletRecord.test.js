@@ -23,6 +23,7 @@ vi.mock('../../../packages/core/src/sdk/submitWithSigner.js', async () => {
 });
 
 const { submitAction } = await import('../../../packages/core/src/flows/submitAction.js');
+const { BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME } = await import('../../../packages/core/src/flows/broadcastPermanence.js');
 const { BroadcastFailedError } = await import('../../../packages/core/src/sdk/submitWithSigner.js');
 
 function memCollection() {
@@ -90,6 +91,7 @@ describe('submitAction when the wallet is removed mid-send', () => {
 
     it('leaves the record deleted when the broadcast then fails', async () => {
         const h = harness();
+        const onBroadcastFailure = vi.fn(async () => true);
         submitWithSignerMock.mockImplementation(async ({ onProgress }) => {
             await onProgress('broadcasting', { txid: 'tx-3', txHex: 'beef' });
             await h.removeWalletRecords();
@@ -101,7 +103,10 @@ describe('submitAction when the wallet is removed mid-send', () => {
                 signedAt: 1,
             });
         });
-        await expect(submitAction(h.args)).rejects.toBeInstanceOf(BroadcastFailedError);
+        const error = await submitAction({ ...h.args, onBroadcastFailure }).catch((err) => err);
+        expect(error).toBeInstanceOf(BroadcastFailedError);
+        expect(error.name).toBe(BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME);
+        expect(onBroadcastFailure).not.toHaveBeenCalled();
         expect(await h.pendingTxs.list()).toEqual([]);
     });
 

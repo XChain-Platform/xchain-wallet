@@ -160,8 +160,8 @@ export const LANES = [
             + 'treats Rosetta as an arm64 Mac and keeps only the arm64 files, so an x64 install '
             + 'here migrates to arm64 and the x64 zip is never installed. `attest` refuses this '
             + 'lane on a translated device and `coverage` waives it by name; witnessing the x64 zip '
-            + 'needs a native Intel Mac. A native-Intel build check runs beside this lane '
-            + '(.github/workflows/mac-x64-swap-check.yml); it is separate evidence, never this lane\'s attestation.',
+            + 'needs a native Intel Mac. A native-Intel build and pointer CI gate runs beside this lane '
+            + '(.github/workflows/mac-x64-swap-check.yml); it writes no rehearsal evidence.',
     },
     {
         id: 'mac-arm64',
@@ -376,7 +376,8 @@ export const LINUX_FORMAT_UPDATE_SUPPORT = {
  * from anyone.
  *
  * Deliberately broad: a false "all OSes" costs a rehearsal, a false "one
- * OS" ships an untested swap to two thirds of the fleet.
+ * OS" ships an untested swap to two thirds of the fleet. Vault dependencies
+ * outside storage stay covered here; a smoke test follows that import graph.
  */
 export const ALL_OS_TRIGGER_PATHS = [
     'packages/desktop/main/updater.js',
@@ -385,8 +386,21 @@ export const ALL_OS_TRIGGER_PATHS = [
     'packages/desktop/main/keychain.js',
     'packages/desktop/electron-builder.config.cjs',
     'packages/core/src/storage/',
+    'packages/core/src/crypto/',
+    'packages/core/src/schemas/',
+    'packages/core/src/registry/coinTicker.js',
+    'packages/core/src/shared/utils/textHardening.js',
+    'packages/core/src/util/display_name.js',
+    'packages/core/src/util/uuid.js',
     'tools/release/',
 ];
+
+/** Whether a repository-relative source path raises the requirement to every OS. */
+export function isAllOsTriggerPath(file) {
+    return ALL_OS_TRIGGER_PATHS.some(
+        (path) => (path.endsWith('/') ? file.startsWith(path) : file === path),
+    );
+}
 
 /**
  * Third-party packages whose resolved version in pnpm-lock.yaml raises the
@@ -521,7 +535,7 @@ Two kinds of lane, and they are rehearsed by different probes:
                 install-over the user performs by hand.
 
 Exports: LANES, DIRECT_LANES, ALL_LANES, LINUX_FORMAT_UPDATE_SUPPORT,
-ALL_OS_TRIGGER_PATHS, ALL_OS_TRIGGER_PACKAGES, laneById(id), isDirectLane(id), lanesByOs(),
+ALL_OS_TRIGGER_PATHS, ALL_OS_TRIGGER_PACKAGES, isAllOsTriggerPath(file), laneById(id), isDirectLane(id), lanesByOs(),
 basenameGlobMatch(glob, name), directLanesForArtifacts(names),
 directLanesForShipped(lanesText, names).
 `;

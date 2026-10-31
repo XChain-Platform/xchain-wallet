@@ -33,6 +33,13 @@
 //      Approve cannot be completed this way simply does not opt in, and keeps
 //      today's re-entry cost.
 
+export const RESUME_EXPIRED = 'RESUME_EXPIRED';
+export const RESUME_UNAVAILABLE = 'RESUME_UNAVAILABLE';
+
+function resumeError(code, message) {
+    return Object.assign(new Error(message), { code });
+}
+
 /**
  * Messaging methods a stored confirm may dispatch. Every entry is a submit
  * route that takes `prebuiltPsbt`, so a resumed approve signs the byte-
@@ -155,15 +162,15 @@ export function isResumable(session, nowMs) {
  */
 export function resumeDispatch(session, { isHw = false } = {}) {
     if (!isResumable(session, Date.now())) {
-        throw new Error('confirmResume: session is not resumable');
+        throw resumeError(RESUME_EXPIRED, 'confirmResume: session is not resumable');
     }
     const d = session.dispatch;
     const method = isHw ? d.hardware : d.software;
     if (!method) {
-        throw new Error('confirmResume: this confirm has no hardware lane');
+        throw resumeError(RESUME_UNAVAILABLE, 'confirmResume: this confirm has no hardware lane');
     }
     if (!RESUMABLE_DISPATCH_METHODS.includes(method)) {
-        throw new Error(`confirmResume: "${method}" is not an allow-listed dispatch`);
+        throw resumeError(RESUME_UNAVAILABLE, `confirmResume: "${method}" is not an allow-listed dispatch`);
     }
     return { method, base: structuredCloneish(d.base) };
 }

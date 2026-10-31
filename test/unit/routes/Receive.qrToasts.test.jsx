@@ -118,6 +118,21 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('waits for a non-empty address before building or rendering a payment request', async () => {
+        const pendingAddress = { ...ADDRESS, address: '' };
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [pendingAddress] }),
+            getNewestAddress: async () => pendingAddress,
+        });
+
+        expect(await screen.findByRole('button', { name: 'Generate new address' }))
+            .toBeInTheDocument();
+        expect(qrToDataURL).not.toHaveBeenCalled();
+        expect(screen.queryByText('Rendering QR…')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy payment link' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: /^Amount/ })).toBeNull();
+    });
+
     it('does not render fee controls or fee estimates', async () => {
         renderReceive();
 

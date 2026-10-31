@@ -38,8 +38,8 @@
 //     error, recovery, feeText, totalText, emptyActionLabel, warningNoun,
 //     message, description, lead, legend, closeLabel, searchLabel, subtitle,
 //     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
-//     unavailableMessage (the USER_FACING_ATTRS set below is the authority;
-//     keep this list in step with it). The last forty-three are component
+//     unavailableMessage, intro (the USER_FACING_ATTRS set below is the authority;
+//     keep this list in step with it). The last forty-four are component
 //     props rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
@@ -324,6 +324,10 @@ const USER_FACING_ATTRS = new Set([
     // PsbtIntentPanel renders `unavailableMessage` verbatim in place of the
     // transaction view; its call site writes the reason as a ternary literal.
     'unavailableMessage',
+    // FormPage and ListPage render `intro` verbatim as the muted paragraph
+    // above their content. Every JSX `intro=` is copy, a JSX element or a
+    // runtime value, and no gate reports the last two.
+    'intro',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

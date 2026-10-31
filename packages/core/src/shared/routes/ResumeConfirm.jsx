@@ -46,6 +46,7 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -170,7 +171,19 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 onCancel?.();
                 return;
             }
-            setError(err?.message || 'Could not finish this transaction.');
+            if (err?.code === flowsLib.RESUME_EXPIRED) {
+                setError('This unfinished transaction has expired and can no longer be finished. Nothing was signed or sent. Start it again from the original screen.');
+            } else if (err?.code === flowsLib.RESUME_UNAVAILABLE) {
+                setError('This unfinished transaction can\'t be finished from here. Nothing was signed or sent. Start it again from the original screen.');
+            } else if (err?.name === 'InvalidPasswordError') {
+                setError('Incorrect password.');
+            } else {
+                setError(submitFailureMessage(err, {
+                    chainId,
+                    verb: 'finish this transaction',
+                    fallback: 'Could not finish this transaction.',
+                }));
+            }
         }
     }, [session, hw, chainId, composed, messaging, confirmAction, fromAddress, onCancel]);
 
