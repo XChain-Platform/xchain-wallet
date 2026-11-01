@@ -49,6 +49,20 @@ test('accepts installed SDK versions that match each lockfile pin', (t) => {
     assert.match(result.stdout, /desktop: xchain-sdk 0\.21\.3 matches the lockfile/);
 });
 
+test('accepts a lockfile resolution that carries a peer suffix', (t) => {
+    const root = fixture();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(path.join(root, 'pnpm-lock.yaml'), lockfile().replaceAll(
+        "version: '@dankest-llc/xchain-sdk@0.21.3'",
+        "version: '@dankest-llc/xchain-sdk@0.21.3(typescript@5.9.3)'",
+    ));
+
+    const result = run(root);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /web: xchain-sdk 0\.21\.3 matches the lockfile/);
+});
+
 test('rejects an installed SDK version that differs from the lockfile pin', (t) => {
     const root = fixture();
     t.after(() => rmSync(root, { recursive: true, force: true }));

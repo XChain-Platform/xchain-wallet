@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 const { XChainSDK } = require('xchain-sdk');
 
 const PACKAGE_NAMES = ['web', 'extension', 'desktop'];
-const EXPECTED_SDK_PIN = 'npm:@dankest-llc/xchain-sdk@0.26.2';
+const EXPECTED_SDK_PIN = 'npm:@dankest-llc/xchain-sdk@0.27.0';
 const SDK_PIN_PATTERN = /^npm:@dankest-llc\/xchain-sdk@[0-9]+\.[0-9]+\.[0-9]+$/;
 const repoFile = (path) => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
 
@@ -120,7 +120,11 @@ export function sdkPinDisagreements(webText, extensionText, desktopText, lockfil
         if (entry.specifier !== expectedPin) {
             disagreements.push(`pnpm-lock.yaml ${importer} xchain-sdk specifier is ${String(entry.specifier)}, expected ${expectedPin}`);
         }
-        if (entry.version !== expectedVersion) {
+        // pnpm appends a peer-resolution suffix such as "(typescript@5.9.3)"
+        // when a dependency of the SDK carries an optional peer, so compare
+        // the package version without it.
+        const lockedVersion = String(entry.version).replace(/\(.*\)$/, '');
+        if (lockedVersion !== expectedVersion) {
             disagreements.push(`pnpm-lock.yaml ${importer} xchain-sdk version is ${String(entry.version)}, expected ${expectedVersion}`);
         }
     }

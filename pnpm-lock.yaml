@@ -190,8 +190,8 @@ importers:
         specifier: ^8.12.2
         version: 8.12.3
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.26.2
-        version: '@dankest-llc/xchain-sdk@0.26.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.27.0
+        version: '@dankest-llc/xchain-sdk@0.27.0(typescript@5.9.3)'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -239,8 +239,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.26.2
-        version: '@dankest-llc/xchain-sdk@0.26.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.27.0
+        version: '@dankest-llc/xchain-sdk@0.27.0(typescript@5.9.3)'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -322,8 +322,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.26.2
-        version: '@dankest-llc/xchain-sdk@0.26.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.27.0
+        version: '@dankest-llc/xchain-sdk@0.27.0(typescript@5.9.3)'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -626,8 +626,8 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@0.26.2':
-    resolution: {integrity: sha512-yvs73/Q6yPidG4yyG2iO5Ohm6+evmsRti22rLaPGrkC8YClEDJGpufv4bfulb7aGIU08MXf+Nmprud0gWsavHg==}
+  '@dankest-llc/xchain-sdk@0.27.0':
+    resolution: {integrity: sha512-hmACJ+NtpQ1+D+aNH+LdgwDTPshJ03zE3Cb+8EaZtJqcUHPhd8rFOElm/9c62CP0H4WaJNHr35RHyHM/DucbMw==}
     engines: {node: '>=22.0.0'}
 
   '@electron-internal/extract-zip@1.0.5':
@@ -4649,7 +4649,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@0.26.2':
+  '@dankest-llc/xchain-sdk@0.27.0(typescript@5.9.3)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
@@ -4661,7 +4661,7 @@ snapshots:
       astring: 1.9.0
       axios: 1.20.0
       bip174: 2.1.1
-      bitcoinjs-lib: 7.0.4
+      bitcoinjs-lib: 7.0.4(typescript@5.9.3)
       bitcoinjs-message: 2.2.0
       cors: 2.8.6
       dotenv: 16.6.1
@@ -4670,6 +4670,8 @@ snapshots:
       express-json-rpc-router: 1.4.0
       helmet: 8.3.0
       mathjs: 15.2.0
+      uint8array-tools: 0.0.10
+      valibot: 1.5.0(typescript@5.9.3)
       ws: 8.21.0
       zod: 4.6.7
     transitivePeerDependencies:
@@ -5920,14 +5922,14 @@ snapshots:
       typeforce: 1.18.0
       varuint-bitcoin: 1.1.2
 
-  bitcoinjs-lib@7.0.4:
+  bitcoinjs-lib@7.0.4(typescript@5.9.3):
     dependencies:
       '@noble/hashes': 1.8.0
       bech32: 2.0.0
       bip174: 3.0.1
       bs58check: 4.0.0
       uint8array-tools: 0.0.10
-      valibot: 1.5.0
+      valibot: 1.5.0(typescript@5.9.3)
       varuint-bitcoin: 2.0.1
     transitivePeerDependencies:
       - typescript
@@ -8340,7 +8342,9 @@ snapshots:
 
   uuid@7.0.3: {}
 
-  valibot@1.5.0: {}
+  valibot@1.5.0(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   varuint-bitcoin@1.1.2:
     dependencies:
