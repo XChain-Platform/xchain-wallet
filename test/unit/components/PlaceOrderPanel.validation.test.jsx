@@ -97,7 +97,7 @@ describe('PlaceOrderPanel validation', () => {
         mount();
 
         const consent = await screen.findByRole('checkbox', {
-            name: /Enable CoinPay auto-pay/,
+            name: /Enable auto-pay/,
         });
         expect(consent).toBeChecked();
         fireEvent.click(consent);

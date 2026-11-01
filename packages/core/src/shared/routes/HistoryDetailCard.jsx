@@ -1217,7 +1217,11 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         } else if (isRemovedAccessListValue(k, v)) {
             display = 'None';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
-            display = '0 (protocol placeholder; price set by oracle)';
+            // Drop the wire 0: next to an amount it reads as free.
+            const fiat = String(raw.fiat_code ?? raw.FIAT_CODE ?? '').trim();
+            display = fiat
+                ? `Varies: set from the oracle's ${fiat} price at each purchase`
+                : "Varies: set from the oracle's price at each purchase";
         } else if (AMOUNT_KEY_RE.test(k) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v))) {
             const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
                 && /^(amount|quantity)$/i.test(k);

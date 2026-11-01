@@ -110,7 +110,12 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
             derivationPath: "m/84'/1'/0'/0/0",
             source: 'hd',
         }]) },
-        pendingTxs: { list: vi.fn(async () => [...rows.values()]), get: vi.fn(async (id) => rows.get(id) ?? null), put },
+        pendingTxs: {
+            list: vi.fn(async () => [...rows.values()]),
+            get: vi.fn(async (id) => rows.get(id) ?? null),
+            findBy: vi.fn(async (field, value) => [...rows.values()].filter((row) => row[field] === value)),
+            put,
+        },
         settings: { get: vi.fn(async () => ({})) },
     };
     const descriptor = {
@@ -122,7 +127,10 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
     };
     const host = createBackgroundHost({
         vault,
-        chainRegistry: { get: (id) => (id === CHAIN ? descriptor : null) },
+        chainRegistry: {
+            get: (id) => (id === CHAIN ? descriptor : null),
+            chainIdFor: (coin, network) => (coin === 'bitcoin' && network === 'regtest' ? CHAIN : null),
+        },
         sdkRegistry: { get: () => sdk },
         signerPool: { get: () => ({ signPsbt }), has: () => true },
         broadcastQueueStorage: null,
@@ -300,6 +308,47 @@ describe('tx.replace background route', () => {
         expect(rbfFailureMessage(again.error, 'fallback')).toBe(again.error.message);
         expect(h.signPsbt).toHaveBeenCalledTimes(1);
         expect(h.broadcastTx).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the original on the queued replacement record itself', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+        await call(h.host, {});
+
+        const writes = h.put.mock.calls.map(([row]) => row).filter((row) => row.txid === REPLACEMENT);
+        expect(writes[0]).toMatchObject({ status: 'broadcasting', rbfReplacesPendingTxId: 'pending-aaaa' });
+        expect([...h.rows.values()]).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: REPLACEMENT, status: 'queued', rbfReplacesPendingTxId: 'pending-aaaa' }),
+        ]));
+    });
+
+    it('refuses a second replacement after a relaunch with no saved queue', async () => {
+        const first = harness();
+        first.broadcastTx.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+        await call(first.host, {});
+
+        const relaunched = harness([...first.rows.values()]);
+        const again = await call(relaunched.host, {});
+
+        expect(again.ok).toBe(false);
+        expect(again.error.message).toMatch(/already waiting in the queued-transactions banner/);
+        expect(relaunched.signPsbt).not.toHaveBeenCalled();
+    });
+
+    it('retires the original when a replacement rebuilt from the vault alone lands', async () => {
+        const first = harness();
+        first.broadcastTx.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+        await call(first.host, {});
+
+        const relaunched = harness([...first.rows.values()]);
+        const [entry] = await queueOf(relaunched.host);
+        expect(entry).toMatchObject({ txid: REPLACEMENT, rbfReplacesPendingTxId: 'pending-aaaa' });
+
+        const sent = await relaunched.host.handle({ type: 'broadcast.queue.broadcast', request: { walletId: WALLET, id: entry.id } });
+        expect(sent.ok, JSON.stringify(sent.error)).toBe(true);
+        expect([...relaunched.rows.values()]).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: ORIGINAL, status: 'rbf-replaced', rbfReplacement: REPLACEMENT }),
+        ]));
     });
 
     it('settles a speedup the node already holds as delivered', async () => {

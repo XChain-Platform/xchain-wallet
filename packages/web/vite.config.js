@@ -29,10 +29,15 @@ import { defineConfig } from 'vite';
 import { colorMixFallback } from './cssFallbacks.js';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { metaContentSecurityPolicyFor } from './src/csp.js';
+import { metaContentSecurityPolicyFor, profileAllowsTrezorConnect } from './src/csp.js';
 // Which feature set this build carries. Resolved once,
 // here, so the CSP and the stamp written into the dist cannot disagree.
-import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
+import {
+    PROFILE_STAMP_FILE,
+    STORE_BUILD_PROFILE,
+    profileStampFor,
+    resolveBuildProfile,
+} from './buildProfile.js';
 // Which SURFACES this profile carries. The registry is data; the two
 // pieces below are the mechanism that acts on it.
 import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
@@ -156,7 +161,7 @@ const styleGuideBuildPlugin = {
     apply: 'build',
     configResolved(config) { mainOutDir = resolvePath(config.root, config.build.outDir); },
     async closeBundle() {
-        if (STYLE_GUIDE_PASS || BUILD_PROFILE === 'store') return;
+        if (STYLE_GUIDE_PASS || BUILD_PROFILE === STORE_BUILD_PROFILE) return;
         const { build } = await import('vite');
         process.env.XCHAIN_WEB_STYLE_GUIDE_PASS = '1';
         try {
@@ -341,6 +346,9 @@ const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
 export default defineConfig({
     define: {
         'require.main': 'undefined',
+        'import.meta.env.XCHAIN_TREZOR_PAIRING': JSON.stringify(
+            profileAllowsTrezorConnect(BUILD_PROFILE),
+        ),
     },
     // xchain-sdk is CJS and pulls in `ws` + Node `crypto` + Buffer at
     // module load. `ws` is aliased to our browser shim
@@ -453,7 +461,7 @@ export default defineConfig({
         // way: packages/desktop and packages/extension both set sourcemap
         // false. The web shell is the outlier, and the mobile shells inherited
         // the outlier by bundling its output rather than by deciding anything.
-        sourcemap: BUILD_PROFILE !== 'store',
+        sourcemap: BUILD_PROFILE !== STORE_BUILD_PROFILE,
         rollupOptions: {
             ...(STYLE_GUIDE_PASS
                 ? { input: fileURLToPath(new URL('./style-guide/index.html', import.meta.url)) }

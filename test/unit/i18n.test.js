@@ -475,6 +475,8 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // A shared reachability retry label and the settings backup checker.
+            ['common.checking', 'settings.backup.checking'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
             ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
             // Retrying a desktop update download and retrying a balance load.

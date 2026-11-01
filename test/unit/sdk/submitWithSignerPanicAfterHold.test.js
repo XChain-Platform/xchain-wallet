@@ -36,7 +36,7 @@ function revealLegs(txid, encoding) {
     const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
     return {
         inputs: [{ prevTxHash: txid, prevTxIndex: 0, scriptType, redeemScriptHex: '0100' }],
-        outputs: [{ scriptType }],
+        outputs: [{ scriptType, scriptPubKeyHex: '6a00', value: 0 }],
     };
 }
 

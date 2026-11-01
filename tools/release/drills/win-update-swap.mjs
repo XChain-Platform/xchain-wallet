@@ -110,6 +110,7 @@ Options:
   --out <file>     write the evidence JSON here (default: swap-check.json
                    beside the artifact directory)
   --runner <text>  what machine this is, recorded verbatim in the evidence
+  --tag <vX.Y.Z>   release tag whose tree produced the FROM build
   --silicon        print what silicon this process is running on and exit 0
   -h, --help       print this and exit 0
 
@@ -244,6 +245,30 @@ export function disposabilityVerdict(env = process.env) {
     };
 }
 
+/** Release tag whose tree produced the FROM build, if this is a tag run. */
+export function builtFromTagOf(argv, env = process.env) {
+    const explicit = flagValue(argv, '--tag');
+    if (explicit !== undefined) return explicit;
+    return env.GITHUB_REF_TYPE === 'tag' ? (env.GITHUB_REF_NAME || null) : null;
+}
+
+/** Compose the producer's evidence shape without running the Windows drill. */
+export function evidenceFor(pair, {
+    result, runner, silicon, observed = {}, notes = [], builtFromTag = null,
+}) {
+    return makeSwapCheck({
+        lane: pair.lane,
+        from: pair.fromVersion,
+        to: pair.toVersion,
+        result,
+        runner,
+        silicon,
+        observed,
+        notes,
+        builtFromTag,
+    });
+}
+
 /**
  * A stand-in for the `electron` module, for an updater driven under Node.
  *
@@ -363,12 +388,14 @@ async function main(argv) {
         || (process.env.GITHUB_ACTIONS === 'true'
             ? `GitHub-hosted ${process.env.RUNNER_OS || 'Windows'} runner (${process.env.RUNNER_ARCH || pair.arch})`
             : `unnamed Windows host (${pair.arch})`);
+    const builtFromTag = builtFromTagOf(argv);
     const notes = [];
 
     log(`lane:           ${pair.lane}`);
     log(`silicon:        ${silicon.label}`);
     log(`installed-from: ${pair.from} (${pair.fromVersion})`);
     log(`offered:        ${pair.to} (${pair.toVersion}), via ${pair.pointer}`);
+    log(`built-from-tag: ${builtFromTag || '(not a tag run)'}`);
 
     // A check that ran on emulated silicon is still worth having and must
     // not pretend otherwise: the reason this lane exists is that the DD4
@@ -382,15 +409,13 @@ async function main(argv) {
     }
 
     const write = (result) => {
-        const evidence = makeSwapCheck({
-            lane: pair.lane,
-            from: pair.fromVersion,
-            to: pair.toVersion,
+        const evidence = evidenceFor(pair, {
             result: result.result,
             runner,
             silicon: silicon.label,
             observed: result.observed,
             notes: [...notes, ...(result.notes || [])],
+            builtFromTag,
         });
         writeFileSync(outFile, `${JSON.stringify(evidence, null, 2)}\n`);
         log(`evidence written to ${outFile}`);
@@ -615,7 +640,7 @@ function flagValue(argv, name) {
  * @returns {string|undefined}
  */
 export function positionalOf(argv) {
-    const takesValue = new Set(['--out', '--runner']);
+    const takesValue = new Set(['--out', '--runner', '--tag']);
     for (let i = 0; i < argv.length; i += 1) {
         if (argv[i].startsWith('-')) {
             if (takesValue.has(argv[i])) i += 1;

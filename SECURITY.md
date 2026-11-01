@@ -25,7 +25,7 @@ Email **security@dankest.llc** with:
 - The affected version (`packages/core/src/buildInfo.js → WALLET_VERSION`) and the shell you tested against (extension / web / desktop).
 - Any patches or mitigations you'd like considered.
 
-For sensitive reports, please encrypt the email body to our PGP key.
+For sensitive reports, the private advisory channel above is the confidential path we recommend: it is private until we publish it and needs no key exchange. If you would rather use email, send a first message without sensitive details and we will coordinate an encrypted exchange before you share them. We do not publish a PGP key for this address. The fingerprint below is for the wallet release signing key, provided only to verify downloads; do not encrypt a report to it.
 
 > **PGP fingerprint: 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7**  
 > `XChain Wallet Release Signing <releases@dankest.llc>`, ed25519, created 2026-08-06, expires 2028-08-05. The primary key is certify-only and offline; the signing subkey that actually signs a release manifest is `27A1593607C828903EF67DAD10ADF79899B41573`.
@@ -158,4 +158,4 @@ We ship security fixes against the latest tagged release. Older releases are uns
 
 ---
 
-Last reviewed: 2026-04-27 at v0.194.0.
+Last reviewed: 2026-10-30.

@@ -67,8 +67,9 @@ assert.ok(/<StatusMessage\b/.test(banner) && /<ReachabilityLine\b/.test(banner) 
     'ReachabilityBanner renders through StatusMessage with role="status" for screen readers');
 assert.ok(/aria-atomic="true"/.test(line),
     'ReachabilityBanner announces each complete state message');
-assert.ok(/Try again/.test(banner),
-    'ReachabilityBanner exposes a plain-language retry button');
+assert.ok(/t\(['"]common\.tryAgain['"]\)/.test(banner)
+    && /t\(['"]common\.checking['"]\)/.test(banner),
+    'ReachabilityBanner exposes translated retry button labels');
 assert.ok(/const variant = overall === 'offline' \? 'error' : 'warning'/.test(banner) && /variant=\{variant\}/.test(banner),
     'ReachabilityBanner takes its tone from the shared StatusMessage variants');
 

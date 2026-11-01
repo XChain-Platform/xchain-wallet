@@ -33,7 +33,7 @@ import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigne
 const revealLegs = (commitTxid, encoding) => {
     const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
     const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
-    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType, scriptPubKeyHex: '6a00', value: 0 }] };
 };
 
 // A report shaped like the encoder's: it rewrites the COMPRESSION field and

@@ -375,6 +375,22 @@ describe('receiveAddress index space by wallet format', () => {
         return vault;
     }
 
+    function legacySigner() {
+        return {
+            id: 'legacy-signer',
+            kind: 'software',
+            async getAddresses({ startIndex, addressType }) {
+                return [{
+                    index: startIndex,
+                    address: `${addressType}_${startIndex}`,
+                    publicKey: `pub_${startIndex}`,
+                    path: `m/0'/0/${startIndex}`,
+                }];
+            },
+            lock() {},
+        };
+    }
+
     it('continues past a p2pkh address when deriving p2wpkh for a legacy wallet', async () => {
         const vault = vaultWithFormat('counterwallet-legacy');
         const rec = await receiveAddress(
@@ -384,6 +400,21 @@ describe('receiveAddress index space by wallet format', () => {
         expect(rec.derivationPath.endsWith('/1')).toBe(true);
         expect(rec.address).not.toBe(LEGACY_ADDR.address);
         expect(rec.label).toBe('BTC Address #2');
+    });
+
+    it('skips an index funded under another encoding in a legacy wallet', async () => {
+        const vault = vaultWithFormat('counterwallet-legacy');
+        const fundedSdkRegistry = {
+            get: () => ({
+                explorer: { getHistory: async (address) => (address === 'p2wpkh_1' ? [{}] : []) },
+            }),
+        };
+        const rec = await receiveAddress(base(vault, legacySigner(), {
+            addressType: 'p2pkh', sdkRegistry: fundedSdkRegistry,
+        }));
+
+        expect(rec.derivationPath).toBe("m/0'/0/2");
+        expect(rec.address).toBe('p2pkh_2');
     });
 
     it('keeps per-type index spaces for a BIP39 wallet', async () => {
@@ -421,6 +452,18 @@ describe('receiveAddress index space by wallet format', () => {
             base(vault, makeSigner('software'), { addressType: 'p2wpkh' }),
         );
         expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+
+    it('rejects before deriving when the wallet lookup fails', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [LEGACY_ADDR] });
+        vault.wallets = { get: async () => { throw new Error('read failed'); } };
+        const signer = makeSigner('software');
+
+        await expect(receiveAddress(
+            base(vault, signer, { addressType: 'p2wpkh' }),
+        )).rejects.toThrow('read failed');
+        expect(signer.calls).toHaveLength(0);
+        expect(await vault.addresses.list()).toHaveLength(1);
     });
 });
 

@@ -291,7 +291,9 @@ export function ActionConfirmScreen({
             hardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
             feeText={displayedFee}
-            totalText={totalText || (nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined)}
+            totalText={totalText || (nativePaymentTotal
+                ? t('send.totalValue', { amount: nativePaymentTotal, ticker })
+                : undefined)}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}

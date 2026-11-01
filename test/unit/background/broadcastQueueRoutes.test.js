@@ -50,6 +50,7 @@ import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
+const OWNED_ADDR = 'bcrt1qqueue-owner';
 // Queue routes accept signed bytes from outside the active signing flow, so
 // their fixtures spend a coin the stand-in tracker can establish and verify.
 const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
@@ -91,6 +92,13 @@ function deferred() {
     let resolve; let reject;
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
     return { promise, resolve, reject };
+}
+
+function ownedWalletTables() {
+    return {
+        accounts: { findBy: async () => [{ id: 'acct-w1', walletId: W }] },
+        addresses: { list: async () => [{ id: 'addr-w1', accountId: 'acct-w1', address: OWNED_ADDR }] },
+    };
 }
 
 /**
@@ -387,7 +395,8 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
 
 describe('the host queue settles the PendingTx half it was handed', () => {
     const queuedRecord = (id) => ({
-        id, chain: 'bitcoin', network: 'regtest', status: 'queued', txHex: `hex-${id}`, txid: null, error: 'offline',
+        id, chain: 'bitcoin', network: 'regtest', fromAddress: OWNED_ADDR,
+        status: 'queued', txHex: TX_HEX, txid: null, error: 'offline',
     });
 
     it('a successful broadcast moves the record from queued to broadcast', async () => {
@@ -403,6 +412,24 @@ describe('the host queue settles the PendingTx half it was handed', () => {
         expect(rec.txid).toBe('tx-A');
         expect(rec.error).toBeNull();
         expect(typeof rec.broadcastAt).toBe('string');
+    });
+
+    it('a successful broadcast settles every PendingTx merged into the row', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => ({ txid: 'tx-A' })),
+            ...ownedWalletTables(),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        await h.vault.pendingTxs.put(queuedRecord('p2'));
+        await h.list();
+
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+        expect(await h.vault.pendingTxs.get('p2')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+        expect(await h.list()).toEqual([]);
     });
 
     it('a permanent rejection moves the record to failed; a transient one leaves it queued', async () => {
@@ -456,6 +483,62 @@ describe('the host queue settles the PendingTx half it was handed', () => {
         expect(await h.list()).toEqual([]);
     });
 
+    it('permanent rejection and discard settle every PendingTx merged into a row', async () => {
+        const rejected = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => { throw new Error('bad-txns-inputs-missingorspent'); }),
+            ...ownedWalletTables(),
+        });
+        await rejected.vault.pendingTxs.put(queuedRecord('p1'));
+        await rejected.vault.pendingTxs.put(queuedRecord('p2'));
+        await rejected.list();
+        await rejected.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect((await rejected.vault.pendingTxs.get('p1')).status).toBe('failed');
+        expect((await rejected.vault.pendingTxs.get('p2')).status).toBe('failed');
+
+        const discarded = makeHost({
+            entries: [entry('B', { pendingTxId: 'p3' })], broadcastTx: vi.fn(), ...ownedWalletTables(),
+        });
+        await discarded.vault.pendingTxs.put(queuedRecord('p3'));
+        await discarded.vault.pendingTxs.put(queuedRecord('p4'));
+        await discarded.list();
+        await discarded.call('broadcast.queue.discard', { walletId: W, id: 'B' });
+        expect(await discarded.vault.pendingTxs.get('p3')).toBeNull();
+        expect(await discarded.vault.pendingTxs.get('p4')).toBeNull();
+    });
+
+    it('ignores sibling PendingTx ids supplied by queue storage', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1', siblingPendingTxIds: ['p2'] })],
+            broadcastTx: vi.fn(async () => ({ txid: 'tx-A' })),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        await h.vault.pendingTxs.put(queuedRecord('p2'));
+
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast' });
+        expect(await h.vault.pendingTxs.get('p2')).toMatchObject({ status: 'queued' });
+    });
+
+    it('discard retires every PendingTx represented by a deduplicated row', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(),
+            ...ownedWalletTables(),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        await h.vault.pendingTxs.put(queuedRecord('p2'));
+        await h.list();
+
+        const res = await h.call('broadcast.queue.discard', { walletId: W, id: 'A' });
+
+        expect(res.result).toEqual({ discarded: true });
+        expect(await h.vault.pendingTxs.get('p1')).toBeNull();
+        expect(await h.vault.pendingTxs.get('p2')).toBeNull();
+        expect(await h.list()).toEqual([]);
+    });
+
     it('a record that already left queued is not rewritten', async () => {
         const h = makeHost({
             entries: [entry('A', { pendingTxId: 'p1' })],
@@ -483,7 +566,8 @@ describe('the host queue settles the PendingTx half it was handed', () => {
 
 describe('a settlement the vault refused survives the entry that owed it', () => {
     const queuedRecord = (id) => ({
-        id, chain: 'bitcoin', network: 'regtest', status: 'queued', txHex: `hex-${id}`, txid: null, error: 'offline',
+        id, chain: 'bitcoin', network: 'regtest', fromAddress: OWNED_ADDR,
+        status: 'queued', txHex: TX_HEX, txid: null, error: 'offline',
     });
     const KEY = 'xchain.broadcastQueue';
 
@@ -525,6 +609,26 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
         expect(rec.status).toBe('broadcast');
         expect(rec.txid).toBe('tx-A');
         expect(rec.error).toBeNull();
+    });
+
+    it('journals every merged PendingTx when the vault is unavailable', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => 'tx-A'),
+            ...ownedWalletTables(),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        await h.vault.pendingTxs.put(queuedRecord('p2'));
+        await h.list();
+        const open = h.vault.pendingTxs.get;
+        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        h.vault.pendingTxs.get = open;
+        await h.list();
+
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+        expect(await h.vault.pendingTxs.get('p2')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
     });
 
     it('a permanent rejection the vault refused reaches the record too', async () => {
@@ -1015,6 +1119,60 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
             pendingTxId: 'p1',
             summary: `Send from ${A_ADDR}`,
         });
+    });
+
+    it('rebuilds duplicate PendingTx records as one row and settles both', async () => {
+        const records = await withRecords([
+            queuedRecord('p1', A_ADDR),
+            queuedRecord('p2', A_ADDR),
+        ]);
+        const h = makeHost({
+            entries: [], pendingTxs: records, broadcastTx: vi.fn(async () => 'tx-shared'), ...tables(),
+        });
+
+        const listed = await h.list();
+        expect(listed).toEqual([expect.objectContaining({
+            pendingTxId: 'p1', siblingPendingTxIds: ['p2'],
+        })]);
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id })).ok).toBe(true);
+        expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-shared' });
+        expect(await records.get('p2')).toMatchObject({ status: 'broadcast', txid: 'tx-shared' });
+        expect(await h.list()).toEqual([]);
+    });
+
+    it('settles duplicate records when broadcast is called directly after restart', async () => {
+        const records = await withRecords([
+            queuedRecord('p1', A_ADDR),
+            queuedRecord('p2', A_ADDR),
+        ]);
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            pendingTxs: records,
+            broadcastTx: vi.fn(async () => 'tx-shared'),
+            ...tables(),
+        });
+
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-shared' });
+        expect(await records.get('p2')).toMatchObject({ status: 'broadcast', txid: 'tx-shared' });
+    });
+
+    it('retires duplicate records when discard is called directly after restart', async () => {
+        const records = await withRecords([
+            queuedRecord('p1', A_ADDR),
+            queuedRecord('p2', A_ADDR),
+        ]);
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            pendingTxs: records,
+            broadcastTx: vi.fn(),
+            ...tables(),
+        });
+
+        const discarded = await h.call('broadcast.queue.discard', { walletId: W, id: 'A' });
+        expect(discarded.result).toEqual({ discarded: true });
+        expect(await records.get('p1')).toBeNull();
+        expect(await records.get('p2')).toBeNull();
     });
 
     it('rebuilds only the records the asking wallet owns', async () => {

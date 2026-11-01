@@ -88,8 +88,8 @@ assert.ok(/EXPIRATION_PRESETS/.test(src) && /expirationUnix/.test(src),
 assert.ok(!/blocks: \d+/.test(src) && !/expirationBlocks/.test(src),
     'PlaceOrderPanel no longer emits block-count expirations');
 assert.ok(/side === 'buy'/.test(src)
-    && /Buy \{tick1\}/.test(src)
-    && /Sell \{tick1\}/.test(src),
+    && /t\('components\.placeOrderPanel\.buy'\)\} \{tick1\}/.test(src)
+    && /t\('components\.placeOrderPanel\.sell'\)\} \{tick1\}/.test(src),
     'PlaceOrderPanel has a buy/sell toggle bound to tick1');
 assert.ok(/prefillPrice/.test(src) && /setPrice\(prefillPrice\)/.test(src),
     'PlaceOrderPanel accepts + applies prefillPrice from the orderbook click');
@@ -130,8 +130,8 @@ assert.ok(/setStage\('form'\)/.test(src),
 // Review view shows a network fee line via estimateNativeSendFee.
 assert.ok(/estimateNativeSendFee/.test(src),
     'PlaceOrderPanel imports and uses estimateNativeSendFee for fee display');
-assert.ok(/Network fee/.test(src),
-    'review view renders a "Network fee" row');
+assert.ok(/t\('send\.networkFee'\)/.test(src),
+    'review view renders a translated network fee row');
 
 // --- 5. Background handlers --------------------------------------
 

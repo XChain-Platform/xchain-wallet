@@ -522,6 +522,7 @@ assert.throws(() => runChecks({ info: buildInfo(), expected, stage: 'both' }), /
 {
     const archiveSh = readFileSync(join(root, 'tools/release/ios-archive.sh'), 'utf8');
     const exportSh = readFileSync(join(root, 'tools/release/ios-export.sh'), 'utf8');
+    const releaseWorkflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
     const at = (src, needle) => src.indexOf(needle);
     // indexOf returns -1 for absent, and -1 is "before" everything, so an
     // ordering test written as a bare comparison passes loudest when the thing
@@ -555,6 +556,11 @@ assert.throws(() => runChecks({ info: buildInfo(), expected, stage: 'both' }), /
                 && /xchain-websites\/xchain\.io\/\.well-known\/apple-app-site-association/.test(src))],
         ['ios-archive.sh asks for the association only in the signed lane',
             at(archiveSh, '--aasa "$aasa"') > at(archiveSh, 'verify_args+=(--team-id')],
+        ['the release lane resolves and exports the published association before signing',
+            before(releaseWorkflow, 'Resolve the published app association', 'Archive for distribution')
+            && /App\.entitlements/.test(releaseWorkflow)
+            && /XCHAIN_AASA=https:\/\/\$\{association_domain\}\/\.well-known\/apple-app-site-association/.test(releaseWorkflow)
+            && /GITHUB_ENV/.test(releaseWorkflow)],
         ['neither script announces success before the verdict',
             before(archiveSh, 'verify-ios-artifact.mjs', 'ios-archive: wrote')
             && before(exportSh, '--stage export', 'ios-export: wrote')],

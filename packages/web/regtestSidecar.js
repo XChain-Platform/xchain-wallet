@@ -54,8 +54,10 @@
 // BUILD-ONLY, like `sri.js` and `buildProfile.js` beside it: nothing here
 // reaches the browser bundle.
 
-/** The profile this cleanup applies to. Owned by `src/csp.js`; see below. */
-export const STORE_PROFILE = 'store';
+import { STORE_BUILD_PROFILE } from './src/csp.js';
+
+/** The profile this cleanup applies to, imported from the policy owner. */
+export const STORE_PROFILE = STORE_BUILD_PROFILE;
 
 /** The descriptor key in the coin data, and the property the loader reads. */
 export const SIDECAR_KEY = '$regtestSidecar';

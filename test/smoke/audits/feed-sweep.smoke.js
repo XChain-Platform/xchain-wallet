@@ -769,6 +769,49 @@ function clientVerdict(pointerText, manifests, artifacts) {
         'a CRLF feed the desktop client accepts is not a tampering finding');
 }
 
+// ------------------ the yml sha512 claim: producer and consumer must agree
+// The client reads a sha512 from hex or base64 and refuses one it cannot read,
+// so the sweep must neither pass a blank claim nor flag a correct hex spelling.
+
+{
+    const [firstName, firstBody] = Object.entries(V1)[0];
+    const b64 = sha512b64(firstBody);
+    const hex = createHash('sha512').update(firstBody).digest('hex');
+    const manifests = { 'v0.333.1': Object.keys(V1) };
+    const yml = updateInfo('0.333.1', Object.entries(V1));
+    const withClaim = (claim) => yml.split(b64).join(claim);
+    const hashCodes = (pointer) => {
+        buildFeed(root, { artifacts: V1, manifests, pointers: { 'stable-linux.yml': pointer } });
+        return codes(sweep(root)).filter((c) => c === 'POINTER-HASH' || c === 'POINTER-NO-HASH');
+    };
+    const table = [
+        ['base64', withClaim(b64), []],
+        ['lowercase hex', withClaim(hex), []],
+        ['uppercase hex', withClaim(hex.toUpperCase()), []],
+        ['blank', withClaim(''), ['POINTER-NO-HASH']],
+        ['quoted blank', withClaim("''"), ['POINTER-NO-HASH']],
+        ['nested line removed', yml.replace(`    sha512: ${b64}\n`, ''), ['POINTER-NO-HASH']],
+        ['malformed', withClaim('not-a-hash'), ['POINTER-NO-HASH']],
+        ['base64 of 32 bytes', withClaim(createHash('sha256').update(firstBody).digest('base64')),
+            ['POINTER-NO-HASH']],
+        ['wrong bytes', withClaim(sha512b64('something-else')), ['POINTER-HASH']],
+    ];
+    for (const [label, pointer, want] of table) {
+        assert.equal(parseUpdateInfo(pointer).files[0].url, firstName, `${label}: the fixture still names ${firstName}`);
+        const got = hashCodes(pointer);
+        assert.deepEqual(got, want, `${label}: sweep reads the sha512 claim as ${JSON.stringify(got)}`);
+        const client = clientVerdict(pointer, manifests, V1);
+        assert.equal(got.length === 0, client.ok,
+            `${label}: the sweep and the shipped client disagree (client ${client.ok ? 'accepts' : client.reason})`);
+    }
+    // With the legacy top-level pair gone too, the yml is no pointer by content
+    // and is reported as an unexplained file, still never a clean sweep.
+    const bare = yml.split('\n').filter((l) => !l.includes(b64)).join('\n');
+    buildFeed(root, { artifacts: V1, manifests, pointers: { 'stable-linux.yml': bare } });
+    assert.ok(codes(sweep(root)).length > 0, 'a yml with every sha512 line removed does not sweep clean');
+    assert.equal(clientVerdict(bare, manifests, V1).ok, false, 'and the client refuses it');
+}
+
 {
     // The lane list is the whole defect, so assert it by property rather
     // than by re-listing it: every directory the feed publishes into must

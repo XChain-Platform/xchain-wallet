@@ -29,9 +29,9 @@
 // bundle being wrapped in a store artifact and labelled `store` in a signed
 // manifest, which is exactly the false claim the release gate refuses.
 
-import { BUILD_PROFILES, DEFAULT_BUILD_PROFILE } from './src/csp.js';
+import { BUILD_PROFILES, DEFAULT_BUILD_PROFILE, STORE_BUILD_PROFILE } from './src/csp.js';
 
-export { BUILD_PROFILES, DEFAULT_BUILD_PROFILE };
+export { BUILD_PROFILES, DEFAULT_BUILD_PROFILE, STORE_BUILD_PROFILE };
 
 /** Written into the built dist so downstream tooling can read it back. */
 export const PROFILE_STAMP_FILE = 'build-profile.txt';

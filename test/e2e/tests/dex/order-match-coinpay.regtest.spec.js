@@ -310,7 +310,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
             // web-shell acknowledgement the armed path would demand.
-            const autopay = main.getByRole('switch', { name: /Enable CoinPay auto-pay/ });
+            const autopay = main.getByRole('switch', { name: /Enable auto-pay/ });
             await expect(autopay,
                 'the native-coin GIVE side offers no auto-pay control, so PC-16 never armed')
                 .toBeVisible();
@@ -491,7 +491,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Left ON this time, and the web shell's acknowledgement taken: this
             // is the arming the rest of the test depends on.
-            await expect(main.getByRole('switch', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
+            await expect(main.getByRole('switch', { name: /Enable auto-pay/ })).toBeChecked();
             await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
 
             await main.getByRole('button', { name: /^Place order/ }).click();

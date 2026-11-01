@@ -29,7 +29,7 @@
 // (`handle(message)` in, `{ok}`/`{ok:false,error}` out), which is exactly what
 // makes it testable without a browser, a service worker, or Electron.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
@@ -235,16 +235,32 @@ describe('background message host (all three shells)', () => {
     });
 });
 
-// The client modules whose sends must land on a handler. `preHost` says
-// whether that module's transport diverts PRE_HOST_MESSAGE_TYPES to the
-// pre-host listener (extension and desktop do); web sends every type to the
-// host. `floor` refuses a pass that parsed nothing.
+// Shell files that send literal types, with `preHost` when the transport diverts
+// PRE_HOST_MESSAGE_TYPES (extension, desktop) and a `floor` refusing an empty parse.
 const CLIENT_MODULES = [
     { file: 'packages/extension/src/popup/messaging.js', preHost: true, floor: 250 },
     { file: 'packages/desktop/renderer/messaging.js', preHost: true, floor: 250 },
     { file: 'packages/web/src/messaging.js', preHost: false, floor: 250 },
     { file: 'packages/extension/src/approval/messaging.js', preHost: true, floor: 5 },
+    { file: 'packages/desktop/renderer/fiatRateSource.js', preHost: true, floor: 0 },
 ];
+// Shared core runs under web too, so it is scanned with no pre-host lane.
+const SHARED_CORE = 'packages/core/src';
+const LITERAL_SEND = /sendMessage\(\s*['"]/;
+// Build output, installed deps and native shells hold copies, not senders.
+const NOT_SOURCE = new Set(['node_modules', 'dist', 'build', 'www', 'android', 'ios']);
+
+/** Repo-relative source files under `dir` (.js/.mjs/.cjs/.jsx), build output skipped. */
+function sourceFiles(dir) {
+    const out = [];
+    for (const entry of readdirSync(join(REPO_ROOT, dir), { withFileTypes: true })) {
+        if (entry.name.startsWith('.') || NOT_SOURCE.has(entry.name)) continue;
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) out.push(...sourceFiles(rel));
+        else if (/\.(m?js|cjs|jsx)$/.test(entry.name)) out.push(rel);
+    }
+    return out;
+}
 
 /**
  * Every message type a messaging module sends, read from source because each
@@ -299,5 +315,34 @@ describe('client message types against the host route table', () => {
             }
         }
         expect(unrouted, `no handler answers: ${unrouted.join(' | ')}`).toEqual([]);
+    });
+
+    it('routes every type shared core sends to a handler', () => {
+        // Core runs under the web shell, whose transport has no pre-host lane.
+        const registered = new Set(makeFullHost().types());
+        const unrouted = [];
+        let sends = 0;
+        for (const file of sourceFiles(SHARED_CORE)) {
+            const { literal, computed } = sentTypes(file);
+            if (literal.length === 0 && computed.length === 0) continue;
+            expect(computed, `${file} sends a computed type this check cannot follow`).toEqual([]);
+            sends += literal.length;
+            for (const type of new Set(literal)) {
+                if (!registered.has(type)) unrouted.push(`${file} -> '${type}'`);
+            }
+        }
+        expect(sends, 'shared core parsed as no literal sends').toBeGreaterThan(0);
+        expect(unrouted, `no handler answers: ${unrouted.join(' | ')}`).toEqual([]);
+    });
+
+    it('covers every source file that sends a literal message type', () => {
+        // A shell file that imports a raw transport and sends a hard-coded type
+        // is otherwise invisible to both routing checks above.
+        const covered = new Set(CLIENT_MODULES.map((m) => m.file));
+        const senders = sourceFiles('packages').filter((file) =>
+            LITERAL_SEND.test(readFileSync(join(REPO_ROOT, file), 'utf8')));
+        expect(senders.length, 'the scan found no senders at all').toBeGreaterThanOrEqual(covered.size);
+        const uncovered = senders.filter((file) => !covered.has(file) && !file.startsWith(`${SHARED_CORE}/`));
+        expect(uncovered, `add to CLIENT_MODULES with the right preHost: ${uncovered.join(', ')}`).toEqual([]);
     });
 });

@@ -211,7 +211,7 @@ export function forwardSignAction(params) {
     return provider.signAction(params);
 }
 
-/** @param {{ chainId: string, psbtHex: string, signingPaths?: unknown }} params */
+/** @param {{ chainId: string, psbtHex: string, signingPaths: unknown[], broadcast?: boolean }} params */
 export function forwardSignPsbt(params) {
     const provider = getExtensionProvider();
     if (!provider) throw new ExtensionUnavailableError('signPsbt');

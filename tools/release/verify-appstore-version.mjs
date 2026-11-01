@@ -159,8 +159,10 @@ export const SCREENSHOT_DIR_BY_TYPE = Object.freeze({
  * `sourceFileChecksum`, which is an MD5 of the bytes it received. Asking Apple
  * the question means speaking Apple's digest.
  *
- * Returns null when there is no pin or an image it names is missing, and the
- * caller must report that as inconclusive rather than as a pass: an
+ * Returns null when there is no pin or an image it names is missing. A pin
+ * that covers only some display types returns a byType without the others,
+ * and the caller reports each uncovered type the same way. Both are
+ * inconclusive to the caller, never a pass: an
  * unanswered question and a good answer are different things, which is the
  * lesson this whole file is built out of.
  */
@@ -488,7 +490,16 @@ export function classifyVersionRecord(record, ships, pinned = null, tag = null) 
         for (const want of REQUIRED_SCREENSHOT_TYPES) {
             const set = sets.find((s) => s.displayType === want);
             const expect = pinned.byType[want];
-            if (!set || !set.count || !expect) continue; // already reported above
+            if (!set || !set.count) continue; // the screenshots check above already failed this type
+            if (!expect) {
+                checks.push(dunno(
+                    'screenshots-pinned',
+                    `${want}: the capture pin names no images for this display type, so what Apple holds cannot`
+                    + ' be compared to anything. Re-run packages/mobile/scripts/screenshots.sh, which writes the'
+                    + ' pin for every idiom.',
+                ));
+                continue;
+            }
             const theirs = set.checksums ?? [];
             if (theirs.some((c) => !c)) {
                 checks.push(dunno(

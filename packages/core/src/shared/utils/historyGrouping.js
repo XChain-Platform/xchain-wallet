@@ -411,6 +411,15 @@ function summarizeGroup(subkind, leader, members) {
         const leaderAction = upper(leader.action) || 'LINK';
         const peer = members[0];
         const peerAction = peer ? (upper(peer.action) || 'LINK') : '';
+        // Say "cross-chain" only when the two sides sit on different chains.
+        const sameChain = peer
+            ? peer.chainId === leader.chainId
+            : Boolean(leader.link) && leader.link.peerChainId === leader.chainId;
+        if (sameChain) {
+            return peerAction
+                ? t('history.summary.linkSameChain', { peer: peerAction, leader: leaderAction })
+                : t('history.summary.linkSameChainSolo', { leader: leaderAction });
+        }
         return peerAction
             ? t('history.summary.link', { peer: peerAction, leader: leaderAction })
             : t('history.summary.linkSolo', { leader: leaderAction });

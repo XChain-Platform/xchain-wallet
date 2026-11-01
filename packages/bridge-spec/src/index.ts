@@ -23,7 +23,8 @@
 
 // Semver for the bridge protocol itself, independent of wallet version.
 // Minor bumps are additive (new methods); major bumps are breaking.
-// Kept in sync with this package's package.json version.
+// Maintained by hand in runtime.js. It deliberately does not track the
+// package.json version, which follows the wallet release train.
 // The RUNTIME values of this spec live in ./runtime.js and are re-exported
 // here, so this stays the single public entry point. They are plain JS
 // because the desktop MAIN process loads this package out of app.asar with
@@ -124,7 +125,7 @@ export type ActionPermission = 'always' | 'ask' | 'never';
 // Permission record the dApp sees after connect(). Shape mirrors
 // ConnectedSite.permissions (§11.3.5) but is the dApp-visible subset.
 export interface SitePermissions {
-    chains: CoinId[];
+    chains: ChainId[];
     accounts: string[];
     canSignMessage: boolean;
     canSignAction: Record<string, ActionPermission>;
@@ -178,10 +179,10 @@ export interface ConnectOpts {
     // App-declared identity, shown in the approval modal (§43.4).
     appName?: string;
     appIcon?: string;
-    // Chains the dApp wants to operate on. Wallet presents the user with
-    // these pre-selected; user may narrow the set. Omit to let the user
-    // choose from all supported chains.
-    requestedChains?: CoinId[];
+    // Chain ids from getSupportedChains()[].id that the dApp wants to use.
+    // Wallet presents these pre-selected; the user may narrow the set.
+    // Unknown ids are not offered. Omit to show all supported chains.
+    requestedChains?: ChainId[];
     // Minimum bridge-spec semver range the dApp requires (e.g. '^1.2.0').
     // Wallet warns the user if the installed wallet's bridge falls outside.
     requiredBridgeVersion?: string;
@@ -191,7 +192,7 @@ export interface ConnectSuccess {
     ok: true;
     version: string;
     accounts: Account[];
-    chains: CoinId[];
+    chains: ChainId[];
     permissions: SitePermissions;
 }
 
@@ -306,10 +307,11 @@ export interface PsbtSigningPath {
 export interface SignPsbtParams {
     chainId: ChainId;
     psbtHex: string;
-    signingPaths?: PsbtSigningPath[];
-    // If true, wallet signs but does not broadcast; dApp gets back the
-    // signed PSBT to combine with other cosigners. Defaults to false
-    // (sign + finalize + broadcast).
+    // Required and non-empty. Each entry names an input the wallet may sign
+    // and must resolve to an account in the site's connect grant.
+    signingPaths: PsbtSigningPath[];
+    // signPsbt never broadcasts. Omit this field or pass false, then
+    // broadcast the returned txHex. true is refused with INVALID_PARAMS.
     broadcast?: boolean;
 }
 
@@ -318,7 +320,8 @@ export interface SignPsbtSuccess {
     signedPsbtHex: string;
     // Present only when the wallet finalized the PSBT.
     txHex?: string;
-    // Present only when the wallet broadcast the tx.
+    // Present only when the wallet broadcast the tx. signPsbt currently
+    // never broadcasts, so this field is not set.
     txid?: string;
 }
 

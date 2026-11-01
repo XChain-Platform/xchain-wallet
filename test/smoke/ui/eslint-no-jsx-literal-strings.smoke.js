@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last forty-one are component props: copy shipped through them
+// The last forty-four are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -70,9 +70,9 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
     'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
-    'feeText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
+    'feeText', 'totalText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
     'lead', 'legend', 'closeLabel', 'searchLabel', 'subtitle', 'chainLabel',
-    'accessibleLabel', 'visibleLabel', 'labelPrefix',
+    'accessibleLabel', 'visibleLabel', 'labelPrefix', 'unavailableMessage', 'intro',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -180,6 +180,16 @@ assert.strictEqual(v.length, 1, 'flags a summary literal');
 assert.match(v[0].message, /summary/);
 v = findViolations(jsxAttr('summary', jsxExpr(template('Skipped addresses (', ')'))));
 assert.strictEqual(v.length, 1, 'flags a summary template');
+v = findViolations(jsxAttr('intro', literal('Confirm your wallet password.')));
+assert.strictEqual(v.length, 1, 'flags an intro literal');
+assert.match(v[0].message, /intro/);
+v = findViolations(jsxAttr(
+    'intro',
+    jsxExpr(logical(identifier('summary'), template('', ' order'))),
+));
+assert.strictEqual(v.length, 1, 'flags copy in an intro fallback template');
+v = findViolations(jsxAttr('intro', jsxExpr(identifier('summary'))));
+assert.strictEqual(v.length, 0, 'allows a runtime intro value');
 
 // 14. Template copy is reported ONCE, not doubled by the generic
 // content branch that also walks JSXExpressionContainer nodes.
@@ -435,6 +445,17 @@ v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('Netwo
 assert.strictEqual(v.length, 0, 'only the three trim methods unwrap; another call stays a blind spot');
 v = findViolations(jsxAttr('feeText', jsxExpr(identifier('feeText'))));
 assert.strictEqual(v.length, 0, 'a runtime feeText value stays silent');
+v = findViolations(jsxAttr('totalText', jsxExpr(logical(identifier('custom'),
+    conditional(template('Total: ', ' ', ''), identifier('undefined'))))));
+assert.strictEqual(v.length, 1, 'flags a Total template in a totalText fallback ternary');
+assert.match(v[0].message, /Total/);
+v = findViolations(jsxAttr('totalText', jsxExpr(identifier('totalText'))));
+assert.strictEqual(v.length, 0, 'a runtime totalText value stays silent');
+v = findViolations(jsxAttr('unavailableMessage', jsxExpr(conditional(literal('This request is missing the transaction to sign'), literal(null)))));
+assert.strictEqual(v.length, 1, 'flags a literal reason in an unavailableMessage ternary');
+assert.match(v[0].message, /unavailableMessage/);
+v = findViolations(jsxAttr('unavailableMessage', jsxExpr({ type: 'CallExpression', callee: identifier('t'), arguments: [literal('k')] })));
+assert.strictEqual(v.length, 0, 'a translated unavailableMessage stays silent');
 
 // 19f. Dialog and section copy. ConfirmModal renders `message` as its body
 // and SectionHeader renders `description` under its title, so literals,

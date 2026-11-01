@@ -1038,7 +1038,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
-                totalText={totalCostText ? `Total token cost: ${totalCostText}` : undefined}
+                totalText={totalCostText ? t('send.totalTokenCostValue', { amount: totalCostText }) : undefined}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}

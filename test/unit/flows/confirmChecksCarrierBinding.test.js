@@ -15,11 +15,13 @@ describe('checkCarrierScripts payload binding', () => {
         const verify = vi.fn(() => OK);
         checkCarrierScripts({
             psbt: 'p', carrierScripts: ['aa'], encoding: 'P2SH', actionString: 'A',
-            rawData: 'original', rawDataCompressed: true, network: 'n', verifyCarrierScripts: verify,
+            rawData: 'original', rawDataCompressed: true, network: 'n', callerIdentities: ['mine'],
+            verifyCarrierScripts: verify,
         });
         const args = verify.mock.calls[0][0];
         expect(args.rawData).toBe('original');
         expect(args.rawDataCompressed).toBe(true);
+        expect(args.callerIdentities).toEqual(['mine']);
     });
 
     it('treats an absent compressed flag as false and keeps null rawData as null', () => {
@@ -51,6 +53,19 @@ describe('checkCarrierScripts payload binding', () => {
             psbt: 'p', carrierScripts: ['aa'], rawData: 'approved', rawDataCompressed: false,
             network: 'n', verifyCarrierScripts: verify,
         })).toThrow(TamperDetectedError);
+    });
+
+    it('forwards wallet-owned identities through the blocking tamper check', () => {
+        const verify = vi.fn(() => OK);
+        const expected = { addressed: [], encoding: 'P2SH', carrierAllowance: 1 };
+        assertNoTamper({
+            psbtHex: 'p', expected, ownAddresses: ['source', 'change'],
+            decomposePsbt: () => ({ outputs: [{ address: null, scriptPubKeyHex: 'a9',
+                scriptType: 'p2sh', value: 546 }] }),
+            actionString: 'A', decodeActionFromPsbt: () => ({ ok: true }),
+            psbt: 'p', carrierScripts: ['aa'], network: 'n', verifyCarrierScripts: verify,
+        });
+        expect(verify.mock.calls[0][0].callerIdentities).toEqual(['source', 'change']);
     });
 });
 

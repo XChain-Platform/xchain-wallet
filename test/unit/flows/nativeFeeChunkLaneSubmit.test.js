@@ -22,7 +22,7 @@ import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigne
 const revealLegs = (commitTxid, encoding) => {
     const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
     const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
-    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType, scriptPubKeyHex: '6a00', value: 0 }] };
 };
 
 const FEE_DEST = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
@@ -41,7 +41,13 @@ function makeHarness({ encoding = 'P2SH', requiredFeeSats = FEE_SATS } = {}) {
         actions: { createAction },
         // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
         wallet: {
-            decomposePsbt: () => revealLegs('txid-COMMIT-PSBT', encoding),
+            // The reveal pays exactly the deferred outputs spendP2sh was asked to emit.
+            decomposePsbt: (hex) => {
+                const legs = revealLegs('txid-COMMIT-PSBT', encoding);
+                const asked = hex === 'REVEAL-PSBT' ? spendP2sh.mock.calls.at(-1)?.[0]?.customOutputs ?? [] : [];
+                const paid = asked.map((o) => ({ address: o.address, value: o.value, scriptType: 'p2pkh' }));
+                return { ...legs, outputs: [...legs.outputs, ...paid] };
+            },
             getBitcoinNetwork: () => ({ dustThreshold: 5460 }),
         },
         quoteNativeFee: vi.fn(async () => ({

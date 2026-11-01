@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.342.1] - 2026-11-01
+
+### Changed
+- The wallet ships with xchain-sdk 0.27.0, the SDK of XChain Platform v0.27.0.
+
+### Fixed
+- dApp connect requests and grants consistently use chain ids.
+- The reference provider implements coSign and is checked against the provider type in CI.
+- dApp PSBT signing requires explicit signing paths and never reports an unbroadcast transaction as sent.
+
 ## [0.342.0] - 2026-10-30
 
 ### Added

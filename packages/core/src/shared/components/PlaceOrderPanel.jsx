@@ -311,9 +311,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const summary = useMemo(() => {
         if (!total) return null;
         if (side === 'buy') {
-            return `Give ${total} ${tick2}, get ${sizeText} ${tick1}`;
+            return t('components.placeOrderPanel.summaryBuy', {
+                total, tick2, size: sizeText, tick1,
+            });
         }
-        return `Give ${sizeText} ${tick1}, get ${total} ${tick2}`;
+        return t('components.placeOrderPanel.summarySell', {
+            size: sizeText, tick1, total, tick2,
+        });
     }, [side, total, sizeText, tick1, tick2]);
 
     function buildParams() {
@@ -684,7 +688,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             <FormPage
                 demoGuard={demoGuard}
                 label={t('components.placeOrderPanel.reviewOrder')}
-                intro={summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
+                intro={summary || (side === 'buy'
+                    ? t('components.placeOrderPanel.buyOrder')
+                    : t('components.placeOrderPanel.sellOrder'))}
                 onSubmit={handleSubmit}
                 noValidate
                 aria-busy={stage === 'submitting' || undefined}

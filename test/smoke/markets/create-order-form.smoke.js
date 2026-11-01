@@ -35,7 +35,7 @@ assert.match(form, /p\.GET_ADDRESS = getAddress\.trim\(\)/, 'GET_ADDRESS overrid
 assert.match(form, /p\.ALLOW_LIST = allowListIdx/, 'allow-list field');
 assert.match(form, /p\.BLOCK_LIST = blockListIdx/, 'block-list field');
 assert.match(form, /ListPickerScreen/, 'allow/block via the shared list picker');
-assert.match(form, /Enable CoinPay auto-pay/, 'PC-16 auto-pay checkbox');
+assert.match(form, /Enable auto-pay/, 'PC-16 auto-pay checkbox');
 assert.match(form, /autopayEligible = giveIsNative && !isWatcherMode && !isHwSource/, 'auto-pay only for native GIVE software signers');
 assert.match(form, /autopay: \{ enabled: true \}/, 'auto-pay flag threads into orderAction');
 assert.match(form, /composeForConfirm/, 'single-encode confirm path');

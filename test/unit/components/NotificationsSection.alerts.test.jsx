@@ -62,6 +62,17 @@ afterEach(() => {
 });
 
 describe('notification categories and permission', () => {
+    it('renders a sparse settings record without a notification map', () => {
+        settings = {};
+
+        const { container } = render(<NotificationsSection />);
+
+        expect(screen.getByRole('switch', { name: 'Transaction confirmations' })).not.toBeChecked();
+        expect(screen.getByRole('switch', { name: 'Incoming pending payments' })).toBeChecked();
+        expect(screen.getByText('No wallet selected.')).toBeTruthy();
+        expect(container.querySelector('[data-empty-state]')).toBeNull();
+    });
+
     it('keeps only trigger details that add to category labels', () => {
         render(<NotificationsSection />);
 

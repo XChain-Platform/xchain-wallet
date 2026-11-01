@@ -262,7 +262,7 @@ while IFS= read -r rel; do
         md_status=0
         manifest_diff_args=()
         if [[ -n "$IGNORE_KEYS" ]]; then manifest_diff_args=(--ignore "$IGNORE_KEYS"); fi
-        md_out="$(node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" "${manifest_diff_args[@]}")" || md_status=$?
+        md_out="$(node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" "${manifest_diff_args[@]+"${manifest_diff_args[@]}"}")" || md_status=$?
         if [[ -n "$md_out" ]]; then printf '%s\n' "$md_out" >&2; fi
         if (( md_status != 0 )); then
             FAILURES=$((FAILURES + 1))

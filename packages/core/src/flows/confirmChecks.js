@@ -371,7 +371,8 @@ export function checkActionByteMatch({ psbtHex, actionString, encoding, decodeAc
  * @param {string|Uint8Array|null} [rawData]  the payload the caller handed the encoder, never the stored form; null demands no payload push, undefined leaves it unchecked
  * @param {boolean} [rawDataCompressed]    the encoder stored the deflated form of rawData
  */
-export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionString, rawData, rawDataCompressed, network, verifyCarrierScripts }) {
+export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionString, rawData, rawDataCompressed,
+                                      network, callerIdentities, verifyCarrierScripts }) {
     // Encoding first, THEN wiring. A non-chunk encoding genuinely has nothing
     // to check here (inline OP_RETURN has its own byte-match, MULTISIGN is
     // covered by the output-set shape), so skipping is honest.
@@ -388,7 +389,8 @@ export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionStri
         return { ok: false, reason: 'no-verifier', checked: 0 };
     }
     return verifyCarrierScripts({
-        psbt, carrierScripts, encoding: enc, actionString, rawData, rawDataCompressed: rawDataCompressed === true, network,
+        psbt, carrierScripts, encoding: enc, actionString, rawData,
+        rawDataCompressed: rawDataCompressed === true, network, callerIdentities,
     });
 }
 
@@ -430,7 +432,8 @@ export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt,
             { decoded: actionBytes.decoded, reason: actionBytes.reason });
     }
     const carrier = checkCarrierScripts({
-        psbt, carrierScripts, encoding: expected.encoding, actionString, rawData, rawDataCompressed, network, verifyCarrierScripts,
+        psbt, carrierScripts, encoding: expected.encoding, actionString, rawData, rawDataCompressed,
+        network, callerIdentities: ownAddresses, verifyCarrierScripts,
     });
     if (!carrier.ok) {
         // Same copy as the action-byte mismatch on purpose: from the user's

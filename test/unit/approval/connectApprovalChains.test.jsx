@@ -24,6 +24,7 @@ import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { defaultRegistry, BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
+import { EXAMPLE_CONNECT_OPTS } from '../../../packages/test-dapp/src/example.ts';
 
 const shim = vi.hoisted(() => ({
     getSettings: async () => ({}),
@@ -141,6 +142,17 @@ describe('ConnectApproval network checklist', () => {
         expect(screen.getByLabelText(label(bundled))).toBeTruthy();
         expect(screen.queryByLabelText(label(notRequested))).toBeNull();
         expect(screen.queryByRole('checkbox', { name: /message signatures/i })).toBeNull();
+    });
+
+    it('offers the exact network requested by the worked example', () => {
+        mount(EXAMPLE_CONNECT_OPTS.requestedChains);
+
+        const exampleChain = BUNDLED_DESCRIPTORS.find(
+            (descriptor) => descriptor.id === EXAMPLE_CONNECT_OPTS.requestedChains[0],
+        );
+        expect(exampleChain).toBeTruthy();
+        expect(screen.getByLabelText(label(exampleChain)).checked).toBe(true);
+        expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
     });
 
     it('rejects in one click while both decisions are enabled', () => {

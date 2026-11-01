@@ -449,7 +449,7 @@ describe('the signing methods answer their published success shapes', () => {
             type: 'bridge.signPsbt',
             request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [{ inputIndex: 0, address: FROM }] },
         });
-        expect(result).toEqual({ ok: true, signedPsbtHex: 'ab', txHex: 'cd', txid: 'tx-2' });
+        expect(result).toEqual({ ok: true, signedPsbtHex: 'ab', txHex: 'cd' });
     });
 
     it('rejects malformed signing results instead of reporting incomplete successes', async () => {

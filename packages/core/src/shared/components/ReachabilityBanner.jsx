@@ -57,6 +57,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     const text = mayShowBalances
         ? t('reachability.notice.balances')
         : t(overall === 'offline' ? 'reachability.notice.offline' : 'reachability.notice.degraded');
+    const retryLabel = loading ? t('common.checking') : t('common.tryAgain');
 
     // The route hears what this notice says even while a screen hides it, so
     // an empty state for data that could not be checked steps aside and a
@@ -71,7 +72,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
         report(unreachable ? {
             variant,
             text,
-            retryLabel: loading ? 'Checking…' : 'Try again',
+            retryLabel,
             retrying: loading,
             retry,
             // What the Details disclosure shows, for a form that carries the sentence.
@@ -79,7 +80,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             lastChecked,
         } : null);
         return undefined;
-    }, [report, unreachable, variant, text, loading, retry, coins, lastChecked]);
+    }, [report, unreachable, variant, text, retryLabel, loading, retry, coins, lastChecked]);
     useEffect(() => (report ? () => report(null) : undefined), [report]);
 
     if (hiddenByScreen || !unreachable) return null;
@@ -96,7 +97,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             // The live region is the inner status span; the box carries the notice marker.
             marksNotice
             recovery={{
-                label: loading ? 'Checking…' : 'Try again',
+                label: retryLabel,
                 onAction: refresh,
                 disabled: loading,
             }}

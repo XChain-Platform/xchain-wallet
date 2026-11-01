@@ -615,7 +615,7 @@ function ScopedCoinpayForm({
 
             {obligations.length > 0 ? (
                 <>
-                    <SectionHeader title="Pending obligations" />
+                    <SectionHeader title="Payments due" />
                     <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem' }}>
                         {obligations.map((row) => {
                             const isSelected = selected
@@ -687,7 +687,7 @@ function ScopedCoinpayForm({
             {selected && summary ? (
                 <FormPage
                     demoGuard={demoGuard}
-                    label="Selected payment obligation"
+                    label="Selected payment"
                     onSubmit={handleReview}
                     status={(submitError || validationError || insufficientBalanceMessage) ? (
                         <StatusMessage variant="error">

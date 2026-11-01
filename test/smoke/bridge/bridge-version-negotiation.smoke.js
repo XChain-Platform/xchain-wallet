@@ -72,6 +72,11 @@ assert.match(
     /\| 'BRIDGE_VERSION_MISMATCH'/,
     'BridgeErrorCode union still includes BRIDGE_VERSION_MISMATCH',
 );
+assert.doesNotMatch(
+    specSrc,
+    /[Kk]ept in sync with this package's package\.json/,
+    'the bridge protocol version does not track the wallet package version',
+);
 
 // --- 2. handlers.js wiring ------------------------------------------------
 
@@ -123,10 +128,14 @@ assert.doesNotMatch(
 
 // --- 3. isBridgeVersionSupported range behaviour --------------------------
 
-const { isBridgeVersionSupported, BRIDGE_SUPPORTED_VERSIONS } =
+const { BRIDGE_SPEC_VERSION, isBridgeVersionSupported, BRIDGE_SUPPORTED_VERSIONS } =
     await import(join(wsRoot, 'packages', 'bridge-spec', 'src', 'runtime.js'));
 
 assert.deepEqual(BRIDGE_SUPPORTED_VERSIONS, ['0.1.0'], 'one supported version today');
+assert.ok(
+    BRIDGE_SUPPORTED_VERSIONS.includes(BRIDGE_SPEC_VERSION),
+    'BRIDGE_SPEC_VERSION is one of the versions the wallet supports',
+);
 for (const pass of ['0.1.0', '^0.1.0', '~0.1.0', '>=0.1.0', '>0.0.9', '*', '^0.1.0 || ^1.0.0']) {
     assert.equal(isBridgeVersionSupported(pass), true, `${pass} is satisfied by 0.1.0`);
 }

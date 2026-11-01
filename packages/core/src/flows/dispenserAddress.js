@@ -39,26 +39,26 @@ import { unlockWallet } from './unlockWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
+
+const MAX_DERIVATION_INDEX = 0x7fffffff;
 
 /**
  * Whether the chain shows any history at all for `address`, i.e. it was
  * funded at some point even if its balance is zero now. Missing explorer
- * support or a probe failure fails CLOSED: without an answer the flow
- * cannot prove the gap is safe, so it is treated as used and the index
- * range grows past it instead of risking a dispenser address that was
- * already issued once before.
+ * support or a probe failure leaves the result unknown.
  *
  * @param {import('../sdk/SDKRegistry.js').XChainSDKLike} sdk
  * @param {string} address
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean | null>}
  */
 async function addressEverFunded(sdk, address) {
-    if (!sdk || !sdk.explorer || typeof sdk.explorer.getHistory !== 'function') return true;
+    if (!sdk || !sdk.explorer || typeof sdk.explorer.getHistory !== 'function') return null;
     let history;
     try {
         history = await sdk.explorer.getHistory(address, 'address', { limit: 1 });
     } catch {
-        return true;
+        return null;
     }
     if (Array.isArray(history)) return history.length > 0;
     if (history && typeof history === 'object') {
@@ -66,7 +66,24 @@ async function addressEverFunded(sdk, address) {
         if (typeof history.count === 'number') return history.count > 0;
     }
     if (typeof history === 'number') return history > 0;
-    return false;
+    return null;
+}
+
+async function probeIndexFunding({
+    signer, sdk, chainId, accountIndex, index, addressTypes, requestedType,
+}) {
+    let candidate;
+    let unknown = false;
+    for (const addressType of addressTypes) {
+        const [derived] = await signer.getAddresses({
+            chainId, accountIndex, change: 0, startIndex: index, count: 1, addressType,
+        });
+        if (addressType === requestedType) candidate = derived;
+        const funded = await addressEverFunded(sdk, derived.address);
+        if (funded === true) return { candidate, funded: true };
+        if (funded === null) unknown = true;
+    }
+    return { candidate, funded: unknown ? null : false };
 }
 
 /**
@@ -217,19 +234,24 @@ export async function dispenserAddress({
         try {
             probeGaps = (await vault.wallets?.get(walletId))?.origin !== 'demo';
         } catch { /* unreadable record: probe as before */ }
-        for (let i = 0; probeGaps && i < highest; i += 1) {
+        const supportedTypes = sdkSupportedAddressTypes(sdk, descriptor.addressTypes)
+            ?? descriptor.addressTypes;
+        const fundingTypes = sharedIndexSpace
+            ? [type, ...supportedTypes.filter((candidateType) => candidateType !== type)]
+            : [type];
+        const lastProbeIndex = sharedIndexSpace ? MAX_DERIVATION_INDEX : highest - 1;
+        for (let i = 0; probeGaps && i <= lastProbeIndex; i += 1) {
             if (held.has(i)) continue;
-            const [gapAddress] = await signer.getAddresses({
-                chainId,
-                accountIndex: resolvedAccountIndex,
-                change: 0,
-                startIndex: i,
-                count: 1,
-                addressType: type,
+            const probe = await probeIndexFunding({
+                signer, sdk, chainId, accountIndex: resolvedAccountIndex,
+                index: i, addressTypes: fundingTypes, requestedType: type,
             });
-            if (!(await addressEverFunded(sdk, gapAddress.address))) {
+            if (sharedIndexSpace && probe.funded === null) {
+                throw new Error('Dispenser address history is unavailable for this legacy wallet.');
+            }
+            if (probe.funded === false) {
                 nextIndex = i;
-                candidate = gapAddress;
+                candidate = probe.candidate;
                 break;
             }
         }

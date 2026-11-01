@@ -79,10 +79,8 @@ assert.equal(single[0].kind, 'entry',
 const histPath = join(routes, 'History.jsx');
 const hist = readFileSync(histPath, 'utf8');
 
-// Badge label addition.
-// The badge label now routes through the shared plain-language display map
-// (actionDisplayLabel('LINK') renders "Cross-chain") instead of a hardcoded
-// all-caps string. Pin the routing, not the literal.
+// Pin the badge label's routing through the shared display map, not the literal
+// (actionDisplayLabel('LINK') renders "Link", true on one chain or across two).
 assert.ok(/subkind === 'link-pair'\) return actionDisplayLabel\('LINK'\)/.test(hist),
     'groupBadgeLabel labels link-pair via actionDisplayLabel(LINK)');
 

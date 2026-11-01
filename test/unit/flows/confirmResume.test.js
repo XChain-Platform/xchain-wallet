@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     isResumable, resumeDispatch, resumeAfter, describeResumeSession,
-    resumableSessions, assertNoCredentials, RESUME_TTL_MS,
+    resumableSessions, assertNoCredentials, RESUME_TTL_MS, RESUME_EXPIRED, RESUME_UNAVAILABLE,
 } from '../../../packages/core/src/flows/confirmResume.js';
 
 const session = (over = {}) => ({
@@ -97,13 +97,25 @@ describe('resumeDispatch', () => {
     });
 
     it('refuses a session that is not resumable at all', () => {
-        expect(() => resumeDispatch(session({ dispatch: null }))).toThrow(/not resumable/);
+        try {
+            resumeDispatch(session({ dispatch: null }));
+            throw new Error('expected resumeDispatch to refuse');
+        } catch (err) {
+            expect(err).toMatchObject({ code: RESUME_EXPIRED });
+            expect(err.message).toMatch(/not resumable/);
+        }
     });
 
     it('refuses the hardware lane when the form never declared one', () => {
         const s = session();
         delete s.dispatch.hardware;
-        expect(() => resumeDispatch(s, { isHw: true })).toThrow(/no hardware lane/);
+        try {
+            resumeDispatch(s, { isHw: true });
+            throw new Error('expected resumeDispatch to refuse');
+        } catch (err) {
+            expect(err).toMatchObject({ code: RESUME_UNAVAILABLE });
+            expect(err.message).toMatch(/no hardware lane/);
+        }
     });
 });
 

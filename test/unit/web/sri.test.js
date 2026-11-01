@@ -316,6 +316,50 @@ describe('sriPlugin import map warning', () => {
     });
 });
 
+describe('sriPlugin coverage warnings', () => {
+    // Release and mobile builds run no SRI smoke, so these two warnings are
+    // the only report of a pass that left a same-origin subresource unpinned.
+    const build = (head, files) => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-sri-coverage-'));
+        try {
+            mkdirSync(join(dir, 'assets'));
+            for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+            writeFileSync(join(dir, 'index.html'), `<html><head>${head}</head><body></body></html>`);
+            const logger = { info: vi.fn(), warn: vi.fn() };
+            const plugin = sriPlugin();
+            plugin.configResolved({ logger, root: dir, base: '/', build: { outDir: dir } });
+            plugin.writeBundle({}, { 'index.html': { type: 'asset' } });
+            return logger;
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    };
+    const warned = (logger, pattern) => logger.warn.mock.calls.filter(([m]) => pattern.test(m));
+
+    it('warns when a page has nothing to hash', () => {
+        const logger = build('<script src="https://connect.trezor.io/x.js"></script>', {});
+        const hits = warned(logger, /nothing was hashed/);
+        expect(hits).toHaveLength(1);
+        expect(hits[0][0]).toContain('index.html');
+    });
+
+    it('stays quiet about an empty pass when a local asset was hashed', () => {
+        const logger = build('<script type="module" src="/assets/app.js"></script>',
+            { 'assets/app.js': 'main()' });
+        expect(warned(logger, /nothing was hashed/)).toEqual([]);
+        expect(warned(logger, /could not be hashed/)).toEqual([]);
+    });
+
+    it('warns about a local asset missing from disk while others hash', () => {
+        const logger = build('<script type="module" src="/assets/app.js"></script>'
+            + '<script src="/boot-check.js"></script>', { 'assets/app.js': 'main()' });
+        const hits = warned(logger, /could not be hashed/);
+        expect(hits).toHaveLength(1);
+        expect(hits[0][0]).toContain('/boot-check.js');
+        expect(warned(logger, /nothing was hashed/)).toEqual([]);
+    });
+});
+
 describe('sriPlugin under a non-root base', () => {
     const sri = (bytes) => `sha384-${createHash('sha384').update(bytes).digest('base64')}`;
     const build = (base) => {

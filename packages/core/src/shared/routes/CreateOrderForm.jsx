@@ -681,9 +681,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 </dl>
                 {getType === 'coin' ? (
                     <p className={styles.hint}>
-                        You are requesting native {coinTicker}. When matched, this creates a CoinPay
-                        obligation the buyer must pay within the expiration window (tokens stay escrowed
-                        until they do).
+                        You are requesting native {coinTicker}. When matched, the buyer must send you a coin
+                        payment within the expiration window (tokens stay escrowed until they do).
                     </p>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
@@ -889,7 +888,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 {autopayEligible ? (
                     <>
                         <Switch
-                            label={<strong>Enable CoinPay auto-pay</strong>}
+                            label={<strong>Enable auto-pay</strong>}
                             description="We watch for matches on this order and pay each one automatically."
                             checked={autopayEnabled}
                             onChange={(e) => setAutopayEnabled(e.target.checked)}

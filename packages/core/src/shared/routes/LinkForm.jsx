@@ -544,7 +544,11 @@ export function LinkForm({ walletId, onBack }) {
         }
         return wrap(
             <>
-                <p className={styles.successTitle}>Cross-chain link broadcast</p>
+                <p className={styles.successTitle}>
+                    {String(ticker1).toUpperCase() !== String(ticker2).toUpperCase()
+                        ? 'Cross-chain link broadcast'
+                        : 'Link broadcast'}
+                </p>
                 {result?.txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction</p>

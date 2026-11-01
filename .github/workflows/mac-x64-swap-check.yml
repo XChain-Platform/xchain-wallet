@@ -7,15 +7,13 @@
 # witnessed. A GitHub-hosted Intel macOS runner has no translation layer, so
 # the x64 zip is the only zip it can be offered.
 #
-# WHAT THIS JOB IS NOT. It is not an attestation and it does not take the
-# lane. `rehearse.mjs attest` requires `--by <who watched it>` and refuses to
-# run in CI; this job only produces evidence JSON for `rehearse.mjs check`,
-# which lands in `automated-checks` and never satisfies the per-release swap
-# requirement.
+# WHAT THIS JOB IS NOT. It is not an update swap, an attestation, or release
+# record evidence. It checks a native x64 build and its channel pointer as a CI
+# gate. The mac-x64 swap remains unwitnessed on the named rehearsal device.
 #
-# NO SECRETS, NO SIGNING, NO UPLOAD OF BUILDS. Only the evidence JSON leaves.
+# NO SECRETS, NO SIGNING, NO UPLOAD OF BUILDS.
 
-name: macOS x64 update-swap check
+name: macOS x64 native build check
 
 on:
   push:
@@ -27,11 +25,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: mac-x64-swap-check-${{ github.ref }}
+  group: mac-x64-build-check-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  swap-check:
+  build-check:
     runs-on: macos-15-intel
     timeout-minutes: 90
     steps:
@@ -57,20 +55,13 @@ jobs:
 
       - name: Build the x64 zip as tagged
         run: pnpm -C packages/desktop dist --mac zip --x64
-      - name: Stage it
+      - name: Stage the build and channel pointer
         run: |
-          cp packages/desktop/dist/*-x64*.zip swap-check/
-          rm -rf packages/desktop/dist
-
-      - name: Bump the desktop package one patch and rebuild
-        run: |
-          node -e "const f='packages/desktop/package.json',fs=require('fs');const p=JSON.parse(fs.readFileSync(f,'utf8'));const [a,b,c]=p.version.split('.');p.version=[a,b,Number(c)+1].join('.');fs.writeFileSync(f,JSON.stringify(p,null,4)+'\n');console.log('updating to '+p.version)"
-          pnpm -C packages/desktop dist --mac zip --x64
           cp packages/desktop/dist/*-x64*.zip swap-check/
           cp packages/desktop/dist/stable-mac.yml swap-check/
           ls -l swap-check
 
-      - name: Record what the native runner witnessed (check, not an attestation)
+      - name: Verify the native x64 build and pointer
         run: |
           rm -rf swap-check/unpacked && mkdir -p swap-check/unpacked
           newest="$(ls -t swap-check/*-x64*.zip | head -n 1)"
@@ -90,16 +81,6 @@ jobs:
           const pointerMatches=zips.length>0&&zips.every(z=>staged.includes(z.replace(/.*\//,'')))&&shas.length>0&&shas.every(h=>hashes.includes(h));
           const x64Only=zips.length>0&&zips.every(z=>/x64/.test(z))&&/x86_64/.test(arch)&&!/arm64/.test(arch);
           const ok=native&&x64Only&&pointerMatches;
-          fs.writeFileSync('swap-check-result.json',JSON.stringify({
-            kind:'automated-swap-check',lane:'mac-x64',
-            runner:'GitHub-hosted macos-15-intel runner (native x64)',
-            native,binary:arch.trim(),zips,pointerMatchesStagedZip:pointerMatches,
-            result:ok?'pass':'fail'},null,2)+'\n');
+          console.log(JSON.stringify({native,binary:arch.trim(),zips,pointerMatchesStagedZip:pointerMatches},null,2));
           process.exit(ok?0:1);
           " "$bin"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mac-x64-swap-check
-          path: swap-check-result.json
-          if-no-files-found: error

@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { networks } from 'bitcoinjs-lib';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -115,7 +115,7 @@ describe('desktop runtime shares one broadcast-queue store across hosts', () => 
 
 describe('desktop runtime persists its broadcast queue across relaunches', () => {
     it('restores identical raw transaction bytes and retry state in a fresh runtime', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-queue-'));
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-queue-'));
         const path = broadcastQueuePathFor(dir);
         const first = unlockableRuntime({
             queueStorage: new FileBroadcastQueueStorage(path),
@@ -150,9 +150,9 @@ describe('desktop runtime persists its broadcast queue across relaunches', () =>
     });
 
     it('logs a warning and starts empty when the queue file is corrupt', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-corrupt-'));
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-corrupt-'));
         const path = broadcastQueuePathFor(dir);
-        await writeFile(path, '{not-json', 'utf8');
+        await fs.writeFile(path, '{not-json', 'utf8');
         const logger = { warn: vi.fn() };
         const runtime = unlockableRuntime({
             queueStorage: new FileBroadcastQueueStorage(path, logger),
@@ -168,9 +168,9 @@ describe('desktop runtime persists its broadcast queue across relaunches', () =>
     });
 
     it('reports an unreadable file write through the queue persistence verdict', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-refused-'));
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-refused-'));
         const blockedParent = join(dir, 'not-a-directory');
-        await writeFile(blockedParent, 'blocked', 'utf8');
+        await fs.writeFile(blockedParent, 'blocked', 'utf8');
         const logger = { warn: vi.fn() };
         const runtime = unlockableRuntime({
             queueStorage: new FileBroadcastQueueStorage(
@@ -188,6 +188,45 @@ describe('desktop runtime persists its broadcast queue across relaunches', () =>
 
         expect(result.ok).toBe(true);
         expect(result.result.persisted).toBe(false);
-        expect(logger.warn).toHaveBeenCalledOnce();
+        expect(logger.warn).toHaveBeenCalled();
+        expect(logger.warn.mock.calls[0][0]).toMatch(/could not be read/);
+        expect(logger.warn.mock.calls[0][0]).not.toMatch(/starting with an empty queue/);
+    });
+
+    it('keeps every stored wallet intact across a temporary file read failure', async () => {
+        const dir = await fs.mkdtemp(join(tmpdir(), 'xchain-desktop-broadcast-busy-'));
+        const path = broadcastQueuePathFor(dir);
+        const otherEntry = {
+            id: 'other-entry', chainId: CHAIN, signedTxHex: SIGNED.txHex,
+            summary: 'Other wallet', signedAt: 1,
+        };
+        const seed = {
+            storageVersion: 1,
+            queues: { 'wallet-2': [otherEntry] },
+            settlements: [],
+        };
+        await fs.writeFile(path, JSON.stringify(seed), 'utf8');
+        const before = await fs.readFile(path, 'utf8');
+        const busy = Object.assign(new Error('resource busy'), { code: 'EBUSY' });
+        const read = vi.spyOn(fs, 'readFile').mockRejectedValue(busy);
+        const runtime = unlockableRuntime({
+            queueStorage: new FileBroadcastQueueStorage(path, { warn: vi.fn() }),
+        });
+
+        try {
+            await ensureHost(runtime);
+            const result = await call(runtime, 'broadcast.queue.enqueue', {
+                walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex,
+            });
+            expect(result.result.persisted).toBe(false);
+        } finally {
+            read.mockRestore();
+        }
+
+        expect(await fs.readFile(path, 'utf8')).toBe(before);
+        await call(runtime, 'broadcast.queue.list', { walletId: W });
+        const recovered = JSON.parse(await fs.readFile(path, 'utf8'));
+        expect(recovered.queues['wallet-2']).toEqual([otherEntry]);
+        expect(recovered.queues[W]).toHaveLength(1);
     });
 });

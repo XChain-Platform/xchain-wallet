@@ -32,25 +32,21 @@
  * @param {'bip39' | 'counterwallet-legacy' | 'wif-only' | undefined} format
  * @returns {boolean} true when every address type shares ONE index space
  */
-function indexSpaceSharedAcrossTypes(format) {
+export function indexSpaceSharedAcrossTypes(format) {
     return format === 'counterwallet-legacy';
 }
 
 /**
- * Same, resolved from the persisted Wallet record. Falls back to false
- * (per-type spaces) when the wallet cannot be read, which keeps every
- * caller's pre-existing behaviour for BIP39 wallets.
+ * Same, resolved from the persisted Wallet record. A read error propagates
+ * because guessing per-type spaces can re-issue a legacy wallet's held key
+ * under another address encoding.
  *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} walletId
  * @returns {Promise<boolean>}
  */
 export async function indexSpaceSharedForWallet(vault, walletId) {
-    let wallet = null;
-    try {
-        wallet = walletId ? await vault.wallets.get(walletId) : null;
-    } catch {
-        wallet = null;
-    }
+    if (!walletId || typeof vault?.wallets?.get !== 'function') return false;
+    const wallet = await vault.wallets.get(walletId);
     return indexSpaceSharedAcrossTypes(wallet?.format);
 }

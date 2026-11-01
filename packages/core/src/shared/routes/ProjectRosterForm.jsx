@@ -475,7 +475,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             });
             if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
+            if (!txid) throw new Error('Link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
             setStage('done');
         } catch (err) {
@@ -485,7 +485,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
-                        chainId, coinTicker, fallback: err?.message || 'Cross-chain link broadcast failed.',
+                        chainId, coinTicker, fallback: err?.message || 'Link broadcast failed.',
                     }),
             );
             if (!hw) {

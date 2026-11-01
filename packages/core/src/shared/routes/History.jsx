@@ -52,6 +52,7 @@ import '../../i18n/locales/en/history.js';
 import {
     applyHistoryFilters,
     classifyEntryStatus,
+    isCrossChainLink,
     ACTION_TYPE_OPTIONS,
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
@@ -263,7 +264,7 @@ export function timelineRuns(items) {
  * Filters:
  *   - Chain chips (toggle each chainId on/off)
  *   - "Cross-chain only": keep only entries that are part of a LINK
- *     pairing (regardless of whether both peers are in the result set)
+ *     pairing across two chains (whether or not both peers are in the result set)
  *
  * Wallet addresses are resolved up-front via
  * `messaging.getAddressesByChain(walletId)`. Per (chain, address) we
@@ -1087,7 +1088,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
-        if (crossChainOnly) list = list.filter((e) => Boolean(e.link));
+        if (crossChainOnly) list = list.filter((e) => Boolean(e.link) && isCrossChainLink(e));
         if (multisigOnly && multisigAddress) {
             const lower = multisigAddress.toLowerCase();
             list = list.filter((e) => {
@@ -2351,7 +2352,7 @@ function sidesFromLink(link, localChainId) {
             peer: { chainId: c1ChainId, coinTicker: String(coin1), actionIndex: idx1 },
         };
     }
-    // Same-chain LINK (rare but possible): treat side1 as local, side2
+    // Same-chain LINK (the Attach Content flow makes these): treat side1 as local, side2
     // as peer so the connector still draws.
     if (c1IsLocal && c2IsLocal) {
         return {
@@ -2408,6 +2409,7 @@ function actionTypeIcon(id) {
         case 'dividend':   return <Icon.DollarIcon />;
         case 'broadcast':  return <Icon.BroadcastIcon />;
         case 'message':    return <Icon.MessageIcon />;
+        case 'link':       return <Icon.LinkIcon />;
         case 'crosschain': return <Icon.LinkIcon />;
         default:           return null;
     }

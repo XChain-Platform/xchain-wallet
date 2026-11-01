@@ -74,6 +74,8 @@ async function applyUpdate(vault, id, patch) {
         }
     }
 
+    // Keep the spending window across a policy edit (a reset would re-open the
+    // budget, and the entries are the approval record).
     const next = { ...existing, updatedAt: new Date().toISOString() };
 
     if (patch.name !== undefined) {

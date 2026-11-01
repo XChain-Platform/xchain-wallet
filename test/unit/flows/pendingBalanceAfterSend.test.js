@@ -130,6 +130,66 @@ describe('pending send balance projection', () => {
         });
     });
 
+    it('persists the exact debit from the commit PSBT when a hardware signer returns no PSBT', async () => {
+        const rows = new Map();
+        const vault = {
+            settings: { get: async () => ({}), put: async () => {} },
+            pendingTxs: {
+                put: async (row) => { rows.set(row.id, structuredClone(row)); },
+            },
+            accounts: { findBy: async () => [{ id: 'a1' }] },
+            addresses: {
+                list: async () => [
+                    { id: 'source', accountId: 'a1', address: SOURCE, chain: 'bitcoin', network: 'regtest' },
+                    { id: 'change', accountId: 'a1', address: CHANGE, chain: 'bitcoin', network: 'regtest' },
+                ],
+            },
+            wallets: { get: async () => ({ importedKeys: [] }) },
+        };
+        const decomposePsbt = vi.fn((hex) => {
+            if (hex !== 'PSBT') throw new Error(`unexpected PSBT ${hex}`);
+            return {
+                inputs: [{ value: '100000' }],
+                outputs: [
+                    { address: 'bcrt1qrecipient', value: '20000' },
+                    { address: CHANGE, value: '79000' },
+                ],
+            };
+        });
+        const sdk = {
+            actions: {
+                createAction: () => ({ actionString: 'SEND|0|PEPE|1|dest', action: 'SEND', version: 0 }),
+            },
+            encoder: {
+                createTx: async () => ({ psbt: 'PSBT', encoding: 'OP_RETURN' }),
+                broadcastTx: async () => ({}),
+            },
+            wallet: { decomposePsbt },
+        };
+        const signer = {
+            kind: 'ledger',
+            signPsbt: async () => ({ signedPsbtHex: '', txHex: 'TX', txid: 'txid-1' }),
+        };
+
+        await sendToken({
+            vault,
+            walletId: 'w1',
+            chainRegistry,
+            sdkRegistry: { get: () => sdk },
+            chainId: CHAIN_ID,
+            from: { address: SOURCE, publicKey: 'pub', derivationPath: 'm/0' },
+            to: 'bcrt1qqypqxpq9qcrsszg2pvxq6rs0zqg3yyc5phstwt',
+            tick: 'PEPE',
+            amount: '1',
+            change: CHANGE,
+            signer,
+        });
+
+        const [stored] = Array.from(rows.values());
+        expect(decomposePsbt).toHaveBeenCalledWith('PSBT');
+        expect(stored).toMatchObject({ status: 'broadcast', nativeDebitSats: '21000' });
+    });
+
     it('subtracts live native and token debits without subtracting the native amount twice', () => {
         const projected = applyPendingBalanceDeltas(balances(), [pending()], chainRegistry);
         const shape = projected[CHAIN_ID][0].balances;

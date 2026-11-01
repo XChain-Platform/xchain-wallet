@@ -131,6 +131,20 @@ describe('broadcast queue engine restart invariant', () => {
         expect(next.engine.getQueue('w1').map((e) => e.signedTxHex)).toEqual(['kept']);
     });
 
+    it('refuses an enqueue that races behind removal of the wallet', async () => {
+        const storage = memStorage();
+        const { engine } = boot(storage);
+        await engine.ensureQueueLoaded();
+        await engine.pruneWalletFromQueue('w1');
+
+        const result = await engine.enqueueSignedBroadcast('w1', {
+            chainId: 'c1', signedTxHex: 'signed-after-removal', pendingTxId: 'p1',
+        });
+
+        expect(result).toEqual({ entry: null, persisted: false });
+        expect(engine.getQueue('w1')).toEqual([]);
+    });
+
     it('the broadcast-failure hook resolves only after the entry and its ADS verdict are saved', async () => {
         const storage = memStorage();
         let release;

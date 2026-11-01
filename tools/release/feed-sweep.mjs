@@ -79,11 +79,13 @@ export const FINDINGS = {
     'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards (oversized, or a version it will not parse)',
     'POINTER-DANGLING': 'a pointer naming a file that is not on the feed',
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
+    'POINTER-NO-HASH': "a yml pointer names a file with no sha512 the desktop client can read, which every desktop client refuses",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
     'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
+    'MANIFEST-TAG-MISMATCH': 'a manifest file name does not name the release in its signed tag header',
 };
 
 /** sha256 of a file, hex, streamed (artifacts run to hundreds of MB). */
@@ -94,6 +96,17 @@ export function sha256File(path) {
 /** sha512 of a file, base64 - the encoding electron-updater writes. */
 export function sha512File(path) {
     return hashFile(path, 'sha512', 'base64');
+}
+
+/** A pointer sha512 as hex, or '' when absent or malformed (port of updateVerify.js normalizeSha512). */
+export function normalizeSha512(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^[0-9a-f]{128}$/.test(raw.toLowerCase())) return raw.toLowerCase();
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) return '';
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length !== 64) return '';
+    return decoded.toString('hex');
 }
 
 function hashFile(path, algorithm, encoding) {
@@ -424,9 +437,8 @@ export function sweep(root, options = {}) {
     // ---- baseline: the union of every published manifest ---------------
     const manifestDir = join(root, MANIFEST_DIR);
     const union = new Map();        // basename -> Set<sha256>
-    const byRelease = new Map();    // releaseTagOf(tag) -> Set<basename>
+    const byManifestFile = new Map(); // manifest file name -> Set<basename>
     const gateByFile = new Map();   // manifest file name -> its dev-mock-gate value
-    const tagsSeen = new Set();
     let manifestCount = 0;
     let signaturesChecked = 0;
 
@@ -465,25 +477,17 @@ export function sweep(root, options = {}) {
             const { tag, gate, entries } = parseManifestText(bytes.toString('utf8'), name);
             // Key the gate by file name: the client fetches v<version>.txt, re-sign included.
             gateByFile.set(name, gate);
-            // The RELEASE, not the signature. A re-sign tag
-            // (`v0.336.0-resign1`) is the release tag's tree with the release
-            // tooling corrected and nothing else, cut because the dev-mock gate
-            // that stamps the manifest header comes from the tag and so cannot
-            // be fixed for a release already published. Its manifest is
-            // republished under the release's own name, and a channel pointer
-            // still names the plain version - so recording the header verbatim
-            // here would make the corrected manifest read as NO manifest and
-            // raise POINTER-NO-MANIFEST against the release that was just
-            // repaired. Both spellings are kept: the pointer check asks for the
-            // release, and nothing else reads this set.
-            tagsSeen.add(tag);
-            tagsSeen.add(releaseTagOf(tag));
-            const release = releaseTagOf(tag);
-            if (!byRelease.has(release)) byRelease.set(release, new Set());
+            const fileTag = name.replace(/\.txt$/, '');
+            if (releaseTagOf(tag) !== fileTag) {
+                add('MANIFEST-TAG-MISMATCH', `${MANIFEST_DIR}/${name}`,
+                    `file names ${fileTag}, but signed header ${tag} resolves to ${releaseTagOf(tag)}`);
+            }
+            const covered = new Set();
+            byManifestFile.set(name, covered);
             for (const [file, hash] of entries) {
                 if (!union.has(file)) union.set(file, new Set());
                 union.get(file).add(hash);
-                byRelease.get(release).add(file);
+                covered.add(file);
             }
         }
     }
@@ -594,7 +598,7 @@ export function sweep(root, options = {}) {
                 continue;
             }
             const version = parseJsonPointerVersion(text);
-            if (!tagsSeen.has(`v${version}`)) {
+            if (!byManifestFile.has(`v${version}.txt`)) {
                 add('POINTER-NO-MANIFEST', rel,
                     `names version ${version}, no RELEASE_HASHES/v${version}.txt`);
             }
@@ -606,7 +610,7 @@ export function sweep(root, options = {}) {
             add('POINTER-UNPARSEABLE', rel, 'no version or no files entry');
             continue;
         }
-        if (!tagsSeen.has(`v${info.version}`)) {
+        if (!byManifestFile.has(`v${info.version}.txt`)) {
             add('POINTER-NO-MANIFEST', rel,
                 `names version ${info.version}, no RELEASE_HASHES/v${info.version}.txt`);
         }
@@ -628,14 +632,20 @@ export function sweep(root, options = {}) {
                 add('POINTER-DANGLING', rel, `names ${dir}/${entry.url}, which is absent`);
                 continue;
             }
-            if (entry.sha512 && sha512File(target) !== entry.sha512) {
+            // Read the claim as the client does (verifyChannelPointer): hex or
+            // base64 alike, and a missing one refuses the install rather than passing.
+            const claimed = normalizeSha512(entry.sha512);
+            if (!claimed) {
+                add('POINTER-NO-HASH', rel,
+                    `names ${dir}/${entry.url} with no sha512 the desktop client can read, so it refuses the install`);
+            } else if (Buffer.from(sha512File(target), 'base64').toString('hex') !== claimed) {
                 add('POINTER-HASH', rel, `sha512 does not match ${dir}/${entry.url}`);
             }
             // Judged against the pointer's OWN release, as the client does
             // (updateVerify.js verifyChannelPointer): it fetches only that
             // release's manifest. With no such manifest POINTER-NO-MANIFEST has
             // fired, and the union test still reports a planted file.
-            const own = byRelease.get(`v${info.version}`);
+            const own = byManifestFile.get(`v${info.version}.txt`);
             if (own && !own.has(entry.url)) {
                 add('POINTER-UNCOVERED', rel,
                     `names ${dir}/${entry.url}, which the v${info.version} manifest does not cover`

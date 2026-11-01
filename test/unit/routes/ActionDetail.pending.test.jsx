@@ -233,11 +233,23 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
         fireEvent.click(screen.getByText('Details'));
         const label = screen.getByRole('rowheader', { name: 'Get amount' });
         expect(label.closest('tr').querySelector('td').textContent)
-            .toBe('0 (protocol placeholder; price set by oracle)');
+            .toBe("Varies: set from the oracle's USD price at each purchase");
 
         fireEvent.click(screen.getByText('Raw data'));
         expect(view.container.querySelector('pre').textContent).toContain('"get_amount": "0"');
-        expect(view.container.querySelector('pre').textContent).not.toContain('protocol placeholder');
+        expect(view.container.querySelector('pre').textContent).not.toContain('Varies');
+    });
+
+    it('words an oracle-priced zero without a fiat code as the oracle price', () => {
+        const raw = {
+            action: 'DISPENSER', get_amount: '0',
+            oracle_address: 'bc1qoracleoracleoracleoracleoracleoracle',
+        };
+        renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
+        fireEvent.click(screen.getByText('Details'));
+        const label = screen.getByRole('rowheader', { name: 'Get amount' });
+        expect(label.closest('tr').querySelector('td').textContent)
+            .toBe("Varies: set from the oracle's price at each purchase");
     });
 
     it('labels zero allow and block lists as none in History details', () => {

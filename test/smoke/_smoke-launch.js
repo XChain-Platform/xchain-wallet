@@ -23,9 +23,11 @@ export const RAW_SOURCE_SMOKES = new Set([
     'audits/history-export-modal.smoke.js',
     'audits/scan-route.smoke.js',
     'core/i18n.smoke.js',
+    'markets/place-order.smoke.js',
     'ui/ads-onboarding-notice.smoke.js',
     'ui/demo-disclosure-on-home.smoke.js',
     'ui/input-capslock-warning.smoke.js',
+    'ui/reachability-banner.smoke.js',
     'ui/send-autocomplete.smoke.js',
     'ui/verify-signature.smoke.js',
 ]);

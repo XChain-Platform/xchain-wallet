@@ -709,6 +709,8 @@ export {
     RESUMABLE_DISPATCH_METHODS,
     RESUMABLE_AFTER_METHODS,
     RESUME_TTL_MS,
+    RESUME_EXPIRED,
+    RESUME_UNAVAILABLE,
     assertNoCredentials,
     isResumable,
     resumeDispatch,

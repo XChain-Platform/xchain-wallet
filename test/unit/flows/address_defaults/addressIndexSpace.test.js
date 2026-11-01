@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { describe, expect, it, vi } from 'vitest';
-import { indexSpaceSharedForWallet } from '../../../../packages/core/src/flows/_addressIndexSpace.js';
+import {
+    indexSpaceSharedAcrossTypes,
+    indexSpaceSharedForWallet,
+} from '../../../../packages/core/src/flows/_addressIndexSpace.js';
 
 function vaultReturning(wallet) {
     return { wallets: { get: vi.fn().mockResolvedValue(wallet) } };
@@ -48,6 +51,15 @@ describe('indexSpaceSharedForWallet', () => {
     it('returns false when the wallet lookup rejects', async () => {
         const vault = { wallets: { get: vi.fn().mockRejectedValue(new Error('read failed')) } };
 
-        await expect(indexSpaceSharedForWallet(vault, 'wallet-1')).resolves.toBe(false);
+        await expect(indexSpaceSharedForWallet(vault, 'wallet-1')).rejects.toThrow('read failed');
     });
+});
+
+it.each([
+    ['counterwallet-legacy', true],
+    ['bip39', false],
+    ['wif-only', false],
+    [undefined, false],
+])('identifies whether %s shares one index space', (format, expected) => {
+    expect(indexSpaceSharedAcrossTypes(format)).toBe(expected);
 });

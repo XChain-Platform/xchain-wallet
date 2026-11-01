@@ -30,7 +30,7 @@ const revealLegs = (txid, encoding) => {
     };
     return {
         inputs: [{ prevTxHash: txid, prevTxIndex: 0, scriptType, ...script }],
-        outputs: [{ scriptType }],
+        outputs: [{ scriptType, scriptPubKeyHex: '6a00', value: 0 }],
     };
 };
 

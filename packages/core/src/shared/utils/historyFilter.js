@@ -53,8 +53,26 @@ export const ACTION_TYPE_OPTIONS = [
     { id: 'dividend', label: 'Dividend' },
     { id: 'broadcast', label: 'Broadcast' },
     { id: 'message', label: 'Message' },
-    { id: 'crosschain', label: 'Cross-chain' },
+    { id: 'link', label: 'Link' },
+    { id: 'crosschain', label: 'Cross-chain link' },
 ];
+
+/**
+ * Tell whether a LINK row, or a row a LINK names, spans two chains (Attach Content links on one chain).
+ * Row tickers decide first, then the peer chain (a null peer is an unknown coin); neither claims nothing.
+ *
+ * @param {HistoryEntry} entry
+ * @returns {boolean}
+ */
+export function isCrossChainLink(entry) {
+    const raw = entry?.raw || {};
+    const coin1 = String(raw.coin1 ?? raw.COIN1 ?? '').trim().toUpperCase();
+    const coin2 = String(raw.coin2 ?? raw.COIN2 ?? '').trim().toUpperCase();
+    if (coin1 && coin2) return coin1 !== coin2;
+    const link = entry?.link;
+    if (!link) return false;
+    return link.peerChainId !== entry.chainId;
+}
 
 // The `id` values are `confirmed` / `failed` because `classifyEntryStatus`
 // emits those bucket names from the raw row payload; the labels below are
@@ -98,7 +116,7 @@ export function classifyEntryAction(entry, walletAddresses) {
     if (a === 'DIVIDEND') return 'dividend';
     if (a === 'BROADCAST') return 'broadcast';
     if (a === 'MESSAGE') return 'message';
-    if (a === 'LINK') return 'crosschain';
+    if (a === 'LINK') return isCrossChainLink(entry) ? 'crosschain' : 'link';
     return 'other';
 }
 

@@ -686,12 +686,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             }),
             onBroadcast: (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
+                if (!txid) throw new Error('Link broadcast did not return a transaction ID.');
                 setLinkTxid(txid);
                 setPassword('');
                 setStage(setAsTokenInfo ? 'review-tis' : 'done');
             },
-            fallback: 'Cross-chain link broadcast failed.',
+            fallback: 'Link broadcast failed.',
         });
     }
 

@@ -558,6 +558,30 @@ const check = (over) => assertRecord({
     assert.ok(!check({ 'swap-requirement': 'whatever', swaps: [] }).ok);
 }
 
+// --- one-os counts only a desktop swap on an OS the release demands -----
+{
+    const macLinux = ['XChain-Wallet-0.1.0-mac-arm64.zip', 'XChain-Wallet-0.1.0-x86_64.AppImage'];
+    const scoped = (over, releaseArtifacts) => assertRecord({
+        record: { ...baseRecord, ...over }, tag: TAG, prodManifestSha256: MANIFEST_SHA, releaseArtifacts,
+    });
+    const winOnly = scoped({ swaps: [{ lane: 'win-x64', device: 'bench', from: '0.333.0' }] }, macLinux);
+    assert.ok(!winOnly.ok, 'a mac+Linux release must not pass on a swap recorded only for a Windows lane');
+    assert.match(winOnly.problems.join(' '), /no observed swap on any OS/);
+    assert.ok(scoped({}, macLinux).ok, 'control: the same mac+Linux release passes on its mac-arm64 swap');
+
+    const androidOnly = check({ swaps: [{ lane: 'android-direct', device: 'x', from: '0.333.0' }] });
+    assert.ok(!androidOnly.ok, 'an android-direct entry must not satisfy the desktop one-os requirement');
+    assert.match(androidOnly.problems.join(' '), /no observed swap on any OS/);
+
+    const waivedOnly = check({
+        'swap-bootstrap-oses': ['win32'], swaps: [{ lane: 'win-x64', device: 'bench', from: '0.333.0' }],
+    });
+    assert.ok(!waivedOnly.ok, 'a swap on the one bootstrap-waived OS must not stand in for the demanded ones');
+    assert.match(waivedOnly.problems.join(' '), /no observed swap on any OS/);
+    assert.ok(check({ 'swap-bootstrap-oses': ['win32'] }).ok,
+        'control: the same waiver passes with a swap on a demanded OS');
+}
+
 // --- a swap must install its OWN lane's artifact -------------------------
 //
 // electron-updater's MacUpdater treats an Apple-silicon Mac, Rosetta included,

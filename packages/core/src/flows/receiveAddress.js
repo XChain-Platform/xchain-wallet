@@ -24,6 +24,7 @@ import { unlockWallet } from './unlockWallet.js';
 import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+import { sdkSupportedAddressTypes } from './sdkAddressTypes.js';
 
 export class NoMatchingAccountError extends Error {
     constructor(walletId, accountIndex) {
@@ -63,6 +64,23 @@ async function addressEverFunded(sdk, address) {
     // Any other answer (an error body, an HTML page) is unreadable: the
     // address's funding stays unknown, never "unfunded".
     return null;
+}
+
+async function probeIndexFunding({
+    signer, sdk, chainId, accountIndex, index, addressTypes, requestedType,
+}) {
+    let candidate;
+    let unknown = false;
+    for (const addressType of addressTypes) {
+        const [derived] = await signer.getAddresses({
+            chainId, accountIndex, change: 0, startIndex: index, count: 1, addressType,
+        });
+        if (addressType === requestedType) candidate = derived;
+        const funded = await addressEverFunded(sdk, derived.address);
+        if (funded === true) return { candidate, funded: true };
+        if (funded === null) unknown = true;
+    }
+    return { candidate, funded: unknown ? null : false };
 }
 
 /**
@@ -243,19 +261,29 @@ async function deriveReceiveAddress({
         let derived;
         if (targetIndex === undefined) {
             const sdk = sdkRegistry.get(chainId);
+            const supportedTypes = sdkSupportedAddressTypes(sdk, descriptor.addressTypes)
+                ?? descriptor.addressTypes;
+            const fundingTypes = sharedIndexSpace
+                ? [type, ...supportedTypes.filter((candidateType) => candidateType !== type)]
+                : [type];
             for (let index = 0; index <= MAX_DERIVATION_INDEX; index += 1) {
                 if (held.has(index)) continue;
-                const [candidate] = await signer.getAddresses({
-                    chainId,
-                    accountIndex: resolvedAccountIndex,
-                    change: 0,
-                    startIndex: index,
-                    count: 1,
-                    addressType: type,
-                });
-                const funded = probeFunding
-                    ? await addressEverFunded(sdk, candidate.address)
-                    : null;
+                let candidate;
+                let funded = null;
+                if (probeFunding) {
+                    ({ candidate, funded } = await probeIndexFunding({
+                        signer, sdk, chainId, accountIndex: resolvedAccountIndex,
+                        index, addressTypes: fundingTypes, requestedType: type,
+                    }));
+                } else {
+                    [candidate] = await signer.getAddresses({
+                        chainId, accountIndex: resolvedAccountIndex, change: 0,
+                        startIndex: index, count: 1, addressType: type,
+                    });
+                }
+                if (sharedIndexSpace && funded === null) {
+                    throw new Error('Receive address history is unavailable for this legacy wallet.');
+                }
                 // An unreadable explorer cannot prove a deleted interior
                 // gap safe. The first index beyond every held record is
                 // still the normal fresh frontier and remains available

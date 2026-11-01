@@ -126,7 +126,7 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {(transactions: { signed: object, revealSigned: object | null, psbtHex?: string }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {boolean} [verifyBuiltTx]   hold the encoder's PSBT to the confirm pipeline's tamper checks before signing (submitWithSigner)
  * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
@@ -403,7 +403,10 @@ export async function submitAction({
         : effectiveEncoderOpts;
 
     const composedBeforeBroadcast = async (transactions) => {
-        if (pending && transactions?.signed?.signedPsbtHex) {
+        // A hardware signer returns signedPsbtHex '' after checking its transaction
+        // spends and pays exactly what the commit PSBT does, so that PSBT gives the debit.
+        const debitPsbtHex = transactions?.signed?.signedPsbtHex || transactions?.psbtHex;
+        if (pending && debitPsbtHex) {
             const owned = new Set([
                 pendingTxMeta?.fromAddress,
                 encoderOptsForSubmit?.change,
@@ -428,7 +431,7 @@ export async function submitAction({
             try {
                 const sdk = sdkRegistry.get(chainId);
                 nativeDebitSats = nativeDebitSatsFromPsbt(
-                    sdk.wallet.decomposePsbt(transactions.signed.signedPsbtHex),
+                    sdk.wallet.decomposePsbt(debitPsbtHex),
                     owned,
                 );
             } catch {
@@ -483,7 +486,8 @@ export async function submitAction({
                 if (!pending) return false;
                 try {
                     await writePending(patch);
-                    return true;
+                    // A write skipped because the wallet was removed saved nothing.
+                    return !pendingRemoved;
                 } catch (writeErr) {
                     if (err && typeof err === 'object') {
                         err.pendingTxWriteError = writeErr && writeErr.message
@@ -550,7 +554,8 @@ export async function submitAction({
                         ...revealMark,
                     });
                     let queueSaved = false;
-                    if (typeof onBroadcastFailure === 'function') {
+                    // A removed wallet's bytes would sit in a queue no surface can list or discard.
+                    if (!pendingRemoved && typeof onBroadcastFailure === 'function') {
                         try {
                             queueSaved = await onBroadcastFailure({
                                 ...commitMark,

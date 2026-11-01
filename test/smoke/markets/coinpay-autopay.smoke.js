@@ -95,7 +95,7 @@ assert.match(panel, /GIVE_COIN: coinTicker, GET_COIN: coinTicker/,
     'ORDER params carry the COIN networks (indexer rejects them missing)');
 assert.match(panel, /p\.GIVE_TICK\.toUpperCase\(\) === coinTicker\) p\.GIVE_TICK = ''/,
     'native GIVE side composes as an EMPTY tick (wire rule)');
-assert.match(panel, /Enable CoinPay auto-pay/, 'consent checkbox present');
+assert.match(panel, /Enable auto-pay/, 'consent checkbox present');
 assert.match(panel, /useState\(true\)/, 'checkbox defaults ON');
 assert.match(panel, /giveIsNative && !isWatcherMode && !isHwSource\(fromAddress\)/,
     'checkbox only for software signers on a native-GIVE order');
@@ -107,7 +107,7 @@ assert.match(panel, /Outstanding auto-pay exposure/, 'aggregate exposure shown w
 
 // ---- CreateOrderForm: the create-order route's own consent UI --------------
 const createOrder = read('packages', 'core', 'src', 'shared', 'routes', 'CreateOrderForm.jsx');
-assert.match(createOrder, /Enable CoinPay auto-pay/, 'create-order consent switch present');
+assert.match(createOrder, /Enable auto-pay/, 'create-order consent switch present');
 assert.match(createOrder, /const \[autopayEnabled, setAutopayEnabled\] = useState\(true\)/, 'create-order switch defaults ON');
 assert.match(createOrder, /const autopayEligible = giveIsNative && !isWatcherMode && !isHwSource;/,
     'create-order switch only for software signers on a native-GIVE order');

@@ -21,6 +21,7 @@
 import { decodeWif } from '../crypto/wif.js';
 import { isValidBip39Mnemonic } from '../crypto/mnemonic.js';
 import { isValidCounterwalletMnemonic } from '../crypto/counterwallet.js';
+import { normalizeRecoveryPhrase } from '../crypto/recoveryPhrase.js';
 import { parseBip21Uri } from './bip21.js';
 import { parseXcwChunk, XCW_PREFIX } from './psbtQr.js';
 import { looksLikeBackupPointer, parseBackupPointer } from './backupPointer.js';
@@ -172,9 +173,9 @@ export function detectQrContent(input, opts = {}) {
         }
     }
 
-    // --- Step 4: BIP39 mnemonic (whitespace + case normalized first) ---
-    const normalized = raw.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ');
-    const wordCount = normalized.split(' ').length;
+    // --- Step 4: BIP39 mnemonic (uses the wallet import normalizer) ---
+    const normalized = normalizeRecoveryPhrase(raw);
+    const wordCount = normalized ? normalized.split(' ').length : 0;
     if (wordCount >= 12 && isValidBip39Mnemonic(normalized)) {
         return { type: 'mnemonic-bip39', mnemonic: normalized };
     }

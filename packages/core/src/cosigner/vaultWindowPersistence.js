@@ -78,7 +78,8 @@ export function createVaultWindowPersistence(vault, accountId, expectedScope = {
 /**
  * Build a VaultWindowStore for an account, or null when the account's policy
  * has no `maxPerWindow` cap (the SDK CoSigner needs a window store only then).
- * The window length comes from `policy.maxPerWindow.hours`.
+ * The window length comes from `policy.maxPerWindow.hours`. A null return
+ * leaves any stored `window` on the record untouched.
  *
  * @param {object} args
  * @param {import('../storage/Vault.js').Vault} args.vault

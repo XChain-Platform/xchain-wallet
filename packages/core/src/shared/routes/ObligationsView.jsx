@@ -142,7 +142,7 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <>
                         {autopayArmed ? (
                             <p className={styles.hint}>
-                                CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
+                                Auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
                                 confirmed matches are paid automatically while the wallet stays unlocked.
                             </p>
                         ) : null}

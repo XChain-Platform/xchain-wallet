@@ -209,10 +209,10 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         await act(async () => newWallet.resolve([{
             id: 'new-consent', orderActionIndex: 17, autopay: true,
         }]));
-        expect(await screen.findByText('CoinPay auto-pay on')).toBeInTheDocument();
+        expect(await screen.findByText('Auto-pay on')).toBeInTheDocument();
 
         await act(async () => oldWallet.resolve([]));
-        expect(screen.getByText('CoinPay auto-pay on')).toBeInTheDocument();
+        expect(screen.getByText('Auto-pay on')).toBeInTheDocument();
     });
 
     it('exposes immediate auto-pay changes as a switch', async () => {
@@ -224,7 +224,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
             setAutopayEnabled,
         });
 
-        const toggle = await screen.findByRole('switch', { name: 'CoinPay auto-pay on' });
+        const toggle = await screen.findByRole('switch', { name: 'Auto-pay on' });
         expect(toggle).toBeChecked();
         fireEvent.click(toggle);
 

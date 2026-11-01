@@ -200,7 +200,7 @@ if [[ -e "$TARGET" ]]; then
     echo "deploy-web.sh: $TARGET already exists." >&2
     echo "  A published version is never rebuilt in place (§3). To roll" >&2
     echo "  BACK to it, flip the symlink; do not redeploy over it:" >&2
-    echo "    ln -sfn '$TARGET' '$CURRENT.tmp' && mv -Tf '$CURRENT.tmp' '$CURRENT'" >&2
+    echo "    ln -sfn 'releases/$TAG' '$CURRENT.tmp' && mv -Tf '$CURRENT.tmp' '$CURRENT'" >&2
     echo "  If an earlier deploy of $TAG failed, a copy of this script older than" >&2
     echo "  the hidden-sibling unpack may have left it half-written: remove it and" >&2
     echo "  deploy again rather than flipping to it." >&2
@@ -228,6 +228,9 @@ mkdir -p "$RELEASES"
 PARTIAL="$RELEASES/.$TAG.partial.$$"
 mkdir "$PARTIAL" || { PARTIAL=""; echo "deploy-web.sh: could not create an unpack dir under $RELEASES." >&2; exit 1; }
 tar -xzf "$STAGED_TARBALL" -C "$PARTIAL"
+# Tar restores the archive's root mtime. Pruning is by deployment order, so
+# record when this release was unpacked rather than when its commit was made.
+touch "$PARTIAL"
 
 if [[ ! -f "$PARTIAL/index.html" ]]; then
     echo "deploy-web.sh: no index.html in the unpacked release; refusing to flip." >&2
@@ -268,7 +271,7 @@ if [[ -L "$CURRENT" ]]; then
 fi
 
 if [[ "$HAVE_MV_T" -eq 1 ]]; then
-    ln -sfn "$TARGET" "$CURRENT.tmp"
+    ln -sfn "releases/$TAG" "$CURRENT.tmp"
     mv -Tf "$CURRENT.tmp" "$CURRENT"
 else
     # BSD/macOS: `ln -h` refuses to follow the existing symlink, so the
@@ -276,7 +279,25 @@ else
     # (it unlinks first), so prefer a GNU host for the live flip.
     echo "deploy-web.sh: no 'mv -T' here; using the BSD symlink replace." >&2
     echo "  That path is NOT atomic. Fine for a test host, not for prod." >&2
-    ln -shf "$TARGET" "$CURRENT"
+    ln -shf "releases/$TAG" "$CURRENT"
+fi
+
+# Never report a successful flip unless the entry point resolves through it.
+if [[ ! -f "$CURRENT/index.html" ]]; then
+    BROKEN_TARGET="$(readlink "$CURRENT" 2>/dev/null || true)"
+    echo "deploy-web.sh: $CURRENT -> '${BROKEN_TARGET:-unreadable}' does not reach index.html." >&2
+    if [[ -n "$PREVIOUS" ]]; then
+        if [[ "$HAVE_MV_T" -eq 1 ]]; then
+            ln -sfn "$PREVIOUS" "$CURRENT.tmp"
+            mv -Tf "$CURRENT.tmp" "$CURRENT"
+        else
+            ln -shf "$PREVIOUS" "$CURRENT"
+        fi
+        echo "  Restored the previous target: $PREVIOUS" >&2
+    else
+        rm -f "$CURRENT"
+    fi
+    exit 1
 fi
 
 echo "deploy-web.sh: live on $TAG" >&2

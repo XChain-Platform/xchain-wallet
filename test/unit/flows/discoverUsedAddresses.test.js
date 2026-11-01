@@ -12,23 +12,24 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const cryptoMocks = vi.hoisted(() => ({
     bip39MnemonicToSeed: vi.fn(),
+    counterwalletMnemonicToSeedBytes: vi.fn(),
     derive: vi.fn(),
     hdKeyFromSeed: vi.fn(),
     isValidBip39Mnemonic: vi.fn(),
+    validateCounterwalletMnemonic: vi.fn(),
     zeroDerivedKey: vi.fn(),
 }));
 
 vi.mock('../../../packages/core/src/crypto/index.js', () => ({
     ...cryptoMocks,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE: 'p2pkh',
-    counterwalletMnemonicToSeedBytes: vi.fn(),
-    isValidCounterwalletMnemonic: vi.fn(),
 }));
 
 import {
     DEFAULT_GAP_LIMIT,
     discoverUsedAddresses,
 } from '../../../packages/core/src/flows/discoverUsedAddresses.js';
+import { InvalidMnemonicError } from '../../../packages/core/src/flows/importMnemonic.js';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const descriptor = {
@@ -68,7 +69,9 @@ beforeEach(() => {
     vi.clearAllMocks();
     seed = new Uint8Array([1, 2, 3]);
     cryptoMocks.isValidBip39Mnemonic.mockReturnValue(true);
+    cryptoMocks.validateCounterwalletMnemonic.mockReturnValue({ ok: true });
     cryptoMocks.bip39MnemonicToSeed.mockResolvedValue(seed);
+    cryptoMocks.counterwalletMnemonicToSeedBytes.mockReturnValue(seed);
     cryptoMocks.hdKeyFromSeed.mockReturnValue({ id: 'root' });
     cryptoMocks.derive.mockImplementation((_root, path) => ({ publicKeyHex: path }));
 });
@@ -225,6 +228,108 @@ it('applies the full gap limit independently to every supported address type', a
         { addressType: 'p2tr', highestUsedIndex: 1, scannedCount: 4 },
     ]);
     expect(Object.fromEntries(probesByType)).toEqual({ p2pkh: 4, p2wpkh: 4, p2tr: 4 });
+});
+
+it('counts one shared gap across legacy address encodings', async () => {
+    const legacy = {
+        id: 'bitcoin-mainnet',
+        defaultAddressType: 'p2wpkh',
+        addressTypes: ['p2pkh', 'p2wpkh'],
+    };
+    const deriveAddress = vi.fn((key, { type }) => `${type}|${key}`);
+    const result = await discover({
+        format: 'counterwallet-legacy',
+        chainRegistry: {
+            supportedChains: () => [legacy],
+            get: () => legacy,
+            derivationPathFor: (_id, _type, _account, change, index) => `m/0'/${change}/${index}`,
+        },
+        sdkRegistry: { get: () => ({ wallet: { deriveAddress } }) },
+        addressTypes: 'all',
+        gapLimit: 2,
+        isUsedProbe: vi.fn(async (_sdk, address) => {
+            const [type, path] = address.split('|');
+            const index = Number(path.split('/').at(-1));
+            return { used: type === 'p2pkh' ? [0, 4].includes(index) : [1, 2, 3].includes(index) };
+        }),
+    });
+
+    expect(result.totalUsedFound).toBe(5);
+    expect(result.perChain.map(({ addressType, highestUsedIndex, scannedCount }) => ({
+        addressType, highestUsedIndex, scannedCount,
+    }))).toEqual([
+        { addressType: 'p2pkh', highestUsedIndex: 4, scannedCount: 7 },
+        { addressType: 'p2wpkh', highestUsedIndex: 3, scannedCount: 7 },
+    ]);
+    expect(cryptoMocks.derive).toHaveBeenCalledTimes(7);
+    expect(deriveAddress).toHaveBeenCalledTimes(14);
+});
+
+it('holds the shared legacy gap when any encoding probe is unknown', async () => {
+    const legacy = {
+        id: 'bitcoin-mainnet', defaultAddressType: 'p2pkh', addressTypes: ['p2pkh', 'p2wpkh'],
+    };
+    const result = await discover({
+        format: 'counterwallet-legacy',
+        chainRegistry: {
+            supportedChains: () => [legacy],
+            get: () => legacy,
+            derivationPathFor: (_id, _type, _account, change, index) => `m/0'/${change}/${index}`,
+        },
+        sdkRegistry: {
+            get: () => ({ wallet: { deriveAddress: (key, { type }) => `${type}|${key}` } }),
+        },
+        addressTypes: 'all',
+        gapLimit: 2,
+        isUsedProbe: vi.fn(async (_sdk, address) => {
+            if (address.startsWith('p2pkh|') && address.endsWith('/0')) throw new Error('unknown');
+            return { used: false };
+        }),
+    });
+
+    expect(result.perChain.map((entry) => entry.scannedCount)).toEqual([3, 3]);
+    expect(result.perChain[0].addresses[0].unknown).toBe(true);
+});
+
+it('isolates an unsupported legacy encoding from the other requested types', async () => {
+    const legacy = {
+        id: 'bitcoin-mainnet', defaultAddressType: 'p2pkh', addressTypes: ['p2pkh', 'p2wpkh'],
+    };
+    const result = await discover({
+        format: 'counterwallet-legacy',
+        chainRegistry: {
+            supportedChains: () => [legacy], get: () => legacy,
+            derivationPathFor: (_id, _type, _account, change, index) => `m/0'/${change}/${index}`,
+        },
+        sdkRegistry: {
+            get: () => ({ wallet: { deriveAddress: (key, { type }) => {
+                if (type === 'p2wpkh') throw new Error('unsupported encoding');
+                return `${type}|${key}`;
+            } } }),
+        },
+        addressTypes: 'all', gapLimit: 1,
+        isUsedProbe: vi.fn(async () => ({ used: false })),
+    });
+
+    expect(result.perChain[0]).toMatchObject({
+        addressType: 'p2pkh', scannedCount: 1, incomplete: false,
+    });
+    expect(result.perChain[1]).toMatchObject({
+        addressType: 'p2wpkh', scannedCount: 0, incomplete: true, error: 'unsupported encoding',
+    });
+});
+
+it.each([
+    ['word count', ['expected 12 words, got 11']],
+    ['bad word', ['word 3 ("abandn") is not in the Counterwallet wordlist']],
+])('passes through the Counterwallet %s validation reason', async (_label, errors) => {
+    cryptoMocks.validateCounterwalletMnemonic.mockReturnValue({ ok: false, errors });
+
+    const error = await discover({ format: 'counterwallet-legacy' }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(InvalidMnemonicError);
+    expect(error).toMatchObject({ format: 'counterwallet-legacy', errors });
+    expect(cryptoMocks.counterwalletMnemonicToSeedBytes).not.toHaveBeenCalled();
 });
 
 it('stops at the maximum derivation index when the gap limit cannot be completed', async () => {

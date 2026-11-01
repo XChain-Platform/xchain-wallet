@@ -184,6 +184,33 @@ describe('a stored entry keeps every field the host writes', () => {
         });
     });
 
+    it('loads byte-free reveal settlements and drops unknown operations', async () => {
+        const reveal = {
+            id: 's-reveal', walletId: 'w1', pendingTxId: 'p-1', op: 'reveal',
+            reveal: { txid: 'reveal-id', commitTxid: 'commit-id', txHex: 'must-drop' },
+            patch: { status: 'queued', txHex: 'must-drop' },
+            recordedAt: 1,
+        };
+        statefulChromeStorage({
+            value: {
+                storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
+                queues: {},
+                settlements: [reveal, { id: 's-unknown', pendingTxId: 'p-2', op: 'future' }],
+            },
+        });
+        const storage = createBroadcastQueueStorage();
+
+        await storage.load();
+        const settlements = await storage.loadSettlements();
+
+        expect(settlements).toEqual([{
+            id: 's-reveal', walletId: 'w1', pendingTxId: 'p-1', op: 'reveal',
+            reveal: { txid: 'reveal-id', commitTxid: 'commit-id' },
+            patch: { status: 'queued' }, recordedAt: 1,
+        }]);
+        expect(JSON.stringify(settlements)).not.toContain('must-drop');
+    });
+
     it('reads an unknown version without rewriting it', async () => {
         const future = {
             storageVersion: BROADCAST_QUEUE_STORAGE_VERSION + 1,

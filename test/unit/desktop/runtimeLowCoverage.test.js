@@ -15,6 +15,7 @@ import {
     tearDownHost,
     wipeRuntimeStores,
 } from '../../../packages/desktop/main/runtime.js';
+import { AUTO_LOCK_UNSAVED } from '../../../packages/extension/src/background/autoLockState.js';
 
 function backend(initial = null) {
     let value = initial;
@@ -142,6 +143,60 @@ describe('desktop runtime dispatch branches', () => {
         const result = await handleIpcMessage(createRuntime(deps()), { type: 'custom.locked' });
         expect(result.ok).toBe(false);
         expect(result.error.name).toBe('WalletLockedError');
+    });
+
+    it('locks and returns the shared refusal when an arm cannot be saved', async () => {
+        const input = deps();
+        const autoLockStore = backend({ armed: false, idleMs: 0, lastActivity: 1 });
+        autoLockStore.save.mockRejectedValue(new Error('disk full'));
+        const runtime = createRuntime({ ...input, autoLockStore });
+        runtime.host = {};
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const result = await handleIpcMessage(runtime, {
+            type: AUTO_LOCK_REPORT_TYPE,
+            request: { armed: true, idleMs: 60_000 },
+        });
+
+        expect(result).toEqual({ ok: true, result: { ok: false, reason: AUTO_LOCK_UNSAVED } });
+        expect(runtime.host).toBeNull();
+        expect(input.sessionBackend.clear).toHaveBeenCalledOnce();
+        expect(autoLockStore.clear).toHaveBeenCalled();
+        expect(runtime.autoLockCleanupPending).toBe(false);
+    });
+
+    it('keeps cleanup pending but still clears the stale record when session clear fails', async () => {
+        const input = deps();
+        input.sessionBackend.clear.mockRejectedValue(new Error('keychain busy'));
+        const autoLockStore = backend({ armed: false, idleMs: 0, lastActivity: 1 });
+        autoLockStore.save.mockRejectedValue(new Error('disk full'));
+        const runtime = createRuntime({ ...input, autoLockStore });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await handleIpcMessage(runtime, {
+            type: AUTO_LOCK_REPORT_TYPE,
+            request: { armed: true, idleMs: 60_000 },
+        });
+
+        expect(autoLockStore.clear).toHaveBeenCalledOnce();
+        expect(runtime.autoLockCleanupPending).toBe(true);
+    });
+
+    it.each([
+        ['a disarm', { armed: false }],
+        ['an activity report', { armed: true, idleMs: 60_000, activity: true }],
+    ])('does not lock for a failed %s', async (_label, request) => {
+        const input = deps();
+        const autoLockStore = backend({ armed: true, idleMs: 60_000, lastActivity: 1 });
+        autoLockStore.save.mockRejectedValue(new Error('disk full'));
+        const runtime = createRuntime({ ...input, autoLockStore });
+        runtime.host = {};
+
+        const result = await handleIpcMessage(runtime, { type: AUTO_LOCK_REPORT_TYPE, request });
+
+        expect(result.ok).toBe(false);
+        expect(runtime.host).not.toBeNull();
+        expect(input.sessionBackend.clear).not.toHaveBeenCalled();
     });
 });
 

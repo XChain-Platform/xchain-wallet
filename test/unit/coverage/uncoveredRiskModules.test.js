@@ -203,7 +203,7 @@ describe('test-dApp runtime modules', () => {
         const connected = await provider.connect({ appName: 'Unit dApp' });
         expect(connected).toMatchObject({
             ok: true,
-            chains: ['bitcoin'],
+            chains: ['bitcoin-regtest'],
             permissions: { canSignMessage: true },
         });
         expect(accountsChanged).toHaveBeenCalledOnce();
@@ -228,6 +228,69 @@ describe('test-dApp runtime modules', () => {
         await expect(provider.getAccounts()).rejects.toThrow('not connected');
     });
 
+    it('models sign-only PSBT responses and required signing paths', async () => {
+        const provider = new MockXChainProvider();
+        await provider.connect();
+        const valid = {
+            chainId: 'bitcoin-regtest',
+            psbtHex: '70736274',
+            signingPaths: [{ inputIndex: 0, address: 'bcrt1qfrom' }],
+        };
+
+        await expect(provider.signPsbt({
+            chainId: valid.chainId,
+            psbtHex: valid.psbtHex,
+        })).resolves.toMatchObject({ ok: false, error: 'INVALID_PARAMS' });
+        await expect(provider.signPsbt(valid)).resolves.toEqual({
+            ok: true,
+            signedPsbtHex: '70736274deadbeef',
+            txHex: 'mock-txhex',
+        });
+        await expect(provider.signPsbt({ ...valid, broadcast: true }))
+            .resolves.toMatchObject({ ok: false, error: 'INVALID_PARAMS' });
+    });
+
+    it('models single-input and multi-input coSign approvals', async () => {
+        const provider = new MockXChainProvider();
+        await provider.connect();
+        const base = {
+            chainId: 'bitcoin-regtest',
+            aggregateAddress: 'bcrt1paggregate',
+            psbtHex: '70736274',
+        };
+
+        await expect(provider.coSign({ ...base, inputIndex: 2 }))
+            .resolves.toMatchObject({ ok: true, approved: true, action: 'SEND' });
+        await expect(provider.coSign({
+            ...base,
+            inputs: [{ index: 1, agentPublicNonce: '02aa' }],
+        })).resolves.toMatchObject({
+            ok: true,
+            approved: true,
+            signatures: [{ index: 1 }],
+        });
+
+        const rejecting = new MockXChainProvider({ rejectAll: true });
+        await expect(rejecting.coSign(base))
+            .resolves.toEqual({ ok: false, error: 'USER_REJECTED' });
+        await expect(new MockXChainProvider().coSign(base))
+            .rejects.toThrow('not connected');
+    });
+
+    it('grants requested chain ids and refuses coin-family ids', async () => {
+        const provider = new MockXChainProvider();
+        await expect(provider.connect({ requestedChains: ['bitcoin-regtest'] }))
+            .resolves.toMatchObject({
+                ok: true,
+                chains: ['bitcoin-regtest'],
+                permissions: { chains: ['bitcoin-regtest'] },
+            });
+        await provider.disconnect();
+
+        await expect(provider.connect({ requestedChains: ['bitcoin'] }))
+            .resolves.toEqual({ ok: false, error: 'USER_REJECTED' });
+    });
+
     it('runs the public example end to end through the package runtime entry', async () => {
         const provider = new MockXChainProvider();
         const uninstall = provider.install();
@@ -250,6 +313,7 @@ describe('test-dApp runtime modules', () => {
         const disconnect = vi.fn(async () => {});
         const provider = {
             isXChainWallet: true,
+            getSupportedChains: vi.fn(async () => [{ id: 'bitcoin-regtest', coin: 'bitcoin' }]),
             connect: vi.fn(async () => ({
                 ok: true,
                 version: '0.1.0',

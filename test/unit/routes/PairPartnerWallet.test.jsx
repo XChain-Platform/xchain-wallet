@@ -33,6 +33,7 @@ import { encodeXcwChunks } from '../../../packages/core/src/uri/psbtQr.js';
 import { setNativeQrScanner } from '../../../packages/core/src/ui/nativeQrScanner.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const LEGACY_PHRASE = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'correct-horse-battery';
 const PARTNER_CODE = encodePairingPayload(buildPairingPayload({
     walletMode: 'signer',
@@ -179,12 +180,26 @@ describe('PairPartnerWallet: seed stage', () => {
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });
 
+    it('refuses a phrase that only the legacy format accepts', () => {
+        const messaging = mkMessaging();
+        mount(messaging);
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Shared recovery phrase/i, LEGACY_PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+
+        fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent(/From FreeWallet/);
+        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+    });
+
     it('imports the shared phrase and requests this wallet\'s pairing code', async () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
 
         expect(messaging.importMnemonic).toHaveBeenCalledWith(
-            expect.objectContaining({ mnemonic: PHRASE, password: PASSWORD }),
+            expect.objectContaining({ mnemonic: PHRASE, password: PASSWORD, format: 'bip39' }),
         );
         // The role rides along on the request: the host persists walletMode
         // in the same call that reads the keys, so a payload can never

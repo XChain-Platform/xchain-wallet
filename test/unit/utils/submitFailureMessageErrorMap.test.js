@@ -50,6 +50,7 @@ describe('submitFailureMessage SDK error map', () => {
         ['invalid satoshi amount', codedError('Error', 'INVALID_SATS_AMOUNT', unsafe)],
         ['unknown chain', codedError('UnknownChainError', undefined, unsafe)],
         ['refused reveal inputs', codedError('Error', 'REVEAL_INPUTS_REFUSED', unsafe)],
+        ['refused reveal outputs', codedError('Error', 'REVEAL_OUTPUTS_REFUSED', unsafe)],
 
         ['no spendable coin', codedError('SDKEncoderError', 'NO_UTXOS', unsafe), { coinTicker: 'BTC' }],
         ['stale spendable balance', codedError('SDKEncoderError', 'UTXO_TRACKER_STALE', unsafe)],

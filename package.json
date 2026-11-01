@@ -1,7 +1,7 @@
 {
     "name": "xchain-wallet",
     "description": "Self-custodial multi-chain wallet for the XChain Platform (browser, Chrome extension, and desktop)",
-    "version": "0.342.0",
+    "version": "0.342.1",
     "private": true,
     "type": "module",
     "license": "AGPL-3.0-or-later",
@@ -19,7 +19,7 @@
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "pnpm -r --if-present lint",
         "build": "pnpm -r --if-present build",
-        "ci": "pnpm test:unit && pnpm test:integration && pnpm test:security && pnpm test:fuzz && pnpm test:smoke && pnpm test:tools",
+        "ci": "pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:security && pnpm test:fuzz && pnpm test:smoke && pnpm test:tools",
         "ci:full": "bash tools/ci-full.sh",
         "test": "pnpm test:unit && pnpm test:fuzz && pnpm test:smoke && pnpm test:tools",
         "test:unit": "vitest run --config test/vitest/unit.config.js",

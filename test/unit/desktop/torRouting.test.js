@@ -364,13 +364,15 @@ describe('applyTorRouting', () => {
         const registry = { pools: [], setPool(p) { this.pools.push(p ? 'SOCKS' : 'CLEARED'); } };
         const proxyCalls = [];
         const session = { setProxy: async (cfg) => { proxyCalls.push(cfg); } };
+        // Toggle off once the probe has reached the stalled proxy, so the off lands mid-probe.
+        const probing = new Promise((r) => stalled.once('connection', r));
         try {
             const on = applyTorRouting({
                 settings: { privacy: { torRouting: true, socksProxyAddress: address } },
                 sdkRegistry: registry,
                 session,
             });
-            await new Promise((r) => setTimeout(r, 50));
+            await probing;
             const off = applyTorRouting({ settings: { privacy: { torRouting: false } }, sdkRegistry: registry, session });
             await Promise.all([on, off]);
             expect(registry.pools.at(-1)).toBe('CLEARED');

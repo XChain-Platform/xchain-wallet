@@ -14,6 +14,7 @@ import {
     decodeAction,
     listEditValue,
     simulateAction,
+    withContractCallDescriptions,
     withListRemovalDescriptions,
 } from '../../../packages/core/src/decoder/index.js';
 
@@ -66,6 +67,19 @@ describe('decoder public module', () => {
                 { action: 'ORDER', version: '2', params: { ALLOW_LIST: '0' } },
             ),
             expected: { details: [{ label: 'Allow list', value: 'Remove allow list' }] },
+        },
+        {
+            name: 'withContractCallDescriptions',
+            run: () => withContractCallDescriptions(
+                { details: [{ label: 'Arguments', value: 'a, b, c' }] },
+                { action: 'EXECUTE', params: { PARAMS: ['a, b', 'c'] } },
+            ),
+            expected: {
+                details: [
+                    { label: 'Argument 1', value: 'a, b' },
+                    { label: 'Argument 2', value: 'c' },
+                ],
+            },
         },
     ])('exports $name', ({ run, expected }) => {
         expect(run()).toEqual(expected);

@@ -154,7 +154,7 @@ describe('CreateOrderForm coverage', () => {
 
         fireEvent.click(screen.getAllByRole('radio', { name: 'Native BTC' })[0]);
 
-        expect(screen.getByRole('switch', { name: 'Enable CoinPay auto-pay' })).toBeChecked();
+        expect(screen.getByRole('switch', { name: 'Enable auto-pay' })).toBeChecked();
         expect(screen.getByRole('checkbox', {
             name: 'I understand this web wallet only auto-pays while it is open and unlocked.',
         })).not.toBeChecked();

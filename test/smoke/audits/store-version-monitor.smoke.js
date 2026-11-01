@@ -733,6 +733,105 @@ const PKG = 'io.xchain.wallet.android';
         'a known lane must never fall through to the residual bucket');
 }
 
+// ------------------------------- every APK the manifest lists for the release
+//
+// The direct lane serves a second APK beside the store one (the full-profile
+// build, `-full.apk`) from the same directory. Each one the manifest lists is
+// hashed; an unlisted one is never fetched, and a name outside the strict
+// `xchain-wallet-v<feed version>-<suffix>.apk` shape is never turned into a URL.
+{
+    const base = 'https://downloads.example.invalid/wallet';
+    const STORE = 'xchain-wallet-v0.336.0.apk';
+    const FULL = 'xchain-wallet-v0.336.0-full.apk';
+    const storeBytes = Buffer.from('the signed store APK');
+    const fullBytes = Buffer.from('the signed full APK');
+    const sha = (b) => createHash('sha256').update(b).digest('hex');
+    const manifestOf = (lines, tag = 'v0.336.0') => [
+        '# XChain Wallet release manifest', `# tag: ${tag}`, ...lines,
+    ].join('\n');
+    // Build a stub that throws on any URL it was not given, so a stray fetch fails the case.
+    const stub = (manifest, apks) => {
+        const seen = [];
+        const fetchImpl = async (url) => {
+            seen.push(url);
+            if (url === `${base}/android/latest.json`) return ok(JSON.stringify({ version: '0.336.0' }));
+            if (url === `${base}/RELEASE_HASHES/v0.336.0.txt`) return ok(manifest);
+            const name = url.slice(`${base}/android/`.length);
+            if (url.startsWith(`${base}/android/`) && Object.hasOwn(apks, name)) {
+                const v = apks[name];
+                if (v instanceof Error) throw v;
+                if (typeof v === 'number') return { ok: false, status: v, arrayBuffer: async () => new ArrayBuffer(0) };
+                return { ok: true, status: 200, arrayBuffer: async () => v };
+            }
+            throw new Error(`fakeFetch: no stub for ${url}`);
+        };
+        return { fetchImpl, seen };
+    };
+    const runDirect = (fetchImpl) => run({
+        argv: ['--no-chrome', '--no-play', '--direct-base', base], env: {}, fetchImpl,
+    });
+    const bothListed = manifestOf([`${sha(storeBytes)}  ./${STORE}`, `${sha(fullBytes)}  ./${FULL}`]);
+
+    // Both listed, both served and matching: two OK results.
+    const clean = await runDirect(stub(bothListed, { [STORE]: storeBytes, [FULL]: fullBytes }).fetchImpl);
+    assert.equal(clean.exitCode, 0, `both APKs matching must be a clean run:\n${clean.stderr}`);
+    assert.match(clean.stdout, /2 item\(s\) checked, 2 ok/);
+    assert.match(clean.stdout, new RegExp(FULL.replace(/\./g, '\\.')));
+
+    // The full APK swapped at the CDN while the store APK is fine.
+    const swapped = await runDirect(stub(bothListed, {
+        [STORE]: storeBytes, [FULL]: Buffer.from('a DIFFERENT full APK'),
+    }).fetchImpl);
+    assert.equal(swapped.exitCode, 1, 'a swapped full APK is an alert run');
+    assert.match(swapped.stderr, /DIRECT APK INCIDENT SIGNAL/);
+    assert.match(swapped.stderr, /xchain-wallet-v0\.336\.0-full\.apk[^\n]*is NOT the one that was signed/,
+        'the alert must name the full APK, not leave the operator to guess which file moved');
+    assert.doesNotMatch(swapped.stderr, /UNCLASSIFIED ALERT/, 'the full APK files under the direct banner');
+
+    // Listed but not served is a dead download link, as for the store APK.
+    const gone = await runDirect(stub(bothListed, { [STORE]: storeBytes, [FULL]: 404 }).fetchImpl);
+    assert.equal(gone.exitCode, 1, 'a listed full APK the CDN does not serve is an alert');
+    assert.match(gone.stderr, /digest for xchain-wallet-v0\.336\.0-full\.apk but the CDN does not serve/);
+
+    // A release signed for the store lane alone lists no full APK, and none is requested.
+    const storeOnly = stub(manifestOf([`${sha(storeBytes)}  ./${STORE}`]), { [STORE]: storeBytes });
+    const storeOnlyRun = await runDirect(storeOnly.fetchImpl);
+    assert.equal(storeOnlyRun.exitCode, 0, `a store-only manifest must stay clean:\n${storeOnlyRun.stderr}`);
+    assert.ok(!storeOnly.seen.some((u) => u.includes('-full')), 'an unlisted full APK must not be fetched');
+
+    // Names outside the strict shape are never fetched, whatever the manifest lists.
+    const hostile = stub(manifestOf([
+        `${sha(storeBytes)}  ./${STORE}`,
+        `${'a'.repeat(64)}  ./../x.apk`,
+        `${'b'.repeat(64)}  ./xchain-wallet-v0.336.0-full.apk.exe`,
+        `${'c'.repeat(64)}  ./xchain-wallet-v0.335.0-full.apk`,
+        `${'d'.repeat(64)}  ./xchain-wallet-v0.336.0-../../x.apk`,
+        `${'e'.repeat(64)}  ./xchain-wallet-v0.336.0-FULL.apk`,
+    ]), { [STORE]: storeBytes });
+    const hostileRun = await runDirect(hostile.fetchImpl);
+    assert.equal(hostileRun.exitCode, 0, `off-pattern names must be ignored, not fetched:\n${hostileRun.stderr}`);
+    assert.deepEqual(hostile.seen, [
+        `${base}/android/latest.json`, `${base}/RELEASE_HASHES/v0.336.0.txt`, `${base}/android/${STORE}`,
+    ], 'only the feed, the manifest and the store APK may be requested');
+
+    // A transport failure on the full APK leaves the store result standing.
+    for (const failure of [new Error('ETIMEDOUT'), 500]) {
+        const flaky = await runDirect(stub(bothListed, { [STORE]: storeBytes, [FULL]: failure }).fetchImpl);
+        assert.equal(flaky.exitCode, 3, 'an unreachable full APK is inconclusive, never clean');
+        assert.match(flaky.stdout, /OK {5}item=direct[^\n]*xchain-wallet-v0\.336\.0\.apk is published/,
+            'the store APK result must survive a failure fetching the full APK');
+        assert.match(flaky.stderr, /xchain-wallet-v0\.336\.0-full\.apk/);
+    }
+
+    // Feed and manifest skew is reported once, and no APK is fetched for it.
+    const skew = stub(manifestOf([`${sha(storeBytes)}  ./${STORE}`, `${sha(fullBytes)}  ./${FULL}`], 'v0.337.0'),
+        { [STORE]: storeBytes, [FULL]: fullBytes });
+    const skewRun = await runDirect(skew.fetchImpl);
+    assert.equal(skewRun.exitCode, 1);
+    assert.equal(skewRun.stderr.match(/two different releases/g)?.length, 1, 'skew is one finding, not one per APK');
+    assert.ok(!skew.seen.some((u) => u.includes('-full')), 'a skewed manifest must not drive further fetches');
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md, '
     + 'the Play absence latch, and the row 130 direct lane: a served APK that does not '

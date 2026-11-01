@@ -78,7 +78,12 @@ function harness({ encoding = 'OP_RETURN' } = {}) {
                         scriptType: 'p2sh',
                         redeemScriptHex: '0100',
                     }],
-                    outputs: [],
+                    // The marker, then exactly the deferred outputs spendP2sh was asked to emit.
+                    outputs: [
+                        { scriptType: 'unknown', scriptPubKeyHex: '6a00', value: 0 },
+                        ...(spendP2sh.mock.calls.at(-1)?.[0]?.customOutputs ?? [])
+                            .map((o) => ({ address: o.address, value: o.value, scriptType: 'p2wpkh' })),
+                    ],
                 }
                 : { inputs: [{}], outputs: [{ scriptType: 'p2sh' }] },
         },

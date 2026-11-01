@@ -71,7 +71,7 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
     // BTC-exclusive (staking + smart-contract sub-actions)
     COLLECT: 'collect staking rewards',
     DELEGATE: 'delegate stake',
-    DEPLOY: 'deploy contracts',
+    DEPLOY: 'publish contracts',
     DEPOSIT: 'receive deposits',
     EXECUTE: 'call other contracts',
     STAKE: 'stake tokens',

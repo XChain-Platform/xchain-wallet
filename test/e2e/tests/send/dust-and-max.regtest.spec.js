@@ -55,6 +55,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { freshMempoolSize } from '../../fixtures/venueHealth.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Small enough to keep the arithmetic readable, large enough to pay a fee. */
@@ -93,7 +94,7 @@ async function coinBalanceSats(address) {
 
 async function mempoolSize() {
     const status = await minerRpc('status', {});
-    return Number(status?.mempool_size ?? -1);
+    return freshMempoolSize(status);
 }
 
 /** Mines only while something is actually waiting for a block (§3.5). */

@@ -104,6 +104,9 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  *          alone. Additive and undefined-tolerant: a record written before it,
  *          or for a single-transaction action, carries none and sends `txHex` alone
  * @property {string | null} [revealTxid]  that reveal's txid, the action's identity
+ * @property {string | null} [rbfReplacesPendingTxId]  on a fee-bump replacement, the
+ *          id of the original PendingTx it evicts, so a queue rebuilt from the vault
+ *          can retire that original. Additive and undefined-tolerant
  */
 
 /**
@@ -276,6 +279,14 @@ export function validatePendingTx(record) {
         errors,
         'revealTxid',
         r.revealTxid === undefined || r.revealTxid === null || isNonEmptyString(r.revealTxid),
+        'must be null or a non-empty string',
+    );
+    // Verify the fee-bump link names a record id when present (undefined on every older record).
+    check(
+        errors,
+        'rbfReplacesPendingTxId',
+        r.rbfReplacesPendingTxId === undefined || r.rbfReplacesPendingTxId === null
+            || isNonEmptyString(r.rbfReplacesPendingTxId),
         'must be null or a non-empty string',
     );
     return result(errors);

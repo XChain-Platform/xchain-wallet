@@ -260,6 +260,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const receiveContextRef = useRef(receiveContextKey);
     receiveContextRef.current = receiveContextKey;
     const address = addressContextKey === receiveContextKey ? loadedAddress : null;
+    const hasReceiveAddress = typeof address?.address === 'string'
+        && address.address.length > 0;
     const currentAddressIdRef = useRef(address?.id || null);
     currentAddressIdRef.current = address?.id || null;
     const labelDraftValue = labelDraft.addressId === address?.id
@@ -489,7 +491,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
     // whenever the shown address changes.
-    const isHwAddress = !!address && (address.source === 'trezor' || address.source === 'ledger');
+    const isHwAddress = hasReceiveAddress
+        && (address.source === 'trezor' || address.source === 'ledger');
     const hwDeviceLabel = address?.source === 'ledger'
         ? 'Ledger'
         : address?.source === 'trezor' ? 'Trezor' : 'device';
@@ -572,7 +575,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [generateError, hwVerifyFailed]);
 
     const verifyOnDevice = useCallback(async () => {
-        if (!address || !activeChainId) return;
+        if (!hasReceiveAddress || !activeChainId) return;
         if (typeof messaging.verifyReceiveAddress !== 'function') {
             setHwVerify({ status: 'error', message: 'This app cannot verify the address on your hardware wallet.' });
             return;
@@ -616,7 +619,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 });
             }
         }
-    }, [address, activeChainId, walletId, messaging, receiveContextKey]);
+    }, [address, hasReceiveAddress, activeChainId, walletId, messaging, receiveContextKey]);
 
     // Derive the multisig output address whenever chain changes, if
     // this wallet has a MultisigConfig. Failures are non-fatal; we
@@ -824,7 +827,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // optional chain extension distinguishes testnet from regtest, whose
     // address formats and URI schemes are otherwise identical.
     const qrUri = useMemo(() => {
-        if (!address || !descriptor || !activeChainId) return null;
+        if (!hasReceiveAddress || !descriptor || !activeChainId) return null;
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
         return uriLib.encodeBip21Uri({
@@ -837,7 +840,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 ...(tick ? { tick } : {}),
             },
         });
-    }, [address, descriptor, activeChainId, reqAmount, reqTick]);
+    }, [address, hasReceiveAddress, descriptor, activeChainId, reqAmount, reqTick]);
 
     useEffect(() => {
         if (!qrUri) {
@@ -1163,7 +1166,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         </Button>
     ) : null;
 
-    const qrActionsContent = address ? (
+    const qrActionsContent = hasReceiveAddress ? (
         <div ref={qrActionsRef} className={`${qrStyles.actions} ${styles.qrActions}`}>
             <Button
                 size="md"
@@ -1204,7 +1207,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // (above the card when wide): the load failure, then a failed New address,
     // then a hardware-wallet verification failure. The amount error stays under
     // its field.
-    const hwVerifyNotice = isHwAddress && address
+    const hwVerifyNotice = isHwAddress
         ? (hwVerify.status === 'mismatch'
             ? `${t('receive.your')} ${hwDeviceLabel} ${t('receive.showedADifferentAddressDo')}`
             : hwVerify.status === 'error' ? hwVerify.message : null)
@@ -1243,13 +1246,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </Select>
             ) : null}
 
-            {!address && descriptor && addressType && !generating && !generateError ? (
+            {!hasReceiveAddress && descriptor && addressType && !generating && !generateError ? (
                 <FormNotice variant="status">
                     {`${t('receive.thereIsNo')} ${addressTypeLabel(addressType)} ${t('receive.addressYetCreateOneTo')}`}
                 </FormNotice>
             ) : null}
 
-            {address ? (
+            {hasReceiveAddress ? (
                 <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
                     <div
                         ref={qrSurfaceRef}
@@ -1294,11 +1297,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </div>
             ) : null}
 
-            {!address && generateAddressButton ? (
+            {!hasReceiveAddress && generateAddressButton ? (
                 <div className={styles.generateAddressAction}>{generateAddressButton}</div>
             ) : null}
 
-            {address?.id ? (
+            {hasReceiveAddress && address.id ? (
                 <div className={styles.labelEditor}>
                     <Input
                         size="md"
@@ -1346,7 +1349,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 );
             })() : null}
 
-            {address ? (
+            {hasReceiveAddress ? (
                 <>
                     <div className={styles.amountEditor}>
                         <AmountField

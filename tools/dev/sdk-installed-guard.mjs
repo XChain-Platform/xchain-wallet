@@ -42,7 +42,10 @@ function importerSdkResolution(lockfile, shell) {
         if (!resolution.startsWith(SDK_RESOLUTION_PREFIX)) {
             throw new Error(`lockfile ${shell} xchain-sdk resolution is not the registry package`);
         }
-        const version = resolution.slice(SDK_RESOLUTION_PREFIX.length);
+        // pnpm appends a peer-resolution suffix such as "(typescript@5.9.3)"
+        // when a dependency of the SDK carries an optional peer; the installed
+        // package.json carries only the version, so drop the suffix.
+        const version = resolution.slice(SDK_RESOLUTION_PREFIX.length).replace(/\(.*\)$/, '');
         if (!version) throw new Error(`lockfile ${shell} xchain-sdk resolution has no version`);
         return version;
     }

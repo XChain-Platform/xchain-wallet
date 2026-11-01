@@ -30,7 +30,7 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  * @typedef {Object} BroadcastQueueStore
  * @property {BroadcastQueueStorage | null} storage  the one writer of the stored key
  * @property {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} queues  walletId to its live entry array
- * @property {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} owed
+ * @property {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard' | 'reveal', patch?: object, reveal?: object, discard?: true, recordedAt: number }>} owed
  *   PendingTx writes a closed or refusing vault could not take yet
  * @property {boolean} loaded  the stored blob has been read into `queues`
  * @property {boolean} sealed  a wallet wipe ended this store; nothing writes again
@@ -74,6 +74,41 @@ export const OWED_SETTLEMENT_LIMIT = 50;
  */
 export function owedRecordKey(record) {
     return typeof record?.id === 'string' && record.id ? record.id : `pending:${String(record?.pendingTxId)}`;
+}
+
+/** PendingTx statuses an owed patch can still write over; any other is terminal. */
+const WRITABLE_OWED_STATUSES = new Set(['queued', 'broadcasting']);
+
+/**
+ * Fold a later owed write for one PendingTx into the earlier one, giving the
+ * record whose replay equals replaying both in order. Patches stack, and a
+ * discard carries earlier work so the flush applies it first. Reveal promotion
+ * stays byte-free while later patches and discards remain attached to it. An
+ * earlier discard or terminal patch closes the record, so it is returned
+ * unchanged and the later write is dropped, as its replay would be.
+ * Always builds a new record (the flush retires records by identity).
+ *
+ * @param {any} prior   the earlier record for this PendingTx, if any
+ * @param {any} next    the later record
+ * @returns {any}       `prior` itself when it closes the record, else a record to keep
+ */
+export function foldOwedSettlement(prior, next) {
+    if (!prior || typeof prior !== 'object' || prior.pendingTxId !== next?.pendingTxId) return next;
+    if (prior.op === 'discard' || prior.discard === true) return prior;
+    const priorStatus = prior.patch?.status;
+    if (typeof priorStatus === 'string' && !WRITABLE_OWED_STATUSES.has(priorStatus)) return prior;
+    if (prior.op === 'reveal') {
+        if (next.op === 'reveal') return prior;
+        return {
+            ...next,
+            op: 'reveal',
+            reveal: prior.reveal,
+            patch: { ...(prior.patch ?? {}), ...(next.patch ?? {}) },
+            ...(next.op === 'discard' ? { discard: true } : {}),
+        };
+    }
+    if (prior.op !== 'patch' || !prior.patch || typeof prior.patch !== 'object') return next;
+    return { ...next, patch: { ...prior.patch, ...(next.patch ?? {}) } };
 }
 
 /**
@@ -377,13 +412,31 @@ function adoptStoredState(store, snapshot, settlements, known) {
         && !storedKeys.has(owedRecordKey(entry))
         && !(entry.walletId && pruned?.has(entry.walletId)));
     if (carriedOwed.length > 0) carried = true;
-    // One record per PendingTx: a carried record is the later write.
-    const carriedTxs = new Set(carriedOwed.map((entry) => entry.pendingTxId));
+    // One record per PendingTx: a carried record is the later write, folded
+    // onto the stored one so it keeps that record's structural fields.
+    const carriedByTx = new Map(carriedOwed.map((entry) => [entry.pendingTxId, entry]));
+    const foldedCarried = new Map();
+    const keptStored = [];
+    for (const entry of storedOwed) {
+        const adopted = liveByKey.get(owedRecordKey(entry)) ?? { ...entry };
+        const later = carriedByTx.get(entry.pendingTxId);
+        if (!later) {
+            keptStored.push(adopted);
+            continue;
+        }
+        const folded = foldOwedSettlement(adopted, later);
+        if (folded === adopted) {
+            keptStored.push(adopted);
+            foldedCarried.set(later, null);
+        } else {
+            foldedCarried.set(later, folded);
+        }
+    }
     store.owed = [
-        ...storedOwed
-            .filter((entry) => !carriedTxs.has(entry.pendingTxId))
-            .map((entry) => liveByKey.get(owedRecordKey(entry)) ?? { ...entry }),
-        ...carriedOwed,
+        ...keptStored,
+        ...carriedOwed
+            .filter((entry) => foldedCarried.get(entry) !== null)
+            .map((entry) => foldedCarried.get(entry) ?? entry),
     ].slice(-OWED_SETTLEMENT_LIMIT);
     return carried;
 }
@@ -416,7 +469,7 @@ export async function refreshBroadcastQueueStore(store) {
     // dormant tab held, and the lease makes this store the writer again.
     store.loaded = false;
     store.dormant = false;
-    store.loadPromise = (async () => {
+    const refreshLoad = (async () => {
         const known = { queues: store.persisted?.queues, owed: store.persisted?.owed };
         let snapshot;
         let settlements = [];
@@ -454,9 +507,10 @@ export async function refreshBroadcastQueueStore(store) {
         }
         return true;
     })();
+    store.loadPromise = refreshLoad;
 
-    const refreshed = await store.loadPromise;
-    if (!refreshed) store.loadPromise = null;
+    const refreshed = await refreshLoad;
+    if (!refreshed && store.loadPromise === refreshLoad) store.loadPromise = null;
     return refreshed;
 }
 

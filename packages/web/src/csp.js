@@ -44,9 +44,7 @@
 //     worker must be a same-origin script anyway (matches the extension).
 
 import { WIRE_AUDIT } from '../../core/src/privacy/wireAudit.js';
-import { bitcoinDescriptors } from '../../core/src/registry/descriptors/bitcoin.js';
-import { dogecoinDescriptors } from '../../core/src/registry/descriptors/dogecoin.js';
-import { litecoinDescriptors } from '../../core/src/registry/descriptors/litecoin.js';
+import { BUNDLED_DESCRIPTORS } from '../../core/src/registry/descriptors/index.js';
 import {
     DEFAULT_MINER_URL,
     TREZOR_CONNECT_ORIGIN,
@@ -61,14 +59,9 @@ import {
 // defence against an XSS payload is exactly this directive, an unusable
 // allowance is not neutral: it is a remote-code surface kept open for nothing,
 // and one more thing to explain to an app-store reviewer.
-export const BUILD_PROFILES = Object.freeze(['default', 'store']);
 export const DEFAULT_BUILD_PROFILE = 'default';
-
-const CHAIN_DESCRIPTORS = [
-    ...bitcoinDescriptors,
-    ...dogecoinDescriptors,
-    ...litecoinDescriptors,
-];
+export const STORE_BUILD_PROFILE = 'store';
+export const BUILD_PROFILES = Object.freeze([DEFAULT_BUILD_PROFILE, STORE_BUILD_PROFILE]);
 
 function endpointOrigin(endpoint) {
     const url = new URL(endpoint.defaultUrl);
@@ -86,7 +79,7 @@ function fixedEgressOrigins() {
 }
 
 function configuredEndpointOrigins() {
-    return CHAIN_DESCRIPTORS.flatMap((descriptor) => (
+    return BUNDLED_DESCRIPTORS.flatMap((descriptor) => (
         ['explorer', 'encoder', 'hub']
             .filter((name) => descriptor[name])
             .map((name) => endpointOrigin(descriptor[name]))
@@ -94,7 +87,7 @@ function configuredEndpointOrigins() {
 }
 
 function configuredExplorerSocketOrigins() {
-    return CHAIN_DESCRIPTORS.map((descriptor) => {
+    return BUNDLED_DESCRIPTORS.map((descriptor) => {
         const origin = new URL(endpointOrigin(descriptor.explorer));
         origin.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
         return origin.origin;
@@ -134,6 +127,20 @@ const DIRECTIVES = {
     'frame-ancestors': ["'none'"],
 };
 
+function assertBuildProfile(profile) {
+    if (!BUILD_PROFILES.includes(profile)) {
+        throw new Error(
+            `csp: unknown build profile ${JSON.stringify(profile)};`
+            + ` expected one of ${BUILD_PROFILES.join(', ')}`,
+        );
+    }
+}
+
+export function profileAllowsTrezorConnect(profile = DEFAULT_BUILD_PROFILE) {
+    assertBuildProfile(profile);
+    return profile !== STORE_BUILD_PROFILE;
+}
+
 /**
  * The directive set for a build profile.
  *
@@ -147,17 +154,12 @@ const DIRECTIVES = {
  * @returns {Record<string, string[]>}
  */
 export function directivesFor(profile = DEFAULT_BUILD_PROFILE) {
-    if (!BUILD_PROFILES.includes(profile)) {
-        throw new Error(
-            `csp: unknown build profile ${JSON.stringify(profile)};`
-            + ` expected one of ${BUILD_PROFILES.join(', ')}`,
-        );
-    }
+    assertBuildProfile(profile);
     const directives = Object.fromEntries(
         Object.entries(DIRECTIVES).map(([name, values]) => [name, [...values]]),
     );
     directives['connect-src'] = connectSources();
-    if (profile === 'store') {
+    if (!profileAllowsTrezorConnect(profile)) {
         for (const name of ['script-src', 'frame-src']) {
             directives[name] = directives[name].filter((v) => v !== TREZOR_CONNECT_ORIGIN);
         }

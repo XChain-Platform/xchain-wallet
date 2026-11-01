@@ -85,6 +85,16 @@ export const CONSOLE_ERROR_ALLOWLIST = [
         test: 'locks this launch and every relaunch while session.bin cannot be removed',
         message: /^\[xchain\] auto-lock could not clear the cached session key: Error: EPERM/,
     },
+    {
+        file: 'test/unit/desktop/autoLockLaunchGate.test.js',
+        test: 'a locked-screen disarm report after the failed clear does not reopen the key on relaunch',
+        message: /^\[xchain\] auto-lock could not clear the cached session key: Error: EPERM/,
+    },
+    {
+        file: 'test/unit/desktop/autoLockLaunchGate.test.js',
+        test: 'an armed report after the failed clear does not reopen the key on relaunch',
+        message: /^\[xchain\] auto-lock could not clear the cached session key: Error: EPERM/,
+    },
     // Label restore after an import is best effort and logs when it is
     // skipped; these tests fail the restore to prove the import still succeeds.
     {

@@ -320,4 +320,14 @@ describe('resolveChangeAddress', () => {
         expect(out.rotated).toBe(false);
         expect(out.address).toBe('addr_0_0_0');
     });
+
+    it('keeps the spending address when the wallet lookup fails', async () => {
+        vault.wallets = { get: async () => { throw new Error('read failed'); } };
+
+        const out = await resolveChangeAddress(opts(vault, signer, { settings: ROTATION_ON }));
+
+        expect(out).toEqual({ address: 'addr_0_0_0', rotated: false, record: null });
+        expect(signer.calls).toHaveLength(0);
+        expect(await vault.addresses.list()).toHaveLength(1);
+    });
 });
