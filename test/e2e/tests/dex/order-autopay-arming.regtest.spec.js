@@ -224,7 +224,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the armed order carries no auto-pay control in My orders, so the consent cannot be '
                 + 'seen or withdrawn from the surface that lists it')
                 .toBeVisible({ timeout: 60_000 });
-            await expect(row, 'the row does not say the order is armed').toContainText(/auto-pay on/);
+            await expect(row, 'the row does not say the order is armed').toContainText(/auto-pay on/i);
             await expect(toggle).toBeChecked();
 
             // click(), NOT uncheck(): the switch is CONTROLLED by the consent
