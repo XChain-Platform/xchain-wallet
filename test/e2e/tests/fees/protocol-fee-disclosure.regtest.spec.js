@@ -361,6 +361,12 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         });
 
         await test.step('LANE 2: the native lane projects the coin cost the chain then takes', async () => {
+            // The coin fee is priced from the live coin/USD snapshot, which can
+            // move between the pre-flight quote and the wallet's own quote (LANE 1
+            // runs in between). So the projection is bracketed by a quote on each
+            // side of the compose, and the chain is then held to what the screen
+            // projected, which is the claim this lane measures.
+            const before = await feeQuote('ISSUE', `${TICK_NATIVE_LANE}|${SUPPLY}|0|0|0`);
             await composeIssue(page, TICK_NATIVE_LANE, { nativeFee: true });
 
             // No XCHAIN line here, deliberately: the fee is already disclosed
@@ -373,11 +379,14 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             const minerSats = await screenNetworkFeeSats(page);
             const projectedFeeSats = await projectedProtocolFeeSats(page);
-            expect(projectedFeeSats,
-                'the balance projection carries no protocol-fee row, so the screen is showing the '
-                + 'miner fee as the whole cost - in the native lane, where the fee is a real'
-                + 'output the miner-fee arithmetic cannot see')
-                .toBe(quotedSats);
+            const after = await feeQuote('ISSUE', `${TICK_NATIVE_LANE}|${SUPPLY}|0|0|0`);
+            const bracket = [quotedSats, Number(before?.requiredFeeSats), Number(after?.requiredFeeSats)]
+                .filter((sats) => sats > 0);
+            expect(bracket,
+                'the balance projection carries no protocol-fee row, or one no venue quote around the '
+                + `compose matches (${bracket.join(', ')} sats), so the screen is not showing the fee the `
+                + 'native lane pays as a real output the miner-fee arithmetic cannot see')
+                .toContain(projectedFeeSats);
 
             const satsBefore = await coinBalanceSats(source);
             const xchainBefore = await tokenBalance(source, 'XCHAIN');
@@ -391,8 +400,8 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
                 + 'reached the wire')
                 .toBe(1);
             expect(Math.round(Number(action.fee?.native_coin_amount) * 1e8),
-                `the coin fee on chain is not the ${quotedSats} sats the screen projected`)
-                .toBe(quotedSats);
+                `the coin fee on chain is not the ${projectedFeeSats} sats the screen projected`)
+                .toBe(projectedFeeSats);
 
             // THE MEASUREMENT THIS SECTION EXISTS FOR: what the screen said
             // the action costs, against what it cost. Before the fix these
