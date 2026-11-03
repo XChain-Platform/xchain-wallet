@@ -350,13 +350,14 @@ describe('shared network filter surfaces', () => {
         render(<NetworkFilterDropdown value="dogecoin" onChange={onChange} />);
         const trigger = screen.getByRole('button', { name: 'Filter by network' });
 
-        expect(trigger).toHaveTextContent('Dogecoin');
+        expect(trigger).not.toHaveTextContent('Dogecoin');
+        expect(trigger).toHaveAttribute('title', 'Dogecoin');
         fireEvent.click(trigger);
         fireEvent.click(screen.getByRole('option', { name: /^All networks/ }));
         expect(onChange).toHaveBeenCalledWith('all');
     });
 
-    it('preserves the label and wraps the shared toolbar at 320px', () => {
+    it('keeps the icon trigger and wraps the shared toolbar at 320px', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
         window.dispatchEvent(new Event('resize'));
         render(
@@ -396,9 +397,11 @@ describe('shared network filter surfaces', () => {
         expect(dropdown).toBeInTheDocument();
         expect(filter).toBeInTheDocument();
         expect(toolbar).toBeInTheDocument();
-        expect(trigger).toHaveTextContent('All networks');
-        // The network count is announced, not drawn, so the label keeps the width.
+        // The network name and count are announced and titled, never drawn.
+        expect(trigger).not.toHaveTextContent('All networks');
         expect(trigger).not.toHaveTextContent('3 networks');
+        expect(trigger).toHaveAttribute('title', 'All networks');
+        expect(trigger.querySelector(`.${filterStyles.triggerIcon}`)).toBeInTheDocument();
         expect(dropdownRule).toMatch(/flex:\s*1 1 10rem/);
         expect(dropdownRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
         expect(filterRule).toMatch(/min-width:\s*min\(10rem, 100%\)/);
@@ -439,8 +442,9 @@ describe('shared network filter surfaces', () => {
         ), 'utf8');
 
         expect(window.innerWidth).toBe(411);
-        expect(trigger).toHaveTextContent('All networks');
+        expect(trigger).not.toHaveTextContent('All networks');
         expect(trigger).not.toHaveTextContent('3 networks');
+        expect(trigger).toHaveAttribute('title', 'All networks');
         expect(filter).toHaveClass(filterStyles.md);
         // The kit Chip owns the trigger height; the filter only lets it fill and shrink.
         expect(filterCss).toMatch(/\.trigger\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/s);
@@ -449,6 +453,53 @@ describe('shared network filter surfaces', () => {
         expect(toolbarCss).toMatch(/\.toolbar\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
         expect(contactsSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
         expect(dispensersSource).toMatch(/<ListToolbar\b[\s\S]*<NetworkFilterDropdown[\s\S]*announceNetworkCount/);
+    });
+});
+
+describe('NetworkFilterDropdown icon-only trigger', () => {
+    it.each([
+        { announce: false, name: 'Filter by network' },
+        { announce: true, name: 'Filter by network: All networks, 3 networks' },
+    ])('draws no All networks text when announceNetworkCount is $announce', ({ announce, name }) => {
+        render(
+            <NetworkFilterDropdown
+                value="all"
+                onChange={() => {}}
+                announceNetworkCount={announce}
+            />,
+        );
+
+        const trigger = screen.getByRole('button', { name });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('All networks');
+        expect(trigger.textContent.trim()).toBe('');
+        expect(trigger).toHaveAccessibleName(name);
+        expect(trigger).toHaveAttribute('title', 'All networks');
+        expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+        const icon = trigger.querySelector(`.${filterStyles.triggerIcon}`);
+        expect(icon).toBeInTheDocument();
+        expect(icon.querySelector('svg')).not.toBeNull();
+        expect(trigger.closest(`.${filterStyles.wrap}`)).toHaveClass(filterStyles.iconOnly);
+    });
+
+    it('shows the selected coin icon with no coin name text', () => {
+        render(<NetworkFilterDropdown value="dogecoin" onChange={() => {}} />);
+
+        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toBeNull();
+        expect(trigger).not.toHaveTextContent('Dogecoin');
+        expect(trigger.textContent.trim()).toBe('');
+        expect(trigger).toHaveAttribute('title', 'Dogecoin');
+        expect(trigger).toHaveAttribute('aria-pressed', 'true');
+        expect(trigger.querySelector(`.${filterStyles.triggerIcon} img`)).not.toBeNull();
+    });
+
+    it('keeps the label on a direct NetworkFilter trigger', () => {
+        mount();
+
+        const trigger = screen.getByRole('button', { name: /All networks/ });
+        expect(trigger.querySelector(`.${filterStyles.triggerLabel}`)).toHaveTextContent('All networks');
+        expect(trigger.closest(`.${filterStyles.wrap}`)).not.toHaveClass(filterStyles.iconOnly);
     });
 });
 

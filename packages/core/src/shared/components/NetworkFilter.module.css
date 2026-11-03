@@ -95,6 +95,12 @@
     justify-content: center;
 }
 
+/* An icon-only trigger has no label to fill the row, so the caret holds the
+   end edge the way a Select caret does. */
+.iconOnly .triggerCaret {
+    margin-inline-start: auto;
+}
+
 /* ───── Popover ───── */
 
 .popover {

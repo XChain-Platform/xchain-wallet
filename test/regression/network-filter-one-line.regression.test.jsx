@@ -82,8 +82,11 @@ describe('regression/network-filter-one-line', () => {
             expect(dropdown).toHaveClass(dropdownStyles.md);
             expect(filter).toHaveClass(filterStyles.md);
             expect(icon).toBeInTheDocument();
-            expect(label).toHaveTextContent('All networks');
+            // The trigger draws only its icon; the name lives in the title and aria name.
+            expect(label).toBeNull();
+            expect(trigger).not.toHaveTextContent('All networks');
             expect(trigger).not.toHaveTextContent('3 networks');
+            expect(trigger).toHaveAttribute('title', 'All networks');
             expect(labelRule).toMatch(/overflow:\s*hidden/);
             expect(labelRule).toMatch(/text-overflow:\s*ellipsis/);
             expect(labelRule).toMatch(/white-space:\s*nowrap/);

@@ -42,12 +42,16 @@ const chainRegistry = {
  * @param {(value: string) => void} props.onChange
  * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {boolean} [props.announceNetworkCount]
+ * @param {boolean} [props.iconOnly]  the trigger draws only its icon, so a
+ *   list toolbar never repeats the network as text (U12); the name stays in
+ *   the title and the accessible name
  */
 export function NetworkFilterDropdown({
     value,
     onChange,
     size = 'md',
     announceNetworkCount = false,
+    iconOnly = true,
 }) {
     const selectedValue = value || 'all';
     const ariaLabel = announceNetworkCount && selectedValue === 'all'
@@ -63,6 +67,7 @@ export function NetworkFilterDropdown({
                 onChange={onChange}
                 ariaLabel={ariaLabel}
                 size={size}
+                iconOnly={iconOnly}
             />
         </div>
     );

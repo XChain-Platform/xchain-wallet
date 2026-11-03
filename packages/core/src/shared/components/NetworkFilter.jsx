@@ -38,6 +38,8 @@ import '../../i18n/locales/en/extension.js';
  * @param {(coin: string) => void} props.onChange
  * @param {string} [props.ariaLabel]
  * @param {'sm' | 'md' | 'lg'} [props.size]
+ * @param {boolean} [props.iconOnly]  draw only the filter or coin icon; the
+ *   network name stays in the title and the accessible name (U12)
  */
 export function NetworkFilter({
     chainRegistry,
@@ -46,6 +48,7 @@ export function NetworkFilter({
     onChange,
     ariaLabel,
     size = 'md',
+    iconOnly = false,
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -153,7 +156,11 @@ export function NetworkFilter({
     };
 
     return (
-        <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
+        <div
+            ref={triggerRef}
+            className={[styles.wrap, styles[size], iconOnly ? styles.iconOnly : '']
+                .filter(Boolean).join(' ')}
+        >
             <Chip
                 pressed={value !== 'all'}
                 className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
@@ -179,9 +186,11 @@ export function NetworkFilter({
                         <Icon.FilterIcon />
                     )}
                 </span>
-                <span className={styles.triggerText}>
-                    <span className={styles.triggerLabel}>{triggerLabel}</span>
-                </span>
+                {iconOnly ? null : (
+                    <span className={styles.triggerText}>
+                        <span className={styles.triggerLabel}>{triggerLabel}</span>
+                    </span>
+                )}
                 <span className={styles.triggerCaret} aria-hidden="true">
                     <ChevronIcon open={open} />
                 </span>
