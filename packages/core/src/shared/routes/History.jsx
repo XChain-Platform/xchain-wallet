@@ -2687,6 +2687,8 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                 ref={triggerRef}
                 type="button"
                 className={styles.chainPickerBtn}
+                aria-label={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
+                title={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
@@ -2708,7 +2710,6 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>

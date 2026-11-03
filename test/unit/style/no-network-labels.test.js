@@ -118,6 +118,48 @@ function importedBanner(node) {
     return null;
 }
 
+// A selection fallback such as `selected ? name : t('common.allNetworks')`
+// still renders the label whenever nothing is selected.
+function isAllNetworksCall(node) {
+    if (node?.type === 'ConditionalExpression') {
+        return isAllNetworksCall(node.consequent) || isAllNetworksCall(node.alternate);
+    }
+    if (node?.type === 'LogicalExpression') {
+        return isAllNetworksCall(node.left) || isAllNetworksCall(node.right);
+    }
+    return node?.type === 'CallExpression'
+        && node.callee?.type === 'Identifier'
+        && node.callee.name === 't'
+        && node.arguments[0]?.type === 'StringLiteral'
+        && node.arguments[0].value === 'common.allNetworks';
+}
+
+function isOptionElement(node) {
+    if (node?.type !== 'JSXElement') return false;
+    const opening = node.openingElement;
+    if (opening.name?.name === 'option') return true;
+    return opening.attributes.some((attribute) => attribute.type === 'JSXAttribute'
+        && attribute.name?.name === 'role'
+        && attribute.value?.value === 'option');
+}
+
+// A trigger or chip that reads "All networks" repeats the network as a label.
+// The same text inside a listbox option is a choice, not a repeated label.
+function allNetworksTriggerLabels(ast, record) {
+    const walk = (node, insideOption, parent = null) => {
+        if (!node || typeof node !== 'object') return;
+        const nowInside = insideOption || isOptionElement(node);
+        if (node.type === 'JSXExpressionContainer' && parent?.type === 'JSXElement' && !nowInside && isAllNetworksCall(node.expression)) {
+            record(node, 'renders the All networks label outside a listbox option');
+        }
+        for (const value of Object.values(node)) {
+            if (Array.isArray(value)) value.forEach((item) => walk(item, nowInside, node));
+            else if (value?.type) walk(value, nowInside, node);
+        }
+    };
+    walk(ast, false);
+}
+
 function violations(source, filename = 'fixture.jsx') {
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
     const taintedNames = renderedNetworkKindNames(ast);
@@ -140,6 +182,7 @@ function violations(source, filename = 'fixture.jsx') {
             record(node, 'renders networkKind as text');
         }
     });
+    allNetworksTriggerLabels(ast, record);
     return [...found];
 }
 
@@ -166,6 +209,24 @@ describe('network label source guard', () => {
             'fixture.jsx:6 renders networkKind as text',
             'fixture.jsx:7 passes showNetworkKind',
             'fixture.jsx:9 renders networkKind as text',
+        ]);
+    });
+
+    it('flags an All networks trigger label and permits it inside a listbox option', () => {
+        const source = [
+            "const trigger = <button><span>{t('common.allNetworks')}</span></button>;",
+            "const option = <button role=\"option\"><span>{t('common.allNetworks')}</span></button>;",
+            "const native = <option value=\"all\">{t('common.allNetworks')}</option>;",
+            "const aria = <button aria-label={t('common.allNetworks')} />;",
+            "const fallback = <button><span>{selected ? selected.displayName : t('common.allNetworks')}</span></button>;",
+            "const either = <button><span>{selectedName || t('common.allNetworks')}</span></button>;",
+            "const fallbackAria = <button aria-label={selected ? selected.displayName : t('common.allNetworks')} />;",
+        ].join('\n');
+
+        expect(violations(source)).toEqual([
+            'fixture.jsx:1 renders the All networks label outside a listbox option',
+            'fixture.jsx:5 renders the All networks label outside a listbox option',
+            'fixture.jsx:6 renders the All networks label outside a listbox option',
         ]);
     });
 
