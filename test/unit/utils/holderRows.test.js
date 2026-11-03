@@ -58,4 +58,11 @@ describe('extractHolderCount', () => {
         expect(extractHolderCount({ total: 0, data: [] })).toBe('0');
         expect(extractHolderCount([{ address: 'a' }, { address: 'b' }])).toBe('2');
     });
+
+    it('reads a reply with neither a total nor a row array as unknown, not zero', () => {
+        expect(extractHolderCount('<html>502 Bad Gateway</html>')).toBeNull();
+        expect(extractHolderCount({})).toBeNull();
+        expect(extractHolderCount({ error: 'upstream' })).toBeNull();
+        expect(extractHolderCount(null)).toBeNull();
+    });
 });

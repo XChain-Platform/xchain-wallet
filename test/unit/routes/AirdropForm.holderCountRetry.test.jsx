@@ -254,6 +254,18 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         expect(document.body.textContent).toMatch(/~0 HDR550816/);
     });
 
+    it('reads an unparseable holder reply as unavailable, never as zero holders', async () => {
+        const holders = mountAirdrop(async () => '<html>502 Bad Gateway</html>');
+
+        await listOneTick();
+        await flushTimers();
+
+        expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
+        expect(preview()?.textContent).not.toMatch(/~0 holders/);
+        expect(holders).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('button', { name: 'Retry holder counts' })).toBeTruthy();
+    });
+
     it('lists the token and reason for every failed lookup in a partial preview', async () => {
         const holders = mountAirdrop(async ({ tick }) => {
             if (tick === OTHER) throw new Error('Explorer has no route for this token');

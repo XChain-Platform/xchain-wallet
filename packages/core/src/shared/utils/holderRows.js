@@ -37,7 +37,8 @@ export function extractHolderRows(resp) {
  * Number.MAX_SAFE_INTEGER remain exact.
  *
  * @param {any} resp  the response from `messaging.getHoldersForToken`
- * @returns {string}  a non-negative integer count
+ * @returns {string | null}  a non-negative integer count, or null when the
+ *   reply carries no count
  */
 export function extractHolderCount(resp) {
     const raw = resp && !Array.isArray(resp) ? resp.total : undefined;
@@ -47,5 +48,13 @@ export function extractHolderCount(resp) {
     if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0) {
         return String(raw);
     }
-    return String(extractHolderRows(resp).length);
+    // A reply with neither a total nor a row array (an HTML error page that
+    // arrives as a string, or a bare object) says nothing about the holder
+    // set, so it reads as unknown rather than as zero holders.
+    if (Array.isArray(resp)
+        || (resp && typeof resp === 'object'
+            && (Array.isArray(resp.data) || Array.isArray(resp.rows) || Array.isArray(resp.holders)))) {
+        return String(extractHolderRows(resp).length);
+    }
+    return null;
 }

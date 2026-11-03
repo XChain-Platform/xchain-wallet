@@ -516,7 +516,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     }
                     try {
                         const resp = await messaging.getHoldersForToken({ chainId, tick: t });
-                        return { tick: t, count: extractHolderCount(resp), error: null };
+                        const count = extractHolderCount(resp);
+                        // An unreadable reply is a failed read, so it retries and is named.
+                        if (count === null) throw new Error('The explorer reply carries no holder count.');
+                        return { tick: t, count, error: null };
                     } catch (err) {
                         lastErr = err;
                     }
