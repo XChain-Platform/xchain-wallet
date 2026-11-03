@@ -213,13 +213,29 @@ test('rulings measurement reads repeated text inside an open modal only', async 
         <div role="dialog" aria-modal="true" aria-labelledby="t">
             <h2 id="t">Commands</h2>
             <ul>
+                <li><span class="rowTitle">Settings</span></li>
+                <li><span class="rowTitle">Backup</span></li>
+            </ul>
+            <p>Open this section</p>
+            <p>Open this section</p>
+        </div>
+    `);
+    const { repeatedText = [] } = await page.evaluate(measureRulings);
+    expect(repeatedText.map(({ text, count }) => `${text} x${count}`)).toEqual(['open this section x2']);
+});
+
+test('rulings measurement reads one subtitle repeated across list rows as row data', async ({ page }) => {
+    await page.setContent(`
+        <div role="dialog" aria-modal="true" aria-labelledby="t">
+            <h2 id="t">Commands</h2>
+            <ul>
                 <li><span class="rowTitle">Settings</span><span class="rowSubtitle">Open this section</span></li>
                 <li><span class="rowTitle">Backup</span><span class="rowSubtitle">Open this section</span></li>
             </ul>
         </div>
     `);
-    const { repeatedText } = await page.evaluate(measureRulings);
-    expect(repeatedText.map(({ text, count }) => `${text} x${count}`)).toEqual(['open this section x2']);
+    const { repeatedText = [] } = await page.evaluate(measureRulings);
+    expect(repeatedText).toEqual([]);
 });
 
 test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
