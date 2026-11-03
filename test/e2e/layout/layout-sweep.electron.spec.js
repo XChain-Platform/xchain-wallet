@@ -18,7 +18,8 @@
 //
 //     pnpm --filter @xchain-wallet/desktop build:renderer
 
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -31,6 +32,16 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
 const desktopDir = join(repo, 'packages', 'desktop');
 // LAYOUT_SWEEP_OUT sends the lines and screenshots somewhere else.
+// The window loads renderer/dist/index.html, which a fresh tree lacks; a missing
+// build otherwise shows as ERR_FILE_NOT_FOUND on the first reload.
+function ensureRendererBuild() {
+    if (existsSync(join(desktopDir, 'renderer', 'dist', 'index.html'))) return;
+    const built = spawnSync(join(desktopDir, 'node_modules', '.bin', 'vite'), ['build'], { cwd: desktopDir, encoding: 'utf8' });
+    if (built.status !== 0 || !existsSync(join(desktopDir, 'renderer', 'dist', 'index.html'))) {
+        throw new Error(`desktop renderer build failed (exit ${built.status}): ${String(built.stderr || '').slice(-400)}`);
+    }
+}
+
 const OUT_ROOT = process.env.LAYOUT_SWEEP_OUT || join(repo, 'tmp', 'layout-sweep');
 
 // The window sizes: the app's minimum, its default, a mid-size and a large
@@ -49,6 +60,7 @@ const SIZES = process.env.LAYOUT_SIZES
 for (const [width, height] of SIZES) {
     test(`desktop layout sweep ${width}x${height}`, async () => {
         test.setTimeout(75 * 60 * 1000);
+        ensureRendererBuild();
         const venue = `macos-desktop-${width}x${height}`;
         const userDataDir = mkdtempSync(join(tmpdir(), 'xc-layout-sweep-'));
         const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
