@@ -721,8 +721,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             return t('routes.tokenAdmin.callbackHoldersUnread', { tick: ticker.trim() });
         }
         setDistribution({ isDistributed: fresh.isDistributed, holderCount: Number(fresh.holderCount) || 0 });
-        return fresh.isDistributed
-            ? 'Callback settings can only be changed before any supply is distributed. This token already has holders.'
+        if (fresh.isDistributed) {
+            return 'Callback settings can only be changed before any supply is distributed. This token already has holders.';
+        }
+        // A capped or short page is a floor, not the holder set, so an
+        // undistributed reading over it proves nothing and Review refuses.
+        return fresh.partial === true
+            ? t('routes.tokenAdmin.callbackHoldersUnread', { tick: ticker.trim() })
             : null;
     }
 
