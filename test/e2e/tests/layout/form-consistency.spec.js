@@ -30,11 +30,21 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
+import { installFontScale } from '../../layout/sweep.js';
 
 const VIEWPORTS = [
     { width: 360, height: 800 },
+    { width: 375, height: 800 },
     { width: 1440, height: 900 },
+    // Large text at phone width: the shells scale the root font by 1.3 and 1.5.
+    // FORM_TEXT_SCALE=1 adds these two; they hold a wrapped field label over
+    // an address field's icon button and the fee readout's rate figure.
+    ...(process.env.FORM_TEXT_SCALE ? [
+        { width: 360, height: 800, fontScale: 1.3 },
+        { width: 360, height: 800, fontScale: 1.5 },
+    ] : []),
 ];
+const sizeKey = (v) => `${v.width}x${v.height}${v.fontScale ? `-text${v.fontScale}` : ''}`;
 
 /** Palette destinations that open a form (or a form-bearing list). */
 const PALETTE_ROUTES = [
@@ -221,6 +231,27 @@ function formFaults() {
         }
     }
 
+    // A button drawn over a field (an address field's picker icon, say) sits
+    // inside the field box it acts on: one that crosses the box edge has left
+    // the field it belongs to, and its transparent in-field chrome reads as a
+    // broken outline. A long label that wraps under large text is the usual
+    // way an icon anchored to a one-line label slips out of its field. Only a
+    // button inside the field's own component counts (three levels up from
+    // the control); page chrome such as the tab bar floats over fields freely.
+    for (const btn of buttons) {
+        const r = rect(btn);
+        for (const [el, box] of boxes) {
+            if (box === btn || btn.contains(box)) continue;
+            if (!el.parentElement?.parentElement?.parentElement?.contains(btn)) continue;
+            const b = rect(box);
+            const across = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+            const down = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+            if (across <= 2 || down <= 2 || contains(b, r) || contains(r, b)) continue;
+            faults.push(`${name(btn)}: crosses the edge of field ${name(el)}`);
+            break;
+        }
+    }
+
     // Row heights: fields, selects and text buttons that share a row.
     const rowItems = [];
     for (const el of fields) {
@@ -389,11 +420,12 @@ async function walk(page, size, out) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`forms and buttons are consistent at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`forms and buttons are consistent at ${sizeKey(viewport)}`, async ({ page }) => {
         test.setTimeout(20 * 60 * 1000);
-        await page.setViewportSize(viewport);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await installFontScale(page, viewport.fontScale);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-        const size = `${viewport.width}x${viewport.height}`;
+        const size = sizeKey(viewport);
         const results = await walk(page, size, process.env.FORM_SWEEP_OUT);
         if (process.env.FORM_SWEEP_OUT) writeFileSync(`${process.env.FORM_SWEEP_OUT}/${size}.json`, JSON.stringify(results, null, 1));
         const measured = results.reduce((n, r) => n + (r.counts.fields || 0), 0);
@@ -409,16 +441,17 @@ for (const viewport of VIEWPORTS) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`onboarding forms are consistent at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`onboarding forms are consistent at ${sizeKey(viewport)}`, async ({ page }) => {
         test.setTimeout(4 * 60 * 1000);
-        await page.setViewportSize(viewport);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await installFontScale(page, viewport.fontScale);
         await page.goto('/', { waitUntil: 'commit' });
         await dismissIntroCarousel(page);
         const results = [];
         const record = async (route) => {
             await settle(page);
             results.push({ route, ...(await page.evaluate(formFaults)) });
-            if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${viewport.width}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
+            if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${sizeKey(viewport)}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
         };
         await record('Welcome');
         for (const name of ['Create new wallet', 'Import wallet', 'From FreeWallet', 'Pair a watcher or signer']) {

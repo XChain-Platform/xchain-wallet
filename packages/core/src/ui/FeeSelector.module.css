@@ -167,6 +167,9 @@
 .sliderReadout {
     font-size: var(--xc-text-sm);
     display: flex;
+    /* Under large text the rate moves to its own line whole, so it never
+       breaks inside its figure and stands taller than the fee beside it. */
+    flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--xc-space-2);
@@ -198,6 +201,7 @@
 }
 
 .sliderReadoutRate {
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -251,6 +255,7 @@
     font: inherit;
     color: inherit;
     cursor: text;
+    white-space: nowrap;
     border-bottom: 1px solid transparent;
     position: relative;
 }
