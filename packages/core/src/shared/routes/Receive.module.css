@@ -158,7 +158,7 @@
 }
 
 .explorerLink {
-    composes: btn secondary md from '../../ui/Button.module.css';
+    /* Receive.jsx adds Button's btn, secondary and md classes beside this one. */
     display: inline-flex;
     align-items: center;
     justify-content: center;

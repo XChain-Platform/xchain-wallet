@@ -26,7 +26,7 @@ describe('Receive explorer link pointer target', () => {
         const src = read('packages/core/src/shared/routes/Receive.jsx');
         const anchor = src.match(/<a\s[^>]*href=\{addressExplorerUrl\}[^>]*>/);
         expect(anchor).not.toBeNull();
-        expect(anchor[0]).toMatch(/className=\{styles\.explorerLink\}/);
+        expect(anchor[0]).toMatch(/className=\{[^\n]*\$\{styles\.explorerLink\}`\}/);
     });
 
     it('explorerLink states the 24px floor and is visible to the tap-target sweep', () => {

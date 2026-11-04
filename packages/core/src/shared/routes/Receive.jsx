@@ -48,6 +48,10 @@ import {
     NO_CHAINS_BODY,
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
+// Ahead of the route's own sheet, so the shared button base loads first and
+// the explorer link's rules follow it; a CSS-file composes would inline a
+// second copy of Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
@@ -1190,7 +1194,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             </Button>
             {addressExplorerUrl ? (
                 <a
-                    className={styles.explorerLink}
+                    className={`${buttonStyles.btn} ${buttonStyles.secondary} ${buttonStyles.md} ${styles.explorerLink}`}
                     href={addressExplorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"

@@ -58,8 +58,11 @@ describe('Receive action layout', () => {
         expect(receive).toMatch(/>\s*Explorer\s*<span[^>]*>↗<\/span>/);
         expect(receive).toMatch(/aria-label="Generate new address"[\s\S]*?>\s*New address\s*</);
         expect(actionSource.match(/variant="secondary"/g)).toHaveLength(3);
-        expect(css).toMatch(
-            /\.explorerLink\s*\{[^}]*composes:\s*btn secondary md from '\.\.\/\.\.\/ui\/Button\.module\.css';/,
+        // The explorer link takes the secondary medium button look from markup;
+        // a composes would put a second Button.module.css into Receive's chunk.
+        expect(css).not.toMatch(/composes:[^;]*Button\.module\.css/);
+        expect(receive).toMatch(
+            /className=\{`\$\{buttonStyles\.btn\} \$\{buttonStyles\.secondary\} \$\{buttonStyles\.md\} \$\{styles\.explorerLink\}`\}/,
         );
     });
 
