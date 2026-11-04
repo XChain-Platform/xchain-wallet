@@ -1,7 +1,18 @@
 /* One row of an activity list. The list is the card (a flush card with
    dividers between rows, on Home and in History alike), so a row draws no
-   border, corner or fill of its own; it keeps the card inset. */
+   border, corner or fill of its own; it keeps the card inset. The row
+   carries the shared Button classes, whose hover and press rules outrank
+   .row:hover, so it points their colours at the muted row fill instead of
+   the ghost slate. Button's single-class rules tie a single-class rule here,
+   so whichever sheet loads last would win; the doubled class outranks them
+   in any sheet order (the plain class is listed too so the rule is found
+   under its own name). */
+.row.row,
 .row {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: transparent;
+    justify-content: normal;
+    max-width: none;
     padding: var(--xc-card-pad);
     background: transparent;
     border: 0;
@@ -31,16 +42,29 @@
     white-space: nowrap;
 }
 
-.row:hover {
+.row.row:hover {
     background: var(--xc-bg-muted);
 }
 
-.row:focus-visible {
+/* Button's hover and press rules weigh three classes; these weigh four, so
+   the row keeps its own edge colour and does not dim or nudge when pressed. */
+.row.row:hover:not(:disabled),
+.row.row:active:not(:disabled) {
+    border-color: currentColor;
+}
+
+.row.row:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.row.row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-.selected {
+/* Doubled to stay ahead of the doubled row rule above. */
+.selected.selected {
     background: var(--xc-bg-muted);
 }
 
@@ -155,7 +179,7 @@
 }
 
 @media (max-width: 400px) {
-    .row {
+    .row.row {
         column-gap: var(--xc-space-1);
     }
 

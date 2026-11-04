@@ -5,6 +5,8 @@
 
 import { AssetMark } from '../../ui/AssetMark.jsx';
 import { RelativeTime } from './RelativeTime.jsx';
+// The Button sheet loads first so the row rules below win the cascade.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './ActivityRow.module.css';
 
 const STATUS_LABELS = {
@@ -37,7 +39,7 @@ export function ActivityRow({
         <button
             type="button"
             onClick={onClick}
-            className={`${styles.row} ${selected ? styles.selected : ''} ${className}`.trim()}
+            className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${styles.row} ${selected ? styles.selected : ''} ${className}`.trim()}
             {...rest}
         >
             {decoration}
