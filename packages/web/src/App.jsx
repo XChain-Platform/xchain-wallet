@@ -251,6 +251,24 @@ const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/rou
 const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
 
+// A session read that never settles (a wedged storage adapter, a host bridge
+// that never answers) gives way to the failure screen instead of leaving the
+// loading dots up forever. It sits well above a slow but working adapter.
+export const SESSION_STATUS_TIMEOUT_MS = 20_000;
+
+function getSessionStatusWithTimeout() {
+    let timer;
+    return Promise.race([
+        Promise.resolve().then(() => getSessionStatus()),
+        new Promise((_, reject) => {
+            timer = setTimeout(
+                () => reject(new Error('The wallet storage did not respond.')),
+                SESSION_STATUS_TIMEOUT_MS,
+            );
+        }),
+    ]).finally(() => clearTimeout(timer));
+}
+
 // Loaded on first pairing; a lock or wallet switch resets the loaded ones.
 const TREZOR_PAIRING_ENABLED = import.meta.env.XCHAIN_TREZOR_PAIRING !== false;
 const hardwareFactories = trackHardwareFactories({
@@ -351,6 +369,9 @@ function AppInner() {
     const statusStateRef = useRef(status.state);
     statusStateRef.current = status.state;
     const nativeSuspendedRef = useRef(false);
+    // Only the newest session read may set the status; an older one that
+    // settles late (after a timeout and a retry) is dropped.
+    const statusRequest = useRef(0);
     const [nativeResumeKey, setNativeResumeKey] = useState(0);
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
@@ -756,6 +777,7 @@ function AppInner() {
     const launchRouteState = useRef(createLaunchRouteState());
 
     const refresh = useCallback(() => {
+        const request = ++statusRequest.current;
         setStatus({ state: 'loading' });
         setOnboardingStep((step) => {
             if (preserveInitialOnboardingStep.current) {
@@ -765,8 +787,9 @@ function AppInner() {
             return 'welcome';
         });
         setUnlockedView('home');
-        getSessionStatus()
+        getSessionStatusWithTimeout()
             .then((next) => {
+                if (statusRequest.current !== request) return;
                 setStatus(next);
                 if (next?.state === 'unlocked') nativeSuspendedRef.current = false;
                 const launchView = launchRouteState.current.takeForSession(next);
@@ -782,7 +805,8 @@ function AppInner() {
                     } catch { /* CustomEvent unsupported: non-fatal */ }
                 }
             })
-            .catch((err) =>
+            .catch((err) => {
+                if (statusRequest.current !== request) return;
                 setStatus({
                     state: 'error',
                     error: err?.message || String(err),
@@ -791,8 +815,8 @@ function AppInner() {
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
                     errorKind: vaultErrorKind(err),
-                }),
-            );
+                });
+            });
     }, []);
     useDemoAutoWipe(activeWalletId, refresh);
 
@@ -845,7 +869,10 @@ function AppInner() {
         });
     }
 
-    useEffect(() => { refresh(); }, [refresh]);
+    useEffect(() => {
+        refresh();
+        return () => { statusRequest.current += 1; };
+    }, [refresh]);
 
     // While the Send screen shows an approved payment, the newest incoming
     // link waits here and is applied when that screen unmounts.
@@ -1189,7 +1216,7 @@ function AppInner() {
         case 'error':
             return status.errorKind
                 ? <VaultUnavailable kind={status.errorKind} detail={status.error} />
-                : <Loading error={status.error} />;
+                : <Loading error={status.error} onRetry={refresh} />;
         case 'no-wallet':
             if (onboardingStep === 'create') {
                 return (

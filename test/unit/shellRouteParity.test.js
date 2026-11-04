@@ -303,11 +303,6 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The web route outlet supplies its compact-layout fallback directly.',
         },
-        'Loading.onRetry': {
-            shells: ['desktop', 'extension'],
-            kind: 'known-gap',
-            reason: 'The web loading screen does not yet expose the recovery action that desktop and extension show.',
-        },
         'Locked.lockReason': {
             shells: ['desktop', 'extension'],
             kind: 'intended',
