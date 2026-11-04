@@ -231,7 +231,11 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 >
                     {error}
                 </StatusMessage>
-            ) : null}
+            ) : (chainId && !rows ? (
+                <div role="status" aria-label="Loading betting markets" aria-busy="true">
+                    Loading betting markets…
+                </div>
+            ) : null)}
             toolbar={(
                 <div className={local.toolbarRow}>
                     <div className={local.toolbarNetwork}>
@@ -252,11 +256,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 </div>
             )}
         >
-            {chainId && !rows && !error ? (
-                <div role="status" aria-label="Loading betting markets" aria-busy="true">
-                    Loading betting markets…
-                </div>
-            ) : null}
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"
