@@ -35,7 +35,18 @@
     display: none;
 }
 
-.tab {
+/* BottomTabBar.jsx puts Button's btn, ghost and md classes beside .tab and
+   .sheetItem. The base hover and press rules outrank a single class and paint
+   --xc-button-hover-bg, so each surface names the fill it keeps: none on a tab,
+   the surface tone on a sheet row. Both stay square-cornered. A build chunk
+   can also place the Button sheet after this one, where its single-class rules
+   would win on order (a slate fill, white bold labels, rounded corners), so the
+   tab rules are scoped under .bar and the row rules under .sheetList to
+   outrank the base in any sheet order. */
+.bar .tab {
+    --xc-button-hover-bg: transparent;
+    /* The tab's zero-width edge keeps its currentColor on hover, as before the base. */
+    --xc-button-hover-border: currentColor;
     flex: 1 1 0;
     min-width: 0;
     display: flex;
@@ -45,6 +56,7 @@
     gap: 2px;
     background: transparent;
     border: 0;
+    border-radius: 0;
     color: var(--xc-text-muted, var(--xc-text));
     font: inherit;
     font-size: var(--xc-text-xs);
@@ -56,12 +68,23 @@
     min-height: var(--xc-tap-min);
 }
 
-.tab:focus-visible {
+/* The base press rule dims and nudges a button; a tab and a sheet row keep
+   still under the finger, as they do without the base. The scoped pair
+   outranks the base press rule in any sheet order. */
+.bar .tab:active:not(:disabled),
+.sheetList .sheetItem:active:not(:disabled),
+.tab:active:not(:disabled),
+.sheetItem:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.bar .tab:focus-visible {
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: -3px;
 }
 
-.tabActive {
+.bar .tabActive {
     color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
@@ -114,7 +137,9 @@
     padding: 0;
 }
 
-.sheetItem {
+.sheetList .sheetItem {
+    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-border: var(--xc-control-border);
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
@@ -122,6 +147,7 @@
     padding: var(--xc-space-3) var(--xc-space-4);
     background: transparent;
     border: 0;
+    border-radius: 0;
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-md);
@@ -129,12 +155,12 @@
     cursor: pointer;
 }
 
-.sheetItem:hover,
-.sheetItem:focus-visible {
+.sheetList .sheetItem:hover,
+.sheetList .sheetItem:focus-visible {
     background: var(--xc-surface);
 }
 
-.sheetItem:focus-visible {
+.sheetList .sheetItem:focus-visible {
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: -2px;
 }
@@ -169,7 +195,7 @@
     }
 }
 
-.sheetItemActive {
+.sheetList .sheetItemActive {
     color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
@@ -218,8 +244,8 @@
 }
 
 @media (prefers-contrast: more) {
-    .tabActive,
-    .sheetItemActive {
+    .bar .tabActive,
+    .sheetList .sheetItemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
     }
@@ -232,7 +258,7 @@
         min-height: 2.75rem;
     }
 
-    .tab {
+    .bar .tab {
         gap: 0;
         padding-block: 2px;
     }

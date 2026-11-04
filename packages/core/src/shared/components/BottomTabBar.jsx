@@ -19,6 +19,10 @@ import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
 // The More sheet opens only on a tap, so its surface and styles load on demand.
 import { OverlaySurfaceOnDemand as OverlaySurface } from './onDemandOverlays.js';
 import { openWhenLoaded, useIdlePreload } from '../utils/onDemandComponent.js';
+// Ahead of the bar's own sheet, so the shared button base loads first and the
+// tab and row rules follow it; a CSS-file composes would inline a second copy
+// of Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -68,6 +72,12 @@ import { t } from '../../i18n/index.js';
 // The thumb-row tabs, in TAB_BAR_DESTINATIONS order, with the sidebar's labels
 // and icons. `spendable` marks the Send row signer mode promises is gone.
 const PRIMARY_TABS = TAB_BAR_DESTINATIONS.map(navItem);
+
+// Tabs and sheet rows stay native buttons, so each carries the shared Button
+// base, variant and size classes in markup; the bar's own rules then shape them.
+const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.md}`;
+const TAB_CLASS = `${BUTTON_BASE} ${styles.tab}`;
+const SHEET_ITEM_CLASS = `${BUTTON_BASE} ${styles.sheetItem}`;
 
 const SHEET_PRIMARY = [
     { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
@@ -213,7 +223,7 @@ export function BottomTabBar({
                             type="button"
                             data-bottom-tab={tab.id}
                             tabIndex={tabStop === tab.id ? 0 : -1}
-                            className={`${styles.tab} ${active ? styles.tabActive : ''}`}
+                            className={`${TAB_CLASS} ${active ? styles.tabActive : ''}`}
                             aria-current={active ? 'page' : undefined}
                             onFocus={() => setRovingTab(tab.id)}
                             onClick={() => {
@@ -234,7 +244,7 @@ export function BottomTabBar({
                     type="button"
                     data-bottom-tab="more"
                     tabIndex={tabStop === 'more' ? 0 : -1}
-                    className={`${styles.tab} ${sheetOpen ? styles.tabActive : ''}`}
+                    className={`${TAB_CLASS} ${sheetOpen ? styles.tabActive : ''}`}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onFocus={() => setRovingTab('more')}
@@ -276,7 +286,7 @@ export function BottomTabBar({
                                         <li key={row.id}>
                                             <button
                                                 type="button"
-                                                className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
+                                                className={`${SHEET_ITEM_CLASS} ${active ? styles.sheetItemActive : ''}`}
                                                 data-xc-menu-item
                                                 aria-current={active ? 'page' : undefined}
                                                 onClick={() => {
@@ -305,7 +315,7 @@ export function BottomTabBar({
                                     <li>
                                         <button
                                             type="button"
-                                            className={styles.sheetItem}
+                                            className={SHEET_ITEM_CLASS}
                                             data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
@@ -323,7 +333,7 @@ export function BottomTabBar({
                                     <li>
                                         <button
                                             type="button"
-                                            className={styles.sheetItem}
+                                            className={SHEET_ITEM_CLASS}
                                             data-xc-menu-item
                                             onClick={() => {
                                                 setSheetOpen(false);
@@ -343,7 +353,7 @@ export function BottomTabBar({
                                             the current page here the same way. */}
                                         <button
                                             type="button"
-                                            className={`${styles.sheetItem} ${settingsActive ? styles.sheetItemActive : ''}`}
+                                            className={`${SHEET_ITEM_CLASS} ${settingsActive ? styles.sheetItemActive : ''}`}
                                             data-xc-menu-item
                                             aria-current={settingsActive ? 'page' : undefined}
                                             onClick={() => {
@@ -362,7 +372,7 @@ export function BottomTabBar({
                                     <li>
                                         <button
                                             type="button"
-                                            className={styles.sheetItem}
+                                            className={SHEET_ITEM_CLASS}
                                             data-xc-menu-item
                                             data-destructive="true"
                                             onClick={() => {
@@ -382,7 +392,7 @@ export function BottomTabBar({
                                     .map((site) => (
                                         <li key={site.key}>
                                             <a
-                                                className={styles.sheetItem}
+                                                className={SHEET_ITEM_CLASS}
                                                 data-xc-menu-item
                                                 href={site.href}
                                                 target="_blank"
