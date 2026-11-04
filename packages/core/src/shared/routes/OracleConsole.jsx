@@ -98,6 +98,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null, queued: boolean} | null} */ (null));
     const [refreshing, setRefreshing] = useState(false);
     const loadSequence = useRef(0);
+    // Watcher lane only: the build is not a confirm phase, so composing never
+    // turns on. The ref stops a second tap in the same turn from building a
+    // second unsigned transaction, and the state disables the button.
+    const watcherBuildRef = useRef(false);
+    const [watcherBuilding, setWatcherBuilding] = useState(false);
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -218,19 +223,26 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // (create in CreateBetFeedForm, place in BetFeedDetail); adding it here would
     // ask a user to pay a fee the chain never charges.
     async function runOracleAction(feed, builder, submit, params) {
-        if (actionConfirm.composing) return;
+        if (actionConfirm.composing || watcherBuildRef.current) return;
         const from = sourceDescriptor(feed.owner);
         setFormError(null);
         setResult(null);
         try {
             if (isWatcherMode) {
-                const res = await messaging.buildBetActionPsbtRequest({
-                    chainId: feed.chainId,
-                    from,
-                    builder,
-                    params,
-                });
-                setResult(res);
+                watcherBuildRef.current = true;
+                setWatcherBuilding(true);
+                try {
+                    const res = await messaging.buildBetActionPsbtRequest({
+                        chainId: feed.chainId,
+                        from,
+                        builder,
+                        params,
+                    });
+                    setResult(res);
+                } finally {
+                    watcherBuildRef.current = false;
+                    setWatcherBuilding(false);
+                }
                 return;
             }
             const res = await actionConfirm.run({
@@ -456,8 +468,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     ) : null}
                                     <Button
                                         variant="primary"
-                                        loading={actionConfirm.composing}
-                                        disabled={demoGuard.blocked || (!allowList.trim() && !blockList.trim())}
+                                        loading={actionConfirm.composing || watcherBuilding}
+                                        disabled={watcherBuilding || demoGuard.blocked || (!allowList.trim() && !blockList.trim())}
                                         onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
                                             feedActionIndex: f.action_index,
                                             allowList: allowList.trim(),
@@ -500,8 +512,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     </p>
                                     <Button
                                         variant="primary"
-                                        loading={actionConfirm.composing}
-                                        disabled={demoGuard.blocked || outcome === null}
+                                        loading={actionConfirm.composing || watcherBuilding}
+                                        disabled={watcherBuilding || demoGuard.blocked || outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
                                             feedActionIndex: f.action_index, outcome, outcomes: labels,
                                         })}
@@ -522,8 +534,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     </p>
                                     <Button
                                         variant="danger"
-                                        loading={actionConfirm.composing}
-                                        disabled={demoGuard.blocked}
+                                        loading={actionConfirm.composing || watcherBuilding}
+                                        disabled={watcherBuilding || demoGuard.blocked}
                                         onClick={() => runOracleAction(f, 'cancelMarketParams', submitCancel, {
                                             feedActionIndex: f.action_index,
                                         })}
