@@ -35,6 +35,7 @@ import {
     isPendingContractUnstake,
     scalarRows,
 } from '../../flows/stakingDashboard.js';
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -614,7 +615,7 @@ function StakeRow({ row, period, hideSecondLine = false, onSelect }) {
         <div role="listitem" className={local.rowItem}>
             <button
                 type="button"
-                className={local.row}
+                className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${local.row}`}
                 onClick={onSelect}
                 aria-label={stakeRowLabel(row)}
             >

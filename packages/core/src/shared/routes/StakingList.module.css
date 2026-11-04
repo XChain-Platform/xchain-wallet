@@ -48,36 +48,61 @@
     overflow: hidden;
 }
 
-.row {
+/* The row carries the shared Button classes for the kit's focus, press and
+   forced-colours behaviour, and the large size's tap floor; the rest is the
+   row's own flat look. A module that `composes` from Button.module.css
+   (Receive does) inlines a copy of it, and once that copy loads after this
+   sheet its one-class .btn and .ghost rules outrank one-class row rules: the
+   row took the slate fill, white bold centred text, rounded corners and the
+   button's padding. Scoped under its list item the row outranks that copy
+   wherever it lands, so it states every property the base or the variant
+   sets. The kit's hover and press read their colours from the two custom
+   properties, so the row keeps its muted hover and its divider. */
+.rowItem {
     display: flex;
     min-width: 0;
+}
+
+.rowItem > .row {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: currentColor;
+    --xc-icon-size: inherit;
+    display: flex;
+    position: static;
+    min-width: 0;
+    max-width: none;
     align-items: center;
+    justify-content: normal;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
     border: none;
     border-top: 1px solid var(--xc-border);
+    border-radius: 0;
     background: transparent;
     width: 100%;
     text-align: start;
     color: inherit;
     font: inherit;
+    overflow-wrap: normal;
     cursor: pointer;
-}
-
-.rowItem {
-    display: flex;
-    min-width: 0;
 }
 
 .rowItem:first-of-type > .row {
     border-top: none;
 }
 
-.row:hover {
+/* The kit's hover sets every side's colour from the token, so the divider
+   on top keeps its own colour here. */
+.rowItem > .row:hover:not(:disabled) {
     background: var(--xc-bg-muted);
+    border-top-color: var(--xc-border);
 }
 
-.row:focus-visible {
+.rowItem:first-of-type > .row:hover:not(:disabled) {
+    border-top-color: currentColor;
+}
+
+.rowItem > .row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     /* The negative offset keeps the focus outline inside the clickable row. */
     outline-offset: -2px;
@@ -232,7 +257,7 @@
 }
 
 @media not all and (min-width: 400px) {
-    .row {
+    .rowItem > .row {
         display: grid;
         grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr);
         align-items: start;
