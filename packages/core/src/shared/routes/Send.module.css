@@ -462,22 +462,40 @@
     outline-offset: 2px;
 }
 
-.heroIconWrapInteractive {
-    appearance: none;
-    background: transparent;
-    border: none;
+/* The Change asset hero carries the shared Button classes (btn ghost lg).
+   Two classes outrank the single-class .btn, .ghost and .lg rules wherever
+   a copy of Button.module.css lands in the cascade, so the hero keeps its
+   bare 88px circle: no fill, no border, no padding, no gap, the page font,
+   no size floor or column cap. The two state variables resolve the Button
+   hover and press rules to no fill and an edge in the text colour, as the
+   plain button had. */
+.heroIconWrap.heroIconWrapInteractive {
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentcolor;
+    display: flex;
+    gap: normal;
+    min-height: auto;
+    max-width: none;
     padding: 0;
-    cursor: pointer;
+    border: 0;
     border-radius: 50%;
+    background: transparent;
     color: inherit;
     font: inherit;
+    transition: none;
 }
 
-.heroIconWrapInteractive:hover {
+/* The Button press rule nudges and darkens; the hero never did. */
+.heroIconWrap.heroIconWrapInteractive:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.heroIconWrap.heroIconWrapInteractive:hover:not(:disabled) {
     filter: brightness(0.96);
 }
 
-.heroIconWrapInteractive:focus-visible {
+.heroIconWrap.heroIconWrapInteractive:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: var(--xc-space-1);
 }

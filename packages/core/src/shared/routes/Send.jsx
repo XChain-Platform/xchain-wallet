@@ -254,6 +254,10 @@ import {
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import { encoderFieldError } from '../../sdk/encoderFieldErrors.js';
+// Ahead of this file's own sheet, so the shared button base loads first and
+// the hero's rules follow it; a CSS-file composes would inline a second copy
+// of Button.module.css.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './Send.module.css';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
@@ -4605,7 +4609,7 @@ export function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChange
             type: 'button',
             onClick: onChangeAsset,
             'aria-label': `Change asset (currently ${heroName})`,
-            className: `${styles.heroIconWrap} ${styles.heroAsset} ${styles.heroIconWrapInteractive}`,
+            className: `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${styles.heroIconWrap} ${styles.heroAsset} ${styles.heroIconWrapInteractive}`,
         }
         : { className: `${styles.heroIconWrap} ${styles.heroAsset}`, 'aria-hidden': 'true' };
     return (
