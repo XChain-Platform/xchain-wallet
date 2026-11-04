@@ -14,6 +14,10 @@ import {
     formatWithThousands,
     normalizeLocalizedDecimal,
 } from '../shared/utils/amountFormat.js';
+// Ahead of the selector's own sheet, so the shared button base loads first and
+// the tick and readout rules follow it; a CSS-file composes would inline a
+// second copy of Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from './Button.module.css';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 import { FormNotice } from './FormNotice.jsx';
@@ -34,6 +38,10 @@ const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
 const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
+// The tier stops and the click-to-edit figures are native buttons on the shared
+// Button base (one variant, one size); FeeSelector.module.css keeps their tick
+// and readout geometry and their transparent resting look.
+const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.sm}`;
 
 /**
  * FeeSelector (§44.2): Slow / Normal / Fast / Custom slider. Rendering
@@ -341,7 +349,7 @@ export function FeeSelector({
                         <button
                             key={s}
                             type="button"
-                            className={`${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
+                            className={`${BUTTON_BASE} ${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
                             style={{ left: `calc(${MAX_INDEX ? i / MAX_INDEX : 0} * (100% - var(--fee-thumb)) + var(--fee-thumb) / 2)` }}
                             onClick={() => pickSpeed(s)}
                             disabled={disabled}
@@ -395,7 +403,7 @@ export function FeeSelector({
                                         {allowCustom ? (
                                             <button
                                                 type="button"
-                                                className={styles.readoutEdit}
+                                                className={`${BUTTON_BASE} ${styles.readoutEdit}`}
                                                 onClick={beginFeeEdit}
                                                 disabled={disabled}
                                                 aria-label={t('ui.feeSelector.editExactFeeAmount')}
@@ -441,7 +449,7 @@ export function FeeSelector({
                             ) : !activeEstimate ? null : allowCustom ? (
                                 <button
                                     type="button"
-                                    className={`${styles.readoutEdit} ${styles.sliderReadoutRate}`}
+                                    className={`${BUTTON_BASE} ${styles.readoutEdit} ${styles.sliderReadoutRate}`}
                                     onClick={beginRateEdit}
                                     disabled={disabled}
                                     aria-label={t('ui.feeSelector.editFeeRate', { unit: tiers.unit })}

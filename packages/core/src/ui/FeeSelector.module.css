@@ -102,6 +102,12 @@
     height: calc(var(--xc-tap-min) + var(--xc-space-2));
 }
 
+/* The stop also carries Button's btn, ghost and sm classes (set in
+   FeeSelector.jsx). Those single-class rules tie a single-class rule here, so
+   whichever sheet loads last would win; the doubled class outranks them in
+   any sheet order. The plain selector names the stop's own floor and
+   position beside it. */
+.sliderTick.sliderTick,
 .sliderTick {
     position: absolute;
     inset-block-start: 0;
@@ -133,6 +139,11 @@
     justify-content: flex-start;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
+    /* Square, no button gap, and no ghost fill or edge on hover or press. */
+    border-radius: 0;
+    gap: normal;
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentColor;
 }
 
 .sliderTickEta {
@@ -145,6 +156,24 @@
 .sliderTick:last-child { transform: translateX(-100%); }
 
 .sliderTick:disabled { cursor: not-allowed; }
+
+/* Button's press and disabled rules weigh three classes, so these weigh four
+   to keep the stop on its centring transform, unfilled and in its own text
+   colour in any sheet order. */
+.sliderTicks .sliderTick.sliderTick:active {
+    transform: translateX(-50%);
+    filter: none;
+}
+
+.sliderTicks .sliderTick.sliderTick:first-child:active { transform: translateX(0); }
+.sliderTicks .sliderTick.sliderTick:last-child:active { transform: translateX(-100%); }
+
+.sliderTicks .sliderTick.sliderTick:disabled {
+    background: transparent;
+    border-color: currentColor;
+    color: var(--xc-text-muted);
+    opacity: 1;
+}
 
 /* The tier label stays compact; on a touch screen a transparent layer
    gives it a 44px target, centred on the control (the Button .sm pattern). */
@@ -159,9 +188,14 @@
     }
 }
 
-.sliderTickActive {
+/* Doubled to stay ahead of the doubled stop rule above. */
+.sliderTickActive.sliderTickActive {
     color: var(--xc-text);
     font-weight: 600;
+}
+
+.sliderTicks .sliderTickActive.sliderTickActive:disabled {
+    color: var(--xc-text);
 }
 
 .sliderReadout {
@@ -240,8 +274,10 @@
 /* Click-to-edit readout figures (fee amount, tier rate). Rendered as
    buttons so they're keyboard-reachable; the underline appears on
    hover/focus as the "this is editable" affordance without adding visual
-   noise to the resting readout. */
-.readoutEdit {
+   noise to the resting readout. The figure also carries Button's btn, ghost
+   and sm classes (set in FeeSelector.jsx); the doubled class outranks their
+   single-class rules in any sheet order. */
+.readoutEdit.readoutEdit {
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -258,11 +294,19 @@
     white-space: nowrap;
     border-bottom: 1px solid transparent;
     position: relative;
+    /* A straight underline, no button gap or centring, the figure's own
+       width, and no ghost fill or edge on hover or press. */
+    border-radius: 0;
+    gap: normal;
+    justify-content: normal;
+    max-width: none;
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentColor;
 }
 
-/* The editable fee figures keep their size. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+/* The editable fee figures keep their size. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). Doubled so Button's own .sm layer, which also grows upward, never replaces it. */
 @media (pointer: coarse), (hover: none) {
-    .readoutEdit::before {
+    .readoutEdit.readoutEdit::before {
         content: '';
         position: absolute;
         /* Grows downward only: the tier stops above already reach into this
@@ -274,12 +318,12 @@
     }
 }
 
-.readoutEdit:hover:not(:disabled),
-.readoutEdit:focus-visible {
+.readoutEdit.readoutEdit:hover:not(:disabled),
+.readoutEdit.readoutEdit:focus-visible {
     border-bottom-color: var(--xc-text-muted);
 }
 
-.readoutEdit:focus-visible {
+.readoutEdit.readoutEdit:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
     border-radius: 2px;
@@ -287,6 +331,23 @@
 
 .readoutEdit:disabled {
     cursor: not-allowed;
+}
+
+/* Button's press and disabled rules weigh three classes, so these weigh four
+   to keep the figure still, underlined while pressed, unfilled and in the
+   readout's own colour in any sheet order. */
+.sliderReadout .readoutEdit.readoutEdit:active:not(:disabled) {
+    border-bottom-color: var(--xc-text-muted);
+    filter: none;
+    transform: none;
+}
+
+.sliderReadout .readoutEdit.readoutEdit:disabled {
+    background: transparent;
+    border-color: currentColor;
+    border-bottom-color: transparent;
+    color: inherit;
+    opacity: 1;
 }
 
 /* Exact-fee input: same chrome as the rate input, wider to fit a
