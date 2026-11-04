@@ -226,9 +226,16 @@
     padding: 0;
 }
 
+/* Rows carry the shared Button base (btn, ghost, md), so this rule restates
+   every look the base would change: full-row width, start alignment, square
+   corners, regular weight and the nav padding. The hover tokens keep the
+   Button hover and press fill on the nav row colours. */
 .item {
+    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-border: transparent;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--xc-space-3);
     width: 100%;
     padding: var(--xc-space-2) var(--xc-space-4);
@@ -239,18 +246,40 @@
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);
+    font-weight: 400;
     text-align: start;
     cursor: pointer;
     transition: background-color 80ms ease;
 }
 
-.item:hover,
-.item:focus-visible {
+/* A build chunk can place the Button sheet after this one, where its
+   single-class rules tie .item and win on order (a slate fill, bold centred
+   labels, rounded corners). Scoped under .nav the row look outranks the base
+   in any sheet order; the state rules below carry the same scope so they
+   still win over it. Sizing (min-height) stays with the Button base. */
+.nav .item {
+    display: flex;
+    justify-content: normal;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-4);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 400;
+    text-align: start;
+    transition: background-color 80ms ease;
+}
+
+.nav .item:hover,
+.nav .item:focus-visible {
     background: var(--xc-surface);
     outline: none;
 }
 
-.item:focus-visible {
+.nav .item:focus-visible {
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: -2px;
 }
@@ -275,7 +304,11 @@
     padding-inline: calc(var(--xc-space-1) - 1px);
 }
 
+/* The plain selector names the active row's edge on its own; the scoped one
+   carries the same look past the Button base in any sheet order. */
+.nav .itemActive,
 .itemActive {
+    --xc-button-hover-border: var(--xc-control-border);
     border: 1px solid var(--xc-control-border);
     background: var(--xc-surface);
     font-weight: 600;
@@ -343,7 +376,7 @@
 }
 
 @media (prefers-contrast: more) {
-    .itemActive {
+    .nav .itemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
     }
@@ -353,11 +386,13 @@
    every row. Idle rows take the canvas colour and the active row takes the
    selection colour, so only the current destination shows an edge. */
 @media (forced-colors: active) {
-    .item {
+    .nav .item {
+        --xc-button-hover-border: Canvas;
         border-color: Canvas;
     }
 
-    .itemActive {
+    .nav .itemActive {
+        --xc-button-hover-border: Highlight;
         border-color: Highlight;
     }
 }

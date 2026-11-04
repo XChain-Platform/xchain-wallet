@@ -28,9 +28,14 @@ import {
     ShellNoticesContext,
     ShellReachabilityNoticeContext,
 } from './noticesRoute.js';
+// The Button sheet loads first so the nav row rules below win at equal specificity.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './LeftNav.module.css';
 import { t } from '../../i18n/index.js';
 import screenStyles from '../../ui/Screen.module.css';
+
+// Destination rows stand on the shared Button base (ghost, md) and keep the nav row look from .item.
+const NAV_ROW_BUTTON = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.md} ${styles.item}`;
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
@@ -197,7 +202,7 @@ export function LeftNav({
                         <li key={item.id}>
                             <button
                                 type="button"
-                                className={`${styles.item} ${active ? styles.itemActive : ''}`}
+                                className={`${NAV_ROW_BUTTON} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
                                 title={item.label}
                                 onClick={() => onSelect(item.id)}
@@ -225,7 +230,7 @@ export function LeftNav({
                         <li key={item.id}>
                             <button
                                 type="button"
-                                className={`${styles.item} ${active ? styles.itemActive : ''}`}
+                                className={`${NAV_ROW_BUTTON} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
                                 title={item.label}
                                 onClick={() => onSelect(item.id)}
@@ -249,7 +254,7 @@ export function LeftNav({
                 {onOpenSettings ? (
                     <button
                         type="button"
-                        className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
+                        className={`${NAV_ROW_BUTTON} ${activeItem === 'settings' ? styles.itemActive : ''}`}
                         aria-current={activeItem === 'settings' ? 'page' : undefined}
                         title={t('home.settings')}
                         onClick={onOpenSettings}
