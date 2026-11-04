@@ -18,6 +18,10 @@ import { Button, Icon, ListPage, PageHeader, Screen } from '@xchain-wallet/core/
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LayoutModeToggle } from '../components/LayoutModeToggle.jsx';
 import menuStyles from '../components/HeaderActionMenu.module.css';
+// Ahead of the row sheet, so the shared button base loads first and the row
+// rules follow it; a CSS-file composes would inline a second copy of
+// Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from '../../ui/Button.module.css';
 import rowStyles from './ActionsMenu.module.css';
 
 /**
@@ -100,12 +104,12 @@ export function MenuRoute({
                     {primary.length > 0 || typeof onSettings === 'function' ? (
                         /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={menuStyles.list} role="list" data-xc-menu-list="rows">
-                            {/* Menu entries stay native buttons because each control is the complete clickable row. */}
+                            {/* Each entry is a native button because the control is the complete clickable row; it carries the shared Button base, the ghost variant and the md size in markup, and the menu row rules keep its row look. */}
                             {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                                 <li key={id}>
                                     <button
                                         type="button"
-                                        className={rowStyles.entry}
+                                        className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.md} ${rowStyles.entry}`}
                                         data-xc-menu-item
                                         onClick={handler}
                                     >
@@ -123,7 +127,7 @@ export function MenuRoute({
                                 <li>
                                     <button
                                         type="button"
-                                        className={rowStyles.entry}
+                                        className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.md} ${rowStyles.entry}`}
                                         data-xc-menu-item
                                         onClick={onSwitchWallet}
                                     >
@@ -141,7 +145,7 @@ export function MenuRoute({
                                 <li>
                                     <button
                                         type="button"
-                                        className={rowStyles.entry}
+                                        className={`${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.md} ${rowStyles.entry}`}
                                         data-xc-menu-item
                                         onClick={onSettings}
                                     >
