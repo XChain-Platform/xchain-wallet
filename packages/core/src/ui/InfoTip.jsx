@@ -27,6 +27,12 @@
 // inherits the host's focus styling.
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+// Imported ahead of InfoTip's own sheet so the shared button base always
+// loads first and the trigger's rules follow it. A CSS-file `composes` would
+// inline a second copy of Button.module.css into InfoTip's sheet, and that
+// copy re-asserts .btn over every module loaded before it, real buttons
+// included.
+import buttonStyles from './Button.module.css';
 import styles from './InfoTip.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
@@ -142,7 +148,7 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
         <span ref={wrapRef} className={cls}>
             <button
                 type="button"
-                className={styles.trigger}
+                className={`${buttonStyles.btn} ${buttonStyles.link} ${buttonStyles.sm} ${styles.trigger}`}
                 aria-label={aria}
                 aria-describedby={id}
                 aria-expanded={open}

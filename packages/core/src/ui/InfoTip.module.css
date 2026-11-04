@@ -13,28 +13,45 @@
  * touch screen. Growing the dot itself would shout for attention it does
  * not deserve, so the button keeps its painted size via an inner circle
  * (`.glyph`) and grows its own box to the tap minimum. Transparent
- * background on the button, painted background on the glyph. */
+ * background on the button, painted background on the glyph.
+ *
+ * The trigger also carries the shared Button .btn base with the .link
+ * variant and the .sm size. Their single-class rules tie a single-class rule
+ * here, so whichever sheet loads last would win; the doubled class outranks
+ * them in any sheet order (the plain class is listed too so the rule is
+ * found under its own name). These rules undo the parts of that base that
+ * would grow the box or restyle the dot: the 1px border, inline padding,
+ * control min-height, gap, link colour, 600 weight, sans font, control
+ * radius, width cap and the link underline. */
+.trigger.trigger,
 .trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0;
     min-width: var(--xc-tap-min);
+    max-width: none;
     min-height: var(--xc-tap-min);
     padding: 0;
     border: none;
+    border-radius: 0;
     background: transparent;
     color: var(--xc-text-muted);
+    font-family: revert;
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
+    text-decoration: none;
     cursor: help;
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentColor;
     transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
     position: relative;
 }
 
 /* The help dot keeps its 16px glyph. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
 @media (pointer: coarse), (hover: none) {
-    .trigger::before {
+    .trigger.trigger::before {
         content: '';
         position: absolute;
         inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
@@ -56,9 +73,18 @@
     transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
-.trigger:hover,
-.trigger:focus-visible {
+.trigger.trigger:hover,
+.trigger.trigger:focus-visible {
     color: var(--xc-text);
+}
+
+/* The Button base dims, fills and nudges a pressed button; the help dot
+   keeps its transparent box and lets the glyph carry the state. Four
+   classes outrank Button's three-class press rule in any sheet order. */
+.trigger.trigger:active:not(:disabled) {
+    background: transparent;
+    filter: none;
+    transform: none;
 }
 
 .trigger:hover .glyph,
@@ -69,10 +95,13 @@
 
 /* Ring the dot, not the padded target box: a 24px outline around a 16px
    dot reads as a stray box floating in the row. */
-.trigger:focus-visible {
+.trigger.trigger:focus-visible {
     outline: none;
 }
 
+/* The ring moves to the dot under the scoped erase above too, so a focused
+   trigger always shows an outline, forced colors included. */
+.trigger.trigger:focus-visible .glyph,
 .trigger:focus-visible .glyph {
     outline: 2px solid var(--xc-accent-primary);
     outline-offset: 1px;
@@ -119,7 +148,7 @@
 }
 
 @media (prefers-contrast: more) {
-    .trigger {
+    .trigger.trigger {
         border-color: CanvasText;
         color: CanvasText;
     }
