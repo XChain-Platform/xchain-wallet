@@ -12,6 +12,7 @@ import {
     SECTIONS,
     TOKEN_GROUPS,
 } from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
+import { DEFAULT_VIEW, VIEWS } from '../../../packages/web/src/style-guide/frames.jsx';
 import {
     COMPONENT_MATRIX,
     MATRIX_SIZES,
@@ -85,6 +86,23 @@ describe('style guide primitive coverage', () => {
             expect(COMPONENT_MATRIX[component].states, `${component} state columns`).toEqual(MATRIX_STATES);
             expect(COMPONENT_MATRIX[component].themes, `${component} themes`).toEqual(MATRIX_THEMES);
         }
+    });
+
+    it('previews every example at the mobile, extension and desktop width classes', () => {
+        expect(Object.keys(VIEWS)).toEqual(['mobile', 'extension', 'desktop']);
+        expect(VIEWS[DEFAULT_VIEW], 'the default view exists').toBeTruthy();
+        expect(VIEWS.mobile.width, 'mobile is a phone width').toBeLessThanOrEqual(430);
+        expect(VIEWS.extension.width, 'extension is a popup or side panel width').toBeGreaterThanOrEqual(360);
+        expect(VIEWS.extension.width).toBeLessThanOrEqual(480);
+        expect(VIEWS.desktop.width, 'desktop is a window width').toBeGreaterThanOrEqual(1024);
+        const widths = Object.values(VIEWS).map(({ width }) => width);
+        expect(new Set(widths).size, 'each class has its own width').toBe(3);
+
+        const frames = fs.readFileSync(path.join(root, 'packages/web/src/style-guide/frames.jsx'), 'utf8');
+        expect(frames, 'every LiveExample frame takes the picked view width').toContain('VIEWS[useView()]');
+        expect(frames, 'the triptych renders all three views').toContain('Object.values(VIEWS).map((view)');
+        const page = fs.readFileSync(path.join(root, 'packages/web/src/style-guide/StyleGuidePage.jsx'), 'utf8');
+        expect(page, 'the page offers the width switch').toContain('aria-label="Preview width"');
     });
 
     it('documents every shared token and the complete new token families', () => {
