@@ -13,6 +13,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Button, EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './CollectiblesView.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
@@ -108,8 +109,11 @@ export function CollectiblesView({
                 ))}
             </div>
             {hidden.length > 0 ? (
-                <button
-                    type="button"
+                <Button
+                    variant="ghost"
+                    size="md"
+                    block
+                    icon={null}
                     className={styles.hiddenToggle}
                     onClick={() => setHiddenExpanded((v) => !v)}
                     aria-expanded={hiddenExpanded}
@@ -117,7 +121,7 @@ export function CollectiblesView({
                     {hiddenExpanded
                         ? t('components.collectiblesView.hideHidden', { count: hidden.length })
                         : t('components.collectiblesView.showHidden', { count: hidden.length })}
-                </button>
+                </Button>
             ) : null}
             {hidden.length > 0 && hiddenExpanded ? (
                 <div className={styles.grid} role="list" aria-label={t('components.collectiblesView.hiddenCollectibles')}>
@@ -191,7 +195,12 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
             role="listitem"
         >
             <CardContent
-                className={styles.cardContent}
+                // The clickable card is a native button on the shared Button
+                // base; the ghost look and large size keep it out of the boxed
+                // outline rule, and .cardContent lays the card out on top.
+                className={clickable
+                    ? `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.lg} ${styles.cardContent}`
+                    : styles.cardContent}
                 type={clickable ? 'button' : undefined}
                 onClick={handleClick}
                 aria-label={clickable

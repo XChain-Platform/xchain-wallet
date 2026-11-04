@@ -16,10 +16,6 @@
             "count": 7,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
-        "packages/core/src/shared/components/CollectiblesView.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/components/HeaderActionMenu.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."

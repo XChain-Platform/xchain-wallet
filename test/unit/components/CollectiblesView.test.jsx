@@ -23,6 +23,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useTokenInfo.js', () => ({
 
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { TickerIcon } from '../../../packages/core/src/shared/components/TickerIcon.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const LONG_NAME = 'A collectible name with oneuninterruptedwordthatcannotfitonasinglecard';
 const ART_URL = 'https://assets.example/collectible.png';
@@ -101,6 +102,21 @@ describe('CollectiblesView cards', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Unpin LONGART' }));
         expect(onTogglePin).toHaveBeenCalledWith('bitcoin-regtest:LONGART', false);
         expect(screen.getByRole('list', { name: 'Hidden collectibles' })).toBeTruthy();
+    });
+
+    it('builds the card and the hidden toggle on the shared Button base', () => {
+        render(
+            <CollectiblesView
+                rows={[ROW, { ...ROW, tick: 'HIDDENART', displayName: 'Hidden art' }]}
+                hiddenKeys={new Set(['bitcoin-regtest:HIDDENART'])}
+                onSelectToken={vi.fn()}
+            />,
+        );
+
+        const open = screen.getByRole('button', { name: /open/i });
+        expect(open.className.split(' ')).toContain(buttonStyles.btn);
+        const toggle = screen.getByRole('button', { name: 'Show 1 hidden collectible' });
+        expect(toggle.className.split(' ')).toContain(buttonStyles.btn);
     });
 
     it('defines bounded phone and desktop grids and preserves long names', () => {

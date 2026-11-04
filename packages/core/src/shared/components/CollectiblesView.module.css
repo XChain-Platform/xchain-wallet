@@ -20,14 +20,30 @@
     min-width: 0;
 }
 
+/* On a clickable card this sits on the shared Button base: the column layout,
+   start alignment and transparent hover fill below replace the base's centred
+   row and ghost hover, so the outer card keeps its own hover surface. Button's
+   single-class rules tie a single-class rule here, so whichever sheet loads
+   last would win; the doubled class outranks them in any sheet order (the
+   plain class is listed too so the rule is found under its own name). The
+   content stays unpositioned so the card's corner badges keep the card as
+   their frame. */
+.cardContent.cardContent,
 .cardContent {
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentColor;
     appearance: none;
+    position: static;
     display: flex;
     flex-direction: column;
+    align-items: normal;
+    justify-content: normal;
     gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
+    max-width: none;
     height: 100%;
+    min-height: 0;
     padding: var(--xc-card-pad);
     border: 0;
     border-radius: inherit;
@@ -36,6 +52,13 @@
     text-align: start;
     color: inherit;
     font: inherit;
+}
+
+/* Button's press rule weighs three classes; four keep the card content from
+   dimming or nudging. */
+.cardContent.cardContent:active:not(:disabled) {
+    filter: none;
+    transform: none;
 }
 
 .cardClickable {
@@ -160,21 +183,47 @@
     white-space: nowrap;
 }
 
+/* The shared ghost Button draws the control at the shared md height; this
+   keeps the quiet divider look. Doubled, as .cardContent is, so it outranks
+   Button's single-class rules in any sheet order. */
+.hiddenToggle.hiddenToggle,
 .hiddenToggle {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-border);
+    position: static;
+    display: revert;
+    justify-content: normal;
+    align-items: normal;
+    gap: normal;
+    width: 100%;
+    max-width: none;
     border: 0;
+    border-radius: 0;
     background: transparent;
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
     text-align: center;
+    font-family: revert;
     font-size: var(--xc-text-xs);
+    font-weight: 400;
+    line-height: normal;
     color: var(--xc-text-muted);
     cursor: pointer;
-    width: 100%;
 }
 
-.hiddenToggle:hover {
+/* Four classes outrank Button's three-class hover and press rules: the row
+   fills on hover and press, keeps its divider, and does not dim or nudge. */
+.hiddenToggle.hiddenToggle:hover:not(:disabled),
+.hiddenToggle.hiddenToggle:active:not(:disabled) {
     color: var(--xc-text);
     background: var(--xc-bg-muted);
+    border-color: currentColor;
+    border-top-color: var(--xc-border);
+}
+
+.hiddenToggle.hiddenToggle:active:not(:disabled) {
+    filter: none;
+    transform: none;
 }
 
 @media (min-width: 48rem) {
