@@ -148,3 +148,8 @@ export function allowlistGrowth(base, current) {
     }
     return out;
 }
+
+/** One line per piece of text a screen shows more than once (U18). */
+export function repeatedTextFailures(label, rulings) {
+    return (rulings?.repeatedText || []).map(({ text, count }) => `${label}: "${text}" appears ${count} times`);
+}
