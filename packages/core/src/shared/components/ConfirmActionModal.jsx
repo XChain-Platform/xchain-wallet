@@ -196,7 +196,6 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
  * @param {object|null} [props.simulation]
  * @param {string} props.chainLabel
- * @param {string} [props.approveLabel]   overrides the footer action label
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
  * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
@@ -232,7 +231,6 @@ export function reviewActionLabel(decoded, fallback, chainLabel) {
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
-    approveLabel,
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
@@ -250,11 +248,11 @@ export function ConfirmActionModal({
         ? headline
         : (formattedDecoded?.summary?.split('\n')[0] || fallbackHeadline);
     const defaultApproveLabel = 'Approve';
-    const resolvedApproveLabel = approveLabel || (variant === 'action'
-        ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
-        : headlineText);
+    // The footer verb is always the bare Approve; the reviewed action and amount
+    // appear in the header label, never on the button.
+    const resolvedApproveLabel = defaultApproveLabel;
     const actionHeaderLabel = variant === 'action' && formattedDecoded
-        ? resolvedApproveLabel
+        ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText;
     const isContractCall = variant === 'action'
         && /^(?:contract call|call contract\b)/i.test(headlineText);
@@ -491,7 +489,7 @@ export function ConfirmActionModal({
                 ) : null}
 
                 <div className={styles.header}>
-                    <span className={styles.actionLabel}>{actionHeaderLabel}</span>
+                    <span className={styles.actionLabel} data-testid="confirm-action-label">{actionHeaderLabel}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </div>
 

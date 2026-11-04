@@ -73,8 +73,9 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('action-intent')).toBeTruthy();
         expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
         expect(screen.getByTestId('preflight-panel')).toBeTruthy();
-        expect(screen.getByTestId('confirm-approve').textContent)
+        expect(screen.getByTestId('confirm-action-label').textContent)
             .toBe('Send 5 JDOG');
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
         expect(screen.queryByTestId('contract-call-warning')).toBeNull();
     });
@@ -146,7 +147,7 @@ describe('ConfirmActionModal', () => {
         );
     });
 
-    it('names amount-free actions and updates when the reviewed amount changes', () => {
+    it('names amount-free actions in the header and keeps the footer Approve as the reviewed amount changes', () => {
         const { rerender } = render(<ConfirmActionModal {...base({
             decoded: {
                 summary: 'Send 0.5 BTC to bc1qxyz',
@@ -157,7 +158,7 @@ describe('ConfirmActionModal', () => {
                 warnings: [],
             },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Send 0\.5 BTC$/);
+        expect(screen.getByTestId('confirm-action-label')).toHaveTextContent(/^Send 0\.5 BTC$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: {
@@ -169,23 +170,24 @@ describe('ConfirmActionModal', () => {
                 warnings: [],
             },
         })} />);
-        expect(screen.getByTestId('confirm-approve'))
+        expect(screen.getByTestId('confirm-action-label'))
             .toHaveTextContent(/^Send 12,345,678,901,234,567,890\.12345678 BTC$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Create dispenser on Bitcoin: lock 10 TOKEN', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Create dispenser$/);
+        expect(screen.getByTestId('confirm-action-label')).toHaveTextContent(/^Create dispenser$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Cancel order on Bitcoin (#17)', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Cancel order$/);
+        expect(screen.getByTestId('confirm-action-label')).toHaveTextContent(/^Cancel order$/);
 
         rerender(<ConfirmActionModal {...base({
             decoded: { summary: 'Publish 123.45 to feed 700', details: [], warnings: [] },
         })} />);
-        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Publish 123\.45$/);
+        expect(screen.getByTestId('confirm-action-label')).toHaveTextContent(/^Publish 123\.45$/);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
     });
 
     it('orders and labels the review as recipient, amount, fee, then total', () => {
@@ -276,8 +278,9 @@ describe('ConfirmActionModal', () => {
         expect(amount.textContent).toBe(expected);
         expect(screen.getByTestId('action-intent').querySelector('p').textContent)
             .toBe(`Send ${expected} JDOG to bc1qxyz`);
-        expect(screen.getByTestId('confirm-approve').textContent)
+        expect(screen.getByTestId('confirm-action-label').textContent)
             .toBe(`Send ${expected} JDOG`);
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
     });
 
     it.each([
@@ -303,8 +306,9 @@ describe('ConfirmActionModal', () => {
         expect(intent.querySelector('p').textContent).toContain(`Send ${expected} JDOG`);
         expect(screen.getByText('Amount').closest('div').querySelector('dd').textContent)
             .toBe(expected);
-        expect(screen.getByTestId('confirm-approve').textContent)
+        expect(screen.getByTestId('confirm-action-label').textContent)
             .toBe(`Send ${expected} JDOG`);
+        expect(screen.getByTestId('confirm-approve').textContent).toBe('Approve');
     });
 
     it('shows an exact total for a native payment without adding unlike units', () => {
@@ -436,7 +440,9 @@ describe('ConfirmActionModal', () => {
             .toHaveTextContent(`Network fee: 0.000025 BTC (${fiatValue})`);
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeVisible();
-        expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
+        expect(screen.getByTestId('confirm-action-label'))
+            .toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
+        expect(approve).toHaveTextContent(/^Approve$/);
         const reviewMain = screen.getByTestId('confirm-modal').closest('main');
         const actionFooter = approve.closest('footer');
         expect(actionFooter).toBe(reviewMain.nextElementSibling);
