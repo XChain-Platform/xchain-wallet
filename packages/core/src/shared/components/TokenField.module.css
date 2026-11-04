@@ -23,7 +23,7 @@
 }
 
 .control {
-    composes: btn from "../../ui/Button.module.css";
+    /* TokenField.jsx adds Button's btn class beside this one. */
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);

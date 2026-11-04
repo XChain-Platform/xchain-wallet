@@ -12,6 +12,10 @@ import { useId } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
+// Ahead of the field's own sheet, so the shared button base loads first and the
+// control's rules follow it; a CSS-file composes would inline a second copy of
+// Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './TokenField.module.css';
 import inputStyles from '../../ui/Input.module.css';
 import { t } from '../../i18n/index.js';
@@ -79,7 +83,7 @@ export function TokenField({
             <button
                 type="button"
                 id={controlId}
-                className={`${styles.control} ${error ? styles.invalid : ''}`.trim()}
+                className={`${buttonStyles.btn} ${styles.control} ${error ? styles.invalid : ''}`.trim()}
                 onClick={onOpenPicker}
                 disabled={disabled}
                 aria-invalid={error ? 'true' : undefined}
