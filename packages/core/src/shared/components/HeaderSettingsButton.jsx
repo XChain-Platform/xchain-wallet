@@ -25,10 +25,18 @@ import {
     activeNetworkSwitchCopy,
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
+// Ahead of the component sheet, so the shared button base loads first and the
+// summary-row rules follow it; a CSS-file composes would inline a second copy
+// of Button.module.css that re-applies .btn over other buttons.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './HeaderSettingsButton.module.css';
 import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { t } from '../../i18n/index.js';
+
+// The picker destinations stay native buttons for full-row navigation and take
+// the shared Button base, one variant and one size, for their edge and states.
+const summaryRowClass = `${buttonStyles.btn} ${buttonStyles.secondary} ${buttonStyles.md} ${styles.summaryRow}`;
 
 // The chain filter renders only inside the open popover, so it loads with the
 // header menu rather than in the startup bundle. The component starts the
@@ -276,7 +284,7 @@ export function HeaderSettingsButton({
                         <Section title={t('settings.thisWallet.wallet')}>
                             <button
                                 type="button"
-                                className={styles.summaryRow}
+                                className={summaryRowClass}
                                 onClick={() => navigate(onOpenWalletPicker)}
                                 title={walletLabel || t('shell.settingsButton.chooseWallet')}
                             >
@@ -292,7 +300,7 @@ export function HeaderSettingsButton({
                         <Section title={t('shell.settingsButton.account')}>
                             <button
                                 type="button"
-                                className={styles.summaryRow}
+                                className={summaryRowClass}
                                 onClick={() => navigate(onOpenAccountPicker)}
                                 title={accountLabel || t('shell.settingsButton.chooseAccount')}
                             >
@@ -341,7 +349,7 @@ export function HeaderSettingsButton({
                         <div className={styles.section}>
                             <button
                                 type="button"
-                                className={styles.summaryRow}
+                                className={summaryRowClass}
                                 onClick={() => navigate(onOpenSettings)}
                                 title={t('shell.settingsButton.allSettings')}
                             >
