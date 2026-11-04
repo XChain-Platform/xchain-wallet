@@ -163,3 +163,74 @@ it('follows the sub-screen the view reports and falls back when it leaves', () =
     expect(document.title).toBe('XChain Wallet - Settings');
     title.unmount();
 });
+
+// Records every write to document.title while the callback runs.
+function recordTitleWrites(run) {
+    const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'title');
+    const writes = [];
+    Object.defineProperty(document, 'title', {
+        configurable: true,
+        get() { return descriptor.get.call(document); },
+        set(value) {
+            writes.push(value);
+            descriptor.set.call(document, value);
+        },
+    });
+    try {
+        run(writes);
+    } finally {
+        delete document.title;
+    }
+    return writes;
+}
+
+it('writes the Settings title once when a sub-page goes back', () => {
+    document.title = 'Host title';
+    recordTitleWrites((writes) => {
+        const title = renderHook(() => useDocumentTitle({
+            statusState: 'unlocked',
+            onboardingStep: 'welcome',
+            unlockedView: 'settings',
+        }));
+        const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+            initialProps: { label: 'Display' },
+        });
+        expect(document.title).toBe('XChain Wallet - Display');
+
+        writes.length = 0;
+        section.rerender({ label: null });
+        expect(document.title).toBe('XChain Wallet - Settings');
+        expect(writes).toEqual(['XChain Wallet - Settings']);
+
+        title.unmount();
+        section.unmount();
+    });
+    expect(document.title).toBe('Host title');
+});
+
+it('converges on a Settings panel title without a stale title between', () => {
+    document.title = 'Host title';
+    recordTitleWrites((writes) => {
+        const title = renderHook(() => useDocumentTitle({
+            statusState: 'unlocked',
+            onboardingStep: 'welcome',
+            unlockedView: 'settings',
+        }));
+        expect(document.title).toBe('XChain Wallet - Settings');
+
+        writes.length = 0;
+        const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+            initialProps: { label: 'Display' },
+        });
+        expect(writes).toEqual(['XChain Wallet - Display']);
+
+        writes.length = 0;
+        section.rerender({ label: 'Backup' });
+        expect(document.title).toBe('XChain Wallet - Backup');
+        expect(writes).not.toContain('Host title');
+        expect(writes.at(-1)).toBe('XChain Wallet - Backup');
+
+        section.unmount();
+        title.unmount();
+    });
+});

@@ -164,10 +164,19 @@ export function documentTitleFor({ statusState, onboardingStep, unlockedView, se
 
 export function useDocumentTitle({ statusState, onboardingStep, unlockedView, enabled = true }) {
     const section = useSyncExternalStore(subscribeToSection, readActiveSection, readActiveSection);
+    const title = enabled
+        ? documentTitleFor({ statusState, onboardingStep, unlockedView, section })
+        : null;
+    // Ownership spans the whole time the hook is enabled: the host title is
+    // read once before the first write and put back only when ownership ends,
+    // so a route or sub-screen change never shows the host title in between.
     useEffect(() => {
         if (!enabled || typeof document === 'undefined') return undefined;
         const previousTitle = document.title;
-        document.title = documentTitleFor({ statusState, onboardingStep, unlockedView, section });
         return () => { document.title = previousTitle; };
-    }, [enabled, onboardingStep, section, statusState, unlockedView]);
+    }, [enabled]);
+    useEffect(() => {
+        if (title === null || typeof document === 'undefined') return;
+        if (document.title !== title) document.title = title;
+    }, [title]);
 }
