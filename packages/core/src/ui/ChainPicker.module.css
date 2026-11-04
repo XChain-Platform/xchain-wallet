@@ -43,6 +43,12 @@
 /* The trigger follows the shared text-control dimensions while keeping the
    fuller ticker and network-kind detail in the dropdown rows. */
 .trigger {
+    /* ChainPicker.jsx adds Button's btn class beside this one. */
+    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-border: var(--xc-accent-primary);
+    font-weight: 400;
+    justify-content: flex-start;
+    line-height: normal;
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
@@ -69,17 +75,43 @@
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
+/* A module that `composes` from Button.module.css (TokenField does) inlines a
+   copy of it, and once that copy loads after this sheet its one-class .btn
+   rules outrank .trigger: the border went transparent and the padding, type,
+   alignment and height took the button's. Two classes outrank that copy
+   wherever it lands; the .lg size rule below still follows this one. The
+   caret keeps the inherited icon size rather than .btn's md size. */
+.wrap .trigger {
+    --xc-icon-size: inherit;
+    display: flex;
+    justify-content: flex-start;
+    min-height: var(--chain-picker-control-height);
+    padding: 0 var(--chain-picker-padding-x);
+    border: 1px solid var(--xc-border-strong);
+    font-size: var(--chain-picker-font-size);
+    font-weight: 400;
+    line-height: normal;
+    text-align: start;
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
 .trigger:hover:not(:disabled) {
     border-color: var(--xc-accent-primary);
 }
 
-.trigger:focus-visible {
+.wrap .trigger:focus-visible {
     outline: none;
     border-color: var(--xc-accent-primary);
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
-.trigger:disabled {
+/* The picker keeps its own dimmed surface rather than the shared disabled
+   fill. Button's .btn:disabled:not(.link) weighs three classes, and a copy of
+   it can load after this sheet, so this rule adds the element to win. */
+.wrap button.trigger:disabled {
+    background: var(--xc-surface);
+    border-color: var(--xc-border-strong);
+    color: var(--xc-text);
     opacity: 0.55;
     cursor: not-allowed;
 }
@@ -270,7 +302,7 @@
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {
-    .trigger:focus-visible {
+    .wrap .trigger:focus-visible {
         outline: 2px solid Highlight;
         outline-offset: 2px;
     }

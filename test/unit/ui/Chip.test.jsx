@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Chip } from '../../../packages/core/src/ui/Chip.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 
 describe('<Chip>', () => {
     it('renders static content without button semantics', () => {
@@ -84,7 +86,9 @@ describe('<Chip>', () => {
         const btn = ruleBody(buttonCss, '.btn');
         const sm = ruleBody(buttonCss, '.sm');
 
-        expect(css).not.toMatch(/composes:\s*btn\b/);
+        // Chip.jsx adds the shared button base in markup (see the test below);
+        // a CSS-file composes would inline a second copy of Button's sheet.
+        expect(css).not.toMatch(/composes:/);
         expect(declaration(chip, 'border')).toBe('1px solid var(--xc-control-border)');
         expect(declaration(chip, 'justify-content')).toBe('center');
         expect(declaration(chip, 'padding')).toBe('0 var(--xc-space-3)');
@@ -98,5 +102,18 @@ describe('<Chip>', () => {
         expect(declaration(btn, 'font-size')).toMatch(/^var\(--xc-button-font-size\b/);
 
         expect(declaration(toggle, 'font-weight')).toBe(declaration(btn, 'font-weight'));
+    });
+
+    it('gives a toggle the shared button base class and leaves the static chip without it', () => {
+        render(
+            <>
+                <Chip>BTC / LTC</Chip>
+                <Chip pressed={false} onPressedChange={() => {}}>Watchlist</Chip>
+            </>,
+        );
+
+        expect(buttonStyles.btn).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Watchlist' })).toHaveClass(buttonStyles.btn, chipStyles.toggle);
+        expect(screen.getByText('BTC / LTC')).not.toHaveClass(buttonStyles.btn);
     });
 });

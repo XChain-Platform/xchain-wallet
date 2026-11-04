@@ -11,6 +11,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
+// Ahead of the select's own sheet, so the shared button base loads first and
+// the trigger's rules follow it; see Chip.jsx for why this is not `composes`.
+import buttonStyles from './Button.module.css';
 import styles from './IconSelect.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
@@ -113,7 +116,7 @@ export function IconSelect({
             <button
                 type="button"
                 ref={triggerRef}
-                className={styles.trigger}
+                className={`${buttonStyles.btn} ${styles.trigger}`}
                 onClick={() => {
                     if (disabled) return;
                     if (open) closeSelect();

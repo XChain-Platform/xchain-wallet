@@ -24,6 +24,10 @@
 /* Toggle typography and radius match a small button while Chip continues to
    own its border, spacing, height, and alignment. */
 .toggle {
+    /* Chip.jsx adds Button's btn class to a toggle; the shared button base
+       supplies the hover and press variables the toggle's fills feed. */
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: var(--xc-control-border-hover);
     appearance: none;
     border-radius: var(--xc-control-radius);
     font-size: var(--xc-control-font-sm);
@@ -52,12 +56,43 @@
 }
 
 .pressed {
+    --xc-button-hover-bg: var(--xc-control-selected);
+    --xc-button-hover-border: var(--xc-control-selected);
     background: var(--xc-control-selected);
     border-color: var(--xc-control-selected);
     color: var(--xc-control-selected-text);
 }
 
-.toggle:focus-visible {
+/* A module that `composes` from Button.module.css (TokenField does) inlines a
+   copy of it, and once that copy loads after this sheet its one-class .btn
+   rules outrank the chip's one-class rules: the border went transparent, the
+   padding, type and min-height took the button's, and the pressed toggle got
+   the button's ring. An element plus a class outranks that copy wherever it
+   lands, and a consumer's two-class rule (NetworkFilter's .wrap .trigger)
+   still outranks this. The icon size is inherited, not .btn's md size, so a
+   chip's icons keep the size their row gives them. */
+button.toggle {
+    --xc-icon-size: inherit;
+    flex-shrink: 0;
+    gap: 0;
+    min-height: var(--xc-tap-min);
+    padding: 0 var(--xc-space-3);
+    border: 1px solid var(--xc-control-border);
+    font-size: var(--xc-control-font-sm);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+button.pressed {
+    border-color: var(--xc-control-selected);
+}
+
+/* Pressed is the selected fill, not the button's pressed ring. */
+button.toggle[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
+}
+
+button.toggle:focus-visible {
     outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
 }

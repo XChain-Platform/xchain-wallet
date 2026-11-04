@@ -13,6 +13,9 @@ import * as branding from '../branding/branding.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
+// Ahead of the picker's own sheet, so the shared button base loads first and
+// the trigger's rules follow it; see Chip.jsx for why this is not `composes`.
+import buttonStyles from './Button.module.css';
 import styles from './ChainPicker.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/components.js';
@@ -159,7 +162,7 @@ export function ChainPicker({
             <button
                 type="button"
                 ref={triggerRef}
-                className={styles.trigger}
+                className={`${buttonStyles.btn} ${styles.trigger}`}
                 onClick={() => {
                     if (disabled) return;
                     if (open) closePicker();

@@ -141,6 +141,14 @@
     min-width: 0;
 }
 
+/* The filter Chip's own toggle rule (an element plus a class) zeroes the gap
+   and a later Button.module.css copy resets min-width, so the Chip side of
+   this class repeats both at two classes. */
+.chainPickerWrap .chainPickerLeft {
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
 .chainPickerIcon {
     width: 18px;
     height: 18px;
@@ -285,6 +293,14 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--xc-space-1);
+}
+
+/* The presets sit at the field control height of the date inputs above. The
+   attribute lifts this over Chip's own button.toggle min-height whichever
+   sheet loads first. */
+.datePresets > button[aria-pressed] {
+    height: auto;
+    min-height: var(--xc-control-h-md);
 }
 
 .dateZone,

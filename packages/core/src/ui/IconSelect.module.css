@@ -49,6 +49,12 @@
 }
 
 .trigger {
+    /* IconSelect.jsx adds Button's btn class beside this one. */
+    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-border: var(--xc-text-muted);
+    font-weight: 400;
+    justify-content: flex-start;
+    line-height: normal;
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
@@ -74,11 +80,30 @@
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
+/* A module that `composes` from Button.module.css (TokenField does) inlines a
+   copy of it, and once that copy loads after this sheet its one-class .btn
+   rules outrank .trigger: the border went transparent and the padding, type
+   and alignment took the button's. Two classes outrank that copy wherever it
+   lands. The caret keeps the inherited icon size rather than .btn's md size. */
+.wrap .trigger {
+    --xc-icon-size: inherit;
+    display: flex;
+    justify-content: flex-start;
+    min-height: var(--xc-control-height);
+    padding: 0 var(--xc-control-padding-x);
+    border: 1px solid var(--xc-border-strong);
+    font-size: var(--xc-control-font-size);
+    font-weight: 400;
+    line-height: normal;
+    text-align: start;
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
 .trigger:hover:not(:disabled) {
     border-color: var(--xc-text-muted);
 }
 
-.trigger:focus-visible {
+.wrap .trigger:focus-visible {
     outline: none;
     border-color: var(--xc-accent-primary);
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
@@ -211,7 +236,7 @@
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {
-    .trigger:focus-visible {
+    .wrap .trigger:focus-visible {
         outline: 2px solid Highlight;
         outline-offset: 2px;
     }

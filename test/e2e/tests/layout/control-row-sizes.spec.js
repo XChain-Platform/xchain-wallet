@@ -202,6 +202,27 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
                 ['block', blockForm.getByRole('button', { name: 'Block', exact: true })],
             ]);
         });
+
+        await test.step(`${width}px / History date presets`, async () => {
+            await gotoSection(page, 'History');
+            const fromDate = main.getByLabel('From date');
+            await expect(fromDate).toBeAttached();
+            // Phone widths fold the filter card behind a Filters toggle.
+            const filtersToggle = main.getByRole('button', { name: /^Filters \(\d+\)$/ });
+            if (await filtersToggle.isVisible()) {
+                if (await filtersToggle.getAttribute('aria-expanded') !== 'true') await filtersToggle.click();
+                await expect(filtersToggle).toHaveAttribute('aria-expanded', 'true');
+            }
+            const presets = main.getByRole('group', { name: 'Date range presets' });
+            // The preset Chips sit under the date inputs, so both hold the field control height.
+            await expectMatchingHeights(`History date presets at ${width}px`, [
+                ['from date', fromDate],
+                ['to date', main.getByLabel('To date')],
+                ['7 days preset', presets.getByRole('button', { name: '7 days', exact: true })],
+                ['30 days preset', presets.getByRole('button', { name: '30 days', exact: true })],
+                ['all dates preset', presets.getByRole('button', { name: 'All dates', exact: true })],
+            ], await tokenPx(page, '--xc-control-h-md'));
+        });
     }
 });
 

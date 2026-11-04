@@ -38,6 +38,13 @@
    of the same size matches it in height and corner shape. The wrap prefix
    outranks the kit Chip's own height whatever order the modules load in. */
 .wrap .trigger {
+    /* Repeated from .trigger, at two classes: Chip's toggle rule is an
+       element plus a class and zeroes the gap, and a copy of
+       Button.module.css that another module's composes loads later resets
+       min-width and text-align at one class. */
+    min-width: 0;
+    gap: var(--xc-space-2);
+    text-align: start;
     height: var(--network-filter-control-height, var(--xc-control-h-sm));
     border-radius: var(--xc-control-radius);
     font-size: var(--network-filter-font, var(--xc-control-font-sm));
