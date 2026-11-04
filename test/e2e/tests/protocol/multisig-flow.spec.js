@@ -134,9 +134,9 @@ async function openCommand(page, name) {
 async function fillExternalHardware(row, cosigner) {
     await row.getByLabel('Name', { exact: true }).fill(cosigner.name);
     await row.getByLabel('Origin', { exact: true }).selectOption('external-hardware');
-    await row.getByLabel('Public key (hex, 33-byte compressed)', { exact: true })
+    await row.getByLabel('Public key', { exact: true })
         .fill(cosigner.pubkey);
-    await row.getByLabel('Master fingerprint (4 bytes hex)', { exact: true })
+    await row.getByLabel('Master fingerprint', { exact: true })
         .fill(cosigner.fingerprint);
     await row.getByLabel('Derivation path', { exact: true }).fill(cosigner.derivationPath);
 }
@@ -197,9 +197,9 @@ test.describe('multisig flow', () => {
         const local = createForm.getByRole('group', { name: 'Cosigner 1', exact: true });
         await local.getByLabel('Use one of this wallet\'s addresses', { exact: true })
             .selectOption({ index: 1 });
-        await expect(local.getByLabel('Public key (hex, 33-byte compressed)', { exact: true }))
+        await expect(local.getByLabel('Public key', { exact: true }))
             .toHaveValue(/^(02|03)[0-9a-f]{64}$/i);
-        await expect(local.getByLabel('Master fingerprint (4 bytes hex)', { exact: true }))
+        await expect(local.getByLabel('Master fingerprint', { exact: true }))
             .toHaveValue(/^[0-9a-f]{8}$/i);
 
         const second = createForm.getByRole('group', { name: 'Cosigner 2', exact: true });

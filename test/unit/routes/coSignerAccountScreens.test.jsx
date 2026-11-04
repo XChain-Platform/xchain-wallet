@@ -100,7 +100,7 @@ describe('co-signer account screens', () => {
 
         const addressPicker = await screen.findByLabelText("This wallet's key");
         fireEvent.change(addressPicker, { target: { value: 'address-1' } });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: `04${'b'.repeat(64)}` },
         });
 

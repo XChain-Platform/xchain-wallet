@@ -97,11 +97,11 @@ async function pickLocalAddress() {
 }
 
 async function fillExternalCosigner(key = EXTERNAL) {
-    const publicKeys = screen.getAllByLabelText(/Public key \(hex/i);
+    const publicKeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
     const paths = screen.getAllByLabelText(/^Derivation path/i);
     await act(async () => {
-        fireEvent.change(screen.getByLabelText(/^xpub$/i), { target: { value: key.xpub } });
+        fireEvent.change(screen.getByLabelText(/^Account public key$/i), { target: { value: key.xpub } });
         fireEvent.change(publicKeys[1], { target: { value: key.pubkey } });
         fireEvent.change(fingerprints[1], { target: { value: '11223344' } });
         fireEvent.change(paths[1], { target: { value: key.path } });
@@ -135,7 +135,7 @@ describe('MultisigCreate local cosigner', () => {
         expect(messaging.getMultisigCosignerInfo).toHaveBeenCalledWith({ walletId: 'w-1', addressId: 'addr-1' });
         const [localFingerprint] = screen.getAllByLabelText(/Master fingerprint/i);
         expect(localFingerprint.value).toBe('73c5da0a');
-        const [localPubkey] = screen.getAllByLabelText(/Public key \(hex/i);
+        const [localPubkey] = screen.getAllByLabelText(/^Public key$/i);
         expect(localPubkey.value).toBe(ADDRESS.publicKey);
     });
 
@@ -202,8 +202,8 @@ describe('MultisigCreate key validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
 
-        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
-        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('aabbccdd');
         expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
     });
@@ -245,7 +245,7 @@ describe('MultisigCreate key validation', () => {
     it('opens without an error message and keeps Review disabled', async () => {
         await mount(mkMessaging());
 
-        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByText(/public key must be 66 characters starting with 02 or 03/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
@@ -255,14 +255,14 @@ describe('MultisigCreate key validation', () => {
         await act(async () => {
             fireEvent.change(screen.getAllByLabelText(/^Name/i)[0], { target: { value: 'Alice' } });
         });
-        expect(screen.queryByText(/public key must be a 33-byte compressed key/i)).toBeNull();
+        expect(screen.queryByText(/public key must be 66 characters starting with 02 or 03/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
 
         await act(async () => {
-            fireEvent.blur(screen.getAllByLabelText(/Public key \(hex/i)[0]);
+            fireEvent.blur(screen.getAllByLabelText(/^Public key$/i)[0]);
         });
-        expect(screen.getByText(/Cosigner 1: public key must be a 33-byte compressed key/i)).toBeTruthy();
+        expect(screen.getByText(/Cosigner 1: public key must be 66 characters starting with 02 or 03/i)).toBeTruthy();
     });
 
     it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
@@ -270,7 +270,7 @@ describe('MultisigCreate key validation', () => {
         await pickLocalAddress();
         await fillExternalCosigner({ ...EXTERNAL, pubkey: '03'.padEnd(66, 'b') });
 
-        expect(screen.getByText(/public key must be a 33-byte compressed key/i)).toBeTruthy();
+        expect(screen.getByText(/public key must be 66 characters starting with 02 or 03/i)).toBeTruthy();
     });
 
     it('rejects duplicate public keys before review', async () => {
@@ -394,8 +394,8 @@ describe('MultisigCreate review', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
 
-        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
-        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('11223344');
         expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
     });
@@ -403,7 +403,7 @@ describe('MultisigCreate review', () => {
     it('review display matches the built config by showing canonical keys and numeric threshold', async () => {
         await fillValidDraft(mkMessaging());
         fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '02' } });
-        fireEvent.change(screen.getAllByLabelText(/Public key \(hex/i)[1], {
+        fireEvent.change(screen.getAllByLabelText(/^Public key$/i)[1], {
             target: { value: EXTERNAL.pubkey.toUpperCase() },
         });
         fireEvent.change(screen.getAllByLabelText(/Master fingerprint/i)[1], {
@@ -445,10 +445,10 @@ describe('MultisigCreate share as cosigner', () => {
             fireEvent.change(screen.getByLabelText(/Address to share/i), { target: { value: 'addr-1' } });
         });
 
-        expect(screen.getByTestId('cosigner-share-xpub').textContent).toBe(INFO.xpub);
+        expect(screen.getByTestId('cosigner-share-account-public-key').textContent).toBe(INFO.xpub);
         expect(screen.getByTestId('cosigner-share-public-key').textContent).toBe(INFO.pubkey);
         expect(screen.getByTestId('cosigner-share-master-fingerprint').textContent).toBe('73c5da0a');
         expect(screen.getByTestId('cosigner-share-derivation-path').textContent).toBe(INFO.derivationPath);
-        expect(screen.getByRole('button', { name: 'Copy xpub' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Account public key' })).toBeTruthy();
     });
 });

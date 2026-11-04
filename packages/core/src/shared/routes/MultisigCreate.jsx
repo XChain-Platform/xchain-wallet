@@ -283,7 +283,7 @@ export function MultisigCreate({ walletId, onBack }) {
             const at = (field) => `${r.id}:${field}`;
             if (!r.name.trim()) add(at('name'), `${tag}: name is required.`);
             if (!isCompressedPublicKey(r.pubkey)) {
-                add(at('pubkey'), `${tag}: public key must be a 33-byte compressed key in hex.`);
+                add(at('pubkey'), `${tag}: public key must be 66 characters starting with 02 or 03.`);
                 continue;
             }
             const normalizedPubkey = r.pubkey.toLowerCase();
@@ -308,14 +308,14 @@ export function MultisigCreate({ walletId, onBack }) {
                     continue;
                 }
             }
-            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 hex chars (4 bytes).`);
+            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 characters, using 0 to 9 and a to f.`);
             if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) {
                 add(at('derivationPath'), `${tag}: enter a valid derivation path starting with m.`);
                 continue;
             }
             if (r.origin === 'external-xpub') {
                 if (!r.xpub) {
-                    add(at('xpub'), `${tag}: xpub is required for external-xpub origin.`);
+                    add(at('xpub'), `${tag}: enter the account public key from the other wallet.`);
                     continue;
                 }
                 const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -526,7 +526,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     <p className={styles.hint}>
                         Multisig is available only on Bitcoin networks. Add at least 2 cosigners.
                         The current wallet contributes the local cosigner; add external cosigners
-                        by pasting an xpub or pairing hardware. To join another multisig, open
+                        by pasting an account public key or pairing hardware. To join another multisig, open
                         Share this wallet as a cosigner and send them the values.
                     </p>
                 </details>
@@ -618,7 +618,7 @@ function ReviewCosigner({ index, row }) {
                 <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.pubkey.toLowerCase()}</code></dd>
                 {row.origin === 'external-xpub' ? (
                     <>
-                        <dt className={styles.detailsLabel}>xpub</dt>
+                        <dt className={styles.detailsLabel}>Account public key</dt>
                         <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.xpub}</code></dd>
                     </>
                 ) : null}
@@ -641,7 +641,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                 onBlur={() => onTouch('name')}
                 value={row.name}
                 onChange={(e) => onChange({ name: e.target.value })}
-                placeholder="My signer / Bob's Trezor / cold-storage xpub"
+                placeholder="My signer / Bob's Trezor / cold-storage key"
             />
 
             <Select
@@ -661,7 +661,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                 }, [])}
             >
                 <option value="local">Local signer</option>
-                <option value="external-xpub">External xpub</option>
+                <option value="external-xpub">Another wallet</option>
                 <option value="external-hardware">External hardware</option>
             </Select>
 
@@ -709,7 +709,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     </Button>
                     {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
-                        label="xpub"
+                        label="Account public key"
                 onBlur={() => onTouch('xpub')}
                         value={row.xpub}
                         onChange={(e) => onChange({ xpub: e.target.value.trim() })}
@@ -719,7 +719,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             ) : null}
 
             <Input
-                label="Public key (hex, 33-byte compressed)"
+                label="Public key"
                 onBlur={() => onTouch('pubkey')}
                 value={row.pubkey}
                 onChange={(e) => onChange({ pubkey: e.target.value.trim() })}
@@ -727,7 +727,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             />
 
             <Input
-                label="Master fingerprint (4 bytes hex)"
+                label="Master fingerprint"
                 onBlur={() => onTouch('fingerprint')}
                 value={row.fingerprint}
                 onChange={(e) => onChange({ fingerprint: e.target.value.trim() })}
@@ -777,13 +777,13 @@ function schemeLabel(value) {
 // origin means sits under the field instead.
 const ORIGIN_HINTS = {
     local: 'A software account or paired hardware signer in this wallet.',
-    'external-xpub': 'Paste the xpub from another wallet.',
+    'external-xpub': 'Paste the account public key from another wallet.',
     'external-hardware': 'Sign through file transfer.',
 };
 
 function originLabel(origin) {
     if (origin === 'local') return 'Local signer';
-    if (origin === 'external-xpub') return 'External xpub';
+    if (origin === 'external-xpub') return 'Another wallet';
     return 'External hardware';
 }
 

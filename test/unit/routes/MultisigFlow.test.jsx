@@ -115,8 +115,8 @@ function makeHarness() {
 }
 
 async function fillExternalRows() {
-    const xpubs = screen.getAllByLabelText(/^xpub$/i);
-    const pubkeys = screen.getAllByLabelText(/Public key \(hex/i);
+    const xpubs = screen.getAllByLabelText(/^Account public key$/i);
+    const pubkeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
     const paths = screen.getAllByLabelText(/^Derivation path/i);
     fireEvent.change(xpubs[0], { target: { value: BOB.xpub } });

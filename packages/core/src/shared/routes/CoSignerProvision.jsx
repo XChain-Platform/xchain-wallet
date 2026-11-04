@@ -187,7 +187,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         }
         if (!daemonAddress.derivationPath) return 'The selected address has no derivation path on record.';
         if (!PUBKEY_RE.test(agentPubkey.trim())) {
-            return 'Enter a compressed agent public key starting with 02 or 03, followed by 64 hex characters.';
+            return 'Enter the agent public key: 66 characters starting with 02 or 03.';
         }
         if (walletKeyXOnly.has(agentPubkey.trim().toLowerCase().slice(2))) {
             return 'The agent key must differ from every key in this wallet.';
@@ -397,7 +397,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             </Select>
 
             <Input
-                label="Agent public key (hex, 33-byte compressed)"
+                label="Agent public key"
                 value={agentPubkey}
                 onChange={(e) => setAgentPubkey(e.target.value.trim())}
                 placeholder="02abcdef…"

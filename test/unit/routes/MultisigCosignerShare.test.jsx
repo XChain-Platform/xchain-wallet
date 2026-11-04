@@ -40,7 +40,7 @@ const INFO = {
 };
 
 const VALUE_TEST_IDS = [
-    'cosigner-share-xpub',
+    'cosigner-share-account-public-key',
     'cosigner-share-public-key',
     'cosigner-share-master-fingerprint',
     'cosigner-share-derivation-path',
@@ -114,7 +114,7 @@ describe('MultisigCosignerShare address selection', () => {
     it('clears shared values when the placeholder is selected again', async () => {
         mount();
         selectAddress();
-        expect(await screen.findByTestId('cosigner-share-xpub')).toBeTruthy();
+        expect(await screen.findByTestId('cosigner-share-account-public-key')).toBeTruthy();
 
         selectAddress('');
 
@@ -125,7 +125,7 @@ describe('MultisigCosignerShare address selection', () => {
     it('clears a shared address that is absent after the network changes', async () => {
         const view = mount();
         selectAddress();
-        expect(await screen.findByTestId('cosigner-share-xpub')).toBeTruthy();
+        expect(await screen.findByTestId('cosigner-share-account-public-key')).toBeTruthy();
 
         view.rerender(
             <MultisigCosignerShare
@@ -220,12 +220,12 @@ describe('MultisigCosignerShare key details', () => {
         mount();
         selectAddress('address-2');
 
-        expect(await screen.findByTestId('cosigner-share-xpub')).toHaveTextContent(INFO.xpub);
+        expect(await screen.findByTestId('cosigner-share-account-public-key')).toHaveTextContent(INFO.xpub);
         expect(screen.getByTestId('cosigner-share-public-key')).toHaveTextContent(INFO.pubkey);
         expect(screen.getByTestId('cosigner-share-master-fingerprint')).toHaveTextContent(INFO.fingerprint);
         expect(screen.getByTestId('cosigner-share-derivation-path')).toHaveTextContent(INFO.derivationPath);
         expect(screen.getByText(`Account ${INFO.accountPath}`)).toBeTruthy();
-        expect(screen.getByTestId('cosigner-share-xpub').style.overflowWrap).toBe('anywhere');
+        expect(screen.getByTestId('cosigner-share-account-public-key').style.overflowWrap).toBe('anywhere');
         expect(messaging.getMultisigCosignerInfo).toHaveBeenCalledTimes(1);
         expect(messaging.getMultisigCosignerInfo).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -243,7 +243,7 @@ describe('MultisigCosignerShare key details', () => {
         mount({ networkKind: 'testnet' });
         selectAddress();
 
-        const shared = await screen.findByTestId('cosigner-share-xpub');
+        const shared = await screen.findByTestId('cosigner-share-account-public-key');
         expect(shared.textContent.startsWith('tpub')).toBe(true);
         expect(shared.textContent).not.toBe(mainnetAccount.publicExtendedKey);
     });
@@ -259,8 +259,8 @@ describe('MultisigCosignerShare key details', () => {
         selectAddress();
 
         expect(await screen.findByText('Not available from this signer')).toBeTruthy();
-        expect(screen.queryByTestId('cosigner-share-xpub')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Copy xpub' })).toBeNull();
+        expect(screen.queryByTestId('cosigner-share-account-public-key')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy Account public key' })).toBeNull();
         await waitFor(() => expect(toDataURL).toHaveBeenCalled());
         const payloadText = toDataURL.mock.calls.at(-1)[0];
         expect(payloadText).not.toContain(privateAccount.privateExtendedKey);
@@ -277,7 +277,7 @@ describe('MultisigCosignerShare key details', () => {
 
         expect(await screen.findByText('Not available from this signer')).toBeTruthy();
         expect(screen.queryByTestId('cosigner-share-public-key')).toBeNull();
-        expect(screen.getByTestId('cosigner-share-xpub')).toHaveTextContent(INFO.xpub);
+        expect(screen.getByTestId('cosigner-share-account-public-key')).toHaveTextContent(INFO.xpub);
     });
 });
 

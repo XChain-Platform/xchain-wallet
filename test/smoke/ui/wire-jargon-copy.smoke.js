@@ -51,6 +51,14 @@ const RULES = [
         say: 'names the derivation index in a literal; say "address number"',
     },
     {
+        re: /(?:label|placeholder)=["'][^"']*\b(?:xpub|hex|\d+-byte|\d+ bytes)\b/i,
+        say: 'names a key encoding in a field label; say "Account public key" or "Public key"',
+    },
+    {
+        re: /(?:<option[^>]*>|<dt[^>]*>)\s*(?:External )?xpub\s*</i,
+        say: 'labels an option or row "xpub"; say "Account public key" or "Another wallet"',
+    },
+    {
         re: /(?:label|hint|sub):\s*'[^']*\b(?:in|the) mempool\b/i,
         say: 'names the mempool; say "the network"',
     },
@@ -64,6 +72,21 @@ const COPY_RULES = [
     { re: /\b(?:the|in) mempool\b/i, say: 'names the mempool; say "the network"' },
     { re: /['"`][^'"`]*\bsnapshot block\b/i, say: 'names the snapshot block; say "when this transaction confirms"' },
     { re: /['"`][^'"`]*\bpre-?fetch/i, say: 'says "pre-fetch"; say "work it out ahead of time"' },
+];
+
+// Validation messages on the multisig and agent account forms show under the
+// field a holder just filled, so they name the key in plain words too. The
+// message literal handed to add(), return or an Error is read; the code value
+// 'external-xpub' and a sample key in a placeholder are not messages.
+const VALIDATION_FILES = [
+    join(SHARED, 'routes', 'MultisigCreate.jsx'),
+    join(SHARED, 'routes', 'CoSignerProvision.jsx'),
+];
+const VALIDATION_RULES = [
+    {
+        re: /(?:\badd\([^,]+,\s*|\breturn\s+|Error\(\s*)['"`][^'"`]*\b(?:xpub|hex|\d+-byte|\d+ bytes)\b/i,
+        say: 'names a key encoding in a validation message; say "account public key" or give the length and first characters',
+    },
 ];
 
 const files = sources(SHARED);
@@ -89,6 +112,15 @@ for (const file of COPY_FILES) {
     });
 }
 
+for (const file of VALIDATION_FILES) {
+    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+        for (const { re, say } of VALIDATION_RULES) {
+            if (re.test(line)) hits.push(`${relative(wsRoot, file)}:${i + 1}: ${say}: ${line.trim()}`);
+        }
+    });
+}
+
 assert.deepEqual(hits, [], 'user-facing copy carries wire jargon:\n' + hits.join('\n'));
 
 // The en dictionary follows its own pending-block convention: "the network", never the mempool.
@@ -100,5 +132,9 @@ assert.deepEqual(mempoolKeys, [], 'en copy names the mempool; say "the network" 
 // Labels in the en dictionary say "transaction ID" and "address number", never the developer shorthand.
 const shorthandKeys = Object.keys(en).filter((key) => /\btxid\b|derivation index/i.test(String(en[key])));
 assert.deepEqual(shorthandKeys, [], 'en copy carries "txid" or "derivation index"; say "transaction ID" or "address number"');
+
+// The cosigner share labels and instructions say "account public key" and "Another wallet", never "xpub".
+const xpubKeys = Object.keys(en).filter((key) => /\bxpub\b/i.test(String(en[key])));
+assert.deepEqual(xpubKeys, [], 'en copy says "xpub"; say "account public key" or "Another wallet"');
 
 console.log(`wire-jargon-copy: ${files.length} shared sources and ${Object.keys(en).length} en strings clean`);

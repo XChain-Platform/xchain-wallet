@@ -96,7 +96,7 @@ describe('CoSignerProvision states', () => {
         fireEvent.change(await screen.findByLabelText("This wallet's key"), {
             target: { value: 'address-1' },
         });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
@@ -128,7 +128,7 @@ describe('CoSignerProvision states', () => {
         fireEvent.change(await screen.findByLabelText("This wallet's key"), {
             target: { value: 'address-1' },
         });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY.toUpperCase() },
         });
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: '  Treasury agent  ' } });
@@ -146,7 +146,7 @@ describe('CoSignerProvision states', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to form' }));
         expect(await screen.findByLabelText("This wallet's key")).toHaveValue('address-1');
-        expect(screen.getByLabelText('Agent public key (hex, 33-byte compressed)')).toHaveValue(AGENT_KEY.toUpperCase());
+        expect(screen.getByLabelText('Agent public key')).toHaveValue(AGENT_KEY.toUpperCase());
         expect(screen.getByLabelText('Account name')).toHaveValue('  Treasury agent  ');
         expect(screen.getByRole('checkbox', { name: 'Send' })).toBeChecked();
 
@@ -189,13 +189,13 @@ describe('CoSignerProvision states', () => {
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
         for (const key of ['02' + otherKey, '03' + otherKey]) {
-            fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+            fireEvent.change(screen.getByLabelText('Agent public key'), {
                 target: { value: key },
             });
             expect(await screen.findByText('The agent key must differ from every key in this wallet.')).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
         }
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Review agent account' })).toBeEnabled());
@@ -217,7 +217,7 @@ describe('CoSignerProvision states', () => {
         fireEvent.change(await screen.findByLabelText("This wallet's key"), {
             target: { value: 'address-1' },
         });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
@@ -245,7 +245,7 @@ describe('CoSignerProvision states', () => {
         fireEvent.change(await screen.findByLabelText("This wallet's key"), {
             target: { value: 'address-1' },
         });
-        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
@@ -264,7 +264,7 @@ describe('CoSignerProvision states', () => {
 
         await act(async () => secondLoad.resolve(addresses('address-2')));
         expect(await screen.findByLabelText("This wallet's key")).toHaveValue('');
-        expect(screen.getByLabelText('Agent public key (hex, 33-byte compressed)')).toHaveValue('');
+        expect(screen.getByLabelText('Agent public key')).toHaveValue('');
 
         await act(async () => provision.resolve({
             id: 'old-account',

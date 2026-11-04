@@ -17,7 +17,7 @@ import { addEnglish } from '../../store.js';
 const messages = {
     'multisig.share.title': 'Share this wallet as a cosigner',
     'multisig.share.instructions':
-        'Give these values to the person creating the multisig. In their wallet they add a cosigner with origin "External xpub" and paste each one into the field of the same name. They are public keys: they show the shared address but can\'t spend from it.',
+        'Give these values to the person creating the multisig. In their wallet they add a cosigner with origin "Another wallet" and paste each one into the field of the same name. They are public keys: they show the shared address but can\'t spend from it.',
     'multisig.share.availability':
         'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
     'multisig.share.address': 'Address to share',
@@ -26,7 +26,7 @@ const messages = {
     'multisig.share.payloadHint': 'The QR code and text contain the same public cosigner fields.',
     'multisig.share.qrAlt': 'QR code for multisig cosigner share details',
     'multisig.share.copyPayload': 'Copy cosigner share details',
-    'multisig.share.xpub': 'xpub',
+    'multisig.share.xpub': 'Account public key',
     'multisig.share.account': 'Account {path}',
     'multisig.overCeilingNotice':
         "This multisig has more cosigners than its address type supports, so funds sent to it can't be spent.",
