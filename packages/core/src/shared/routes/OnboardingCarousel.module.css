@@ -47,23 +47,17 @@
    control height (above the --xc-tap-min floor at every width) and, on a
    touch screen, the --xc-control-hit-min area a kit Button adds. At 24px tall
    with no hit area it was the smallest target on the first onboarding
-   screen. */
+   screen. The markup carries the shared btn and link classes, which give it
+   the kit border, radius, transparent fill and focus ring; this rule only
+   sizes it and keeps its quieter text. */
 .skipBtn {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     min-block-size: var(--xc-tap-min);
     min-height: max(var(--xc-tap-min), var(--xc-control-h-sm));
     min-width: max(var(--xc-tap-min), var(--xc-control-h-sm));
     padding: var(--xc-space-1) var(--xc-space-2);
-    border: none;
-    border-radius: var(--xc-radius-sm);
-    background: none;
     color: var(--xc-text-muted);
-    font: inherit;
     font-size: var(--xc-text-sm);
-    cursor: pointer;
 }
 
 /* Centred on the box in both writing directions, as Button.sm does. */
@@ -80,11 +74,6 @@
 
 .skipBtn:hover {
     color: var(--xc-text);
-}
-
-.skipBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .frameViewport {

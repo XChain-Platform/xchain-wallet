@@ -11,6 +11,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+// Ahead of this file's own sheet, so the shared button base loads first and
+// the control's rules follow it; a CSS-file composes would inline a second
+// copy of Button.module.css.
+import buttonStyles from '../../ui/Button.module.css';
 import styles from './OnboardingCarousel.module.css';
 
 /**
@@ -124,7 +128,7 @@ export function OnboardingCarousel({
     }
 
     const skipAction = (
-        <button type="button" className={styles.skipBtn} onClick={handleSkip}>
+        <button type="button" className={`${buttonStyles.btn} ${buttonStyles.link} ${styles.skipBtn}`} onClick={handleSkip}>
             {t('onboarding.carousel.skip')}
         </button>
     );

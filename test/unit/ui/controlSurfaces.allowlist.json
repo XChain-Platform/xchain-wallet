@@ -266,10 +266,6 @@
             "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
-        "packages/core/src/shared/routes/OnboardingCarousel.module.css": {
-            "count": 2,
-            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
-        },
         "packages/core/src/shared/routes/Send.module.css": {
             "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
