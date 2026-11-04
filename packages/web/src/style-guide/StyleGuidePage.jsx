@@ -32,6 +32,7 @@ import { GrayCardSection } from './sections/GrayCardSection.jsx';
 import { AccentBorderedCardSection } from './sections/AccentBorderedCardSection.jsx';
 import { StackedAssetIconSection } from './sections/StackedAssetIconSection.jsx';
 import { AssetHeroSection } from './sections/AssetHeroSection.jsx';
+import { AssetMarkSection } from './sections/AssetMarkSection.jsx';
 import { AssetCardSection } from './sections/AssetCardSection.jsx';
 import { BalanceListSection } from './sections/BalanceListSection.jsx';
 import { TokenSelectorSection } from './sections/TokenSelectorSection.jsx';
@@ -124,6 +125,7 @@ export const SECTIONS = [
     { id: 'gray-card',             label: 'Card',                   Component: GrayCardSection },
     { id: 'solid-accent-card',     label: 'Solid accent card',      Component: AccentBorderedCardSection },
     { id: 'stacked-asset-icon',    label: 'Stacked asset icon',     Component: StackedAssetIconSection, components: ['TickerIcon'] },
+    { id: 'asset-mark',            label: 'Asset mark',             Component: AssetMarkSection },
     { id: 'asset-hero',            label: 'Asset hero (Send)',      Component: AssetHeroSection },
     { id: 'asset-card',            label: 'Asset card (Receive)',   Component: AssetCardSection },
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection, components: ['BalanceList'] },
