@@ -164,10 +164,6 @@
             "count": 2,
             "reason": "Native radio inputs inside a radiogroup; the kit has no radio-row primitive for a two-line label."
         },
-        "packages/core/src/shared/routes/Receive.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/routes/Settings.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."

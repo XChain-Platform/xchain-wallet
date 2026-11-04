@@ -1,24 +1,48 @@
+/* The Change asset control is the shared Button (link lg) drawn as the bare
+   48px circle around the asset artwork it was before the kit. The doubled
+   class outranks the single-class .btn, .link and .lg rules wherever
+   Button.module.css lands in the cascade, so the control keeps its own box,
+   type and edge. The two state variables resolve the Button hover and press
+   rules to no fill and an edge in the text colour, as the plain button had.
+   No Button rule sets width or height, so the circle size stays on the
+   single class. */
 .assetCard {
-    display: block;
-    align-items: center;
     width: 48px;
     height: 48px;
+}
+
+.assetCard.assetCard {
+    --xc-button-hover-bg: transparent;
+    --xc-button-hover-border: currentcolor;
+    display: block;
+    position: static;
+    justify-content: normal;
+    gap: normal;
+    min-height: auto;
+    max-width: none;
     padding: 0;
     background: transparent;
     border: 0;
     border-radius: 50%;
     margin: 0 auto var(--xc-space-3);
     color: var(--xc-text);
-    cursor: pointer;
+    font: revert;
+    text-decoration: none;
     appearance: none;
     transition: filter 120ms ease;
 }
 
-.assetCard:hover {
+/* The Button press rule nudges and darkens; this control never did. */
+.assetCard.assetCard:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.assetCard.assetCard:hover:not(:disabled) {
     filter: brightness(0.96);
 }
 
-.assetCard:focus-visible {
+.assetCard.assetCard:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) * 0.5);
 }

@@ -1341,15 +1341,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     && prefillTickUpper !== nativeTicker;
                 const selectedTick = isTokenSelection ? prefillTickUpper : (nativeTicker || '');
                 return (
-                    <button
-                        type="button"
+                    <Button
+                        variant="link"
+                        size="lg"
+                        icon={null}
                         className={styles.assetCard}
                         onClick={onChangeAsset || onBack}
                         // Icon-only control: the accessible name carries the chain the icon overlay shows.
                         aria-label={t('receive.changeAssetCurrentlyOn', { selectedTick, displayName: descriptor.displayName })}
                     >
                         <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
-                    </button>
+                    </Button>
                 );
             })() : null}
 
