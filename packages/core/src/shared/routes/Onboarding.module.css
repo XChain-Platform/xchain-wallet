@@ -126,7 +126,10 @@
 }
 
 .licenseScroll {
-    composes: card from '../../ui/Card.module.css';
+    /* The licence terms sit in an outline card whose text reaches its inner
+       border edge, so the panel composes the flush card: the same outline
+       with no inset. */
+    composes: flush from '../../ui/Card.module.css';
     /* The terms take every pixel the screen has left (FormPage fill), so
        Accept and continue sits at the bottom of the phone, and the panel
        keeps its own scroll: reaching its end unlocks the acknowledgement. */
@@ -227,6 +230,5 @@
     .licenseScroll {
         /* Keep two short lines visible while leaving room for landscape actions. */
         min-height: 96px;
-        padding: var(--xc-space-2) var(--xc-space-3);
     }
 }

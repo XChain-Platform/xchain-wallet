@@ -97,9 +97,7 @@
         "packages/web/src/style-guide/sections/TokenSelectorSection.module.css | .search": "Development-only or style-guide chrome, not product UI.",
         "packages/web/src/style-guide/sections/templateExamples.module.css | .search, .select": "Development-only or style-guide chrome, not product UI."
     },
-    "overrides": {
-        "packages/core/src/shared/routes/Onboarding.module.css | .licenseScroll | padding": "Open debt (not a ruling): the licence terms card keeps a narrower inset on short screens so two lines of the terms stay visible above the actions; the card itself stays outlined by the licence-page ruling."
-    },
+    "overrides": {},
     "inline": {
         "packages/core/src/shared/components/LogConsole.jsx": {
             "count": 3,
