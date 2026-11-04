@@ -18,10 +18,10 @@
     display: block;
     flex: none;
     width: 100%;
-    /* The fixed measure keeps the step label readable without a matching size token. */
-    max-width: 560px;
+    /* The caption runs the whole row, past the global paragraph measure. */
+    max-width: none;
     /* No top margin: the page already insets its first row from the header. */
-    margin: 0 auto var(--xc-space-3);
+    margin: 0 0 var(--xc-space-3);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 600;

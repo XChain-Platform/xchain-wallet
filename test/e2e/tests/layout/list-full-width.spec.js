@@ -15,6 +15,7 @@
 // reaches past the document client width.
 
 import {
+    createWallet,
     dismissIntroCarousel,
     expect,
     gotoSection,
@@ -132,6 +133,125 @@ test('lists, rows and cards fill the content width up to the scrollbar', async (
                 }
             }
         }
+    }
+    expect(violations, violations.join('\n')).toEqual([]);
+});
+
+// First block of a screen. A list, card or table first block starts on the
+// page gutter and ends on the gutter before the scrollbar, within 2px. A form
+// (a form element or a group) keeps its own sizing and must stay centred, so
+// the two gaps match. The measure reads the main scroller the way the layout
+// harness does.
+const FIRST_BLOCK_VIEWPORTS = [
+    { width: 820, height: 1100 },
+    { width: 1440, height: 900 },
+];
+const GAP_TOLERANCE_PX = 2;
+
+async function measureFirstBlock(page) {
+    return page.locator('#xc-main').evaluate((main) => {
+        const style = getComputedStyle(main);
+        const frameLeft = main.getBoundingClientRect().left + main.clientLeft;
+        const frameRight = frameLeft + main.clientWidth;
+        const gutter = parseFloat(style.paddingLeft) || 0;
+        const first = [...main.children].find((el) => {
+            const cs = getComputedStyle(el);
+            const box = el.getBoundingClientRect();
+            return cs.display !== 'none' && cs.visibility !== 'hidden'
+                && cs.position !== 'absolute' && cs.position !== 'fixed'
+                && box.width >= 1 && box.height >= 1;
+        });
+        if (!first) return { error: 'no first content block' };
+        const box = first.getBoundingClientRect();
+        const isForm = first.tagName === 'FORM' || first.getAttribute('role') === 'group';
+        return {
+            kind: isForm ? 'form' : 'list',
+            label: `${first.tagName.toLowerCase()}:${(first.textContent || '').trim().slice(0, 30)}`,
+            gutter,
+            left: Math.round((box.left - frameLeft) * 100) / 100,
+            rightGap: Math.round((frameRight - box.right) * 100) / 100,
+        };
+    });
+}
+
+// A resize or a route change can still be laying out; the measure is taken
+// once two reads 150ms apart agree.
+async function settledFirstBlock(page) {
+    let previous = await measureFirstBlock(page);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        await page.waitForTimeout(150);
+        const next = await measureFirstBlock(page);
+        if (JSON.stringify(next) === JSON.stringify(previous)) return next;
+        previous = next;
+    }
+    return previous;
+}
+
+function judgeFirstBlock(where, m) {
+    if (m.error) return [`${where}: ${m.error}`];
+    const out = [];
+    if (m.kind === 'list') {
+        if (Math.abs(m.left - m.gutter) > GAP_TOLERANCE_PX) {
+            out.push(`${where}: ${m.label} left ${m.left} is not the gutter ${m.gutter}`);
+        }
+        if (Math.abs(m.rightGap - m.gutter) > GAP_TOLERANCE_PX) {
+            out.push(`${where}: ${m.label} right gap ${m.rightGap} is not the gutter ${m.gutter}`);
+        }
+    } else if (Math.abs(m.left - m.rightGap) > GAP_TOLERANCE_PX) {
+        out.push(`${where}: form ${m.label} is off centre, left ${m.left} and right gap ${m.rightGap}`);
+    }
+    return out;
+}
+
+test('the first block of the intro carousel and the issuance wizard fills the gutter or centres as a form', async ({ page }) => {
+    test.slow();
+    const violations = [];
+
+    for (const viewport of FIRST_BLOCK_VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Skip' }).waitFor({ state: 'visible', timeout: 60_000 });
+        await settle(page);
+        // The intro carousel is an explainer, not a form: its first block
+        // fills the gutter and centres its column inside it.
+        const intro = await settledFirstBlock(page);
+        const where = `${viewport.width}px / intro carousel`;
+        if (!intro.error && intro.kind !== 'list') {
+            violations.push(`${where}: ${intro.label} is classed ${intro.kind}, expected a gutter-filling block`);
+        }
+        violations.push(...judgeFirstBlock(where, intro));
+    }
+
+    // A demo wallet disables every submit button, so the wizard walk uses a
+    // real wallet to reach the details and review steps.
+    await createWallet(page);
+    for (const viewport of FIRST_BLOCK_VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await settle(page);
+        await openPaletteCommand(page, 'Create a token');
+        await expect(page.getByText('Step 1 of 4: Template', { exact: true })).toBeVisible();
+        await settle(page);
+        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard template`, await settledFirstBlock(page)));
+
+        await page.getByRole('button', { name: /Meme token/ }).click();
+        await expect(page.getByText('Step 2 of 4: Network', { exact: true })).toBeVisible();
+        await settle(page);
+        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard network`, await settledFirstBlock(page)));
+
+        const chainForm = page.getByRole('form', { name: 'Choose token network' });
+        await chainForm.getByRole('button', { name: 'Next' }).click();
+        await expect(page.getByText('Step 3 of 4: Details', { exact: true })).toBeVisible();
+        await settle(page);
+        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard details`, await settledFirstBlock(page)));
+
+        const details = page.getByRole('form', { name: 'Token details' });
+        await details.getByRole('textbox', { name: 'Token name (ticker)' }).fill('WIDTHCHECK');
+        await details.getByRole('textbox', { name: 'Supply' }).fill('1000');
+        await details.getByRole('button', { name: 'Review token' }).click();
+        await expect(page.getByText('Step 4 of 4: Review', { exact: true })).toBeVisible({ timeout: 30_000 });
+        await settle(page);
+        violations.push(...judgeFirstBlock(`${viewport.width}px / token wizard review`, await settledFirstBlock(page)));
+        await gotoSection(page, 'Home');
     }
     expect(violations, violations.join('\n')).toEqual([]);
 });

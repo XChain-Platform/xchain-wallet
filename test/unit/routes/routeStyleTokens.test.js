@@ -95,7 +95,9 @@ describe('route styles use the shared geometry tokens (staking, settings, wizard
         const wizard = readRouteCss('TokenWizard');
         const unavailable = readRouteCss('VaultUnavailable');
 
-        expect(wizard).toMatch(/\/\* The fixed measure[^*]+\*\/\s*max-width:\s*560px/);
+        // The step caption runs the whole content row, so it carries no fixed measure.
+        expect(wizard).toMatch(/\.progress\s*\{[^}]*max-width:\s*none;/s);
+        expect(wizard).not.toMatch(/max-width:\s*560px/);
         // The wizard's checkboxes are kit Checkbox controls, so no native-box offset remains.
         expect(wizard).not.toMatch(/\.checkRow/);
         // The escape link is a kit Button now, so the route keeps no underline or focus offsets.

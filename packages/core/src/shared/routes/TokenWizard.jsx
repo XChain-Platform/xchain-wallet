@@ -1045,8 +1045,8 @@ export function TokenWizard({ walletId, onBack }) {
     if (stage === 'chain') {
         return wrap(
             <>
-                <WizardProgress stage={stage} />
                 {renderChainStage({
+                    progress: <WizardProgress stage={stage} inline />,
                     demoGuard,
                     chainsWithAddresses,
                     chainId,
@@ -1063,8 +1063,8 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'details') {
         return wrap(<>
-            <WizardProgress stage={stage} />
             {renderDetailsStage({
+            progress: <WizardProgress stage={stage} inline />,
             demoGuard,
             template,
             name, setName,
@@ -1164,8 +1164,8 @@ export function TokenWizard({ walletId, onBack }) {
     // holding encoder inputs or changing the transaction being reviewed.
     return wrap(
         <>
-            <WizardProgress stage={stage} />
             <FormPage
+                progress={<WizardProgress stage={stage} inline />}
                 demoGuard={demoGuard}
                 label="Review token issuance"
                 onSubmit={(event) => {
@@ -1242,9 +1242,17 @@ const WIZARD_STEP_LABELS = {
     preview: 'Review',
 };
 
-function WizardProgress({ stage }) {
+function WizardProgress({ stage, inline = false }) {
     const index = WIZARD_STEPS.indexOf(stage);
     if (index === -1) return null;
+    // Inside a form page the caption sits in the page's own top row.
+    if (inline) {
+        return (
+            <span aria-current="step">
+                Step {index + 1} of {WIZARD_STEPS.length}: {WIZARD_STEP_LABELS[stage]}
+            </span>
+        );
+    }
     return (
         <p className={styles.progress} aria-current="step">
             Step {index + 1} of {WIZARD_STEPS.length}: {WIZARD_STEP_LABELS[stage]}
@@ -1538,10 +1546,11 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onNext, demoGuard,
+    subtoken, onPickSource, onNext, demoGuard, progress,
 }) {
     return (
         <FormPage
+            progress={progress}
             demoGuard={demoGuard}
             label="Choose token network"
             onSubmit={(event) => {
@@ -1616,7 +1625,7 @@ const TEMPLATE_FIELDS = {
 };
 
 function renderDetailsStage({
-    demoGuard,
+    demoGuard, progress,
     template,
     name, setName, nameError,
     displayName, setDisplayName,
@@ -1642,6 +1651,7 @@ function renderDetailsStage({
     const isEdition = resolved === 'edition';
     return (
         <FormPage
+            progress={progress}
             demoGuard={demoGuard}
             label="Token details"
             onSubmit={onSubmit}
