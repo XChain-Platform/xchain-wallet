@@ -16,10 +16,25 @@
     max-height: 100%;
     min-height: 0;
     width: 100%;
-    max-width: 480px;
-    margin-inline: auto;
     gap: var(--xc-space-4);
     overflow: hidden;
+}
+
+/* The full-screen carousel fills the page gutter like any other first block
+   and centres its 480px reading column inside it. The column takes the
+   root's gap so both variants and the landscape rule keep their spacing. */
+.column {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    inline-size: 100%;
+    gap: inherit;
+}
+
+.centeredFull > .column {
+    max-inline-size: 480px;
+    margin-inline: auto;
 }
 
 .skipRow {
