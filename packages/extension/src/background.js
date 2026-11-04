@@ -285,11 +285,19 @@ const ensureHost = createHostBuildFlight(buildHost);
 // overtaken by a lock or a wipe and must not install its host.
 let hostEpoch = 0;
 
+// The session slot a host build reads while a refused lock's clear is pending.
+const LOCK_PENDING_SESSION = Object.freeze({ load: async () => null });
+
 async function buildHost() {
     if (host) return host;
     const epoch = hostEpoch;
     const pool = signerPool;
-    const sessionBackend = new ChromeSessionBackend();
+    // A key that survived a refused lock is no session: while its clear is
+    // pending the build reads nothing, so it never rebuilds the locked host.
+    // A lock landing mid-read moves hostEpoch, which the check below catches.
+    const sessionBackend = lockBackstop.cleanupPending === true
+        ? LOCK_PENDING_SESSION
+        : new ChromeSessionBackend();
     const masterKey = await sessionBackend.load();
     if (epoch !== hostEpoch) {
         masterKey?.fill(0);
@@ -780,6 +788,7 @@ attachSessionMetaListener({
     // Keeps the auto-lock record (and tears the host down) per the backstop's
     // rule: a secret that survived the clear leaves the idle alarm the job.
     onLocked: (result) => lockBackstop.onLocked(result),
+    isLockPending: () => lockBackstop.cleanupPending === true,
 });
 
 // Signer bridge: always on, independent of vault unlock state. The

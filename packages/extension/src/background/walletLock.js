@@ -199,6 +199,11 @@ export function createUiRequestTracker(opts = {}) {
  * has already nulled host and vault, so the "already locked" guard would
  * otherwise refuse that very retry.
  *
+ * While a clear is pending the session key may still be in storage, so the
+ * worker must read as locked: a host build reads `cleanupPending` and builds
+ * nothing from that key, and the next tick retries the clear whether or not
+ * an idle deadline is due.
+ *
  * @param {LockBackstopDeps} deps
  */
 export function createLockBackstop(deps) {
@@ -225,10 +230,24 @@ export function createLockBackstop(deps) {
         await deps.clearAutoLockState();
     }
 
+    // Retry a clear a failed lock left behind. The host is already torn down,
+    // so no deadline or in-flight request has anything left to hold open.
+    async function retryPendingClear() {
+        if (!cleanupPending) return 'skipped';
+        logger.log('[xchain] auto-lock: retrying the secret clear a failed lock left behind');
+        try {
+            await lockWalletNow();
+            return 'locked';
+        } catch (err) {
+            logger.error('[xchain] auto-lock clear retry failed:', err);
+            return 'failed';
+        }
+    }
+
     async function maybeAutoLock() {
-        // Already locked; nothing to do, unless a previous lock left a secret
-        // behind and is waiting on this alarm to retry the clear.
-        if (!deps.isUnlocked() && !cleanupPending) {
+        if (cleanupPending) return retryPendingClear();
+        // Already locked; nothing to do.
+        if (!deps.isUnlocked()) {
             return 'skipped';
         }
         // A record storage cannot read is a deadline this worker cannot
@@ -276,6 +295,7 @@ export function createLockBackstop(deps) {
         maybeAutoLock,
         onLocked,
         noteUnlocked,
+        retryPendingClear,
         get cleanupPending() { return cleanupPending; },
     };
 }

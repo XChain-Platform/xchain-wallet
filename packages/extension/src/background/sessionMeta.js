@@ -59,12 +59,14 @@ import { VaultIncompleteError, vaultErrorKind } from '@xchain-wallet/core/storag
  *   signerPool?: import('@xchain-wallet/core').signers.SignerPool,
  *   onUnlocked?: () => Promise<void> | void,
  *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
+ *   isLockPending?: () => boolean,
  *   startLabelSyncRestore?: (opts: object) => string,
  * }} PreHostDispatchDeps
  *
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
+ * @property {() => boolean} [isLockPending]   true while a refused lock's secret clear awaits its retry; status then reads locked
  * @property {(opts: object) => string} [startLabelSyncRestore]
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
@@ -135,6 +137,7 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                         : deps.signerPool,
                     onUnlocked: deps.onUnlocked,
                     onLocked: deps.onLocked,
+                    isLockPending: deps.isLockPending,
                     startLabelSyncRestore: deps.startLabelSyncRestore,
                 });
                 sendResponse({ ok: true, result });
@@ -180,6 +183,7 @@ export async function dispatchPreHost(type, request, deps) {
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
                 metaBackend: deps.metaBackend,
+                isLockPending: deps.isLockPending,
             });
         case 'wallet.unlock':
             return handleWalletUnlock(request, {
@@ -275,10 +279,13 @@ async function metaOutlivedVault(metaBackend) {
 }
 
 /**
- * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'], metaBackend?: PreHostBackends['metaBackend'] }} deps
+ * A lock that refused to clear the key leaves it in storage until the retry
+ * lands; `isLockPending` reports that window, and status reads locked through it.
+ *
+ * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'], metaBackend?: PreHostBackends['metaBackend'], isLockPending?: () => boolean }} deps
  * @throws {VaultIncompleteError} when the meta is on disk and the blob is not
  */
-export async function handleSessionStatus({ storageBackend, sessionBackend, metaBackend }) {
+export async function handleSessionStatus({ storageBackend, sessionBackend, metaBackend, isLockPending }) {
     const blob = await storageBackend.load();
     const hasWallet = blob !== null;
     // Meta with no blob is an install nothing can open and onboarding cannot
@@ -289,7 +296,9 @@ export async function handleSessionStatus({ storageBackend, sessionBackend, meta
     if (!hasWallet && metaBackend && await metaOutlivedVault(metaBackend)) {
         throw new VaultIncompleteError();
     }
-    const hasSession = await hasSessionKey(sessionBackend);
+    const hasSession = isLockPending?.() === true
+        ? false
+        : await hasSessionKey(sessionBackend);
     return {
         hasWallet,
         hasSession,
