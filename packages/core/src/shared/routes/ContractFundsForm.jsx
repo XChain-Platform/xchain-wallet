@@ -425,13 +425,18 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            <FormPage
+                label={`${verb} ${preposition} contract #${contractActionIndex}`}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
         );
     }
     if (!addressesByChain) {
-        return wrap(<p>Loading addresses…</p>);
+        return wrap(
+            <FormPage label={`${verb} ${preposition} contract #${contractActionIndex}`}>
+                <p className={styles.hint}>Loading addresses…</p>
+            </FormPage>,
+        );
     }
 
     if (stage === 'done' && result) {
@@ -453,7 +458,10 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             );
         }
         return wrap(
-            <>
+            <FormPage
+                label={`${verb} broadcast`}
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <p className={styles.summary}>
                     {verb} broadcast. The network will credit the {isDeposit ? 'contract' : 'address'} shortly.
                 </p>
@@ -461,10 +469,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
