@@ -695,3 +695,60 @@ describe('template stylesheets: WebView 102 safe', () => {
         }
     });
 });
+
+// AdvancedActionsForm's wrap() helper is a bare Screen. The signer-mode
+// notice, the load error, the loading line and every done-stage panel reach
+// the page through the ListPage each wrap() call passes, and the form and
+// review stages through FormPage, so no state draws straight into the
+// Screen content box.
+describe('AdvancedActionsForm: every wrap() call passes a page template', () => {
+    function advancedWrapRoots() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'AdvancedActionsForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const roots = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                const arg = node.arguments[0];
+                const name = arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+                    ? arg.openingElement.name.name
+                    : (arg?.type || 'none');
+                roots.push({ line: node.loc.start.line, name, arg });
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return roots;
+    }
+
+    const holds = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => holds(item, test))
+            : (value && typeof value === 'object' ? holds(value, test) : false)));
+    };
+
+    it('roots the signer notice, load error, loading line, done panels, review and form in ListPage or FormPage', () => {
+        const roots = advancedWrapRoots();
+        expect(roots.length).toBeGreaterThanOrEqual(8);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .map(({ line, name }) => `AdvancedActionsForm.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+
+    it('keeps the signer notice, load error, loading line and both ResultScreen states inside ListPage', () => {
+        const roots = advancedWrapRoots();
+        const rootsHolding = (test) => roots.filter(({ arg }) => holds(arg, test)).map(({ name }) => name);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('signer mode'))).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'Identifier' && node.name === 'loadError')).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Loading…'))).toEqual(['ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXOpeningElement'
+            && node.name.type === 'JSXIdentifier' && node.name.name === 'ResultScreen')).toEqual(['ListPage', 'ListPage']);
+        expect(rootsHolding((node) => node.type === 'JSXText' && node.value.includes('Broadcast complete.'))).toEqual(['ListPage']);
+    });
+});

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -615,48 +615,61 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         </Screen>
     );
 
+    // The signer-mode notice, the load error, the loading line and the done
+    // panels lay out through ListPage, so no state draws straight into the
+    // Screen content box.
     if (isSignerMode) {
         return wrap(
-            <StatusMessage variant="status">
-                This wallet is in signer mode, so Advanced action is unavailable.
-                Use Sign transaction to sign an unsigned transaction from a watcher wallet,
-                or switch the mode under Settings, Wallet Mode.
-            </StatusMessage>,
+            <ListPage>
+                <StatusMessage variant="status">
+                    This wallet is in signer mode, so Advanced action is unavailable.
+                    Use Sign transaction to sign an unsigned transaction from a watcher wallet,
+                    or switch the mode under Settings, Wallet Mode.
+                </StatusMessage>
+            </ListPage>,
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         // Signed but not broadcast. "sent" is the claim this case
         // cannot make.
         if (result?.queued) {
             return wrap(
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onBack}
-                    what={actionDisplayLabel(action).toLowerCase()}
-                    unsaved={result?.unsaved}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="signed-not-broadcast"
+                        onDone={onBack}
+                        what={actionDisplayLabel(action).toLowerCase()}
+                        unsaved={result?.unsaved}
+                    />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>{actionDisplayLabel(action)} sent</h2>
                 {txid ? (
                     <>
@@ -669,7 +682,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
