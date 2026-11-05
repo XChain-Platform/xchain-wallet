@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
+import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 
 const walletMode = vi.hoisted(() => ({ value: 'full' }));
 
@@ -144,5 +145,70 @@ describe('ControllerBindForm source selection', () => {
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
+    });
+});
+
+
+// The load error, the loading line and the broadcast panel lay out through
+// ListPage like every other route state, so none of them sits bare in the
+// Screen content box.
+describe('ControllerBindForm page template', () => {
+    function listPageSelector() {
+        const probe = render(<ListPage><p>x</p></ListPage>);
+        const name = probe.container.firstChild.className.split(' ')[0];
+        probe.unmount();
+        return '.' + CSS.escape(name);
+    }
+
+    function expectInsideListPage(element) {
+        expect(element.closest(listPageSelector()), 'inside ListPage').not.toBeNull();
+    }
+
+    it('lays out the load error inside ListPage', async () => {
+        const messaging = messagingFor({});
+        messaging.getAddressesByChain.mockRejectedValue(new Error('Address store unavailable'));
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        const alert = await screen.findByText(/Address store unavailable|Failed to load/);
+        expectInsideListPage(alert);
+    });
+
+    it('lays out the loading line inside ListPage', () => {
+        const messaging = messagingFor({});
+        messaging.getAddressesByChain.mockReturnValue(new Promise(() => {}));
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        expectInsideListPage(screen.getByText('Loading addresses…'));
+    });
+
+    it('lays out the broadcast panel and its Done action inside ListPage', async () => {
+        walletMode.value = 'watcher';
+        const txid = 'ab'.repeat(32);
+        // A checksum-valid Litecoin address, so the review step accepts the source.
+        const source = { ...hdAddress, address: 'ltc1qqurswpc8qurswpc8qurswpc8qurswpc8p4r4uu' };
+        const messaging = messagingFor({ [LITECOIN]: [source] });
+        messaging.buildActionPsbtRequest = vi.fn().mockResolvedValue({ txid });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ControllerBindForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '42' } });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+        const sign = await screen.findByRole('button', { name: /Create unsigned transaction: bind controller/ });
+        fireEvent.click(sign);
+        const txidCell = await screen.findByText(txid);
+        expect(messaging.buildControllerBindParams).toHaveBeenCalled();
+        expectInsideListPage(txidCell);
+        expectInsideListPage(screen.getByText(/Bind broadcast/));
+        expectInsideListPage(screen.getByRole('button', { name: 'Done' }));
     });
 });

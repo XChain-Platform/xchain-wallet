@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -527,15 +527,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
+    // The load error, the loading line and the broadcast panel lay out
+    // through ListPage, so no state draws straight into the Screen box.
     if (loadError) {
-        return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
-        );
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
     if (!addressesByChain) {
-        return wrap(<p>Loading addresses…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading addresses…</p></ListPage>);
     }
 
     if (stage === 'done' && result) {
@@ -557,7 +555,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             );
         }
         return wrap(
-            <>
+            <ListPage actions={<Button variant="primary" onClick={onBack}>Done</Button>}>
                 <p className={styles.summary}>
                     {verb} broadcast. The network will apply the controller change shortly.
                 </p>
@@ -565,10 +563,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '-')}</dd>
                 </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </ListPage>,
         );
     }
 
