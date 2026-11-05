@@ -256,9 +256,21 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         );
     }
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    // The load error, the loading line and the submitted panel lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
+    // None of them submits anything, so each is the div form of the template.
+    // The load error is the template's body, not its status slot, so it draws
+    // its own box and the shell's "Some balances may be out of date" steps
+    // aside: one message per page.
+    if (loadError) {
+        return wrap(
+            <FormPage as="div" label="Transfer list">
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </FormPage>,
+        );
+    }
     if (!addressesByChain || owner === undefined || sdkSupported === null) {
-        return wrap(<p className={styles.hint}>Loading...</p>);
+        return wrap(<FormPage as="div" label="Transfer list"><p className={styles.hint}>Loading...</p></FormPage>);
     }
 
     if (result) {
@@ -275,10 +287,16 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             );
         }
         return wrap(
-            <>
-                <StatusMessage variant="success">
-                    {result.psbtHex && !result.txid ? 'Unsigned list transfer created.' : 'List transfer submitted.'}
-                </StatusMessage>
+            <FormPage
+                as="div"
+                label="List transfer submitted"
+                status={(
+                    <StatusMessage variant="success">
+                        {result.psbtHex && !result.txid ? 'Unsigned list transfer created.' : 'List transfer submitted.'}
+                    </StatusMessage>
+                )}
+                actions={<Button type="button" variant="primary" onClick={onDone}>Done</Button>}
+            >
                 <p className={styles.hint}>The new owner takes control when the transfer confirms.</p>
                 {result.txid ? (
                     <dl className={styles.detailsList}>
@@ -286,10 +304,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                         <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
                     </dl>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

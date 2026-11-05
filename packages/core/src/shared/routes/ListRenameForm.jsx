@@ -314,9 +314,24 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         );
     }
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    // The load error, the loading line and the submitted result lay out
+    // through FormPage like the form stage, so the page edge and rhythm match.
+    // The load error is the template's body, not its status slot, so it draws
+    // its own box and the shell's "Some balances may be out of date" steps
+    // aside: one message per page.
+    if (loadError) {
+        return wrap(
+            <FormPage as="div" label="Rename list">
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </FormPage>,
+        );
+    }
     if (!addressesByChain || !detail || owner === undefined || !sharedRows || sdkSupported === null) {
-        return wrap(<p className={styles.hint}>Loading...</p>);
+        return wrap(
+            <FormPage as="div" label="Rename list">
+                <p className={styles.hint}>Loading...</p>
+            </FormPage>,
+        );
     }
 
     if (result) {
@@ -333,10 +348,16 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             );
         }
         return wrap(
-            <>
-                <StatusMessage variant="success">
-                    {result.psbtHex && !result.txid ? 'Unsigned list rename created.' : 'List rename submitted.'}
-                </StatusMessage>
+            <FormPage
+                as="div"
+                label="Rename list"
+                status={(
+                    <StatusMessage variant="success">
+                        {result.psbtHex && !result.txid ? 'Unsigned list rename created.' : 'List rename submitted.'}
+                    </StatusMessage>
+                )}
+                actions={<Button type="button" variant="primary" onClick={onDone}>Done</Button>}
+            >
                 <p className={styles.hint}>The new list details appear when this transaction confirms.</p>
                 {result.txid ? (
                     <dl className={styles.detailsList}>
@@ -344,10 +365,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                         <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
                     </dl>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

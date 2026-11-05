@@ -316,32 +316,50 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
             />
         );
     }
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    // The load error, the loading line and the result panels lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
+    // None of them submits anything, so each is the div form of the template.
+    // The load error is the template's body, not its status slot, so it draws
+    // its own box and the shell's "Some balances may be out of date" steps
+    // aside: one message per page.
+    if (loadError) {
+        return wrap(
+            <FormPage as="div" label="Create union list">
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </FormPage>,
+        );
+    }
     if (!addressesByChain || !chainId || candidates === null || sdkSupported === null) {
-        return wrap(<p className={styles.hint}>Loading...</p>);
+        return wrap(<FormPage as="div" label="Create union list"><p className={styles.hint}>Loading...</p></FormPage>);
     }
     if (result) {
         // Signed but held in the broadcast queue: nothing is on the network yet.
-        if (result.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="union list" unsaved={result.unsaved} />);
+        if (result.queued) {
+            return wrap(
+                <FormPage as="div" label="Queued union list">
+                    <ResultScreen state="signed-not-broadcast" onDone={onDone} what="union list" unsaved={result.unsaved} />
+                </FormPage>,
+            );
+        }
         if (result.psbtHex && !result.txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={buildAnother}
-                    onDone={onDone}
-                />,
+                <FormPage as="div" label="Unsigned union list">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={buildAnother}
+                        onDone={onDone}
+                    />
+                </FormPage>,
             );
         }
         return wrap(
-            <>
-                <StatusMessage variant="success">
-                    {result.psbtHex && !result.txid ? 'Unsigned union list created.' : 'Union list submitted.'}
-                </StatusMessage>
-                <div className={styles.actions}>
-                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
-                </div>
-            </>,
+            <FormPage
+                as="div"
+                label="Union list submitted"
+                status={<StatusMessage variant="success">Union list submitted.</StatusMessage>}
+                actions={<Button type="button" variant="primary" onClick={onDone}>Done</Button>}
+            />,
         );
     }
 

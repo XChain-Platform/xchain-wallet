@@ -722,9 +722,27 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         <Screen variant={variant} header={header} restoreScroll={stage !== 'review-1' && stage !== 'review-2'}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || owner === undefined) return wrap(<p className={styles.hint}>Loading…</p>);
-    if (ownershipReason) return wrap(<StatusMessage variant="warning">{ownershipReason}</StatusMessage>);
+    // The load error, the loading line, the ownership warning and the
+    // non-signing stages lay out through FormPage like the form itself, so no
+    // state draws straight into Screen. None of them submits anything, so each
+    // is the div form of the template. The load error is the template's body,
+    // not its status slot, so it draws its own box and the shell's
+    // "Some balances may be out of date" steps aside: one message per page.
+    if (loadError) {
+        return wrap(
+            <FormPage as="div" label="Edit list">
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </FormPage>,
+        );
+    }
+    if (!addressesByChain || owner === undefined) {
+        return wrap(<FormPage as="div" label="Edit list"><p className={styles.hint}>Loading…</p></FormPage>);
+    }
+    if (ownershipReason) {
+        return wrap(
+            <FormPage as="div" label="Edit list" status={<StatusMessage variant="warning">{ownershipReason}</StatusMessage>} />,
+        );
+    }
 
     // A leg signed but not broadcast stops the chain: the shared panel
     // says so and deliberately offers no retry (re-signing while a signed
@@ -762,7 +780,11 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
 
     if (stage === 'repoint') {
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label="Edit published"
+                actions={<Button variant="primary" onClick={onDone}>Done</Button>}
+            >
                 <h2 className={styles.successTitle}>Fork submitted</h2>
                 {tx1Txid ? (
                     <>
@@ -828,11 +850,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         </StatusMessage>
                     </>
                 )}
-
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onDone}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
@@ -840,7 +858,11 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         const minutes = Math.floor(waitElapsed / 60);
         const slow = minutes >= 5;
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label="Waiting for fork to be indexed"
+                actions={<Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>}
+            >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>{firstTransactionLabel}</dt>
@@ -857,10 +879,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 {slow ? (
                     <p className={styles.hint}>This is taking longer than usual. Typical wait is 1-2 block confirmations.</p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
@@ -933,7 +952,11 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     if (stage === 'review-1' && fromAddress) {
         if (isWatcherMode && twoPhase) {
             return wrap(
-                <>
+                <FormPage
+                    as="div"
+                    label="Not available in watcher mode"
+                    actions={<Button variant="ghost" onClick={() => setStage('compose')}>Back</Button>}
+                >
                     <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                     <p className={styles.hint}>
                         Adding and removing in the same fork is two chained
@@ -947,10 +970,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         only a remove (each of those is a single transaction and
                         works fine in watcher mode).
                     </p>
-                    <div className={styles.actions}>
-                        <Button variant="ghost" onClick={() => setStage('compose')}>Back</Button>
-                    </div>
-                </>,
+                </FormPage>,
             );
         }
         return wrap(
