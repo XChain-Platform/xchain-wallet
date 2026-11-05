@@ -619,10 +619,8 @@ assert.ok(
     'Send.jsx polls signer status via messaging.getSignerStatus',
 );
 assert.ok(
-    /t\('send\.review\.signOn'/.test(sendSrc)
-        && /t\('send\.device\.trezor'\)/.test(sendSrc)
-        && /t\('send\.device\.ledger'\)/.test(sendSrc),
-    'Send.jsx shows "Sign on Trezor" / "Sign on Ledger" button copy',
+    !/send\.review\.signOn/.test(sendSrc),
+    'Send.jsx review button carries no "Sign on <device>" suffix',
 );
 assert.ok(
     /hwStatus !== 'available'/.test(sendSrc),
@@ -872,5 +870,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner to TrezorSigner to sdk.decomposePsbt to trezorFormat to Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC: renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
+    'OK: hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner to TrezorSigner to sdk.decomposePsbt to trezorFormat to Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with a bare "Sign" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC: renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
 );

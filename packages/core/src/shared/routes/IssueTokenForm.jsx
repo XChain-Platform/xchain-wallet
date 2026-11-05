@@ -868,9 +868,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     >
                         {isWatcherMode
                             ? t('send.review.createUnsigned')
-                            : isHwSource
-                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                : t('send.review.sign')}
+                            : t('send.review.sign')}
                     </Button>
                 )}
             >

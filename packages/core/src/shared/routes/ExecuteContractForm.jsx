@@ -829,7 +829,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         {isWatcherMode
                             ? t('send.review.createUnsigned')
                             : isHwSource
-                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                ? t('send.review.sign')
                                 : t('execute.callContract')}
                     </Button>
                 )}

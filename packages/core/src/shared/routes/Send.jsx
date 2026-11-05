@@ -3673,15 +3673,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     >
                         {isWatcherMode
                             ? t('send.review.submitAction', { label: t('send.review.createUnsigned') })
-                            : isHwSource
-                                ? t('send.review.submitAction', {
-                                    label: t('send.review.signOn', {
-                                        device: fromAddress.source === 'trezor'
-                                            ? t('send.device.trezor')
-                                            : t('send.device.ledger'),
-                                    }),
-                                })
-                                : t('send.review.submitAction', { label: softwareSignLabel })}
+                            : t('send.review.submitAction', { label: softwareSignLabel })}
                     </Button>
                 )}
             >

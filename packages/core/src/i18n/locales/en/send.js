@@ -53,7 +53,6 @@ const messages = {
     'send.fields.token': 'Token',
     'send.reviewLabel': 'Review payment',
     'send.review.createUnsigned': 'Create transaction for signing',
-    'send.review.signOn': 'Sign on {device}',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}',
     'send.memoCount':

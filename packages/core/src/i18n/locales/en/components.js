@@ -28,7 +28,6 @@ const messages = {
     'components.placeOrderPanel.reviewOrder': 'Review order',
     'components.placeOrderPanel.editOrder': 'Edit order',
     'components.placeOrderPanel.createUnsignedTransaction': 'Create unsigned transaction',
-    'components.placeOrderPanel.signOn': 'Sign on {value}',
     'components.placeOrderPanel.placeOrder': 'Place {side} order',
     'components.placeOrderPanel.market': 'Market',
     'components.placeOrderPanel.side': 'Side',

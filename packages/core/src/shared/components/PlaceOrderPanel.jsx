@@ -718,7 +718,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             {isWatcherMode
                                 ? t('components.placeOrderPanel.createUnsignedTransaction')
                                 : hw
-                                ? t('components.placeOrderPanel.signOn', { value: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                ? t('send.review.sign')
                                 : t('components.placeOrderPanel.placeOrder', { side })}
                         </Button>
                     </>

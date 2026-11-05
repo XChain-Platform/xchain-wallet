@@ -186,7 +186,7 @@ for (const cls of ['source', 'sourceLabel', 'sourceOrigin', 'sourceApp', 'detail
 // --- 5. Send.jsx polish -------------------------------------------------
 
 // Software signing stays generic so the review does not repeat the chain name.
-// The hardware path keeps its Sign on Trezor / Ledger affordance.
+// The hardware path uses the same bare label: no "Sign on <device>" suffix.
 assert.match(
     sendSrc,
     /const softwareSignLabel = t\('send\.review\.sign'\)/,
@@ -209,6 +209,20 @@ assert.match(
     /<summary className=\{styles\.detailsToggle\}>/,
     'Send.jsx review uses the styled disclosure summary',
 );
+
+// No review or confirm surface labels a button "Sign on <device or chain>".
+{
+    const shared = join(wsRoot, 'packages', 'core', 'src', 'shared');
+    for (const rel of ['routes/Send.jsx', 'routes/ComposeMessage.jsx', 'routes/ExecuteContractForm.jsx', 'routes/IssueTokenForm.jsx', 'components/PlaceOrderPanel.jsx']) {
+        assert.doesNotMatch(readFileSync(join(shared, rel), 'utf8'), /\.signOn'/, `${rel}: no "Sign on X" label key`);
+    }
+    const enKeys = Object.keys(en);
+    assert.deepEqual(
+        enKeys.filter((k) => /signOn$/i.test(k) || /^Sign on\b/.test(String(en[k]))),
+        [],
+        'en locale holds no "Sign on X" label',
+    );
+}
 
 // --- 6. Send.jsx CSS hooks ---------------------------------------------
 

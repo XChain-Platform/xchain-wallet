@@ -976,7 +976,7 @@ function ComposeMessageForm({
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
                         {hw
-                            ? t('send.review.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                            ? t('send.review.sign')
                             : t('composeMessage.confirmSend')}
                     </Button>
                 )}
