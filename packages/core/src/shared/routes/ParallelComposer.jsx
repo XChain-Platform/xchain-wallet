@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // A native select cannot middle-truncate, and a full address ran under the
 // chevron at phone width, so options carry the wallet's usual first6...last6 form.
 import { t } from '../../i18n/index.js';
@@ -495,18 +495,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         </Screen>
     );
 
+    // The load error, the loading line and every result state lay out
+    // through ListPage, so no state draws straight into the Screen box.
     if (loadError) {
-        return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
-        );
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
     // Each row owns a separate confirm and dry-run. Reject closes this page
@@ -530,18 +526,20 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     if (watcherResult) {
         return wrap(
-            <ResultScreen
-                state="unsigned"
-                result={watcherResult}
-                onBuildAnother={() => setWatcherResult(null)}
-                onDone={onBack}
-            />,
+            <ListPage>
+                <ResultScreen
+                    state="unsigned"
+                    result={watcherResult}
+                    onBuildAnother={() => setWatcherResult(null)}
+                    onDone={onBack}
+                />
+            </ListPage>,
         );
     }
 
     if (stage === 'done') {
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.successTitle}>Parallel run complete</p>
                 <SummaryList rows={rows} />
                 <p className={styles.hint}>
@@ -552,7 +550,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -561,12 +559,12 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             // Defensive: should not happen because successful runs flip
             // to 'done', but render a finished state if we get here.
             return wrap(
-                <>
+                <ListPage>
                     <SummaryList rows={rows} />
                     <div className={styles.actions}>
                         <Button variant="primary" onClick={() => setStage('done')}>Continue</Button>
                     </div>
-                </>,
+                </ListPage>,
             );
         }
         const totalSucceeded = rows.filter((r) => r.status === 'success' && !r.queued).length;

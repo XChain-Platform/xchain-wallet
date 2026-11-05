@@ -466,8 +466,19 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         />
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
+    // The load error, the loading line and every result lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
+    if (loadError) {
+        return wrap(
+            <FormPage
+                label="Publish oracle price"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
+    }
+    if (!addressesByChain || !chainId) {
+        return wrap(<FormPage label="Publish oracle price"><p className={styles.hint}>Loading…</p></FormPage>);
+    }
 
     if (actionConfirm.open) {
         const credsReady = isHwSource ? hwStatus === 'available' : (signerReady || password.length > 0);
@@ -502,14 +513,28 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         // Signed but not broadcast yet: nothing is priced, so no success copy.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="price publish" unsaved={result.unsaved} />,
+                <FormPage label="Queued price publish">
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="price publish" unsaved={result.unsaved} />
+                </FormPage>,
             );
         }
         if (result?.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(
+                <FormPage label="Unsigned price publish">
+                    <ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />
+                </FormPage>,
+            );
         }
         return wrap(
-            <>
+            <FormPage
+                label="Price publish result"
+                actions={(
+                    <>
+                        <Button variant="secondary" onClick={handleBuildAnother}>Publish another</Button>
+                        <Button variant="primary" onClick={onBack}>Done</Button>
+                    </>
+                )}
+            >
                 <h2 className={styles.successTitle}>Price publish broadcast</h2>
                 <p className={styles.hint}>
                     {tick} = {value.trim()} {fiat} starts pricing dispensers 24 hours after this
@@ -521,11 +546,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         <code className={styles.txid}>{txid}</code>
                     </>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="secondary" onClick={handleBuildAnother}>Publish another</Button>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

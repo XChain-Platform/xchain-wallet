@@ -543,8 +543,24 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
+    // The load error, the loading line and the broadcast panel lay out
+    // through FormPage like the form and review stages, so every state keeps
+    // the same page edge and rhythm.
+    if (loadError) {
+        return wrap(
+            <FormPage
+                label="Create order"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
+    }
+    if (!addressesByChain || !chainId) {
+        return wrap(
+            <FormPage as="div" label="Create order">
+                <p className={styles.hint}>Loading…</p>
+            </FormPage>,
+        );
+    }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
@@ -563,7 +579,16 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 : 'Auto-pay is armed: matches on this order will be paid automatically while a wallet holding it is unlocked.')
             : null;
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label="Order broadcast"
+                actions={(
+                    <>
+                        {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
+                        <Button variant="primary" onClick={onBack}>Done</Button>
+                    </>
+                )}
+            >
                 <h2 className={styles.successTitle}>Order broadcast</h2>
                 {txid ? (
                     <>
@@ -572,11 +597,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 {autopayNote ? <p className={styles.hint}>{autopayNote}</p> : null}
-                <div className={styles.actions}>
-                    {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

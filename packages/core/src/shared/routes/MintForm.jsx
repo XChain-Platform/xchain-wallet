@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -573,33 +573,41 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         // A queued result is signed and NOT broadcast, so "Minted"
         // would claim the one thing that has not happened yet.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="mint" unsaved={result.unsaved} />,
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="mint" unsaved={result.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Minted</h2>
                 {txid ? (
                     <>
@@ -612,7 +620,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

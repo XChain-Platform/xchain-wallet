@@ -13,6 +13,7 @@ import {
     Screen,
     PageHeader,
     FormPage,
+    ListPage,
     FormNotice,
     Button,
     Input,
@@ -786,32 +787,40 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+        return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={leaveGuard.guardedOnBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={leaveGuard.guardedOnBack}
+                    />
+                </ListPage>,
             );
         }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />,
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>{t('issue.success')}</h2>
                 {txid ? (
                     <>
@@ -824,7 +833,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

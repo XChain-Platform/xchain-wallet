@@ -915,6 +915,7 @@ export function TokenWizard({ walletId, onBack }) {
     const draftBanner = draftEditable && addressesByChain && chainId && !loadError
         && draft.hasDraft() && !draftPending ? (
             <StatusMessage
+                key="draft"
                 variant="status"
                 recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
             >
@@ -924,13 +925,17 @@ export function TokenWizard({ walletId, onBack }) {
                 </DraftDiscardButton>
             </StatusMessage>
         ) : null;
+    // The page notices every step carries in its template's notice slot
+    // (ListPage notices, FormPage status), never loose beside the template.
+    // A load error is the page's one message; the offline note waits.
+    const pageNotices = [
+        !networkAvailable && !loadError ? (
+            <StatusMessage key="offline" variant="warning">Creating a token needs a network connection.</StatusMessage>
+        ) : null,
+        draftBanner,
+    ];
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
-            {/* A load error is the page's one message; the offline note waits. */}
-            {!networkAvailable && !loadError ? (
-                <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
-            ) : null}
-            {draftBanner}
             {children}
         </Screen>
     );
@@ -939,7 +944,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
+        return wrap(<ListPage notices={pageNotices}><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     // The confirmation page replaces the wizard step while keeping wizard
@@ -1033,12 +1038,11 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'template') {
         return wrap(
-            <>
-                <WizardProgress stage={stage} />
-                {renderTemplateStage({
-                    onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
-                })}
-            </>,
+            renderTemplateStage({
+                notices: pageNotices,
+                progress: <WizardProgress stage={stage} />,
+                onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
+            }),
         );
     }
 
@@ -1046,6 +1050,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(
             <>
                 {renderChainStage({
+                    notices: pageNotices,
                     progress: <WizardProgress stage={stage} inline />,
                     demoGuard,
                     chainsWithAddresses,
@@ -1064,6 +1069,7 @@ export function TokenWizard({ walletId, onBack }) {
     if (stage === 'details') {
         return wrap(<>
             {renderDetailsStage({
+            notices: pageNotices,
             progress: <WizardProgress stage={stage} inline />,
             demoGuard,
             template,
@@ -1124,24 +1130,26 @@ export function TokenWizard({ walletId, onBack }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => { setResult(null); setStage('details'); }}
-                    onDone={onBack}
-                />,
+                <ListPage notices={pageNotices}>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={() => { setResult(null); setStage('details'); }}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <ListPage>
+                <ListPage notices={pageNotices}>
                     <ResultScreen state="signed-not-broadcast" onDone={onBack} what="token issuance" unsaved={result.unsaved} />
                 </ListPage>,
             );
         }
         return wrap(
-            <ListPage>
+            <ListPage notices={pageNotices}>
                 <SectionHeader title="Token issued" />
                 {txid ? (
                     <>
@@ -1172,9 +1180,10 @@ export function TokenWizard({ walletId, onBack }) {
                     event.preventDefault();
                     openConfirmScreen();
                 }}
-                status={formError ? (
-                    <StatusMessage variant="error">{formError}</StatusMessage>
-                ) : null}
+                status={[
+                    ...pageNotices,
+                    formError ? <StatusMessage key="form-error" variant="error">{formError}</StatusMessage> : null,
+                ]}
                 actions={(
                     <Button
                         type="submit"
@@ -1509,9 +1518,12 @@ const TEMPLATES = [
     },
 ];
 
-function renderTemplateStage({ onPick }) {
+function renderTemplateStage({ onPick, progress, notices }) {
+    // The step caption is the first row under the notices, inside the list
+    // template like the form stages carry theirs inside FormPage.
     return (
-        <ListPage>
+        <ListPage notices={notices}>
+            {progress}
             {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
@@ -1546,12 +1558,13 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onNext, demoGuard, progress,
+    subtoken, onPickSource, onNext, demoGuard, progress, notices,
 }) {
     return (
         <FormPage
             progress={progress}
             demoGuard={demoGuard}
+            status={notices}
             label="Choose token network"
             onSubmit={(event) => {
                 event.preventDefault();
@@ -1625,7 +1638,7 @@ const TEMPLATE_FIELDS = {
 };
 
 function renderDetailsStage({
-    demoGuard, progress,
+    demoGuard, progress, notices = [],
     template,
     name, setName, nameError,
     displayName, setDisplayName,
@@ -1656,9 +1669,10 @@ function renderDetailsStage({
             label="Token details"
             onSubmit={onSubmit}
             onChangeCapture={onEdit}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
+            status={[
+                ...notices,
+                formError ? <StatusMessage key="form-error" variant="error">{formError}</StatusMessage> : null,
+            ]}
             actions={(
                 <Button type="submit" variant="primary" loading={submitLoading}>
                     {submitLabel}

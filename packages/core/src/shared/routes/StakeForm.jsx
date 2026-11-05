@@ -520,14 +520,19 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         </Screen>
     );
 
+    // The load error, the loading line and every result lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            <FormPage
+                label="Stake XCHAIN"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
         );
     }
-    if (!addressesByChain) return wrap(<p>Loading addresses…</p>);
+    if (!addressesByChain) {
+        return wrap(<FormPage label="Stake XCHAIN"><p className={styles.hint}>Loading addresses…</p></FormPage>);
+    }
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
@@ -535,20 +540,29 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(
+                <FormPage label="Queued stake transaction">
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />
+                </FormPage>,
+            );
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <FormPage label="Unsigned stake transaction">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         return wrap(
-            <>
+            <FormPage
+                label="Stake result"
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <p className={styles.summary}>
                     Stake broadcast. Activation takes effect after 6 BTC blocks.
                 </p>
@@ -556,10 +570,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

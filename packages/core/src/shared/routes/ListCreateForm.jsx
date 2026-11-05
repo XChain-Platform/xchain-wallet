@@ -520,27 +520,36 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         </Screen>
     );
 
+    // The load error, the loading line and every result lay out through
+    // ListPage, as the contacts picker below does, so no state draws
+    // straight into Screen.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
+            return wrap(
+                <ListPage>
+                    <ResultScreen state="unsigned" result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />
+                </ListPage>,
+            );
         }
         // Signed but never broadcast. "List published... is on its
         // way" is the one thing that did not happen.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="list" unsaved={result.unsaved} />,
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="list" unsaved={result.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>List published</h2>
                 <p className={styles.summary}>
                     {listType === '2' ? 'Address' : 'Token'} list with {items.length} item{items.length === 1 ? '' : 's'} is on its way.
@@ -560,7 +569,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

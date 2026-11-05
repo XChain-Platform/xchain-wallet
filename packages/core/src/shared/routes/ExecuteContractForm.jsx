@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -764,13 +764,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
     if (!addressesByChain) {
-        return wrap(<p>{t('execute.loadingAddresses')}</p>);
+        return wrap(<ListPage><p>{t('execute.loadingAddresses')}</p></ListPage>);
     }
 
     if (stage === 'done' && result) {
@@ -792,7 +792,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>{t('execute.success')}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>{t('send.txid')}</dt>
@@ -801,7 +801,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

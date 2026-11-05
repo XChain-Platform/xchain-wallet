@@ -146,10 +146,12 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
 
     if (noChain) {
         return wrap(
-            <EmptyState
-                title={t('governance.noAddress.title')}
-                body={t('governance.noAddress.body')}
-            />,
+            <ListPage>
+                <EmptyState
+                    title={t('governance.noAddress.title')}
+                    body={t('governance.noAddress.body')}
+                />
+            </ListPage>,
         );
     }
     if (!chainId && !error) {

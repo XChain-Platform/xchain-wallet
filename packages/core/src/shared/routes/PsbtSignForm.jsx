@@ -1083,7 +1083,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <ListPage>
+                    <StatusMessage variant="error">{loadError}</StatusMessage>
+                </ListPage>
             </Screen>
         );
     }

@@ -36,7 +36,7 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // A native select cannot middle-truncate, and a full address ran under the
 // chevron at phone width, so options carry the wallet's usual first6...last6 form.
 import { truncateAddress } from '../../ui/AddressText.jsx';
@@ -570,8 +570,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    // The load error, the loading line and every done-stage panel lay out
+    // through ListPage inside the Screen, the same template rhythm the
+    // review and compose stages get from FormPage.
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
+    }
+    if (!addressesByChain || !chainId) return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
 
     // Confirm page, rendered in place of the review stage; the queued rows
     // stay intact behind it, so Reject lands back on the step list.
@@ -601,12 +610,14 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => { setResult(null); setComposed(null); setStage('compose'); }}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={() => { setResult(null); setComposed(null); setStage('compose'); }}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         // A queued result is SIGNED and not broadcast: the confirm lane
@@ -614,11 +625,13 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // broadcast" would report N sub-actions as sent when none are.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />,
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Batch broadcast</h2>
                 <p className={styles.hint}>All {rows.length} action{rows.length === 1 ? '' : 's'} were sent in one transaction. Each one confirms or fails on its own.</p>
                 {txid ? (
@@ -628,7 +641,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     </>
                 ) : null}
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
-            </>,
+            </ListPage>,
         );
     }
 

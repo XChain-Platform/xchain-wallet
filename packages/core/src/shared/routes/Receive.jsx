@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -1094,9 +1094,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     if (isSignerMode) {
         return (
             <Screen variant={variant} header={header}>
-                <StatusMessage variant="status">
-                    {t('receive.thisWalletIsInSigner')}
-                </StatusMessage>
+                <ListPage
+                    notices={(
+                        <StatusMessage variant="status">
+                            {t('receive.thisWalletIsInSigner')}
+                        </StatusMessage>
+                    )}
+                />
             </Screen>
         );
     }
@@ -1112,13 +1116,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     if (!hasAvailableChain(settingsState, chainRegistry)) {
         return (
             <Screen variant={variant} header={header}>
-                <EmptyState
-                    title={NO_CHAINS_TITLE}
-                    body={NO_CHAINS_BODY}
-                    actionLabel={t('common.openNetworkSettings')}
-                    onAction={() => setNetworkSettingsOpen(true)}
-                    actionIcon={<Icon.GearIcon />}
-                />
+                <ListPage>
+                    <EmptyState
+                        title={NO_CHAINS_TITLE}
+                        body={NO_CHAINS_BODY}
+                        actionLabel={t('common.openNetworkSettings')}
+                        onAction={() => setNetworkSettingsOpen(true)}
+                        actionIcon={<Icon.GearIcon />}
+                    />
+                </ListPage>
             </Screen>
         );
     }

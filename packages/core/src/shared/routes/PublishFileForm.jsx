@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -547,10 +547,10 @@ export function PublishFileForm({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
     // Confirm page, rendered in place of the form; the picked file and the
@@ -587,12 +587,14 @@ export function PublishFileForm({ walletId, onBack }) {
         );
         if (result?.psbtHex && !result?.txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => { setResult(null); setStage('compose'); }}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={() => { setResult(null); setStage('compose'); }}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         const txid = result?.txid || result?.broadcast?.txid || null;
@@ -601,11 +603,13 @@ export function PublishFileForm({ walletId, onBack }) {
         // published" would claim a permanent publish that never happened.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="file publish" unsaved={result.unsaved} />,
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="file publish" unsaved={result.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>File published</h2>
                 {txid ? (
                     <>
@@ -627,7 +631,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

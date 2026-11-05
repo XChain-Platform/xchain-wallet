@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -358,24 +358,24 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
-    if (!addressesByChain) return wrap(<p>Loading addresses…</p>);
+    if (!addressesByChain) return wrap(<ListPage><p>Loading addresses…</p></ListPage>);
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         if (result?.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ListPage><ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>);
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     {isClear
                         ? `Delegation cleared. Your ${voteParams.tick} voting weight stops flowing once the network records the action.`
@@ -386,7 +386,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
-            </>,
+            </ListPage>,
         );
     }
 

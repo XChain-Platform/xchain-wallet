@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
@@ -551,25 +551,28 @@ export function ContractStakeForm({
         </Screen>
     );
 
+    // The load error, the loading line, the not-stakeable notice and the done
+    // panels lay out through ListPage, the same way the form and review stages
+    // lay out through FormPage, so no state draws straight into the Screen box.
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            <ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />,
         );
     }
     if (!addressesByChain || !contractMeta) {
-        return wrap(<p>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
     if (!contractMeta.valid) {
         return wrap(
-            <>
-                <StatusMessage variant="error">
-                    Contract #{contractActionIndex} is not stakeable. Its deploy
-                    transaction did not set a cooldown duration. Staking is only
-                    available on contracts that explicitly opted in at deploy time.
-                </StatusMessage>
-            </>,
+            <ListPage
+                notices={(
+                    <StatusMessage variant="error">
+                        Contract #{contractActionIndex} is not stakeable. Its deploy
+                        transaction did not set a cooldown duration. Staking is only
+                        available on contracts that explicitly opted in at deploy time.
+                    </StatusMessage>
+                )}
+            />,
         );
     }
 
@@ -579,20 +582,26 @@ export function ContractStakeForm({
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result?.unsaved} />);
+            return wrap(
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result?.unsaved} />
+                </ListPage>,
+            );
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     {mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegation'} submitted.
                     The transaction was broadcast; the network will record it shortly.
@@ -604,7 +613,7 @@ export function ContractStakeForm({
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

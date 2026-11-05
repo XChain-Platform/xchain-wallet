@@ -11,7 +11,7 @@
 import { t } from '../../i18n/index.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1177,10 +1177,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
@@ -1201,7 +1201,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="update" unsaved={result.unsaved} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>{MODE_DONE_TITLE[mode]}</h2>
                 {txid ? (
                     <>
@@ -1214,7 +1214,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

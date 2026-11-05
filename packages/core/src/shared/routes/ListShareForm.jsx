@@ -292,14 +292,30 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         );
     }
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
+    }
     if (!addressesByChain || !detail || owner === undefined || !sharedRows || sdkSupported === null) {
-        return wrap(<p className={styles.hint}>Loading...</p>);
+        return wrap(
+            <ListPage>
+                <p className={styles.hint}>Loading...</p>
+            </ListPage>,
+        );
     }
 
     if (result) {
         // Signed but held in the broadcast queue: nothing is on the network yet.
-        if (result.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="list share" unsaved={result.unsaved} />);
+        if (result.queued) {
+            return wrap(
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onDone} what="list share" unsaved={result.unsaved} />
+                </ListPage>,
+            );
+        }
         if (result.psbtHex && !result.txid) {
             return wrap(
                 <ListPage>

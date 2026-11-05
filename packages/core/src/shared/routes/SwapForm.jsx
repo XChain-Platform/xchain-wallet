@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -595,20 +595,21 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             header={header}
             restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
-            {!networkAvailable ? (
-                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
-            ) : null}
             {children}
         </Screen>
     );
+    // Every state lays out through FormPage, so the offline notice joins the
+    // FormPage status of whichever state shows instead of sitting in Screen.
+    const offlineNotice = !networkAvailable ? (
+        <StatusMessage key="offline" variant="warning">Swapping needs a network connection.</StatusMessage>
+    ) : null;
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <FormPage
+                label="Swap tokens"
+                status={[offlineNotice, <StatusMessage key="load-error" variant="error">{loadError}</StatusMessage>]}
+            />,
         );
     }
 
@@ -618,20 +619,31 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(
+                <FormPage as="div" label="Swap result" status={[offlineNotice]}>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />
+                </FormPage>,
+            );
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <FormPage as="div" label="Swap result" status={[offlineNotice]}>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label="Swap result"
+                status={[offlineNotice]}
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Swap sent</p>
                 {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
@@ -643,15 +655,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     counterparty matches it; until then you can cancel or edit
                     it from its entry in your activity.
                 </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(
+            <FormPage label="Swap tokens" status={[offlineNotice]}>
+                <p className={styles.hint}>Loading wallet…</p>
+            </FormPage>,
+        );
     }
 
     // --- Review / submitting screen -------------------------------------
@@ -671,9 +684,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 demoGuard={demoGuard}
                 label="Review swap"
                 onSubmit={handleSubmit}
-                status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
+                status={[
+                    offlineNotice,
+                    (isWatcherMode || hw) && submitError ? (
+                        <StatusMessage key="submit-error" variant="error">{submitError}</StatusMessage>
+                    ) : null,
+                ]}
                 actions={(
                     <>
                         <Button
@@ -881,20 +897,23 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || formError ? (
-                <>
-                    {validationError ? (
-                        <StatusMessage variant="error">
-                            {validationError}
-                        </StatusMessage>
-                    ) : null}
-                    {formError ? (
-                        <StatusMessage variant="error">
-                            {formError}
-                        </StatusMessage>
-                    ) : null}
-                </>
-            ) : null}
+            status={[
+                offlineNotice,
+                validationError || formError ? (
+                    <Fragment key="form-errors">
+                        {validationError ? (
+                            <StatusMessage variant="error">
+                                {validationError}
+                            </StatusMessage>
+                        ) : null}
+                        {formError ? (
+                            <StatusMessage variant="error">
+                                {formError}
+                            </StatusMessage>
+                        ) : null}
+                    </Fragment>
+                ) : null,
+            ]}
             actions={(
                 <Button
                     type="submit"
@@ -935,6 +954,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     hideNetworkKind
+                    iconOnly
                 />
 
                 {fromAddress ? (

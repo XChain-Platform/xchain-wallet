@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -563,33 +563,40 @@ export function CreateBetFeedForm({
         );
     }
 
+    // The load error, the loading line and every result lay out through
+    // ListPage, the template for read-only states, so no state draws
+    // straight into the Screen box beside a form stage that uses FormPage.
     if (loadError) {
-        return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
-        );
+        return wrap(<ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />);
     }
-    if (!addressesByChain) return wrap(<p>Loading addresses…</p>);
+    if (!addressesByChain) return wrap(<ListPage><p className={styles.hint}>Loading addresses…</p></ListPage>);
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => setResult(null)}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={() => setResult(null)}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) {
+            return wrap(
+                <ListPage>
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />
+                </ListPage>,
+            );
+        }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     Market submitted. Once the network records it, anyone holding {tick} can bet on it,
                     and it is yours to resolve after betting closes.
@@ -605,7 +612,7 @@ export function CreateBetFeedForm({
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onCreated || onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

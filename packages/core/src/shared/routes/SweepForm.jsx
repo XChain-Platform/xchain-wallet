@@ -667,33 +667,50 @@ export function SweepForm({
         </Screen>
     );
 
+    // The load error, the loading line and every result lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
+    const pageLabel = migrateLane ? 'Sweep to new wallet' : 'Sweep address';
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label={pageLabel}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<FormPage label={pageLabel}><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <FormPage label="Unsigned sweep transaction">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         // Signed but not broadcast. None of the post-sweep effects
         // below (auto-pay disarmed, dispensers closing) have happened.
         if (result?.queued) {
-            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="sweep" unsaved={result.unsaved} />);
+            return wrap(
+                <FormPage label="Queued sweep transaction">
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="sweep" unsaved={result.unsaved} />
+                </FormPage>,
+            );
         }
         const forceClose = result?.forceClose;
         return wrap(
-            <>
+            <FormPage
+                label="Sweep result"
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <h2 className={styles.successTitle}>Sweep broadcast</h2>
                 {txid ? (
                     <>
@@ -724,10 +741,7 @@ export function SweepForm({
                         available to {migrateTo.name || 'the new wallet'}.
                     </p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
+import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWN = 'bc1qexampleexampleexampleexampleexampleex';
@@ -111,6 +112,46 @@ async function mountAndPaste(overrides = {}) {
     return utils;
 }
 
+// Mount the screen with no paste, for the early-return states.
+async function mountOnly(overrides = {}) {
+    const target = {
+        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
+        getActiveAddresses: () => Promise.resolve({}),
+        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        ...overrides,
+    };
+    const messaging = new Proxy(target, {
+        get(t, prop) {
+            if (prop in t) return t[prop];
+            return () => Promise.resolve({});
+        },
+    });
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(PsbtSignForm, { walletId: 'w', onBack() {} }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    return utils;
+}
+
+// The screen body's first child is the ListPage wrapper, and the notice sits inside it.
+function expectNoticeInListPage(utils, re) {
+    const main = utils.container.querySelector('main');
+    expect(main).toBeTruthy();
+    const page = main.firstElementChild;
+    expect(page.classList.contains(listPageStyles.page)).toBe(true);
+    const notice = Array.from(page.querySelectorAll('[role="alert"], [role="status"]'))
+        .find((n) => re.test(n.textContent || ''));
+    expect(notice, 'notice inside the ListPage wrapper').toBeTruthy();
+    return page;
+}
+
 // Sign on the hardware lane, then press Broadcast with the given rejection.
 async function broadcastWith(broadcastSignedTxRequest) {
     const overrides = broadcastSignedTxRequest
@@ -189,6 +230,30 @@ describe('PSBT sign screen: a paste that cannot be read', () => {
         const text = alertsText(utils);
         expect(text).toMatch(/can't read pasted transactions/i);
         expect(text).not.toMatch(/messaging\.|parsePsbtRequest/);
+    });
+});
+
+describe('PSBT sign screen: an address load that fails', () => {
+    it('puts the load error inside the ListPage wrapper, not straight into Screen', async () => {
+        const utils = await mountOnly({
+            getAddressesByChain: () => Promise.reject(new Error('node unreachable')),
+        });
+        expectNoticeInListPage(utils, /load your addresses/i);
+    });
+
+    it('puts the no-addresses error inside the ListPage wrapper', async () => {
+        const utils = await mountOnly({ getAddressesByChain: () => Promise.resolve({}) });
+        expectNoticeInListPage(utils, /No addresses on any network yet/);
+    });
+
+    it('shares the wrapper the watch-only notice uses', async () => {
+        const watcher = await mountOnly({ getSettings: () => Promise.resolve({ walletMode: 'watcher' }) });
+        const watcherClass = expectNoticeInListPage(watcher, /cannot sign transactions/).className;
+        cleanup();
+        const failed = await mountOnly({
+            getAddressesByChain: () => Promise.reject(new Error('node unreachable')),
+        });
+        expect(expectNoticeInListPage(failed, /load your addresses/i).className).toBe(watcherClass);
     });
 });
 

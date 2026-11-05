@@ -567,12 +567,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            <ListPage notices={<StatusMessage variant="error">{loadError}</StatusMessage>} />,
         );
     }
-    if (!poll) return wrap(<p>Loading poll…</p>);
+    if (!poll) return wrap(<ListPage><p>Loading poll…</p></ListPage>);
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;

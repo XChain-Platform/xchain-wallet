@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { formatUnixSecondsLocal } from '../utils/dateTime.js';
@@ -625,30 +625,33 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 : 'Cross-chain swap'}
         />
     );
+    // Every state draws through a page template: the form and the review
+    // through FormPage, the load error, the loading line and each result
+    // through ListPage. The offline note leads each template's notices
+    // instead of sitting bare in Screen.
+    const offlineNote = !networkAvailable ? (
+        <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
+    ) : null;
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
-            {!networkAvailable ? (
-                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
-            ) : null}
             {children}
         </Screen>
     );
+    const listPage = (children, notices = null) => wrap(
+        <ListPage notices={offlineNote || notices ? <>{offlineNote}{notices}</> : null}>
+            {children}
+        </ListPage>,
+    );
 
-    if (loadError && networkOffline && loadErrorIsRequirement) return wrap(null);
+    if (loadError && networkOffline && loadErrorIsRequirement) return listPage(null);
     if (loadError) {
-        return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
-        );
+        return listPage(null, <StatusMessage variant="error">{loadError}</StatusMessage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
-            return wrap(
+            return listPage(
                 <ResultScreen
                     state="unsigned"
                     result={result}
@@ -661,9 +664,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the success
         // copy below would report an escrow that is not open yet.
         if (result?.queued) {
-            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
+            return listPage(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
         }
-        return wrap(
+        return listPage(
             <>
                 <SectionHeader title="Cross-chain swap broadcast" />
                 {txid ? (
@@ -682,7 +685,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return listPage(<p className={styles.hint}>Loading wallet…</p>);
     }
 
     // Review and submitting stages: show a confirmation summary with
@@ -700,9 +703,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 demoGuard={demoGuard}
                 label="Review cross-chain swap"
                 onSubmit={handleSubmit}
-                status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
+                status={[
+                    offlineNote,
+                    (isWatcherMode || hw) && submitError ? (
+                        <StatusMessage key="submit" variant="error">{submitError}</StatusMessage>
+                    ) : null,
+                ]}
                 actions={(
                     <>
                         <Button
@@ -911,16 +917,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             // fields hold still until the confirm page opens.
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
-            status={(validationError || formError) ? (
-                <>
-                    {validationError ? (
-                        <StatusMessage variant="error">{validationError}</StatusMessage>
-                    ) : null}
-                    {formError ? (
-                        <StatusMessage variant="error">{formError}</StatusMessage>
-                    ) : null}
-                </>
-            ) : null}
+            status={[
+                offlineNote,
+                validationError ? (
+                    <StatusMessage key="validation" variant="error">{validationError}</StatusMessage>
+                ) : null,
+                formError ? (
+                    <StatusMessage key="form" variant="error">{formError}</StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <Button
                     type="submit"

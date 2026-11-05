@@ -673,8 +673,10 @@ function SwapActionPanel({
         if (result.psbtHex && !txid) {
             return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
         }
+        // The broadcast panel lays out through ListPage, so it never draws
+        // straight into the Screen content box.
         return wrap(
-            <>
+            <ListPage actions={<Button variant="primary" onClick={onDone}>Done</Button>}>
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
                 <p className={F.hint}>
                     {isCancel
@@ -692,8 +694,7 @@ function SwapActionPanel({
                         ) : null}
                     </>
                 ) : null}
-                <div className={F.actions}><Button variant="primary" onClick={onDone}>Done</Button></div>
-            </>,
+            </ListPage>,
         );
     }
 

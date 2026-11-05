@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
+import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
@@ -58,7 +59,10 @@ describe('GovernancePolls states', () => {
     it('shows the empty-wallet state when no governance address exists', async () => {
         mount({ getAddressesByChain: vi.fn().mockResolvedValue({}) });
 
-        expect(await screen.findByRole('heading', { name: 'No governance address' })).toBeInTheDocument();
+        const heading = await screen.findByRole('heading', { name: 'No governance address' });
+        expect(heading).toBeInTheDocument();
+        // The empty state sits inside the ListPage template, like the loading and error states.
+        expect(heading.closest(`.${listPageStyles.page}`)).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Create poll' })).toBeNull();
     });
 

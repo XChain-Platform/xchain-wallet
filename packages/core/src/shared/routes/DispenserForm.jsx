@@ -15,6 +15,7 @@ import {
     PageHeader,
     FormNotice,
     FormPage,
+    ListPage,
     Button,
     Input,
     ChainBadge,
@@ -1247,11 +1248,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         </Screen>
     );
 
+    // The load error, the loading line and the dispenser-opened panel lay out
+    // through ListPage inside the Screen, so they keep the template edge and
+    // rhythm the form and review stages get from FormPage.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     if (stage === 'done') {
@@ -1271,7 +1279,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return wrap(<ResultScreen state="signed-not-broadcast" onDone={leaveGuard.guardedOnBack} what="dispenser" unsaved={result.unsaved} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Dispenser opened</h2>
                 {txid ? (
                     <>
@@ -1284,7 +1292,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

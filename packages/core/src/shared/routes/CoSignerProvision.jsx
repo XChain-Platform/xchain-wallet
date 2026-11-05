@@ -264,17 +264,36 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         </Screen>
     );
 
+    // The load error, the loading line and the created-account panel lay out
+    // through FormPage like the compose and review stages, so no state draws
+    // straight into Screen.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label="Create agent account"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(
+            <FormPage label="Create agent account">
+                <p className={styles.hint}>Loading wallet…</p>
+            </FormPage>,
+        );
     }
 
     if (stage === 'done') {
         const account = result;
         return wrap(
-            <>
+            <FormPage
+                label="Agent account created"
+                actions={(
+                    <Button variant="primary" onClick={() => (onDone ? onDone(account?.id) : onBack())}>
+                        {onDone ? 'View account' : 'Done'}
+                    </Button>
+                )}
+            >
                 <p className={styles.successTitle}>Agent account created</p>
                 <p className={styles.hint}>
                     Fund this address to give the agent a balance to operate on. The
@@ -291,12 +310,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                         <CopyButton value={account?.aggregateAddress || ''} label="Copy address" />
                     </dd>
                 </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={() => (onDone ? onDone(account?.id) : onBack())}>
-                        {onDone ? 'View account' : 'Done'}
-                    </Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

@@ -888,18 +888,25 @@ function ComposeMessageForm({
         </Screen>
     );
 
+    // The load error, the loading line and the sent panel lay out through
+    // FormPage like the form and review stages, so each keeps the template
+    // edge and rhythm instead of sitting bare in the Screen content box.
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <FormPage
+                as="div"
+                label={t('composeMessage.newTitle')}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>{t('composeMessage.loadingWallet')}</p>);
+        return wrap(
+            <FormPage as="div" label={t('composeMessage.newTitle')}>
+                <p className={styles.hint}>{t('composeMessage.loadingWallet')}</p>
+            </FormPage>,
+        );
     }
 
     if (handshakeQueued) {
@@ -923,17 +930,18 @@ function ComposeMessageForm({
             return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('composeMessage.whatMessage')} unsaved={result.unsaved} />);
         }
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label={t('shell.messageSent')}
+                actions={<Button variant="primary" onClick={onBack}>{t('common.done')}</Button>}
+            >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('shell.messageSent')}</p>
                 {result?.txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         {t('gatedPublish.transaction')} <code>{result.txid}</code>
                     </p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

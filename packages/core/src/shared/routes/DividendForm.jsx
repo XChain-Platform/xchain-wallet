@@ -858,23 +858,32 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         </Screen>
     );
 
+    // The load error, the loading line and every result lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
+    // None of them submits anything, so each is the div form of the template.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage as="div" label="Pay dividend">
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </FormPage>,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<FormPage as="div" label="Pay dividend"><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <FormPage as="div" label="Unsigned dividend transaction">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         // This is the form the campaign proved it on. A queued result
@@ -882,11 +891,17 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         // node was briefly unreachable that their holders had been paid.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="dividend" unsaved={result.unsaved} />,
+                <FormPage as="div" label="Queued dividend transaction">
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="dividend" unsaved={result.unsaved} />
+                </FormPage>,
             );
         }
         return wrap(
-            <>
+            <FormPage
+                as="div"
+                label="Dividend result"
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <h2 className={styles.successTitle}>Dividend sent</h2>
                 {txid ? (
                     <>
@@ -896,10 +911,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 ) : (
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 

@@ -569,12 +569,12 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
-    if (!addressesByChain) return wrap(<p>Loading addresses…</p>);
+    if (!addressesByChain) return wrap(<ListPage><p>Loading addresses…</p></ListPage>);
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;

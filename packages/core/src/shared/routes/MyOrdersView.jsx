@@ -722,22 +722,33 @@ function OrderActionPanel({
             value: txid,
             settings,
         });
+        // Every result lays out through FormPage like the form itself, so no
+        // state draws straight into the bare Screen.
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onDone}
-                    what={isCancel ? 'order cancel' : 'order edit'}
-                    unsaved={result.unsaved}
-                />,
+                <FormPage label={isCancel ? 'Queued order cancel' : 'Queued order edit'}>
+                    <ResultScreen
+                        state="signed-not-broadcast"
+                        onDone={onDone}
+                        what={isCancel ? 'order cancel' : 'order edit'}
+                        unsaved={result.unsaved}
+                    />
+                </FormPage>,
             );
         }
         if (result.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
+            return wrap(
+                <FormPage label={isCancel ? 'Unsigned order cancel' : 'Unsigned order edit'}>
+                    <ResultScreen state="unsigned" result={result} onDone={onDone} />
+                </FormPage>,
+            );
         }
         return wrap(
-            <>
+            <FormPage
+                label={isCancel ? 'Order cancel result' : 'Order edit result'}
+                actions={<Button variant="primary" onClick={onDone}>Done</Button>}
+            >
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
                 <p className={F.hint}>
                     {isCancel
@@ -755,8 +766,7 @@ function OrderActionPanel({
                         ) : null}
                     </>
                 ) : null}
-                <div className={F.actions}><Button variant="primary" onClick={onDone}>Done</Button></div>
-            </>,
+            </FormPage>,
         );
     }
 

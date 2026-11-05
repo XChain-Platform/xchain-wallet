@@ -275,3 +275,64 @@ describe('CoSignerProvision states', () => {
         expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
     });
 });
+
+// The load error, the loading line and the created-account panel lay out
+// through the FormPage template like the compose and review stages, so no
+// state draws straight into the bare Screen.
+describe('CoSignerProvision lays out every state through FormPage', () => {
+    it('shows the address-load error as the FormPage status', async () => {
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockRejectedValue(new Error('Wallet unavailable')),
+            }}>
+                <CoSignerProvision walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const message = await screen.findByText('Wallet unavailable');
+        const status = message.closest('[data-form-status]');
+        expect(status).not.toBeNull();
+        expect(container.querySelector('form')).not.toBeNull();
+    });
+
+    it('puts the loading line inside the FormPage form', () => {
+        mount(vi.fn(() => pending()));
+
+        expect(screen.getByText(/Loading wallet/).closest('form')).not.toBeNull();
+    });
+
+    it('puts the created-account panel and its action inside the FormPage form', async () => {
+        const provisionCoSignerAccount = vi.fn().mockResolvedValue({
+            id: 'account-1',
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            name: 'Treasury agent',
+            aggregateAddress: 'bc1paggregate',
+        });
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockResolvedValue(addresses('address-1')),
+                provisionCoSignerAccount,
+            }}>
+                <CoSignerProvision walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
+            target: { value: 'address-1' },
+        });
+        fireEvent.change(screen.getByLabelText('Agent public key'), {
+            target: { value: AGENT_KEY },
+        });
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review agent account' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create agent account' }));
+
+        const title = await screen.findByText('Agent account created');
+        const form = title.closest('form');
+        expect(form).not.toBeNull();
+        expect(form).toHaveTextContent('Treasury agent');
+        expect(form).toHaveTextContent('Fund this address');
+        expect(form.contains(screen.getByRole('button', { name: 'Done' }))).toBe(true);
+    });
+});

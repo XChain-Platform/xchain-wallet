@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -516,7 +516,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     if (isWatcherMode) {
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
                     Publishing an official-token list is a two-phase action:
@@ -526,18 +526,26 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     on-chain, so this flow can't be split across an
                     air-gapped boundary today.
                 </p>
-            </>,
+            </ListPage>,
         );
     }
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
     if (rosterLoadError) {
-        return wrap(<StatusMessage variant="error">{rosterLoadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{rosterLoadError}</StatusMessage>
+            </ListPage>,
+        );
     }
 
     if (actionConfirm.open) {
@@ -566,12 +574,16 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     // A leg signed but not broadcast stops the flow: the panel offers no retry,
     // because signing again while a signed copy is queued double-broadcasts.
     if (queuedLeg) {
-        return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />);
+        return wrap(
+            <ListPage>
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />
+            </ListPage>,
+        );
     }
 
     if (stage === 'done') {
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Official list published</h2>
                 <p className={styles.successLabel}>List transaction</p>
                 <code className={styles.txid}>{listTxid}</code>
@@ -585,7 +597,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -593,7 +605,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         const minutes = Math.floor(waitElapsed / 60);
         const slow = minutes >= 5;
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>List is on its way</h2>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>List transaction</dt>
@@ -620,7 +632,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
