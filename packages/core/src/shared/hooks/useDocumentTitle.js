@@ -87,7 +87,7 @@ const ROUTE_LABELS = {
     'cross-chain-templates': 'Cross-chain templates',
     'wallet-picker': 'Wallets',
     'account-picker': 'Accounts',
-    'migrate-bip39': 'Upgrade to a BIP39 recovery phrase',
+    'migrate-bip39': 'Upgrade to a standard recovery phrase',
     'sign-psbt': 'Sign transaction',
     'multisig-sign': 'Multisig signing sessions',
     'cosigner-accounts': 'Agent accounts',

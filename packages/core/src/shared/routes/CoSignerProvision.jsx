@@ -337,7 +337,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                     <dd className={styles.detailsValue}><AddressText address={daemonAddress?.address || ''} /></dd>
                     <dt className={styles.detailsLabel}>This wallet's public key</dt>
                     <dd className={styles.detailsValue}><code>{reviewPayload.daemonPubkey}</code></dd>
-                    <dt className={styles.detailsLabel}>This wallet's derivation path</dt>
+                    <dt className={styles.detailsLabel}>This wallet's account path</dt>
                     <dd className={styles.detailsValue}><code>{reviewPayload.daemonDerivationPath}</code></dd>
                     <dt className={styles.detailsLabel}>Agent public key</dt>
                     <dd className={styles.detailsValue}><code>{reviewPayload.agentPubkey}</code></dd>

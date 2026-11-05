@@ -624,7 +624,7 @@ function ReviewCosigner({ index, row }) {
                 ) : null}
                 <dt className={styles.detailsLabel}>Master fingerprint</dt>
                 <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.fingerprint.toLowerCase()}</code></dd>
-                <dt className={styles.detailsLabel}>Derivation path</dt>
+                <dt className={styles.detailsLabel}>Account path</dt>
                 <dd className={styles.detailsValue}><code style={keyValueStyle}>{row.derivationPath}</code></dd>
             </dl>
         </fieldset>
@@ -738,7 +738,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             ) : null}
 
             <Input
-                label="Derivation path"
+                label="Account path"
                 onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}

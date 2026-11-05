@@ -31,7 +31,7 @@ const messages = {
     'createWallet.step1Of3': 'Step 1 of 3',
     'createWallet.atLeastCharactersUseA':
         'At least {MIN_PASSWORD_LENGTH} characters. Use a unique password; longer is stronger.',
-    'createWallet.useABip39PassphraseAdvanced': 'Use a BIP39 passphrase (advanced)',
+    'createWallet.useABip39PassphraseAdvanced': 'Use an extra passphrase (advanced)',
     'createWallet.thisExtraSecretCombinesWith':
         'This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device.',
     'createWallet.saveThisPassphraseSeparatelyFrom':
@@ -50,6 +50,9 @@ const messages = {
     'createWallet.yourPasswordEncryptsThisWallet':
         'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.',
     'createWallet.yourPasswordEncryptsThisWallet2': 'Your password encrypts this wallet on this device.',
+    'createWallet.enterTheExtraPassphraseOrUncheck':
+        'Enter the extra passphrase, or uncheck the box to create a wallet without one.',
+    'createWallet.extraPassphrasesDoNotMatch': "Extra passphrases don't match.",
 };
 
 addEnglish(messages);

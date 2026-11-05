@@ -32,9 +32,9 @@ const messages = {
         "This multisig has more cosigners than its address type supports, so funds sent to it can't be spent.",
     'multisig.share.publicKey': 'Public key',
     'multisig.share.masterFingerprint': 'Master fingerprint',
-    'multisig.share.derivationPath': 'Derivation path',
+    'multisig.share.derivationPath': 'Account path',
     'multisig.share.identityCheck':
-        'Identity check: before funding the multisig, compare the master fingerprint and derivation path with the cosigner over a separate trusted channel. For a hardware signer, confirm its fingerprint on the device itself.',
+        'Identity check: before funding the multisig, compare the master fingerprint and account path shown above with the cosigner over a separate trusted channel. For a hardware signer, confirm its fingerprint on the device itself.',
     'multisig.share.copyField': 'Copy {label}',
     'multisig.share.unavailable': 'Not available from this signer',
     'multisig.reply.signatureInvalid':

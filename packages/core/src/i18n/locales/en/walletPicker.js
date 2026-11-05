@@ -22,7 +22,7 @@ const messages = {
     'walletPicker.demoPrefix': 'Demo wallet · ',
     'walletPicker.legacy': 'FreeWallet (legacy)',
     'walletPicker.importedKey': 'Imported key',
-    'walletPicker.bip39': 'BIP39',
+    'walletPicker.bip39': 'Standard',
     'walletPicker.passphraseNeeded': ' · needs its passphrase at unlock',
     'walletPicker.detailsFor': 'Wallet details for {wallet}',
 };

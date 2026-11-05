@@ -42,7 +42,7 @@ describe('WalletPicker row layout', () => {
         const row = screen.getByRole('button', { name: new RegExp(`^${wallet.name}`) });
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
-        expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
+        expect(row.firstElementChild.textContent).toContain('Demo wallet · Standard');
         expect(screen.getByTitle(wallet.name)).toHaveTextContent(wallet.name);
 
         const css = readFileSync(

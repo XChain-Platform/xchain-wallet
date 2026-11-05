@@ -43,7 +43,7 @@ const VALUE_TEST_IDS = [
     'cosigner-share-account-public-key',
     'cosigner-share-public-key',
     'cosigner-share-master-fingerprint',
-    'cosigner-share-derivation-path',
+    'cosigner-share-account-path',
 ];
 
 function mount(props = {}) {
@@ -196,7 +196,7 @@ describe('MultisigCosignerShare key details', () => {
         expect(screen.queryByLabelText('Cosigner share details')).toBeNull();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(screen.getByRole('note')).toHaveTextContent(
-            /compare the master fingerprint and derivation path.*separate trusted channel/i,
+            /compare the master fingerprint and account path shown above.*separate trusted channel/i,
         );
     });
 
@@ -223,7 +223,7 @@ describe('MultisigCosignerShare key details', () => {
         expect(await screen.findByTestId('cosigner-share-account-public-key')).toHaveTextContent(INFO.xpub);
         expect(screen.getByTestId('cosigner-share-public-key')).toHaveTextContent(INFO.pubkey);
         expect(screen.getByTestId('cosigner-share-master-fingerprint')).toHaveTextContent(INFO.fingerprint);
-        expect(screen.getByTestId('cosigner-share-derivation-path')).toHaveTextContent(INFO.derivationPath);
+        expect(screen.getByTestId('cosigner-share-account-path')).toHaveTextContent(INFO.derivationPath);
         expect(screen.getByText(`Account ${INFO.accountPath}`)).toBeTruthy();
         expect(screen.getByTestId('cosigner-share-account-public-key').style.overflowWrap).toBe('anywhere');
         expect(messaging.getMultisigCosignerInfo).toHaveBeenCalledTimes(1);

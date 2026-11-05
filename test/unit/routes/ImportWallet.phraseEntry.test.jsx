@@ -79,7 +79,7 @@ describe('ImportWallet recovery phrase entry', () => {
         const action = screen.getByRole('button', { name: 'Import' });
         const phrase = screen.getByLabelText('Recovery phrase');
 
-        expect(phrase).toHaveAccessibleDescription(/Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words/);
+        expect(phrase).toHaveAccessibleDescription(/Enter a standard recovery phrase with 12, 15, 18, 21, or 24 words/);
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
         expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
@@ -114,7 +114,7 @@ describe('ImportWallet recovery phrase entry', () => {
 
         expect(textarea).toHaveValue(BIP39_PHRASE);
         expect(screen.getByText('12 words entered')).toBeTruthy();
-        expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
+        expect(screen.getByText('Standard recovery phrase detected')).toBeTruthy();
 
         fillPasswords();
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
@@ -169,7 +169,7 @@ describe('ImportWallet recovery phrase entry', () => {
         textarea.setSelectionRange(12, 12);
         fireEvent.select(textarea);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Use BIP39 word "about"' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Use recovery word "about"' }));
 
         expect(textarea).toHaveValue('abandon about abandon');
     });
@@ -199,14 +199,14 @@ describe('ImportWallet recovery phrase entry', () => {
 
         fireEvent.change(textarea, { target: { value: COUNTERWALLET_PHRASE } });
         expect(screen.queryByText('Counterwallet/FreeWallet recovery phrase detected')).toBeNull();
-        expect(screen.queryByText('BIP39 recovery phrase detected')).toBeNull();
+        expect(screen.queryByText('Standard recovery phrase detected')).toBeNull();
 
         fireEvent.change(textarea, { target: { value: BIP39_PHRASE } });
-        expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
+        expect(screen.getByText('Standard recovery phrase detected')).toBeTruthy();
 
         fireEvent.change(textarea, { target: { value: BIP39_24_WORD_PHRASE } });
         expect(screen.getByText('24 words entered')).toBeTruthy();
-        expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();
+        expect(screen.getByText('Standard recovery phrase detected')).toBeTruthy();
     });
 
     it.each([['import', renderImport], ['FreeWallet import', renderFreeWallet]])(
@@ -235,7 +235,7 @@ describe('ImportWallet recovery phrase entry', () => {
 
     it('explains FreeWallet format detection and shows its 12-word target', () => {
         renderFreeWallet();
-        expect(screen.getByText(/detect BIP39 or the legacy Counterwallet\/FreeWallet format automatically/)).toBeTruthy();
+        expect(screen.getByText(/detect a standard recovery phrase or the legacy Counterwallet\/FreeWallet format automatically/)).toBeTruthy();
         expect(screen.getByText('0 / 12 words')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), {

@@ -35,11 +35,11 @@ const messages = {
     'importWallet.wif.chain': 'Private key network',
     'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
     'importWallet.freeWallet.fullSubtitle':
-        'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.',
+        'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect a standard recovery phrase or the legacy Counterwallet/FreeWallet format automatically.',
     'importWallet.freeWallet.subtitle':
         'Enter your 12-word FreeWallet recovery phrase.',
     'importWallet.phrase.fullSubtitle':
-        'Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.',
+        'Enter a standard recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.',
     'importWallet.phrase.subtitle':
         'Enter a recovery phrase with 12, 15, 18, 21, or 24 words.',
     'importWallet.backup.file': 'Backup file',
@@ -64,24 +64,26 @@ const messages = {
         '{count, plural, one {# word entered} other {# words entered}}',
     // {expected} is the accepted counts already joined as an "or" list.
     'importWallet.phrase.wrongWordCount': 'Expected {expected} words, got {count}.',
-    'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
+    'importWallet.phrase.bip39Detected': 'Standard recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.notBip39UseFreeWallet':
         "This phrase doesn't pass the recovery phrase check. If it came from FreeWallet, use the From FreeWallet option.",
-    'importWallet.phrase.suggestions': 'BIP39 word suggestions',
-    'importWallet.phrase.useWord': 'Use BIP39 word "{word}"',
+    'importWallet.phrase.suggestions': 'Recovery word suggestions',
+    'importWallet.phrase.useWord': 'Use recovery word "{word}"',
     'importWallet.phrase.releaseToLoad': 'Release to load',
     'importWallet.phrase.dropHint': 'Drop a .txt file with your recovery phrase to load it here.',
     'importWallet.password.fullHint':
         'At least {count} characters. Encrypts this wallet on this device.',
     'importWallet.password.hint': 'At least {count} characters.',
     'importWallet.confirmPassword': 'Confirm password',
-    'importWallet.passphrase.toggle': 'This wallet uses a BIP39 passphrase',
-    'importWallet.passphrase.help': 'BIP39 passphrase help',
+    'importWallet.passphrase.toggle': 'This wallet uses an extra passphrase',
+    'importWallet.passphrase.help': 'Extra passphrase help',
     'importWallet.passphrase.helpBody':
         'This extra secret combines with your recovery phrase to recreate the same wallet. It stays behind your password here; hardware wallets request it on the device and connect through Add Account, then Hardware Signer.',
-    'importWallet.passphrase.label': 'BIP39 passphrase',
+    'importWallet.passphrase.label': 'Extra passphrase',
     'importWallet.passphrase.hint': 'Required to derive the same addresses as the original wallet.',
+    'importWallet.passphrase.empty':
+        "Enter the extra passphrase, or uncheck the box if this wallet doesn't use one.",
     'importWallet.backToSetup': 'Back to wallet setup',
     'importWallet.openInTab': 'Open in tab',
     'importWallet.walletElsewhere': 'This device already has a wallet, so nothing was imported here. Unlock that wallet to continue.',

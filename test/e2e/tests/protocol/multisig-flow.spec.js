@@ -138,7 +138,7 @@ async function fillExternalHardware(row, cosigner) {
         .fill(cosigner.pubkey);
     await row.getByLabel('Master fingerprint', { exact: true })
         .fill(cosigner.fingerprint);
-    await row.getByLabel('Derivation path', { exact: true }).fill(cosigner.derivationPath);
+    await row.getByLabel('Account path', { exact: true }).fill(cosigner.derivationPath);
 }
 
 async function createSigningSession(page) {

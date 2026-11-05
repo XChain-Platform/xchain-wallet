@@ -279,7 +279,7 @@ describe('WalletPicker render', () => {
             await wallets.promise;
         });
 
-        expect(await screen.findByRole('button', { name: /Primary wallet BIP39/ })).toHaveAttribute('aria-current', 'true');
+        expect(await screen.findByRole('button', { name: /Primary wallet Standard/ })).toHaveAttribute('aria-current', 'true');
         expect(screen.getByRole('button', { name: 'Manage wallet' })).toBeInTheDocument();
     });
 

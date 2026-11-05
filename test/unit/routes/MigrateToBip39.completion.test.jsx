@@ -69,7 +69,7 @@ function renderMigration(messaging = makeMessaging()) {
             />
         </MessagingProvider>,
     );
-    expectOnlyPageTitle('Upgrade to a BIP39 recovery phrase');
+    expectOnlyPageTitle('Upgrade to a standard recovery phrase');
     return { messaging, onBack, onMigrated, onSweepChain };
 }
 

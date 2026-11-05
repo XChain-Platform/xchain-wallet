@@ -118,7 +118,7 @@ async function fillExternalRows() {
     const xpubs = screen.getAllByLabelText(/^Account public key$/i);
     const pubkeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
-    const paths = screen.getAllByLabelText(/^Derivation path/i);
+    const paths = screen.getAllByLabelText(/^Account path/i);
     fireEvent.change(xpubs[0], { target: { value: BOB.xpub } });
     fireEvent.change(pubkeys[1], { target: { value: BOB.pubkey } });
     fireEvent.change(fingerprints[1], { target: { value: BOB.fingerprint } });

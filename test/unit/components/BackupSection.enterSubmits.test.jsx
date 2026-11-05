@@ -96,7 +96,7 @@ describe('Backup prompts submit on Enter', () => {
         mount({ dryRunRestoreRequest });
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
         const phrase = screen.getByLabelText('Recovery phrase to test');
-        expectEnterSubmits(screen.getByLabelText('BIP39 passphrase'), 'Run test');
+        expectEnterSubmits(screen.getByLabelText('Extra passphrase'), 'Run test');
 
         fireEvent.change(phrase, { target: { value: 'abandon ability able' } });
         fireEvent.submit(phrase.form);

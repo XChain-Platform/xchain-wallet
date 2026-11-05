@@ -257,7 +257,7 @@ describe('the BIP39 passphrase InfoTip on import', () => {
                 <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Extra passphrase help' }));
         const tip = screen.getByRole('tooltip').textContent;
         expect(tip).toMatch(/stays behind your password here/i);
         expect(tip).toMatch(/hardware wallets request it on the device/i);

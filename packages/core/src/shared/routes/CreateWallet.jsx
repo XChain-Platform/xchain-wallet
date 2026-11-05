@@ -271,11 +271,11 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
         // Same rule as the import screen: a checked box with nothing typed
         // is a contradiction, not a wallet without a passphrase.
         if (showPassphrase && bip39Passphrase.length === 0) {
-            setPasswordError('Enter the BIP39 passphrase, or uncheck the box to create a wallet without one.');
+            setPasswordError(t('createWallet.enterTheExtraPassphraseOrUncheck'));
             return;
         }
         if (showPassphrase && bip39Passphrase !== bip39PassphraseConfirm) {
-            setPasswordError('BIP39 passphrases do not match.');
+            setPasswordError(t('createWallet.extraPassphrasesDoNotMatch'));
             return;
         }
         setPasswordError(null);
@@ -601,8 +601,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
     if (/^Wallet name/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-name', label: 'Wallet name' };
     else if (/at least/i.test(passwordError || '') || passwordError === DURESS_PASSWORD_COLLISION_MESSAGE) passwordErrorTarget = { id: 'create-password', label: 'Password' };
     else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
-    else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
-    else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
+    else if (passwordError === t('createWallet.enterTheExtraPassphraseOrUncheck')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: t('importWallet.passphrase.label') };
+    else if (passwordError === t('createWallet.extraPassphrasesDoNotMatch')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
     const passwordErrors = passwordError
         ? [{ ...passwordErrorTarget, message: passwordError }]
         : [];

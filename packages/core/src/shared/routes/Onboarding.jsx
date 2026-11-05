@@ -82,7 +82,7 @@ function markExplainerSeen() {
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
     {
-        text: `${branding.PRODUCT_NAME} is provided as-is, without warranties. Keep access to your recovery phrase, any BIP39 passphrase, and hardware wallet. Confirm transaction details because confirmed blockchain transactions cannot be reversed.`,
+        text: `${branding.PRODUCT_NAME} is provided as-is, without warranties. Keep access to your recovery phrase, any extra passphrase, and hardware wallet. Confirm transaction details because confirmed blockchain transactions cannot be reversed.`,
         critical: true,
     },
     {

@@ -78,7 +78,7 @@ const messages = {
     'settings.backup.recoveryPhraseToTest': 'Recovery phrase to test',
     'settings.backup.format': 'Recovery phrase format',
     'settings.backup.phraseFormat': 'Phrase format',
-    'settings.backup.standardBip39': 'Standard (BIP39)',
+    'settings.backup.standardBip39': 'Standard (12 to 24 words)',
     'settings.backup.counterwalletLegacy': 'Counterwallet legacy',
     'settings.backup.addressesToCheck2': 'Addresses to check',
     'settings.backup.addressesToCheckMustBe': 'Addresses to check must be a whole number from 1 to 100.',

@@ -99,7 +99,7 @@ async function pickLocalAddress() {
 async function fillExternalCosigner(key = EXTERNAL) {
     const publicKeys = screen.getAllByLabelText(/^Public key$/i);
     const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
-    const paths = screen.getAllByLabelText(/^Derivation path/i);
+    const paths = screen.getAllByLabelText(/^Account path/i);
     await act(async () => {
         fireEvent.change(screen.getByLabelText(/^Account public key$/i), { target: { value: key.xpub } });
         fireEvent.change(publicKeys[1], { target: { value: key.pubkey } });
@@ -205,7 +205,7 @@ describe('MultisigCreate key validation', () => {
         expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
         expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('aabbccdd');
-        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+        expect(screen.getAllByLabelText(/^Account path/i)[1]).toHaveValue(EXTERNAL.path);
     });
 
     it('refuses a shared cosigner setup for another network with plain copy', async () => {
@@ -397,7 +397,7 @@ describe('MultisigCreate review', () => {
         expect(screen.getByLabelText(/^Account public key$/i)).toHaveValue(EXTERNAL.xpub);
         expect(screen.getAllByLabelText(/^Public key$/i)[1]).toHaveValue(EXTERNAL.pubkey);
         expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('11223344');
-        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+        expect(screen.getAllByLabelText(/^Account path/i)[1]).toHaveValue(EXTERNAL.path);
     });
 
     it('review display matches the built config by showing canonical keys and numeric threshold', async () => {
@@ -448,7 +448,7 @@ describe('MultisigCreate share as cosigner', () => {
         expect(screen.getByTestId('cosigner-share-account-public-key').textContent).toBe(INFO.xpub);
         expect(screen.getByTestId('cosigner-share-public-key').textContent).toBe(INFO.pubkey);
         expect(screen.getByTestId('cosigner-share-master-fingerprint').textContent).toBe('73c5da0a');
-        expect(screen.getByTestId('cosigner-share-derivation-path').textContent).toBe(INFO.derivationPath);
+        expect(screen.getByTestId('cosigner-share-account-path').textContent).toBe(INFO.derivationPath);
         expect(screen.getByRole('button', { name: 'Copy Account public key' })).toBeTruthy();
     });
 });

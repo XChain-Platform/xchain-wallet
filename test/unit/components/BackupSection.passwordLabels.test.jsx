@@ -56,8 +56,8 @@ describe('Backup prompt password labels', () => {
     it('labels the test-backup passphrase as optional', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
-        const field = screen.getByLabelText('BIP39 passphrase');
-        expect(visibleLabelOf(field)).toBe('BIP39 passphrase (optional)');
+        const field = screen.getByLabelText('Extra passphrase');
+        expect(visibleLabelOf(field)).toBe('Extra passphrase (optional)');
         expect(field).toHaveAttribute('aria-required', 'false');
     });
 });

@@ -645,7 +645,7 @@ export function ImportWallet({
         // box is a claim that a passphrase exists, so an empty one is a
         // contradiction to refuse, not a default to fill in.
         if (!isFreeWallet && showPassphrase && bip39Passphrase.length === 0) {
-            setError('Enter the BIP39 passphrase, or uncheck the box if this wallet does not use one.');
+            setError(t('importWallet.passphrase.empty'));
             return;
         }
         setError(null);
@@ -885,8 +885,8 @@ export function ImportWallet({
         importErrorTarget = { id: 'import-password', label: 'Password' };
     } else if (/Passwords do not match/i.test(error || '')) {
         importErrorTarget = { id: 'import-confirm', label: 'Confirm password' };
-    } else if (/BIP39 passphrase/i.test(error || '')) {
-        importErrorTarget = { id: 'import-bip39-passphrase', label: 'BIP39 passphrase' };
+    } else if (error === t('importWallet.passphrase.empty') || /BIP39 passphrase/i.test(error || '')) {
+        importErrorTarget = { id: 'import-bip39-passphrase', label: t('importWallet.passphrase.label') };
     }
     const importErrors = error ? [{ ...importErrorTarget, message: error }] : [];
     // The summary links field errors after a submit attempt. An error raised

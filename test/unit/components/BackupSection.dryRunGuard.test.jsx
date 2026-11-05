@@ -62,6 +62,6 @@ describe('BackupSection Test backup: screen guard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
 
         expect(screen.getByLabelText('Phrase format')).toHaveValue('counterwallet-legacy');
-        expect(screen.queryByLabelText('BIP39 passphrase')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Extra passphrase')).not.toBeInTheDocument();
     });
 });

@@ -20,7 +20,7 @@ describe('DerivationPathCrossCheck help copy', () => {
             />,
         );
 
-        fireEvent.focus(screen.getByRole('button', { name: 'Derivation path help' }));
+        fireEvent.focus(screen.getByRole('button', { name: 'Account path help' }));
         const tip = screen.getByRole('tooltip');
         expect(tip.textContent).toBe(
             'Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account.',

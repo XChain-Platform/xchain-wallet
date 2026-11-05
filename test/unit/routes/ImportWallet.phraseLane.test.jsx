@@ -96,7 +96,7 @@ describe('regular recovery phrase lane', () => {
 
     it('imports a valid BIP39 phrase as BIP39, pinned on the request', async () => {
         const messaging = await fill('default', VALID_SHARED);
-        expect(screen.getByText('BIP39 recovery phrase detected')).toBeInTheDocument();
+        expect(screen.getByText('Standard recovery phrase detected')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
         await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalled());
         expect(messaging.importMnemonic.mock.calls[0][0]).toMatchObject({ format: 'bip39' });

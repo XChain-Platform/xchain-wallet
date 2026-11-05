@@ -95,7 +95,7 @@ describe('CreateWallet security options', () => {
         draw();
         fillPasswords();
         fireEvent.click(screen.getByRole('switch', {
-            name: /^Use a BIP39 passphrase \(advanced\)/,
+            name: /^Use an extra passphrase \(advanced\)/,
         }));
 
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
@@ -107,7 +107,7 @@ describe('CreateWallet security options', () => {
             /Capitalization and spaces matter/,
         );
         expect(screen.getByText('Required when enabled.')).toBeTruthy();
-        fireEvent.focus(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
+        fireEvent.focus(screen.getByRole('button', { name: 'Extra passphrase help' }));
         const tip = (await screen.findByRole('tooltip')).textContent;
         expect(tip).toMatch(/extra secret combines with your recovery phrase/i);
         expect(tip).toMatch(/hardware wallets handle it on the device/i);
@@ -115,7 +115,7 @@ describe('CreateWallet security options', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-        expect(await screen.findByText(/Enter the BIP39 passphrase, or uncheck the box/)).toBeTruthy();
+        expect(await screen.findByText(/Enter the extra passphrase, or uncheck the box/)).toBeTruthy();
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
     });
 

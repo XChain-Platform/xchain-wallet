@@ -179,7 +179,7 @@ describe('shared components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByText('Derivation path')).toHaveTextContent('Derivation path');
+        expect(screen.getByText('Account path')).toHaveTextContent('Account path');
         expect(screen.getByText(path)).toHaveTextContent(path);
         expect(ruleBody(css.derivation, '.grid')).toMatch(/grid-template-columns:\s*auto 1fr/);
         expect(ruleBody(css.derivation, '.value')).toMatch(/word-break:\s*break-word/);

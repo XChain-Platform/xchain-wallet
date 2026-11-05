@@ -27,7 +27,7 @@ const messages = {
     'walletDetails.originLabel.importedBackup': 'Restored from backup file',
     'walletDetails.originLabel.importedFreewallet': 'Imported from FreeWallet',
     'walletDetails.originLabel.unknown': 'Not recorded',
-    'walletDetails.passphrase': 'BIP39 passphrase status',
+    'walletDetails.passphrase': 'Extra passphrase status',
     'walletDetails.created': 'Created',
     'walletDetails.demoWallet': 'Demo wallet (throwaway)',
     'walletDetails.id': 'ID',

@@ -167,7 +167,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         back.unmount();
 
         mount(messaging);
-        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a BIP39 recovery phrase' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' })).toBeInTheDocument();
     });
 
     it('Dismiss list stops offering the list', async () => {
@@ -179,7 +179,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         first.unmount();
 
         mount(messaging);
-        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a BIP39 recovery phrase' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' })).toBeInTheDocument();
     });
 
     it('drops a kept list whose destination wallet is gone and starts over', async () => {
@@ -187,7 +187,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         const messaging = makeMessaging({ wallets: ['wallet-old'] });
 
         mount(messaging);
-        await screen.findByRole('heading', { level: 1, name: 'Upgrade to a BIP39 recovery phrase' });
+        await screen.findByRole('heading', { level: 1, name: 'Upgrade to a standard recovery phrase' });
         expect(readMigrationSweeps('wallet-old')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Review sweep' })).toBeNull();
     });

@@ -1128,7 +1128,7 @@ export function AddressList({
         }
         if (selected.record?.derivationPath) {
             fields.push({
-                label: 'Derivation path',
+                label: t('multisig.share.derivationPath'),
                 value: selected.record.derivationPath,
                 hint: 'Where this account sits inside your recovery phrase. Different paths produce different addresses from the same phrase; it is a technical detail you rarely need to change.',
             });

@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Ticking "This wallet uses a BIP39 passphrase" and leaving the field
+// Ticking "This wallet uses an extra passphrase" and leaving the field
 // empty must not import anything.
 //
 // The submit handler used to fold an empty passphrase into "no passphrase"
@@ -33,7 +33,7 @@ function renderFilled(importMnemonic) {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('switch', {
-        name: /This wallet uses a BIP39 passphrase/,
+        name: /This wallet uses an extra passphrase/,
     }));
 }
 
@@ -44,14 +44,14 @@ describe('a ticked passphrase box with an empty field refuses to import', () => 
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        await screen.findByText(/Enter the BIP39 passphrase, or uncheck the box/);
+        await screen.findByText(/Enter the extra passphrase, or uncheck the box/);
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
     it('imports with the passphrase once one is typed', async () => {
         const importMnemonic = vi.fn().mockResolvedValue({});
         renderFilled(importMnemonic);
-        fireEvent.change(screen.getByLabelText('BIP39 passphrase'), { target: { value: 'hunter2' } });
+        fireEvent.change(screen.getByLabelText('Extra passphrase'), { target: { value: 'hunter2' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
@@ -63,7 +63,7 @@ describe('a ticked passphrase box with an empty field refuses to import', () => 
         const importMnemonic = vi.fn().mockResolvedValue({});
         renderFilled(importMnemonic);
         fireEvent.click(screen.getByRole('switch', {
-            name: /This wallet uses a BIP39 passphrase/,
+            name: /This wallet uses an extra passphrase/,
         }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));

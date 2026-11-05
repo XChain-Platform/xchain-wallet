@@ -880,8 +880,8 @@ async function importMnemonic(page, { words, passphrase, name }) {
     await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     if (passphrase !== null) {
-        await page.getByLabel('This wallet uses a BIP39 passphrase').check();
-        await page.getByLabel('BIP39 passphrase', { exact: true }).fill(passphrase);
+        await page.getByLabel('This wallet uses an extra passphrase').check();
+        await page.getByLabel('Extra passphrase', { exact: true }).fill(passphrase);
     }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 

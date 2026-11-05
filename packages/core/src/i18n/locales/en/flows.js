@@ -60,11 +60,11 @@ const messages = {
         "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
     'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
 
-    'flows.rbf.unsupportedBuild': "RBF replacement isn't supported by this build.",
+    'flows.rbf.unsupportedBuild': "Fee replacement isn't supported by this build.",
     'flows.rbf.noEntry': 'No entry to replace.',
     'flows.rbf.noHash': 'No transaction hash on this entry.',
     'flows.rbf.alreadyConfirmed': 'Already confirmed.',
-    'flows.rbf.actionUnsupported': "{action} actions aren't RBF-replaceable.",
+    'flows.rbf.actionUnsupported': "{action} actions can't have their fee raised.",
     'flows.rbf.notAllowed': 'This transaction did not allow fee replacement.',
     'flows.rbf.nothingToUndo': 'Nothing to undo.',
     'flows.rbf.cancelConfirmed': 'The cancellation already confirmed.',

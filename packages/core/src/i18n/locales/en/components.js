@@ -190,19 +190,19 @@ const messages = {
     'components.watcherResultPanel.buildAnother': 'Build another',
     'components.derivationPathCrossCheck.hardwareSignerVerification': 'Hardware signer verification',
     'components.derivationPathCrossCheck.signingWithHardwareDevice': 'Signing with hardware device',
-    'components.derivationPathCrossCheck.derivationPathHelpLabel': 'Derivation path help',
+    'components.derivationPathCrossCheck.derivationPathHelpLabel': 'Account path help',
     'components.derivationPathCrossCheck.locatesThisAccountWithinYour':
         'Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account.',
     'components.derivationPathCrossCheck.verify': 'Verify',
     'components.derivationPathCrossCheck.both': 'both',
     'components.derivationPathCrossCheck.theDerivationPathAndAddress':
-        'the derivation path and address on your',
+        'the account path and address on your',
     'components.derivationPathCrossCheck.matchTheValuesAboveApprove':
         'match the values above. Approve only when both match.',
     'components.derivationPathCrossCheck.ifEitherValueIsDifferent':
         'If either value is different, the device may be using a different account or signing address. Reject on the device. Nothing is signed, and you can check the selected account before trying again.',
     'components.derivationPathCrossCheck.trezorDisplaysTheAddressAnd':
-        'Trezor displays the address and the derivation path side-by-side on the confirmation screen.',
+        'Trezor displays the address and the account path side-by-side on the confirmation screen.',
     'components.derivationPathCrossCheck.ledgerDisplaysTheAddressOn':
         'Ledger displays the address on the main screen. On Nano models, press the right button to step through to the path; on Stax, the path appears below the address.',
     'components.derivationPathCrossCheck.stepThroughTheDeviceScreens':
