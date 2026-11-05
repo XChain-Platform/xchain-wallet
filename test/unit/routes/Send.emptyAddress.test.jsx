@@ -66,10 +66,11 @@ describe('Send from an address holding no coin', () => {
         const { onReceive } = mount('0');
 
         const heading = await screen.findByRole('heading', { name: 'Nothing to send yet' });
-        // The empty state is the page's content at full width: directly in
-        // the page body, with no card or dashed box around it.
+        // The empty state is the page's content at full width: in the page
+        // body through the ListPage root alone, with no card or dashed box around it.
         const emptyState = heading.closest('[role="status"]');
-        expect(emptyState.parentElement).toBe(screen.getByRole('main'));
+        expect(emptyState.parentElement.parentElement).toBe(screen.getByRole('main'));
+        expect(emptyState.closest('form')).toBeNull();
         // Every empty state is unboxed, so the plain variant has no class of its own.
         expect(emptyState.className).toMatch(/wrap/);
         expect(screen.queryByRole('group', { name: 'Send' })).toBeNull();

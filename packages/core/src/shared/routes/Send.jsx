@@ -24,6 +24,7 @@ import {
     FieldNote,
     FormNotice,
     FormPage,
+    ListPage,
     EmptyState,
     Icon,
     InfoTip,
@@ -3170,9 +3171,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             header={header}
             restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
-            {stage === 'done' && linkWaiting ? (
-                <StatusMessage variant="status">{t('send.linkWaiting')}</StatusMessage>
-            ) : null}
             {children}
             {footer}
             {leaveGuard.confirmation}
@@ -3230,7 +3228,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     ) : null;
 
     if (!walletModeReady) {
-        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+        return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
 
     // §20: signer mode does not spend. The Wallet Mode screen
@@ -3240,9 +3238,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // user chose and can unset.
     if (isSignerMode) {
         return wrap(
-            <StatusMessage variant="status">
-                {t('send.signerMode')}
-            </StatusMessage>,
+            <ListPage>
+                <StatusMessage variant="status">
+                    {t('send.signerMode')}
+                </StatusMessage>
+            </ListPage>,
         );
     }
     if (networkSettingsOpen) {
@@ -3256,30 +3256,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
     if (!hasAvailableChain({ settings }, chainRegistry)) {
         return wrap(
-            <EmptyState
-                title={NO_CHAINS_TITLE}
-                body={NO_CHAINS_BODY}
-                actionLabel={t('common.openNetworkSettings')}
-                onAction={() => setNetworkSettingsOpen(true)}
-                actionIcon={<Icon.GearIcon />}
-            />,
+            <ListPage>
+                <EmptyState
+                    title={NO_CHAINS_TITLE}
+                    body={NO_CHAINS_BODY}
+                    actionLabel={t('common.openNetworkSettings')}
+                    onAction={() => setNetworkSettingsOpen(true)}
+                    actionIcon={<Icon.GearIcon />}
+                />
+            </ListPage>,
         );
     }
     if (loadError) {
         return wrap(
-            <StatusMessage
-                variant="error"
-                recovery={{
-                    label: t('common.tryAgain'),
-                    onAction: () => setAddressLoadAttempt((attempt) => attempt + 1),
-                }}
-            >
-                {loadError}
-            </StatusMessage>,
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => setAddressLoadAttempt((attempt) => attempt + 1),
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
+            </ListPage>,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+        return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
     // Switching chains after a first check keeps the form mounted (typed or
     // pasted values stay put) while the new chain is checked.
@@ -3292,35 +3296,39 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // loading too, and the form must stay mounted through that as well.
     if (!isWatcherMode && selectedChainBalanceStatus === 'loading'
         && !balanceGateSettledRef.current && !balanceGateWaived) {
-        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+        return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty' && balancesUnchecked) {
         // A zero read while balances could not be checked proves nothing, so
         // the page says that once instead of "Nothing to send yet" beside the
         // stale-balances notice.
         return wrap(
-            <BalancesUncheckedState
-                onRetry={() => {
-                    recheckReachability();
-                    setBalanceRecheck((n) => n + 1);
-                }}
-                onReceive={onReceive}
-            />,
+            <ListPage>
+                <BalancesUncheckedState
+                    onRetry={() => {
+                        recheckReachability();
+                        setBalanceRecheck((n) => n + 1);
+                    }}
+                    onReceive={onReceive}
+                />
+            </ListPage>,
         );
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
-        // The empty state is the page's whole content, so it sits directly in
-        // the page at full content width rather than in a form card.
+        // The empty state is the page's whole content, so it sits in ListPage
+        // at full content width rather than in a form card.
         return wrap(
-            <EmptyState
-                plain
-                title={t('send.empty.title')}
-                body={t('send.empty.body')}
-                icon={<Icon.ReceiveIcon />}
-                actionLabel={onReceive ? t('home.receive') : undefined}
-                onAction={onReceive}
-                actionIcon={<Icon.ReceiveIcon />}
-            />,
+            <ListPage>
+                <EmptyState
+                    plain
+                    title={t('send.empty.title')}
+                    body={t('send.empty.body')}
+                    icon={<Icon.ReceiveIcon />}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
+                    onAction={onReceive}
+                    actionIcon={<Icon.ReceiveIcon />}
+                />
+            </ListPage>,
         );
     }
 
@@ -3454,8 +3462,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // §20 / G040: watcher mode result. The submit returned an unsigned
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
+        // The pending payment-link notice leads the result as ListPage's notice.
+        const doneNotices = linkWaiting ? (
+            <StatusMessage variant="status">{t('send.linkWaiting')}</StatusMessage>
+        ) : null;
+
         if (result?.psbtHex && !txid) {
-            return wrap(<ResultScreen state="unsigned" result={result} onSendAnother={sendAnother} onDone={leaveResultDone} />);
+            return wrap(
+                <ListPage notices={doneNotices}>
+                    <ResultScreen state="unsigned" result={result} onSendAnother={sendAnother} onDone={leaveResultDone} />
+                </ListPage>,
+            );
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -3472,7 +3489,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // reminder and names who does the sending.
         if (result?.queued) {
             return wrap(
-                <>
+                <ListPage notices={doneNotices}>
                     <div role="status" aria-live="polite">
                         <EmptyState
                             role="presentation"
@@ -3483,12 +3500,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             onAction={leaveResultDone}
                         />
                     </div>
-                </>,
+                </ListPage>,
             );
         }
 
         return wrap(
-            <>
+            <ListPage notices={doneNotices}>
                 <div className={styles.successCard} data-transaction-status={sentStatus.status}>
                     <div className={styles.successIcon} aria-hidden="true">
                         {sentStatus.status === 'failed' ? '!' : '✓'}
@@ -3622,7 +3639,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </Button>
                     <Button variant="primary" onClick={leaveResultDone}>{t('common.done')}</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 

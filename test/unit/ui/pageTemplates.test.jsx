@@ -1511,3 +1511,92 @@ describe('ComposeMessage: the load error, the loading line and the sent panel re
         expect(faults).toEqual([]);
     });
 });
+
+// Send's wrap() helper is a bare Screen. The loading line, the signer-mode
+// refusal, the no-networks state, the load error, the empty state and every
+// result panel reach the page through the ListPage each wrap() call passes,
+// and the review and form stages through FormPage, so no Send state draws
+// straight into the Screen box with no template edge or rhythm.
+describe('Send: every stage renders inside FormPage or ListPage, not bare Screen', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+    const FROM = 'bc1qsendersendersendersendersendersendersa';
+    const ADDRESSES = {
+        [CHAIN_ID]: [{ id: 'addr-1', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' }],
+    };
+
+    function templateSelector() {
+        const list = render(<ListPage><p>x</p></ListPage>);
+        const listClass = list.container.firstChild.className.split(' ')[0];
+        list.unmount();
+        const form = render(<FormPage onSubmit={() => {}} label="x"><p>x</p></FormPage>);
+        const formClass = form.container.querySelector('form').className.split(' ')[0];
+        form.unmount();
+        return [listClass, formClass].map((name) => `.${CSS.escape(name)}`).join(', ');
+    }
+
+    function expectInsideTemplate(element) {
+        expect(element.closest(templateSelector()), 'inside ListPage or FormPage').not.toBeNull();
+    }
+
+    async function mountSend({ quantity = '100000000', settings = { walletMode: 'full', grace: { testSendThresholdSats: 0 } }, overrides = {} } = {}) {
+        const { Send } = await import('../../../packages/core/src/shared/routes/Send.jsx');
+        const balances = { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
+        const base = {
+            getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+            getAddressBalances: vi.fn().mockResolvedValue(balances),
+            getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN_ID]: [{ address: FROM, balances, error: null }] }),
+            getSettings: vi.fn().mockResolvedValue(settings),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            ...overrides,
+        };
+        const messaging = new Proxy(base, {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                if (typeof prop !== 'string') return undefined;
+                const stub = vi.fn().mockResolvedValue(null);
+                target[prop] = stub;
+                return stub;
+            },
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Send walletId="w" onBack={() => {}} onReceive={() => {}} />
+            </MessagingProvider>,
+        );
+    }
+
+    it('lays out the loading line inside a template', async () => {
+        await mountSend({ overrides: { getAddressesByChain: vi.fn(() => new Promise(() => {})) } });
+        expectInsideTemplate(await screen.findByText('Loading…'));
+    });
+
+    it('lays out the signer-mode refusal inside a template', async () => {
+        await mountSend({ settings: { walletMode: 'signer' } });
+        expectInsideTemplate(await screen.findByText(/This wallet is in signer mode/));
+    });
+
+    it('lays out the no-networks state inside a template', async () => {
+        await mountSend({ settings: { walletMode: 'full', fees: {} } });
+        expectInsideTemplate(await screen.findByRole('heading', { name: 'No networks available' }));
+    });
+
+    it('lays out the load error inside a template', async () => {
+        await mountSend({ overrides: { getAddressesByChain: vi.fn().mockRejectedValue(new Error('offline')) } });
+        expectInsideTemplate(await screen.findByText(/Couldn't load addresses/));
+    });
+
+    it('lays out the empty state inside a template', async () => {
+        await mountSend({ quantity: '0' });
+        expectInsideTemplate(await screen.findByRole('heading', { name: 'Nothing to send yet' }));
+    });
+
+    it('passes ListPage or FormPage to every wrap() call, the result panels included', () => {
+        const roots = wrapCallRoots('Send.jsx');
+        expect(roots.length).toBeGreaterThanOrEqual(13);
+        const faults = roots
+            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            .map(({ line, name }) => `Send.jsx:${line} wrap(${name})`);
+        expect(faults).toEqual([]);
+    });
+});

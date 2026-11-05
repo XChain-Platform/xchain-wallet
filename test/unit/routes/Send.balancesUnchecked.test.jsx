@@ -110,8 +110,11 @@ describe('Send empty state and the balance check', () => {
         expect(heading).toBeInTheDocument();
         expect(screen.getByText('Your balance may be out of date. Try again to refresh it.')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
-        // Plain, full-width page content, like the trustworthy empty state.
-        expect(heading.closest('[role="status"]').parentElement).toBe(screen.getByRole('main'));
+        // Plain, full-width page content, like the trustworthy empty state:
+        // the ListPage root is its only wrapper inside the page body, no form card.
+        const uncheckedState = heading.closest('[role="status"]');
+        expect(uncheckedState.parentElement.parentElement).toBe(screen.getByRole('main'));
+        expect(uncheckedState.closest('form')).toBeNull();
 
         const checksBefore = messaging.getWalletBalances.mock.calls.length;
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

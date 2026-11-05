@@ -142,7 +142,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /if \(!walletModeReady\) \{\s*return wrap\(<p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p>\);\s*\}/,
+    /if \(!walletModeReady\) \{\s*return wrap\(<ListPage><p className=\{styles\.hint\}>\{t\('common\.loading'\)\}<\/p><\/ListPage>\);\s*\}/,
     'does not render a signing-capable route before wallet mode is known',
 );
 assert.match(
