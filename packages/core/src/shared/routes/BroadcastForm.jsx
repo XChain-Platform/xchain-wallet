@@ -223,12 +223,14 @@ function RawTransactionBroadcast({
             // never goes through useConfirmAction, so the panel's handoff fallback
             // would show another action's leftover warning, or none at all.
             return (
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onDone}
-                    what="broadcast"
-                    unsaved={result?.persisted === false}
-                />
+                <FormPage as="div" label="Broadcast result">
+                    <ResultScreen
+                        state="signed-not-broadcast"
+                        onDone={onDone}
+                        what="broadcast"
+                        unsaved={result?.persisted === false}
+                    />
+                </FormPage>
             );
         }
         const explorerBase = descriptor?.explorer?.defaultUrl;
@@ -239,7 +241,7 @@ function RawTransactionBroadcast({
             settings,
         }) : null;
         return (
-            <div>
+            <FormPage as="div" label="Broadcast result">
                 <div role="status" aria-live="polite" aria-atomic="true">
                     <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : alreadyOnNetwork ? 'Already on the network' : 'Transaction queued'}</h2>
                     {txid ? (
@@ -278,7 +280,7 @@ function RawTransactionBroadcast({
                     </Button>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>
-            </div>
+            </FormPage>
         );
     }
 
@@ -853,30 +855,37 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             />,
         );
     }
+    // The load error, the loading line and every result panel lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
     if (loadError) {
         return wrap(
-            <>
+            <FormPage as="div" label="Broadcast" status={<StatusMessage variant="error">{loadError}</StatusMessage>}>
                 {!lockedToken ? (
                     <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
                 ) : null}
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            </>,
+            </FormPage>,
         );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(
+            <FormPage as="div" label="Broadcast">
+                <p className={styles.hint}>Loading…</p>
+            </FormPage>,
+        );
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onDone || onBack}
-                />,
+                <FormPage as="div" label="Broadcast result">
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onDone || onBack}
+                    />
+                </FormPage>,
             );
         }
         // Signed, but the broadcast leg never landed. The confirm
@@ -884,7 +893,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <FormPage as="div" label="Broadcast result">
+                    <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />
+                </FormPage>,
             );
         }
         const explorerUrl = txid ? explorerPageUrl({
@@ -894,7 +905,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             settings,
         }) : null;
         return wrap(
-            <>
+            <FormPage as="div" label="Broadcast result">
                 <div role="status" aria-live="polite" aria-atomic="true">
                     <h2 className={styles.successTitle}>Broadcast pending</h2>
                     <p className={styles.hint}>
@@ -920,7 +931,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
                     <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
-            </>,
+            </FormPage>,
         );
     }
 
