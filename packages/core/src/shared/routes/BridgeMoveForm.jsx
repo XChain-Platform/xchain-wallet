@@ -563,46 +563,59 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         </Screen>
     );
 
+    // The load error, the loading line and every result lay out through
+    // FormPage like the form itself, so no state draws straight into Screen.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label="Move across networks"
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<FormPage label="Move across networks"><p className={styles.hint}>Loading wallet…</p></FormPage>);
     }
 
     if (stage === 'done') {
         if (result?.psbtHex && !result?.txid) {
             return wrap(
-                <ResultScreen
-                    state="unsigned"
-                    result={result}
-                    onBuildAnother={() => { setResult(null); setStage('form'); }}
-                    onDone={onBack}
-                />,
+                <FormPage label={doneTitle}>
+                    <ResultScreen
+                        state="unsigned"
+                        result={result}
+                        onBuildAnother={() => { setResult(null); setStage('form'); }}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         if (result?.queued) {
             return wrap(
-                <ResultScreen
-                    state="signed-not-broadcast"
-                    onDone={onBack}
-                    what="bridge transfer"
-                    unsaved={result?.unsaved}
-                />,
+                <FormPage label={doneTitle}>
+                    <ResultScreen
+                        state="signed-not-broadcast"
+                        onDone={onBack}
+                        what="bridge transfer"
+                        unsaved={result?.unsaved}
+                    />
+                </FormPage>,
             );
         }
         return wrap(
-            <BridgePendingPanel
-                txid={result?.txid}
-                leg={leg}
-                amount={amount}
-                tickLabel={shown.label}
-                sourceDescriptor={sourceDescriptor}
-                destDescriptor={destDescriptor}
-                destAddress={destAddress}
-                minDepth={minDepth}
-                onDone={onBack}
-            />,
+            <FormPage label={doneTitle}>
+                <BridgePendingPanel
+                    txid={result?.txid}
+                    leg={leg}
+                    amount={amount}
+                    tickLabel={shown.label}
+                    sourceDescriptor={sourceDescriptor}
+                    destDescriptor={destDescriptor}
+                    destAddress={destAddress}
+                    minDepth={minDepth}
+                    onDone={onBack}
+                />
+            </FormPage>,
         );
     }
 
