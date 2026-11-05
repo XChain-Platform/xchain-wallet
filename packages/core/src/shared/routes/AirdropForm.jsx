@@ -1455,15 +1455,21 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             {children}
         </Screen>
     );
+    // The load error, the loading line, the watcher-mode notice and the
+    // wait-for-index and done panels show state rather than take input, so
+    // they lay out through ListPage; the compose and review stages use FormPage.
+    const wrapState = (children, notices = null) => wrap(
+        <ListPage notices={notices}>{children}</ListPage>,
+    );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrapState(null, <StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrapState(<p className={styles.hint}>Loading…</p>);
     }
     if (isWatcherMode) {
-        return wrap(
+        return wrapState(
             <>
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
@@ -1510,7 +1516,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }
 
     if (stage === 'done') {
-        return wrap(
+        return wrapState(
             <>
                 <h2 className={styles.successTitle}>Airdrop sent</h2>
                 {listTxid ? (
@@ -1531,7 +1537,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     if (stage === 'wait-index') {
         const minutes = Math.floor(waitElapsed / 60);
         const slow = minutes >= 5;
-        return wrap(
+        return wrapState(
             <>
                 <p className={styles.summary}>{listDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
