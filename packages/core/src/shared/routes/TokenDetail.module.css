@@ -66,6 +66,8 @@
     color: var(--xc-on-accent);
     width: 28px;
     height: 28px;
+    /* The disabled swap draws a border; the box stays 28px with it. */
+    box-sizing: border-box;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -77,6 +79,16 @@
 .balanceHeroEye:hover { background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent); }
 
 .balanceHeroSwap:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* The shared disabled fill is a near-white tile; on the accent card the
+   disabled swap keeps the translucent hero fill and dims with the opacity,
+   and an on-accent ring keeps its edge visible against the gradient. The
+   repeated class outranks the shared Button disabled rule. */
+.balanceHeroControls .balanceHeroSwap.balanceHeroSwap:disabled {
+    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
+    color: var(--xc-on-accent);
+}
 
 .balanceHeroSwap:focus-visible,
 .balanceHeroEye:focus-visible {

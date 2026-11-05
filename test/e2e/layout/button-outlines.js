@@ -88,3 +88,41 @@ export function measureButtons() {
     }
     return out;
 }
+
+/**
+ * Runs inside the page. The computed edge of every visible button: its own
+ * fill, the nearest painted fill behind it, and its border, shadow and
+ * outline as the browser reports them. It needs no canvas or hit test, so it
+ * also runs under jsdom. Plain function body: no closures over Node values.
+ */
+export function measureButtonEdges() {
+    const painted = (c) => Boolean(c) && c !== 'transparent' && !/^rgba\([^)]*,\s*0\)$/.test(c);
+    const backdrop = (el) => {
+        for (let a = el; a; a = a.parentElement) {
+            const c = getComputedStyle(a).backgroundColor;
+            if (painted(c)) return c;
+        }
+        return 'rgb(255, 255, 255)';
+    };
+    const shared = (el) => [...el.classList].some((c) => c === 'btn' || /^_?btn_/.test(c) || c.endsWith('_btn'));
+    const out = [];
+    for (const el of document.querySelectorAll('button, [role="button"]')) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        const cs = getComputedStyle(el);
+        // jsdom leaves an unset opacity empty, which Number() reads as 0.
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        const label = el.getAttribute('aria-label') || el.innerText || el.textContent || el.getAttribute('title') || '';
+        out.push({
+            name: label.trim().split('\n')[0].slice(0, 40),
+            tag: el.tagName.toLowerCase(),
+            shared: shared(el),
+            bg: cs.backgroundColor,
+            behind: backdrop(el.parentElement || el),
+            border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`,
+            shadow: cs.boxShadow && cs.boxShadow !== 'none' ? cs.boxShadow : '',
+            outline: `${cs.outlineWidth} ${cs.outlineStyle} ${cs.outlineColor}`,
+        });
+    }
+    return out;
+}
