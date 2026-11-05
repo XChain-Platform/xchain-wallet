@@ -119,9 +119,34 @@ function rowsOf(resp) {
         if (Array.isArray(resp.data)) return resp.data;
         if (Array.isArray(resp.holders)) return resp.holders;
     }
-    const err = new Error('tokenHolderSummary: the holder reply is not a holder list');
+    throw holdersUnreadable('the holder reply is not a holder list');
+}
+
+function holdersUnreadable(why) {
+    const err = new Error(`tokenHolderSummary: ${why}`);
     err.code = 'HOLDERS_UNREADABLE';
-    throw err;
+    return err;
+}
+
+// One holder row as { address, amount } with amount a plain decimal string.
+// A row the wallet cannot read (not an object, no address, an amount that is
+// not a non-negative decimal) leaves a holder of unknown balance, so the
+// reply is refused instead of dropping the row and calling the rest complete.
+// A JSON number amount is spelled out in plain digits, since String(1e-7)
+// reads as exponent text.
+function readRow(r) {
+    if (!r || typeof r !== 'object') throw holdersUnreadable('a holder row is not an object');
+    if (typeof r.address !== 'string' || r.address.length === 0) {
+        throw holdersUnreadable('a holder row has no address');
+    }
+    let amount = r.amount;
+    if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+        amount = amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+    }
+    if (typeof amount !== 'string' || parseDecimal(amount) == null) {
+        throw holdersUnreadable('a holder row has an unreadable amount');
+    }
+    return { address: r.address, amount: amount.trim() };
 }
 
 /**
@@ -167,17 +192,19 @@ export async function tokenHolderSummary({
     const listed = rowsOf(resp);
     const listedRows = listed.length;
     const rows = listed
-        .map((r) => ({
-            address: typeof r?.address === 'string' ? r.address : null,
-            amount: r?.amount != null ? String(r.amount) : '0',
-        }))
-        .filter((r) => r.address && Number(r.amount) > 0)
+        .map(readRow)
+        .filter((r) => parseDecimal(r.amount).int > 0n)
         // One holder is one balance. A reply that lists an address twice (a
         // replica mid-page, a join that fans out) would count the holder twice,
         // double their CALLBACK payout, and call a sole owner's token
         // distributed; the first row stands for the address.
         .filter(firstRowPerAddress());
     const total = Number(resp?.total);
+    // A total below the distinct holders the page lists contradicts the page,
+    // so neither the count nor the rows can be trusted as the holder set.
+    if (Number.isFinite(total) && resp?.total != null && total < rows.length) {
+        throw holdersUnreadable('the holder total is below the holders listed');
+    }
     const ownerAddr = owner || null;
 
     let ownerHolds = false;

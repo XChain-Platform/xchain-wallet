@@ -180,3 +180,54 @@ describe('CallbackForm NW at Approve', () => {
         expect(target.callbackAction).not.toHaveBeenCalled();
     });
 });
+
+// A reply whose rows the wallet cannot read, or whose total sits below the
+// holders it lists, contradicts itself. Dropping the unreadable rows would
+// call the rest a complete set (a zero CALLBACK payout, undistributed supply
+// for the settings gate), so the summary refuses it.
+const UNREADABLE_ROWS = [
+    ['rows with no address field', { data: [{ holder: 'holder-1', amount: '3' }, { holder: 'holder-2', amount: '4' }], total: 2 }],
+    ['rows with an unreadable amount', { data: [{ address: 'holder-1', amount: 'abc' }, { address: 'holder-2', amount: '1,000' }], total: 2 }],
+    ['rows that are not objects', { data: ['holder-1', 'holder-2'], total: 2 }],
+    ['rows longer than the total', { data: [{ address: OWNER.address, amount: '5' }, { address: 'holder-1', amount: '3' }, { address: 'holder-2', amount: '4' }], total: 1 }],
+    ['a zero total beside listed rows', { data: [{ address: 'holder-1', amount: '3' }], total: 0 }],
+];
+
+describe('NW self-contradicting holder replies', () => {
+    for (const [label, body] of UNREADABLE_ROWS) {
+        for (const mode of ['callback payout', 'settings gate']) {
+            it(`refuses ${label} for the ${mode}`, async () => {
+                const { sdkRegistry } = holderSdk(body);
+                await expect(tokenHolderSummary({
+                    sdkRegistry, chainId: CHAIN, tick: 'CALLABLE', owner: OWNER.address,
+                    ...(mode === 'callback payout' ? { callbackAmount: '1', callbackDecimals: 8 } : {}),
+                })).rejects.toMatchObject({ code: 'HOLDERS_UNREADABLE' });
+            });
+        }
+    }
+
+    it('spells a JSON number amount in plain digits for the payout', async () => {
+        const { sdkRegistry } = holderSdk({ data: [{ address: 'holder-1', amount: 1e-7 }, { address: 'holder-2', amount: 3 }], total: 2 });
+        const s = await tokenHolderSummary({
+            sdkRegistry, chainId: CHAIN, tick: 'CALLABLE', owner: OWNER.address,
+            callbackAmount: '1', callbackDecimals: 8,
+        });
+        expect(s.partial).toBe(false);
+        expect(s.recipientCount).toBe(2);
+        expect(s.totalPayout).toBe('3.0000001');
+    });
+
+    for (const [label, body] of UNREADABLE_ROWS) {
+        it(`Execute callback refuses ${label} at Approve`, async () => {
+            const { messaging, target } = callbackMessaging(pagedReply(holderSet(100)), { balance: '100000000000' });
+            mountCallback(messaging);
+            await openConfirm();
+            target.tokenHolderSummary.mockImplementation((req) => tokenHolderSummary({
+                sdkRegistry: { get: () => ({ getHolders: async () => body }) }, ...req,
+            }));
+            await approve();
+            await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+            expect(target.callbackAction).not.toHaveBeenCalled();
+        });
+    }
+});
