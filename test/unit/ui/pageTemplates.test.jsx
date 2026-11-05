@@ -1010,6 +1010,87 @@ describe('DividendForm: every stage renders inside FormPage', () => {
     });
 });
 
+// GatedPublishForm's wrap() helper is a bare Screen. The load error reaches
+// the page as the FormPage status, and the broadcast result as FormPage
+// content with Done in its action row, the same template the form and
+// review stages use, so neither sits in the Screen box with no template edge.
+describe('GatedPublishForm: the load error and the broadcast result render inside FormPage', () => {
+    const CHAIN_ID = 'bitcoin-mainnet';
+
+    async function mountGatedPublish(overrides = {}) {
+        const { MessagingProvider: Provider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
+        const { GatedPublishForm } = await import('../../../packages/core/src/shared/routes/GatedPublishForm.jsx');
+        const messaging = {
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listContacts: vi.fn().mockResolvedValue([]),
+            listGatedKeys: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked', unlocked: true }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            isUnlocked: vi.fn().mockResolvedValue(true),
+            ...overrides,
+        };
+        const proxy = new Proxy(messaging, {
+            get(target, property) {
+                return property in target ? target[property] : undefined;
+            },
+        });
+        render(
+            <Provider shell="desktop" messaging={proxy}>
+                <GatedPublishForm walletId="w" chainId={CHAIN_ID} tick="GATE" onBack={() => {}} />
+            </Provider>,
+        );
+    }
+
+    function gatedPublishWrapCalls() {
+        const path = join(coreSrcDir(), 'shared', 'routes', 'GatedPublishForm.jsx');
+        const tree = parse(readFileSync(path, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const calls = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'wrap') {
+                calls.push(node.arguments[0]);
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+        return calls;
+    }
+
+    const hasDescendant = (node, test) => {
+        if (!node || typeof node !== 'object') return false;
+        if (test(node)) return true;
+        return Object.values(node).some((value) => (Array.isArray(value)
+            ? value.some((item) => hasDescendant(item, test))
+            : (value && typeof value === 'object' ? hasDescendant(value, test) : false)));
+    };
+    const rootName = (arg) => (arg?.type === 'JSXElement' && arg.openingElement.name.type === 'JSXIdentifier'
+        ? arg.openingElement.name.name
+        : (arg?.type || 'none'));
+
+    it('lays out the load error in the FormPage status region', async () => {
+        await mountGatedPublish({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
+        const error = await screen.findByText('Address store unavailable');
+        expect(error.closest('[data-form-status]'), 'inside the FormPage status region').not.toBeNull();
+    });
+
+    it('lays out the broadcast result in FormPage with Done in its action row', () => {
+        const calls = gatedPublishWrapCalls();
+        const success = calls.filter((arg) => hasDescendant(arg, (node) => node.type === 'StringLiteral'
+            && node.value === 'gatedPublish.success'));
+        expect(success.map(rootName)).toEqual(['FormPage']);
+        const actions = success[0].openingElement.attributes.find((attribute) => attribute.type === 'JSXAttribute'
+            && attribute.name.name === 'actions');
+        expect(actions, 'the result FormPage has an actions prop').toBeDefined();
+        expect(hasDescendant(actions, (node) => node.type === 'StringLiteral' && node.value === 'common.done')).toBe(true);
+        expect(calls.filter((arg) => hasDescendant(arg, (node) => node.type === 'Identifier' && node.name === 'loadError'))
+            .map(rootName)).toEqual(['FormPage']);
+    });
+});
+
 // AdvancedActionsForm's wrap() helper is a bare Screen. The signer-mode
 // notice, the load error, the loading line and every done-stage panel reach
 // the page through the ListPage each wrap() call passes, and the form and

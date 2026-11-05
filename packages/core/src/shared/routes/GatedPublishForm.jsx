@@ -433,8 +433,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         <Screen variant={variant} header={header}>{children}</Screen>
     );
 
+    // The load error and the broadcast result lay out through FormPage like
+    // the form stage, so no state draws straight into Screen.
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label={t('gatedPublish.title', { tick })}
+                status={<StatusMessage variant="error">{loadError}</StatusMessage>}
+            />,
+        );
     }
 
     if (actionConfirm.open) {
@@ -485,7 +492,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             );
         }
         return wrap(
-            <>
+            <FormPage
+                label={t('gatedPublish.success')}
+                actions={<Button variant="primary" onClick={onBack}>{t('common.done')}</Button>}
+            >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('gatedPublish.success')}</p>
                 {result?.txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>{t('gatedPublish.transaction')} <code>{result.txid}</code></p>
@@ -499,10 +509,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     {t('gatedPublish.successHint.beforeToken')} {tick}{' '}
                     {t('gatedPublish.successHint.afterToken')}
                 </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
