@@ -122,7 +122,7 @@ describe('publish forms replace file state safely', () => {
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Title cannot contain text-direction control characters.');
-        expect(screen.queryByRole('form', { name: 'Review gated publish' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('keeps the public network picker free of network-kind text', async () => {
@@ -268,8 +268,10 @@ describe('publish forms replace file state safely', () => {
         expect(document.body.textContent).not.toContain('No reusable packs');
     });
 
-    it('returns from gated publish review without resubmitting and preserves the form', async () => {
-        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
+    it('sends gated publish Review straight to the confirm compose and keeps the form when it fails', async () => {
+        const client = messaging();
+        client.composeGatedPublishForConfirm = vi.fn().mockRejectedValue(new Error('Encoder offline'));
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
         const input = await screen.findByLabelText('File to publish');
         fireEvent.change(input, {
             target: { files: [new File(['draft'], 'members.txt', { type: 'text/plain' })] },
@@ -281,10 +283,31 @@ describe('publish forms replace file state safely', () => {
         fireEvent.click(screen.getByRole('checkbox', { name: /published on-chain forever/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByRole('textbox', { name: 'Title' })).toHaveValue('Member draft');
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Member draft');
         expect(screen.getByText(/members\.txt/)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Sign and publish|Sign on/ })).toBeNull();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    it('builds the unsigned gated publish straight from the watcher form with no confirm step', async () => {
+        const client = messaging();
+        client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
+        client.buildGatedPublishPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff' });
+        client.composeGatedPublishForConfirm = vi.fn();
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
+        const input = await screen.findByLabelText('File to publish');
+        fireEvent.change(input, {
+            target: { files: [new File(['abc'], 'members.txt', { type: 'text/plain' })] },
+        });
+        await act(async () => readers[0].succeed(3));
+        fireEvent.click(screen.getByRole('checkbox', { name: /published on-chain forever/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create transaction for signing' }));
+
+        await waitFor(() => expect(client.buildGatedPublishPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(client.composeGatedPublishForConfirm).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('returns from artwork review without resubmitting and preserves the form', async () => {
@@ -335,10 +358,11 @@ describe('publish forms replace file state safely', () => {
         expect(document.body.textContent).toContain(' report.txt ');
     });
 
-    it('shows the exact gated metadata and full existing pack hash on review', async () => {
+    it('composes the exact gated metadata and full existing pack hash for the confirm screen', async () => {
         const client = messaging();
         const keyHash = 'ab'.repeat(32);
         client.listGatedKeys.mockResolvedValue([{ keyHash }]);
+        client.composeGatedPublishForConfirm = vi.fn().mockRejectedValue(new Error('Encoder offline'));
         mount(
             <GatedPublishForm
                 walletId="w"
@@ -360,13 +384,16 @@ describe('publish forms replace file state safely', () => {
         fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review gated publish' })).toBeInTheDocument();
-        expect(screen.getByText('gated.txt · 3 bytes · text/plain')).toBeInTheDocument();
-        expect(screen.getByText('Members')).toBeInTheDocument();
-        expect(screen.getByText('October')).toBeInTheDocument();
-        expect(screen.getByText(keyHash)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(await screen.findByLabelText('Title')).toHaveValue('  Members  ');
+        await waitFor(() => expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1));
+        expect(client.composeGatedPublishForConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            gateTicker: 'GATE',
+            type: 'text/plain',
+            title: 'Members',
+            memo: 'October',
+            existingKeyHash: keyHash,
+        }));
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveValue('  Members  ');
         expect(screen.getByLabelText('Memo')).toHaveValue('  October  ');
     });
 
@@ -418,6 +445,7 @@ describe('publish forms replace file state safely', () => {
     it('refuses stale gated ownership before review', async () => {
         const client = messaging();
         client.getTokenInfo.mockResolvedValue({ creator: 'another-owner', divisibility: 8 });
+        client.composeGatedPublishForConfirm = vi.fn();
         mount(
             <GatedPublishForm
                 walletId="w"
@@ -437,7 +465,7 @@ describe('publish forms replace file state safely', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('no longer owns GATE');
-        expect(screen.queryByText('Review gated publish')).not.toBeInTheDocument();
+        expect(client.composeGatedPublishForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses gated memo and fee errors before review', async () => {

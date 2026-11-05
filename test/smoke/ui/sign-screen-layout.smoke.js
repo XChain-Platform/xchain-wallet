@@ -259,6 +259,31 @@ assert.match(sendCss, /\.detailsToggle\b/, 'Send.module.css defines .detailsTogg
         assert.match(src, /<ConfirmActionModal\b/, `${name}: renders the shared confirm footer`);
         assert.doesNotMatch(src, /<Button\b/, `${name}: adds no footer buttons of its own`);
     }
+    {
+        // Gated publish signs on the shared confirm screen alone: Review hands
+        // the composed publish to <ActionConfirmScreen>, and no review stage of
+        // the form puts a second sign button in front of Reject and Approve.
+        const gatedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
+        assert.doesNotMatch(gatedSrc, /gatedPublish\.signAndPublish/, 'GatedPublishForm: no Sign and publish button');
+        assert.doesNotMatch(gatedSrc, /send\.review\.signOn/, 'GatedPublishForm: no Sign on device button');
+        assert.match(
+            gatedSrc,
+            /if \(actionConfirm\.open\) \{\s*return \(\s*<ActionConfirmScreen\b/,
+            'GatedPublishForm: the open confirm flow renders <ActionConfirmScreen>',
+        );
+        const reviewStart = gatedSrc.search(/stage === 'review'/);
+        const reviewBranch = reviewStart === -1
+            ? ''
+            : gatedSrc.slice(reviewStart, gatedSrc.indexOf('// Form stage.', reviewStart));
+        assert.doesNotMatch(reviewBranch, /<Button\b/, 'GatedPublishForm: the review branch has no submit <Button>');
+        // handleReview through the publish step it calls, up to the header.
+        const reviewHandler = gatedSrc.slice(
+            gatedSrc.indexOf('async function handleReview('),
+            gatedSrc.indexOf('const header = ('),
+        );
+        assert.match(reviewHandler, /actionConfirm\.run\(/, 'GatedPublishForm: Review hands off to the confirm flow');
+        assert.doesNotMatch(reviewHandler, /setStage\('review'\)/, 'GatedPublishForm: Review opens no second review stage');
+    }
 }
 
 console.log('sign-screen-layout smoke OK');

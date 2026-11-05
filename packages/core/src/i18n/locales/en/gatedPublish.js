@@ -16,7 +16,6 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- gated publishing ----------------------------------------
-    'gatedPublish.review.title': 'Review gated publish',
     'gatedPublish.title': 'Gated content · {tick}',
     'gatedPublish.watcherSavedKey':
         'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
@@ -29,17 +28,11 @@ const messages = {
     'gatedPublish.successHint.afterToken':
         'through a normal send gets the key automatically. To add more files that unlock together, publish again and pick this pack.',
     'gatedPublish.pack.new': 'New pack (fresh key)',
-    'gatedPublish.signAndPublish': 'Sign and publish',
     'gatedPublish.review.summary.beforeFile': 'Publish',
-    'gatedPublish.review.summary.afterFile': 'encrypted; only holders of {tick} will be able to read it.',
     'gatedPublish.previewAlt': 'Preview of {file}',
-    'gatedPublish.file': 'File',
-    'gatedPublish.gateToken': 'Gate token',
     'gatedPublish.fileMetadata': '{name} · {bytes} bytes · {type}',
     'gatedPublish.pack': 'Pack',
     'gatedPublish.unlockThreshold': 'Unlock threshold',
-    'gatedPublish.thresholdReview': 'hold ≥ {amount} {tick} to receive the key',
-    'gatedPublish.publishingFrom': 'Publishing from',
     'gatedPublish.permanentHint':
         "Permanent: the encrypted bytes live on-chain forever and the gate can't be removed later, only the key re-shared. One transaction publishes the file and records your recovery copy of the key; there is no key-less window.",
     'gatedPublish.watcherHint':

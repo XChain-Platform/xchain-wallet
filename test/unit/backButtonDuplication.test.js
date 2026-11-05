@@ -80,7 +80,6 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/routes/BatchComposerForm.jsx',
     'packages/core/src/shared/routes/ContractFundsForm.jsx',
     'packages/core/src/shared/routes/CreateWallet.jsx',
-    'packages/core/src/shared/routes/GatedPublishForm.jsx',
     'packages/core/src/shared/routes/LinkForm.jsx',
     'packages/core/src/shared/routes/ListCreateForm.jsx',
     'packages/core/src/shared/routes/ListForkForm.jsx',

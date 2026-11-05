@@ -66,7 +66,7 @@ function mount(Component, props, messaging = messagingWith()) {
 
 async function rejectConfirmation() {
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
-    const submit = screen.getByRole('button', { name: /Sign and publish|Publish list/ });
+    const submit = screen.getByRole('button', { name: /Publish list/ });
     fireEvent.click(submit);
     fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
     await waitFor(() => expect(screen.getByLabelText('Password')).toHaveValue(''));
@@ -83,9 +83,15 @@ describe('confirmation password cleanup', () => {
         fireEvent.click(screen.getByRole('checkbox', {
             name: /I understand the encrypted file is published on-chain forever/,
         }));
+        // Review opens the confirm screen directly: its Reject and Approve are
+        // the only sign step, so the password is typed there.
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
+        expect(screen.queryByRole('button', { name: /Sign and publish|Sign on/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
-        await rejectConfirmation();
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        expect(await screen.findByLabelText('Password')).toHaveValue('');
     });
 
     it('clears ProjectRosterForm password after Reject', async () => {

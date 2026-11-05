@@ -9,11 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -112,13 +112,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [ackForever, setAckForever] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
-        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
     );
-    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileReadIdRef = useRef(0);
 
     useEffect(() => {
@@ -196,10 +194,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-
-    useEffect(() => {
-        if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
-    }, [stage]);
 
     // Encoding-aware ceiling for the CURRENT metadata: exact once the
     // signing address is known, the conservative floor until then.
@@ -356,8 +350,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             }
         }
         setFormError(null);
-        setSubmitError(null);
-        setStage('review');
+        await publish();
     }
 
     function publishRequest() {
@@ -392,13 +385,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         };
     }
 
-    async function handleSubmit(event) {
-        event.preventDefault();
+    // Review hands the publish straight to the shared confirm screen, whose
+    // Reject and Approve are the only sign step: the password or the device
+    // check lives there, so the form keeps no review stage or sign button of
+    // its own. A watcher wallet signs nothing and builds the unsigned
+    // transaction at once.
+    async function publish() {
         if (!fileMeta || !fromAddress || stage === 'submitting') return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
-        setSubmitError(null);
         try {
             const base = publishRequest();
             let r;
@@ -421,31 +415,22 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             setResult(r);
             setStage('done');
         } catch (err) {
-            if (isUserRejection(err)) { setStage('review'); return; }
+            setStage('form');
+            if (isUserRejection(err)) return;
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+            setFormError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Publish failed.',
             }));
-            setStage('review');
-            if (!isWatcherMode && !hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
         } finally {
             setPassword('');
         }
     }
 
     const header = (
-        <PageHeader
-            onBack={onBack}
-            title={stage === 'review' || stage === 'submitting'
-                ? t('gatedPublish.review.title')
-                : t('gatedPublish.title', { tick })}
-        />
+        <PageHeader onBack={onBack} title={t('gatedPublish.title', { tick })} />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (loadError) {
@@ -521,138 +506,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         );
     }
 
-    if (stage === 'review' || stage === 'submitting') {
-        const packLabel = packChoice === 'new'
-            ? t('gatedPublish.pack.new')
-            : packChoice;
-        const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={t('gatedPublish.review.title')}
-                onSubmit={handleSubmit}
-                noValidate
-                status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button
-                            variant="secondary"
-                            type="button"
-                            onClick={(event) => {
-                                event.preventDefault();
-                                setStage('form');
-                            }}
-                            disabled={stage === 'submitting'}
-                        >
-                            {t('common.back')}
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={stage === 'submitting'}
-                            disabled={isWatcherMode
-                                ? false
-                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            {isWatcherMode
-                                ? t('send.review.createUnsigned')
-                                : hw
-                                    ? t('send.review.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
-                                    : t('gatedPublish.signAndPublish')}
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    {t('gatedPublish.review.summary.beforeFile')} <strong>{fileMeta?.name.trim()}</strong>{' '}
-                    {t('gatedPublish.review.summary.afterFile', { tick })}
-                </p>
-                {reviewPreviewUrl ? (
-                    <img
-                        src={reviewPreviewUrl}
-                        alt={t('gatedPublish.previewAlt', { file: fileMeta?.name || t('gatedPublish.file') })}
-                        width={160}
-                        height={160}
-                        loading="lazy"
-                        decoding="async"
-                        style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
-                    />
-                ) : null}
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('gatedPublish.gateToken')}</dt>
-                    <dd className={styles.detailsValue}><code>{tick}</code></dd>
-                    <dt className={styles.detailsLabel}>{t('gatedPublish.file')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {t('gatedPublish.fileMetadata', {
-                            name: fileMeta?.name.trim(),
-                            bytes: fileMeta?.bytes.length.toLocaleString(),
-                            type: fileMeta?.type,
-                        })}
-                    </dd>
-                    {title.trim() ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('gatedPublish.titleField')}</dt>
-                            <dd className={styles.detailsValue}>{title.trim()}</dd>
-                        </>
-                    ) : null}
-                    {memo.trim() ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('send.memo')}</dt>
-                            <dd className={styles.detailsValue}>{memo.trim()}</dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('gatedPublish.pack')}</dt>
-                    <dd className={styles.detailsValue}>{packLabel}</dd>
-                    {thresholdActive && gateMinAmount.trim() ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('gatedPublish.unlockThreshold')}</dt>
-                            <dd className={styles.detailsValue}>
-                                {t('gatedPublish.thresholdReview', {
-                                    amount: gateMinAmount.trim(),
-                                    tick,
-                                })}
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('gatedPublish.publishingFrom')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {fromAddress ? <AddressText address={fromAddress.address} /> : null}
-                    </dd>
-                </dl>
-                <p className={styles.hint} role="note">
-                    {t('gatedPublish.permanentHint')}
-                </p>
-
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('gatedPublish.watcherHint')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={({ status }) => setHwStatus(status)}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
-        );
-    }
-
     // Form stage.
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
@@ -673,9 +526,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <Button
                     type="submit"
                     variant="primary"
+                    loading={stage === 'submitting'}
                     disabled={issuerEligibility.pending || !!issuerEligibility.error}
                 >
-                    {t('common.review')}
+                    {isWatcherMode ? t('send.review.createUnsigned') : t('common.review')}
                 </Button>
             )}
         >
@@ -796,6 +650,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 />
             ) : null}
 
+            <p className={styles.hint} role="note">
+                {t('gatedPublish.permanentHint')}
+            </p>
+            {isWatcherMode ? (
+                <p className={styles.hint}>
+                    {t('gatedPublish.watcherHint')}
+                </p>
+            ) : null}
             <Checkbox
                 label={t('gatedPublish.ackForever')}
                 checked={ackForever}

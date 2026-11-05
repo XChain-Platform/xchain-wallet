@@ -19,7 +19,7 @@ const fullyDeferred = new Map([
     ['packages/core/src/ui/AssetMark.jsx', 3],
     ['packages/core/src/shared/routes/AttachContentForm.jsx', 2],
     ['packages/core/src/shared/routes/DispensersList.jsx', 2],
-    ['packages/core/src/shared/routes/GatedPublishForm.jsx', 2],
+    ['packages/core/src/shared/routes/GatedPublishForm.jsx', 1],
     ['packages/core/src/shared/routes/PublishFileForm.jsx', 2],
 ]);
 

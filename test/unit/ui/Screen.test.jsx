@@ -39,7 +39,6 @@ const REVIEW_SCROLL_FORMS = [
     ['DestroyForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DispenserForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['DividendForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
-    ['GatedPublishForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['IssueTokenForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
     ['LinkForm', 'restoreScroll={!isReviewOrSubmitting}'],
     ['ListCreateForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
