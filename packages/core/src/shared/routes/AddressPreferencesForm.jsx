@@ -20,7 +20,7 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -299,8 +299,16 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
-    if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            </ListPage>,
+        );
+    }
+    if (!addressesByChain || !chainId || !fromAddress) {
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
+    }
 
     if (ownerLane.open) {
         return (
@@ -332,7 +340,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Preferences written</h2>
                 <p className={styles.hint}>
                     They take effect once the transaction confirms and indexes valid.
@@ -346,7 +354,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
