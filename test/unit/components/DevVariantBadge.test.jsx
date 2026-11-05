@@ -98,6 +98,18 @@ describe('DevVariantBadge', () => {
         expect(badge.style.top).toBe('');
     });
 
+    it('clamps and persists an off-screen saved position at mount', () => {
+        window.localStorage.setItem(positionKey, JSON.stringify({ x: 99999, y: 99999 }));
+
+        const badge = renderBadge();
+
+        const left = Number.parseFloat(badge.style.left);
+        const top = Number.parseFloat(badge.style.top);
+        expect(left).toBeLessThan(window.innerWidth);
+        expect(top).toBeLessThan(window.innerHeight);
+        expect(JSON.parse(window.localStorage.getItem(positionKey))).toEqual({ x: left, y: top });
+    });
+
     it('re-clamps and persists a saved position after viewport resize', () => {
         window.localStorage.setItem(positionKey, JSON.stringify({ x: 700, y: 20 }));
         const badge = renderBadge();
@@ -109,5 +121,30 @@ describe('DevVariantBadge', () => {
         expect(badge.style.left).toBe('396px');
         expect(badge.style.top).toBe('20px');
         expect(JSON.parse(window.localStorage.getItem(positionKey))).toEqual({ x: 396, y: 20 });
+    });
+
+    it('keeps a clamped saved position above a bottom tab bar and beside a rail', () => {
+        window.localStorage.setItem(positionKey, JSON.stringify({ x: -500, y: 99999 }));
+        const bar = document.createElement('nav');
+        const rail = document.createElement('nav');
+        document.body.append(bar, rail);
+        const viewH = window.innerHeight;
+        const viewW = window.innerWidth;
+        vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({
+            left: 0, right: viewW, top: viewH - 56, bottom: viewH, width: viewW, height: 56,
+        });
+        vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({
+            left: 0, right: 72, top: 0, bottom: viewH, width: 72, height: viewH,
+        });
+
+        try {
+            const badge = renderBadge();
+
+            expect(Number.parseFloat(badge.style.left)).toBeGreaterThanOrEqual(72);
+            expect(Number.parseFloat(badge.style.top)).toBeLessThanOrEqual(viewH - 56);
+        } finally {
+            bar.remove();
+            rail.remove();
+        }
     });
 });
