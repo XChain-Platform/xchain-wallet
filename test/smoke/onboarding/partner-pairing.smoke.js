@@ -175,7 +175,7 @@ assert.ok(
 
 const preHostImport = read('packages', 'extension', 'src', 'background', 'walletCreate.js');
 assert.ok(
-    /return \{[^}]*walletId[^}]*\}/.test(sliceOf(preHostImport, 'export async function handleWalletImport(')),
+    /return \{[^}]*walletId[^}]*\}/.test(sliceOf(preHostImport, 'function handleWalletImport(')),
     'the pre-host fresh-install import (extension + desktop) returns a walletId',
 );
 

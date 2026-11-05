@@ -44,7 +44,11 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
  * Returns the mnemonic so a popup running the §19.2 seed-phrase display
  * ceremony can show it before the success transition.
  */
-export async function handleWalletCreateWithMnemonic(request, deps) {
+export function handleWalletCreateWithMnemonic(request, deps) {
+    return withOnboardingLock(deps, () => createWithMnemonic(request, deps));
+}
+
+async function createWithMnemonic(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.create: password is required');
@@ -113,6 +117,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -124,7 +129,11 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
     return { mnemonic, walletName: name };
 }
 
-export async function handleWalletImport(request, deps) {
+export function handleWalletImport(request, deps) {
+    return withOnboardingLock(deps, () => importWallet(request, deps));
+}
+
+async function importWallet(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     const mnemonic = /** @type {any} */ (request)?.mnemonic;
     const wif = /** @type {any} */ (request)?.wif;
@@ -205,6 +214,7 @@ export async function handleWalletImport(request, deps) {
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
     } catch (err) {
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -282,7 +292,11 @@ export async function restoreLabelSyncBestEffort({ vault, walletId, password, bi
  * nothing to re-mint ids against, and the backup's own settings are adopted
  * (the restoring user's network / fee choices ARE the ones being restored).
  */
-export async function handleWalletImportBackup(request, deps) {
+export function handleWalletImportBackup(request, deps) {
+    return withOnboardingLock(deps, () => importBackupFresh(request, deps));
+}
+
+async function importBackupFresh(request, deps) {
     const req = /** @type {any} */ (request) ?? {};
     const password = req.password;
     const backupPassword = req.backupPassword;
@@ -376,6 +390,7 @@ export async function handleWalletImportBackup(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        if (isVaultConflict(err)) throw walletExistsError();
         await discardPartialWallet(deps);
         throw err;
     } finally {
@@ -394,13 +409,62 @@ export async function handleWalletImportBackup(request, deps) {
     };
 }
 
+/** Tail of the onboarding queue per install, keyed by its storage backend. */
+const onboardingQueues = new WeakMap();
+
+/**
+ * Run one create / import / fresh-restore at a time per install. Two windows
+ * (or a create beside an import) that start at once both meet an empty vault
+ * at `assertFreshVault`; run in order, the second meets the first one's
+ * wallet and refuses with WalletExistsError instead of racing it to the blob
+ * and then clearing the winner's blob and kdfParams in its own cleanup.
+ *
+ * @template T
+ * @param {{ storageBackend?: object, metaBackend?: object }} deps
+ * @param {() => Promise<T>} run
+ * @returns {Promise<T>}
+ */
+async function withOnboardingLock(deps, run) {
+    const key = deps?.storageBackend ?? deps?.metaBackend;
+    if (!key || typeof key !== 'object') return run();
+    const prior = onboardingQueues.get(key) ?? Promise.resolve();
+    let release = () => {};
+    const tail = prior.then(() => new Promise((resolve) => { release = resolve; }));
+    onboardingQueues.set(key, tail);
+    await prior;
+    try {
+        return await run();
+    } finally {
+        release();
+        if (onboardingQueues.get(key) === tail) onboardingQueues.delete(key);
+    }
+}
+
+function walletExistsError() {
+    return Object.assign(
+        new Error('A wallet already exists. Unlock or reset first.'),
+        { name: 'WalletExistsError' },
+    );
+}
+
+/**
+ * A conditional save on a vault this lane opened empty refuses only because
+ * another writer (a second process on the same file) stored a wallet first.
+ * That blob is the other writer's, so the lane reports WalletExistsError and
+ * clears nothing.
+ */
+function isVaultConflict(err) {
+    return err?.name === 'VaultConflictError';
+}
+
 /**
  * Remove what a failed create / import / fresh-restore wrote. These lanes write
  * the blob once, at their save, so a kdfParams, session or signing-secret save
  * that is refused after it leaves an encrypted blob the unlock path cannot
  * open and every onboarding lane refuses to replace. Callers
- * reach this only after `assertFreshVault` proved the install held nothing, so
- * it never discards a wallet that was already there. A clear that fails too is
+ * reach this only under the onboarding lock, after `assertFreshVault` proved
+ * the install held nothing and with no conditional-save conflict, so it never
+ * discards a wallet that was already there or that another writer stored. A clear that fails too is
  * left for the original error to report.
  *
  * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> } }} deps
@@ -426,16 +490,6 @@ async function discardPartialWallet(deps) {
  * @param {{ metaBackend: { load: () => Promise<any> }, storageBackend: { load: () => Promise<any> } }} deps
  */
 export async function assertFreshVault(deps) {
-    if (await deps.metaBackend.load()) {
-        throw Object.assign(
-            new Error('A wallet already exists. Unlock or reset first.'),
-            { name: 'WalletExistsError' },
-        );
-    }
-    if (await deps.storageBackend.load()) {
-        throw Object.assign(
-            new Error('A wallet already exists. Unlock or reset first.'),
-            { name: 'WalletExistsError' },
-        );
-    }
+    if (await deps.metaBackend.load()) throw walletExistsError();
+    if (await deps.storageBackend.load()) throw walletExistsError();
 }
