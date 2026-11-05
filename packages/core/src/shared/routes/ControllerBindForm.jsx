@@ -721,7 +721,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const networkField = (
         <NetworkField
             value={chainId}
-            onChange={(cid) => { setChainId(cid); setFromAddressId(null); setSourceError(null); }}
+            onChange={(cid) => {
+                // Re-picking the network already shown keeps the chosen From
+                // source; only a real switch clears it and reloads sources.
+                if (cid === chainId) return;
+                setChainId(cid);
+                setFromAddressId(null);
+                setSourceError(null);
+            }}
             chainIds={networkChainIds}
             chainRegistry={chainRegistry}
         />
