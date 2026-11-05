@@ -62,8 +62,8 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
         <Screen variant={variant} header={header}>{children}</Screen>
     );
 
-    if (error) return wrap(<StatusMessage variant="error">{error}</StatusMessage>);
-    if (!accounts) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (error) return wrap(<ListPage><StatusMessage variant="error">{error}</StatusMessage></ListPage>);
+    if (!accounts) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
 
     return wrap(
         <ListPage

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoSignerAccountList } from '../../../packages/core/src/shared/routes/CoSignerAccountList.jsx';
+import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 function pending() {
     return new Promise(() => {});
@@ -115,5 +116,19 @@ describe('CoSignerAccountList states', () => {
         expect(document.body.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
         fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');
+    });
+
+    it('draws the loading line inside the ListPage template', () => {
+        mount(vi.fn(() => pending()));
+
+        const line = screen.getByText(/Loading/);
+        expect(line.parentElement).toHaveClass(listPageStyles.page);
+    });
+
+    it('draws the load failure inside the ListPage template', async () => {
+        mount(vi.fn().mockRejectedValue(new Error('Account service unavailable')));
+
+        const message = await screen.findByText('Account service unavailable');
+        expect(message.closest('.' + listPageStyles.page)).not.toBeNull();
     });
 });
