@@ -160,6 +160,58 @@ test('layout findings key the scrolled-away header and short content apart from 
     expect(layoutSweepFailures(screens)).toHaveLength(2);
 });
 
+test('a list that runs under the scrollbar is a content edge finding', () => {
+    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, headerRightGap: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
+    const screens = [{
+        label: 'contacts', vw: 360, layout, narrow: [{ el: 'ul.list', w: 360, usable: 336, short: -24, offset: 0, under: 24 }],
+    }];
+    expect(layoutSweepFindings(screens)).toEqual([
+        { key: 'contentEdge', screen: 'contacts', detail: 'contacts: ul.list runs 24px under the scrollbar' },
+    ]);
+});
+
+// A main scroller whose 14px scrollbar always shows where the engine draws
+// classic scrollbars, and the given content inside it.
+const scrollbarFrame = (content, dir = 'ltr') => `
+    <style>
+        html, body { margin: 0; overflow: hidden; }
+        #xc-main { width: 300px; height: 300px; overflow-y: scroll; }
+        #xc-main::-webkit-scrollbar { width: 14px; height: 14px; }
+        #xc-main::-webkit-scrollbar-thumb { background: #888; }
+        ul { margin: 0; padding: 0; list-style: none; }
+        li { height: 40px; }
+    </style>
+    <main id="xc-main" dir="${dir}">${content}<div style="height: 900px"></div></main>
+`;
+
+test('narrow list measurement reports a list that runs under the scrollbar and not one that fits', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 400 });
+    // Chromium's mobile emulation draws overlay scrollbars, so the frame's
+    // client width is 300px there and 286px where the scrollbar is classic.
+    await page.setContent(scrollbarFrame('<ul class="list" style="width: 330px"><li>Alice</li><li>Bob</li></ul>'));
+    const frame = await page.evaluate(() => document.getElementById('xc-main').clientWidth);
+    const { narrow } = await page.evaluate(measureInPage, {});
+    expect(narrow.map(({ el, under }) => ({ el, under }))).toEqual([{ el: 'ul.list "Alice Bob"', under: 330 - frame }]);
+    await page.setContent(scrollbarFrame('<ul class="list"><li>Alice</li><li>Bob</li></ul>'));
+    expect((await page.evaluate(measureInPage, {})).narrow).toEqual([]);
+});
+
+test('narrow list measurement leaves a list inside its own horizontal scroll box alone', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 400 });
+    // A wide table-like list scrolls sideways inside its own box, which
+    // fills the frame and ends at the scrollbar.
+    await page.setContent(scrollbarFrame('<div style="overflow-x: auto"><ul class="list" style="width: 600px"><li>Alice</li><li>Bob</li></ul></div>'));
+    expect((await page.evaluate(measureInPage, {})).narrow).toEqual([]);
+});
+
+test('narrow list measurement leaves a list that fills a right-to-left frame alone', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 400 });
+    // In a right-to-left frame the scrollbar sits on the left, so a list
+    // that fills the frame ends at the frame's right border.
+    await page.setContent(scrollbarFrame('<ul class="list"><li>Alice</li><li>Bob</li></ul>', 'rtl'));
+    expect((await page.evaluate(measureInPage, {})).narrow).toEqual([]);
+});
+
 test('header pin measurement finds a header that scrolls away and puts the scroll back', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 400 });
     await page.setContent(`

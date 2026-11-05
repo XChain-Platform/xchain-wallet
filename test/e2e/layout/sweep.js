@@ -352,6 +352,14 @@ export function measureInPage(opts = {}) {
         const padR = parseFloat(scs.paddingRight) || 0;
         const usable = scroller.clientWidth - padL - padR;
         const left = sr.left + (parseFloat(scs.borderLeftWidth) || 0) + padL;
+        // The scroller's right frame edge: where its scrollbar begins, or
+        // its right border in a right-to-left frame, which draws the
+        // scrollbar on the left (WebKit leaves clientLeft at the border then,
+        // so the side comes from the direction).
+        const borderL = parseFloat(scs.borderLeftWidth) || 0;
+        const frameRight = scs.direction === 'rtl'
+            ? sr.right - (parseFloat(scs.borderRightWidth) || 0)
+            : sr.left + borderL + scroller.clientWidth;
         const LISTY = /(^|_|-)(list|lists|card|cards|table|items|grid|panel|feed|results)(_|-|$)/i;
         const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
         const isCandidate = (el) => {
@@ -420,9 +428,21 @@ export function measureInPage(opts = {}) {
                 rowL = Math.min(rowL, sr2.left); rowR = Math.max(rowR, sr2.right);
                 judged.add(sib);
             }
+            // A block clipped by its own sideways scroll or clip box shows
+            // only the part inside that box, so the row is judged by it.
+            for (let a = target.parentElement; a && a !== scroller; a = a.parentElement) {
+                if (getComputedStyle(a).overflowX === 'visible') continue;
+                const ar = a.getBoundingClientRect();
+                rowL = Math.max(rowL, ar.left + a.clientLeft);
+                rowR = Math.min(rowR, ar.left + a.clientLeft + a.clientWidth);
+            }
             const short = Math.round(usable - (rowR - rowL));
-            if (short > 2) {
-                out.push({ el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(usable), short, offset: Math.round(rowL - left) });
+            // A block that runs past the frame edge sits under the scrollbar.
+            const under = Math.round(rowR - frameRight);
+            if (short > 2 || under > 1) {
+                out.push({
+                    el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(usable), short, offset: Math.round(rowL - left), under: Math.max(under, 0),
+                });
                 if (out.length >= 15) break;
             }
         }
@@ -732,7 +752,8 @@ export function layoutSweepFindings(screens) {
             add('headerScrolledAway', label, `${label}: ${item.el} scrolled out of view (top ${item.top}px, bottom ${item.bottom}px)`);
         }
         for (const item of narrow) {
-            add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
+            if (item.under > 1) add('contentEdge', label, `${label}: ${item.el} runs ${item.under}px under the scrollbar`);
+            else add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
         }
     }
     return findings;
