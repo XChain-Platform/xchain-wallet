@@ -1114,6 +1114,33 @@ describe('desktop main entry point', () => {
         expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(1, 3);
     });
 
+    it('titles the window from the document title each page-title-updated event finds', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        const win = createWindow();
+        const page = { title: 'Create wallet' };
+        let windowTitle = 'XChain Wallet';
+        win.webContents.executeJavaScript = vi.fn(async (code) => (code === 'document.title' ? page.title : undefined));
+        win.getTitle = vi.fn(() => windowTitle);
+        win.setTitle = vi.fn((title) => { windowTitle = title; });
+        const onTitle = win.webContents.bridgeListeners.get('page-title-updated');
+        expect(onTitle).toBeTypeOf('function');
+
+        const first = { preventDefault: vi.fn() };
+        onTitle(first, 'Create wallet');
+        expect(first.preventDefault).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(win.setTitle).toHaveBeenLastCalledWith('Create wallet'));
+
+        // The page returns to Welcome; the event can still carry the screen
+        // it left, so the window follows the document, not the event.
+        page.title = 'Welcome';
+        const second = { preventDefault: vi.fn() };
+        onTitle(second, 'Create wallet');
+        expect(second.preventDefault).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(win.setTitle).toHaveBeenLastCalledWith('Welcome'));
+        expect(win.setTitle).toHaveBeenCalledTimes(2);
+        expect(windowTitle).toBe('Welcome');
+    });
+
     it('contains a renderer load rejection and reveals a recoverable window', async () => {
         const secret = 'xchain:send?memo=private';
         electron.state.loadFileError = new Error(secret);

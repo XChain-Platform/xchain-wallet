@@ -639,6 +639,20 @@ export function createWindow(opts = {}) {
     win.once('ready-to-show', () => {
         runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); }, 'renderer reveal');
     });
+    // The window shows the title the page holds now. A title event can arrive
+    // after the page has moved on, so each event re-reads the document title
+    // and a return to an earlier screen never keeps the title of the screen
+    // it came from.
+    win.webContents.on('page-title-updated', (event) => {
+        event.preventDefault();
+        void runMainTask(async () => {
+            if (win.isDestroyed()) return;
+            const title = await win.webContents.executeJavaScript('document.title');
+            if (!win.isDestroyed() && typeof title === 'string' && title && win.getTitle() !== title) {
+                win.setTitle(title);
+            }
+        }, 'window title');
+    });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
     win.on('minimize', () => {
