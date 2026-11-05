@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 // Contact network replies stay ordered, duplicate submissions stay single,
-// and conflict retries carry the version the screen reloads.
+// conflict retries carry the version the screen reloads, and a refused
+// Undo restore keeps Undo available for the same snapshot.
 
 import { describe, it, expect, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -17,6 +18,7 @@ import { base58check } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 
 const CONFLICT = 'Contact changed since this screen loaded. Reopen it and try again.';
 const OLD_VERSION = '2026-10-01T00:00:00.000Z';
@@ -196,5 +198,44 @@ describe('ContactsList duplicate submission', () => {
             await saveDone.promise;
         });
         await screen.findByText('No contacts yet');
+    });
+});
+
+describe('ContactsList Undo after a refused restore', () => {
+    it('keeps Undo available after a refused restore write and restores the contact on the next Undo', async () => {
+        const snapshot = contactAt(OLD_VERSION);
+        const store = new Map([[snapshot.id, snapshot]]);
+        const saveContact = vi.fn(async ({ record }) => {
+            if (saveContact.mock.calls.length === 1) throw new Error('Storage is busy.');
+            store.set(record.id, record);
+            return record;
+        });
+        const messaging = {
+            listContacts: vi.fn(async () => [...store.values()]),
+            saveContact,
+            deleteContact: vi.fn(async ({ id }) => { store.delete(id); }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <ContactsList walletId="w1" onBack={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        await waitFor(() => expect(saveContact).toHaveBeenCalledTimes(1));
+        expect(saveContact).toHaveBeenCalledWith({ record: snapshot, expectedUpdatedAt: null });
+        expect(screen.queryByRole('button', { name: 'Alice' })).toBeNull();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(saveContact).toHaveBeenCalledTimes(2));
+        expect(saveContact.mock.calls[1][0]).toEqual({ record: snapshot, expectedUpdatedAt: null });
+        expect(await screen.findByRole('button', { name: 'Alice' })).toBeTruthy();
     });
 });

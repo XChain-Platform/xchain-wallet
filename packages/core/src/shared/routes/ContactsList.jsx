@@ -517,18 +517,25 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setMode('list');
             await loadContacts();
             if (snapshot) {
-                showToast({
+                // The toast host dismisses the toast as soon as Undo runs, so a
+                // refused restore offers the same Undo again; the retry stays
+                // bound to this snapshot instead of leaving the contact lost.
+                const undoToast = {
                     message: `${displayName} deleted`,
                     actionLabel: 'Undo',
-                    onAction: async () => {
-                        try {
-                            await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
-                            await loadContacts();
-                        } catch (err) {
-                            setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
-                        }
-                    },
-                });
+                    onAction: () => restoreContact(),
+                };
+                const restoreContact = async () => {
+                    try {
+                        await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
+                    } catch (err) {
+                        setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
+                        showToast(undoToast);
+                        return;
+                    }
+                    await loadContacts();
+                };
+                showToast(undoToast);
             }
         } catch (err) {
             setLoadError(userFacingMessage(err, 'Could not delete this contact. Try again.'));
