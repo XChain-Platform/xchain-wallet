@@ -69,7 +69,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
  * @param {Set<string> | null} [props.automaticHiddenKeys] `chainId:tick` keys collapsed by a display preference. These rows stay reachable but have no per-row unhide action because the preference owns their visibility.
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
- * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
+ * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8), except an 'unavailable' verdict, which shows no status text. Native rows are never badged.
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
@@ -364,7 +364,10 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                                 size="sm"
                             />
                         ) : null}
-                        {!isNative && verify ? (
+                        {/* An asset row carries no status text when the wallet
+                            cannot check a balance; only a proven, pending or
+                            contradicted verdict earns a badge here. */}
+                        {!isNative && verify && verify.status !== 'unavailable' ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={!clickable} />
                         ) : null}
                     </span>
