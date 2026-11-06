@@ -193,12 +193,9 @@
     border-top: 0;
 }
 
-/* One line of the field error (margin plus a 1.4 line of the xs text) stays
-   reserved under the password field until the error replaces it. */
+/* The password field adds no space of its own, so the unlock actions sit the
+   form gap under it, as on every other form; the field error grows the field
+   only while it shows. */
 .passwordField {
     width: 100%;
-}
-
-.passwordFieldIdle {
-    padding-block-end: calc(var(--xc-help-gap) + var(--xc-text-xs) * 1.4);
 }

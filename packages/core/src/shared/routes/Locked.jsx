@@ -769,9 +769,9 @@ export function Locked({ onUnlocked, lockReason = null }) {
                 aria-label={t('locked.walletUsername')}
                 hidden
             />
-            {/* The wrong-password message appears under the field in a space kept free
-                while it is hidden, so the centred form does not jump when it shows. */}
-            <div className={error ? styles.passwordField : `${styles.passwordField} ${styles.passwordFieldIdle}`}>
+            {/* The wrong-password message appears under the field and the actions
+                keep the form gap below it, so no idle space is reserved. */}
+            <div className={styles.passwordField}>
                 <Input
                     ref={inputRef}
                     type="password"
