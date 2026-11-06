@@ -27,10 +27,12 @@ const surfaces = [
         selectedSelector: '.pressed',
     },
     {
+        // Tabs mark hover, press and selection with text colour and the
+        // bottom underline only, so their hover and pressed rules paint no fill.
         file: 'packages/core/src/ui/Tabs.module.css',
         base: '.tab',
         hoverSelectors: ['.tab:hover'],
-        hoverBackground: 'var(--xc-control-bg-hover)',
+        underlineOnly: true,
         selectedSelector: "[aria-selected='true']",
     },
     {
@@ -71,6 +73,12 @@ function hasFinePointerGate(rule) {
     return false;
 }
 
+// A rule paints a fill when it sets a background or background colour.
+function paintsFill(rule) {
+    const decls = declarations(rule);
+    return Boolean(decls.background || decls['background-color']);
+}
+
 function inspectSurface(source, surface) {
     const root = postcss.parse(source, { from: surface.file });
     const rules = [];
@@ -87,18 +95,26 @@ function inspectSurface(source, surface) {
     if (hoverRules.length === 0 || hoverRules.some((rule) => !hasFinePointerGate(rule))) {
         failures.push('hover must require a fine pointer');
     }
-    const hoverBackgrounds = hoverRules
-        .map((rule) => declarations(rule).background)
-        .filter(Boolean);
-    if (hoverBackgrounds.length !== 1 || hoverBackgrounds[0] !== surface.hoverBackground) {
-        failures.push('hover must use one surface background token');
-    }
-
     const activeRules = rules.filter((rule) => rule.selectors.some(
         (selector) => selector.includes(`${surface.base}:active`),
     ));
-    if (!activeRules.some((rule) => declarations(rule).background)) {
-        failures.push('pressed state needs a background');
+    if (surface.underlineOnly) {
+        if (hoverRules.some((rule) => paintsFill(rule))) {
+            failures.push('underline-only hover must declare no background');
+        }
+        if (activeRules.some((rule) => paintsFill(rule))) {
+            failures.push('underline-only pressed state must declare no background');
+        }
+    } else {
+        const hoverBackgrounds = hoverRules
+            .map((rule) => declarations(rule).background)
+            .filter(Boolean);
+        if (hoverBackgrounds.length !== 1 || hoverBackgrounds[0] !== surface.hoverBackground) {
+            failures.push('hover must use one surface background token');
+        }
+        if (!activeRules.some((rule) => declarations(rule).background)) {
+            failures.push('pressed state needs a background');
+        }
     }
 
     const selectedRules = rules.filter((rule) => rule.selectors.some(
@@ -137,6 +153,29 @@ describe('desktop interactive surface states', () => {
             'hover must require a fine pointer',
             'pressed state needs a background',
             'selected state needs the shared selected token',
+        ]);
+    });
+
+    it('rejects a hover or pressed fill on an underline-only surface', () => {
+        const source = [
+            '.item { cursor: pointer; }',
+            '@media (hover: hover) and (pointer: fine) {',
+            '  .item:hover { background: var(--xc-control-bg-hover); color: var(--xc-text); }',
+            '}',
+            '.item:active { background-color: var(--xc-control-bg-hover); }',
+            ".item[aria-selected='true'] { border-bottom-color: var(--xc-control-selected); }",
+        ].join('\n');
+        const failures = inspectSurface(source, {
+            file: 'Fixture.module.css',
+            base: '.item',
+            hoverSelectors: ['.item:hover'],
+            underlineOnly: true,
+            selectedSelector: "[aria-selected='true']",
+        });
+
+        expect(failures).toEqual([
+            'underline-only hover must declare no background',
+            'underline-only pressed state must declare no background',
         ]);
     });
 });
