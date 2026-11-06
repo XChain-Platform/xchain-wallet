@@ -103,13 +103,12 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const testCoinsOnly = !isDemoWallet(walletId)
         && rowsWithChain.length > 0
         && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
-    const { total, unpriced, priceUnavailable } = useMemo(() => {
+    const { total, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);
         const meaningful = (rows || []).filter(hasNonZeroQuantity);
         const meaningfulSum = sumFiatValue(meaningful);
         return {
             ...sum,
-            unpriced: meaningfulSum.unpriced,
             priceUnavailable: meaningful.length > 0 && meaningfulSum.priced === 0,
         };
     }, [rows]);
@@ -202,7 +201,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     }, [rows, effectivePriceMap, total]);
 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
-    const hasUnpriced = unpriced > 0;
     const stalePriceAsOf = oldestStalePriceTimestamp(rows);
     // A failed price refresh keeps the last 24h move on screen, so its age
     // joins the one freshness line instead of reading as current.
@@ -222,9 +220,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
+    // A holding without a price adds nothing to the total and no status
+    // text: a price simply shows when one exists.
     const showMeta = !hidden && (testCoinsOnly
         ? hasUpdate
-        : (hasChange || hasUnpriced || hasUpdate));
+        : (hasChange || hasUpdate));
     // A row whose balance read failed carries no number, so the headline
     // cannot sum it as zero: with nothing else priced the total is unknown,
     // and beside priced rows it is a floor, the way the row itself says.
@@ -447,11 +447,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                 ({changeDisplay.text}{t('components.totalBalanceHero.24h')}
                             </span>
                         ) : null}
-                        {hasUnpriced && !testCoinsOnly ? (
-                            <span className={styles.metaUnpriced}>
-                                {unpricedLabel(rows)}
-                            </span>
-                        ) : null}
                     </span>
                     {hasUpdate ? (
                         <StalenessLabel
@@ -495,24 +490,6 @@ function oldestStalePriceTimestamp(rows) {
         if (oldest === null || timestamp < oldest) oldest = timestamp;
     }
     return oldest;
-}
-
-// The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE
-// are coins, so "3 tokens not priced" misnamed them. Counts the same rows
-// `sumFiatValue` counts as unpriced.
-function unpricedLabel(rows) {
-    let coins = 0;
-    let tokens = 0;
-    for (const r of rows || []) {
-        if (!hasNonZeroQuantity(r)) continue;
-        if (sumFiatValue([r]).unpriced === 0) continue;
-        if (r?.kind === 'native') coins += 1;
-        else tokens += 1;
-    }
-    const parts = [];
-    if (coins > 0) parts.push(`${coins} ${coins === 1 ? 'coin' : 'coins'}`);
-    if (tokens > 0) parts.push(`${tokens} ${tokens === 1 ? 'token' : 'tokens'}`);
-    return `${parts.join(' and ')} not priced`;
 }
 
 function hasNonZeroQuantity(row) {

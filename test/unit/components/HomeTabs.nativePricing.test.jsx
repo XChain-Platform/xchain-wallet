@@ -8,13 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// regression: on a real (non-demo) wallet Home showed "$0.00 USD" and
-// "3 tokens not priced" for BTC, LTC and DOGE while the price oracle was
-// healthy, because balance reads carry no price and Home never attached
-// one. Send priced the same coins, since it asks the rate cache itself.
-// The hero now gets the oracle rate on every native row, a zero balance
-// with a known price counts as priced, and a coin without one is called a
-// coin.
+// Home prices native coins on a real (non-demo) wallet the way Send does:
+// the hero gets the oracle rate on every native row, and a zero balance
+// with a known price counts as priced. A holding without a price adds
+// nothing to the total and carries no pricing status text.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -229,90 +226,96 @@ describe('Home test-network fiat', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).not.toHaveTextContent('$');
-        expect(screen.getByRole('region', { name: 'Unpriced tokens' })).toBeInTheDocument();
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toBeInTheDocument();
         expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
     });
 });
 
+// One DEX-traded token (MARKET), one token with no market (UNKNOWN) and
+// one spam-looking dust row (SPAM) on a mainnet wallet.
+const DEX_BALANCES = {
+    'bitcoin-mainnet': [{
+        address: 'bitcoin-mainnet-addr',
+        balances: {
+            tokens: [
+                { tick: 'MARKET', quantity: '100000000', divisibility: 8 },
+                { tick: 'UNKNOWN', quantity: '100000000', divisibility: 8 },
+                { tick: 'SPAM', quantity: '1', divisibility: 8 },
+            ],
+        },
+    }],
+};
+
+function dexVenue() {
+    const calls = [];
+    configureFiatRateSource({
+        now: () => NOW,
+        explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        fetch: async (url) => {
+            calls.push(url);
+            if (url.includes('/api/price_snapshots/')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [{ coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS }],
+                    }),
+                };
+            }
+            if (url.includes('/api/market/MARKET/BTC')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [{
+                            tick1: 'MARKET',
+                            tick2: 'BTC',
+                            tick1_price: '0.000001',
+                            tick2_price: '1000000',
+                            last_updated: FRESH_TS,
+                        }],
+                    }),
+                };
+            }
+            if (url.includes('/api/market/UNKNOWN/BTC')) {
+                return { ok: true, json: async () => ({ data: [] }) };
+            }
+            if (url.includes('/api/market/SPAM/BTC')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [{
+                            tick1: 'SPAM',
+                            tick2: 'BTC',
+                            tick1_price: '1',
+                            tick2_price: '1',
+                            last_updated: FRESH_TS,
+                        }],
+                    }),
+                };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        },
+    });
+    return calls;
+}
+
 describe('Home token rows on a real wallet', () => {
     it('prices only the DEX-traded token, skips spam-looking dust, and keeps the count aligned', async () => {
-        const calls = [];
-        configureFiatRateSource({
-            now: () => NOW,
-            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
-            fetch: async (url) => {
-                calls.push(url);
-                if (url.includes('/api/price_snapshots/')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            data: [{ coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS }],
-                        }),
-                    };
-                }
-                if (url.includes('/api/market/MARKET/BTC')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            data: [{
-                                tick1: 'MARKET',
-                                tick2: 'BTC',
-                                tick1_price: '0.000001',
-                                tick2_price: '1000000',
-                                last_updated: FRESH_TS,
-                            }],
-                        }),
-                    };
-                }
-                if (url.includes('/api/market/UNKNOWN/BTC')) {
-                    return { ok: true, json: async () => ({ data: [] }) };
-                }
-                if (url.includes('/api/market/SPAM/BTC')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            data: [{
-                                tick1: 'SPAM',
-                                tick2: 'BTC',
-                                tick1_price: '1',
-                                tick2_price: '1',
-                                last_updated: FRESH_TS,
-                            }],
-                        }),
-                    };
-                }
-                return { ok: false, status: 404, json: async () => ({}) };
-            },
-        });
-        mount({
-            balances: {
-                'bitcoin-mainnet': [{
-                    address: 'bitcoin-mainnet-addr',
-                    balances: {
-                        tokens: [
-                            { tick: 'MARKET', quantity: '100000000', divisibility: 8 },
-                            { tick: 'UNKNOWN', quantity: '100000000', divisibility: 8 },
-                            { tick: 'SPAM', quantity: '1', divisibility: 8 },
-                        ],
-                    },
-                }],
-            },
-        });
+        const calls = dexVenue();
+        mount({ balances: DEX_BALANCES });
 
-        expect(within(hero()).getByText('3 tokens not priced')).toBeInTheDocument();
+        expect(within(hero()).queryByText(/not priced/)).toBeNull();
         expect(calls).toEqual([]);
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(false);
         expect(document.body.textContent).not.toContain('$80,000.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
         await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
-        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        expect(within(hero()).queryByText(/not priced/)).toBeNull();
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
         expect(within(hero()).getByText(/Updated/)).toBeInTheDocument();
-        const unpriced = screen.getByRole('region', { name: 'Unpriced tokens' });
-        expect(unpriced.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]')).toBeTruthy();
-        expect(within(unpriced).queryByText('MARKET')).toBeNull();
         const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
+        expect(unknown).toBeTruthy();
+        expect(within(unknown).queryByText('MARKET')).toBeNull();
         expect(unknown.textContent).not.toContain('$');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
         expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
@@ -323,8 +326,36 @@ describe('Home token rows on a real wallet', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Coins' }));
         await act(async () => {});
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
-        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        expect(within(hero()).queryByText(/not priced/)).toBeNull();
         expect(calls).toHaveLength(callsBeforeCoins);
+    });
+
+    it('lists an unpriced token beside priced ones with no pricing status text', async () => {
+        dexVenue();
+        const onSelectToken = vi.fn();
+        mount({ balances: DEX_BALANCES, onSelectToken });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
+
+        expect(screen.queryByText('Unpriced tokens')).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Unpriced tokens' })).toBeNull();
+        const market = document.querySelector('[data-balance-key="bitcoin-mainnet:MARKET"]');
+        const panel = market.closest('[role="tabpanel"]');
+        expect(panel.querySelector('p')).toBeNull();
+        expect(panel.querySelector('section')).toBeNull();
+        const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
+        expect(market).toBeTruthy();
+        expect(unknown).toBeTruthy();
+        // Both rows sit in one list, the priced row first.
+        expect(unknown.parentElement).toBe(market.parentElement);
+        expect(market.compareDocumentPosition(unknown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(within(unknown).getByRole('button', { name: /UNKNOWN/ }));
+        expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'bitcoin-mainnet',
+            tick: 'UNKNOWN',
+        }));
     });
 });
 
@@ -495,12 +526,12 @@ describe('TotalBalanceHero unpriced note', () => {
         expect(hero()).not.toHaveTextContent(/▲|▼|%/);
     });
 
-    it('names coins and tokens apart', () => {
+    it('shows no unpriced count for funded coins and tokens without a price', () => {
         renderHero([
             native({ quantity: '100' }),
             native({ kind: 'token', tick: 'XCP', quantity: '100' }),
             native({ kind: 'token', tick: 'PEPECASH', quantity: '100' }),
         ]);
-        expect(screen.getByText('1 coin and 2 tokens not priced')).toBeInTheDocument();
+        expect(screen.queryByText(/not priced/)).toBeNull();
     });
 });

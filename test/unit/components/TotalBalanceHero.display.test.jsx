@@ -93,7 +93,7 @@ describe('TotalBalanceHero fiat formatting', () => {
         });
 
         expect(screen.getByText('$1,256.56')).toBeInTheDocument();
-        expect(screen.getByText('1 token not priced')).toBeInTheDocument();
+        expect(screen.queryByText(/not priced/)).toBeNull();
         expect(screen.getByLabelText('1,256.56 US dollars')).toBeInTheDocument();
     });
 

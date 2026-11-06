@@ -228,18 +228,6 @@
     text-align: end;
 }
 
-.metaUnpriced {
-    color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
-    font-size: var(--xc-text-xs);
-    font-weight: 500;
-}
-
-.metaUnpriced:not(:first-child)::before {
-    content: '·';
-    margin-inline-end: var(--xc-space-1);
-}
-
-.metaUnpriced,
 .changePositive,
 .changeNegative,
 .changeNeutral {
