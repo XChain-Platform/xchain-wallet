@@ -672,6 +672,7 @@ const STACK = {
 const COPY = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-sm)',
+    maxWidth: 'none',
 };
 
 const CODE_BOX = {
