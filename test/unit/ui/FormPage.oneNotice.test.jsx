@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // A form carries one notice per state: its caution, its saved draft and the
-// shell's "Some balances may be out of date" share one box with a line each.
+// shell's "Some information may be out of date" share one box with a line each.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -108,7 +108,7 @@ describe('one notice box per form', () => {
         ), refresh);
         const shown = boxes(container);
         expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some balances may be out of date');
+        expect(shown[0]).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
         expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -162,7 +162,7 @@ describe('one notice box per form', () => {
         ));
         const shown = boxes(container);
         expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some balances may be out of date');
+        expect(shown[0]).toHaveTextContent('Some information may be out of date');
         expect(shown[0].querySelector('[role="status"][aria-live="polite"]')).not.toBeNull();
     });
 });

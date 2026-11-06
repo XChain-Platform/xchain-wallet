@@ -51,7 +51,7 @@ describe('ReachabilityBanner', () => {
     it('uses one short atomic notice without technical status text', () => {
         mount({ perChain: [chain()] });
         const status = screen.getByRole('status');
-        expect(screen.getByText('Some balances may be out of date')).toBeTruthy();
+        expect(screen.getByText('Some information may be out of date')).toBeTruthy();
         expect(status).not.toHaveTextContent(/degraded|offline|hub|encoder|explorer/i);
         expect(status).toHaveAttribute('aria-live', 'polite');
         expect(status).toHaveAttribute('aria-atomic', 'true');
@@ -73,7 +73,7 @@ describe('ReachabilityBanner', () => {
         });
         view.rerender(<ReachabilityBanner />);
         expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
-        expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
+        expect(screen.getByRole('status')).toHaveTextContent("You're offline. Some information may be out of date.");
     });
 
     it('uses translated retry labels in the banner and reported notice', async () => {
@@ -179,7 +179,7 @@ describe('ReachabilityBanner', () => {
     it('announces only the reachability state when poll details rerender', () => {
         const view = mount({ lastChecked: 100 });
         const announcement = screen.getByRole('status');
-        expect(announcement).toHaveTextContent('Some balances may be out of date');
+        expect(announcement).toHaveTextContent('Some information may be out of date');
         expect(announcement).not.toHaveTextContent('Last checked');
 
         useReachability.mockReturnValue({
@@ -191,7 +191,7 @@ describe('ReachabilityBanner', () => {
         });
         view.rerender(<ReachabilityBanner />);
         expect(screen.getByRole('status')).toBe(announcement);
-        expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
+        expect(screen.getByRole('status')).toHaveTextContent('Some information may be out of date');
     });
 
     it('renders nothing for a chain that is current', () => {
@@ -209,7 +209,7 @@ describe('ReachabilityBanner', () => {
             expect(window.innerWidth).toBe(360);
             expect(notice).toHaveAttribute('data-variant', 'warning');
             expect(notice.querySelector('[aria-hidden="true"]')).toHaveTextContent('⚠');
-            expect(message).toHaveTextContent('Some balances may be out of date');
+            expect(message).toHaveTextContent('Some information may be out of date');
             expect(message.parentElement).toContainElement(screen.getByRole('button', { name: 'Details' }));
             expect(notice).toContainElement(screen.getByRole('button', { name: 'Try again' }));
             expect(css).not.toMatch(/\.degraded\b|\.offline\b/);

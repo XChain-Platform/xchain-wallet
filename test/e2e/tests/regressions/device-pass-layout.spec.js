@@ -68,11 +68,11 @@ test.describe('demo wallet', () => {
         await expect(main.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     });
 
-    test('a demo wallet never shows the stale-balances notice', async ({ page }) => {
+    test('a demo wallet never shows the out-of-date notice', async ({ page }) => {
         test.slow();
         // The real-wallet test below proves the notice appears within this wait.
         await page.waitForTimeout(45_000);
-        await expect(page.getByText('Some balances may be out of date')).toHaveCount(0);
+        await expect(page.getByText(/Some information may be out of date/)).toHaveCount(0);
     });
 
     test('Home quick-action tiles are outlined at desktop width', async ({ page }) => {
@@ -97,17 +97,17 @@ test.describe('demo wallet', () => {
 });
 
 test.describe('real wallet', () => {
-    test('the stale-balances Details open below the line without an inner scroller', async ({ page }) => {
+    test('the out-of-date notice Details open below the line without an inner scroller', async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: 390, height: 844 });
         await createWallet(page);
         // The dev services are not running here, so the reachability notice
         // appears once its startup grace ends.
-        const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
+        const message = page.getByRole('status').filter({ hasText: /Some information may be out of date/ });
         await expect(message).toBeVisible({ timeout: 90_000 });
         // Notices are page content, never toolbar content: the notice is in
         // the route's main region.
-        await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Some balances may be out of date' }))
+        await expect(page.getByRole('main').getByRole('status').filter({ hasText: /Some information may be out of date/ }))
             .toBeVisible();
         const notice = message.locator('xpath=../..');
         await notice.getByRole('button', { name: 'Details' }).click();
@@ -144,11 +144,11 @@ test.describe('real wallet', () => {
         expect(onTop).toBe(true);
     });
 
-    test('the stale-balances Details close when the route changes', async ({ page }) => {
+    test('the out-of-date notice Details close when the route changes', async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: 390, height: 844 });
         await createWallet(page);
-        const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
+        const message = page.getByRole('status').filter({ hasText: /Some information may be out of date/ });
         await expect(message).toBeVisible({ timeout: 90_000 });
         const toggle = message.locator('xpath=..').getByRole('button', { name: 'Details' });
         await toggle.click();

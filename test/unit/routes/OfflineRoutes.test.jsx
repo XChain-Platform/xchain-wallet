@@ -72,8 +72,8 @@ function renderOffline(messaging, route) {
 }
 
 function expectOneOfflineNotice() {
-    // The compact notice uses one sentence for offline and degraded states.
-    expect(screen.getAllByText('Some balances may be out of date')).toHaveLength(1);
+    // Offline, the compact notice says the information may be out of date.
+    expect(screen.getAllByText("You're offline. Some information may be out of date.")).toHaveLength(1);
 }
 
 beforeEach(() => {

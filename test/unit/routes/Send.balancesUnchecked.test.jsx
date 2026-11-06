@@ -132,7 +132,7 @@ describe('Send empty state and the balance check', () => {
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expect(screen.getByText(/Sending needs a network connection/)).toBeInTheDocument();
-        expect(screen.queryByText('Some balances may be out of date')).toBeNull();
+        expect(screen.queryByText(/Some information may be out of date/)).toBeNull();
         expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
@@ -143,19 +143,19 @@ describe('Send empty state and the balance check', () => {
         expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
-    it('does not also show the stale-balances notice on that screen', async () => {
+    it('does not also show the out-of-date notice on that screen', async () => {
         reachability.overall = 'degraded';
         mount('0', { inShell: true });
         expect(await screen.findByRole('heading', { name: "Balances couldn't be checked" })).toBeInTheDocument();
-        expect(screen.queryByText('Some balances may be out of date')).toBeNull();
+        expect(screen.queryByText(/Some information may be out of date/)).toBeNull();
     });
 
     it('shows the notice once in the page content when Send has a form to show', async () => {
         reachability.overall = 'degraded';
         mount('100000000', { inShell: true });
         await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 });
-        const notice = screen.getByText('Some balances may be out of date');
+        const notice = screen.getByText('Some information may be out of date');
         expect(screen.getByRole('main').contains(notice)).toBe(true);
-        expect(screen.getAllByText('Some balances may be out of date')).toHaveLength(1);
+        expect(screen.getAllByText('Some information may be out of date')).toHaveLength(1);
     });
 });

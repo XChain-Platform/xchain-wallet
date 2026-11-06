@@ -3,10 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The reachability notice names balances only on a screen that can show one.
-// Screens without balances get copy about the screen's information in
-// general, and every screen still carries exactly one notice. A screen of
-// data held on this device carries none.
+// The reachability notice says the screen's information may be out of date
+// on every screen that holds network data, and every such screen carries
+// exactly one notice. A screen of data held on this device carries none.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -18,7 +17,6 @@ import { ReachabilityBanner } from '../../../packages/core/src/shared/components
 import {
     NoticesRouteContext,
     routeHoldsNetworkData,
-    routeMayShowBalances,
 } from '../../../packages/core/src/shared/components/noticesRoute.js';
 
 function mount(overall, routeKey) {
@@ -58,10 +56,12 @@ describe('ReachabilityBanner copy by screen', () => {
     });
 
     it.each(['home:1', 'send:2', 'token-detail:3', 'history:4'])(
-        'keeps the balance wording on %s',
+        'uses the same information wording on %s, a screen with balances',
         (routeKey) => {
             mount('offline', routeKey);
-            expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
+            expect(screen.getByRole('status'))
+                .toHaveTextContent("You're offline. Some information may be out of date.");
+            expect(screen.queryByText(/balances/)).toBeNull();
         },
     );
 
@@ -74,10 +74,10 @@ describe('ReachabilityBanner copy by screen', () => {
         },
     );
 
-    it('treats a missing route key as a balance screen', () => {
+    it('treats a missing route key as a network data screen', () => {
         mount('offline', null);
-        expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
-        expect(routeMayShowBalances(undefined)).toBe(true);
+        expect(screen.getByRole('status'))
+            .toHaveTextContent("You're offline. Some information may be out of date.");
         expect(routeHoldsNetworkData(undefined)).toBe(true);
     });
 });

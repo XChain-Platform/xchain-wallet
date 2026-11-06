@@ -23,7 +23,6 @@ import {
     ReachabilityNoticeReportContext,
     ReachabilityNoticeWantedContext,
     routeHoldsNetworkData,
-    routeMayShowBalances,
 } from './noticesRoute.js';
 import { t } from '../../i18n/index.js';
 import { ReachabilityLine, affectedCoins } from './ReachabilityLine.jsx';
@@ -46,17 +45,16 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     // A screen that already says its balances could not be checked takes
     // the place of this notice; the probe keeps running underneath.
     const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
-    // Balances are named only on a screen that can show one.
-    const mayShowBalances = routeMayShowBalances(routeKey);
     // A screen of data held on this device has nothing to go out of date.
     // A local-data screen can still ask for the notice (the endpoint settings).
     const wantedByScreen = useContext(ReachabilityNoticeWantedContext);
     const holdsNetworkData = routeHoldsNetworkData(routeKey) || wantedByScreen;
     const unreachable = holdsNetworkData && (overall === 'degraded' || overall === 'offline');
     const variant = overall === 'offline' ? 'error' : 'warning';
-    const text = mayShowBalances
-        ? t('reachability.notice.balances')
-        : t(overall === 'offline' ? 'reachability.notice.offline' : 'reachability.notice.degraded');
+    // The notice speaks of the screen's information in general on every
+    // screen. A balance that could not be checked says so in its own row or
+    // empty state, so the notice never claims a balance is stale.
+    const text = t(overall === 'offline' ? 'reachability.notice.offline' : 'reachability.notice.degraded');
     const retryLabel = loading ? t('common.checking') : t('common.tryAgain');
 
     // The route hears what this notice says even while a screen hides it, so
