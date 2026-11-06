@@ -31,7 +31,7 @@ import styles from './OnboardingCarousel.module.css';
  * renders every frame stacked in a single scrollable column so a user who
  * can't tolerate movement still gets the full explainer without stepping
  * through it. Auto-advance is opt-in (`autoAdvance`) and, when on, stops
- * permanently the moment the user interacts (Next / Back / a dot / Skip)
+ * permanently the moment the user interacts (Next / a dot / an arrow key / Skip)
  * so it never fights a reader who has taken control.
  *
  * `onDone` fires for both "Get started" (finished) and "Skip": the caller
@@ -56,7 +56,7 @@ export function OnboardingCarousel({
 }) {
     const isFull = variant === 'full';
     const [index, setIndex] = useState(0);
-    // Once the user drives the carousel (Next/Back/dot/Skip), auto-advance
+    // Once the user drives the carousel (Next/dot/arrow/Skip), auto-advance
     // is retired for the rest of the session. A reader who takes the wheel
     // should never have the slide yanked out from under them.
     const [userDrove, setUserDrove] = useState(false);
@@ -163,16 +163,10 @@ export function OnboardingCarousel({
         </div>
     );
 
+    // Only the forward action sits here: the screen has no header, so a
+    // reader steps back with the dots or ArrowLeft, never an in-page Back.
     const navigation = (
         <>
-            <Button
-                variant="ghost"
-                onClick={() => goTo(index - 1)}
-                disabled={index === 0}
-                icon={<Icon.BackIcon />}
-            >
-                {t('common.back')}
-            </Button>
             {atLast ? (
                 <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
                     {t('onboarding.carousel.getStarted')}
@@ -217,7 +211,7 @@ export function OnboardingCarousel({
         );
     }
 
-    // --- Default: one frame at a time with dots + prev/next + skip.
+    // --- Default: one frame at a time with dots + next + skip.
     return (
         <div
             className={isFull ? styles.centeredFull : styles.rootPopup}

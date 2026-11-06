@@ -10,7 +10,8 @@
 
 // Behavioural test for Cluster J FOLLOWUP 3 (§25.2): the first-time
 // onboarding explainer carousel. Drives the real component:
-//   - paginated frames advance via Next / Back / dots
+//   - paginated frames advance via Next / dots / arrow keys, with no
+//     in-page Back beside Next
 //   - the last frame's "Get started" completes; "Skip" dismisses early
 //   - both call onDone (with completed = true / false)
 //   - reduced-motion drops stepping and stacks every frame
@@ -92,9 +93,6 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.getByText('Frame B title')).not.toBeVisible();
         expectSinglePageHeading('Frame A title');
 
-        // Back is disabled on the first frame.
-        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
-
         // Next -> frame B, then C.
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(screen.getByText('Frame B title')).toBeInTheDocument();
@@ -111,13 +109,32 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(onDone).toHaveBeenCalledWith(true);
     });
 
-    it('Back steps to the previous frame', () => {
+    it('shows only Next, or Get started on the last frame, and no in-page Back', () => {
+        stubMatchMedia(false);
+        const { container } = render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
+        const nav = container.querySelector('[data-testid="onboarding-carousel"] [class*="nav"]');
+        expect(nav).not.toBeNull();
+        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Next']);
+        expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getAllByRole('tab')[2]);
+        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Get started']);
+        expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+    });
+
+    it('steps back to the previous frame through the dots and ArrowLeft', () => {
         stubMatchMedia(false);
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.getByText('Frame B title')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(screen.getByText('Frame A title')).toBeInTheDocument();
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
+        fireEvent.click(screen.getAllByRole('tab')[0]);
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+
+        const next = screen.getByRole('button', { name: 'Next' });
+        fireEvent.click(next);
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Next' }), { key: 'ArrowLeft' });
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
     });
 
     it('a dot jumps directly to that frame', () => {
@@ -198,10 +215,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
             act(() => { vi.advanceTimersByTime(2000); });
             expect(screen.getByText('Frame B title')).toBeInTheDocument();
             // User takes control -> auto-advance retires; further ticks are inert.
-            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-            expect(screen.getByText('Frame A title')).toBeInTheDocument();
+            fireEvent.click(screen.getAllByRole('tab')[0]);
+            expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
             act(() => { vi.advanceTimersByTime(10000); });
-            expect(screen.getByText('Frame A title')).toBeInTheDocument();
+            expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
         } finally {
             vi.useRealTimers();
         }

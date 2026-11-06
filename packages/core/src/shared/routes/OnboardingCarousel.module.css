@@ -208,14 +208,10 @@
 
 .nav {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     gap: var(--xc-space-2);
     flex: 0 0 auto;
-}
-
-:global([dir='rtl']) .nav > :first-child svg {
-    transform: scaleX(-1);
 }
 
 .actions {
