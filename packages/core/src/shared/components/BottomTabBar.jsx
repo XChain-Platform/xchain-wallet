@@ -26,8 +26,6 @@ import buttonStyles from '../../ui/Button.module.css';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
-import PLATFORM_LINKS from '../platform-links.json';
-import { platformLinkLabel } from '../platformLinkLabel.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -62,7 +60,6 @@ import { t } from '../../i18n/index.js';
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onCommandPalette]
- * @param {string} [props.platformCurrent] web-only key used to expose sibling platform sites in the More sheet
  * @param {boolean} [props.hasVmAddress] gates the Contracts sheet row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the row is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops the Send tab and the Receive sheet row
@@ -108,7 +105,6 @@ export function BottomTabBar({
     onOpenSettings,
     onOpenWalletPicker,
     onCommandPalette,
-    platformCurrent,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
@@ -387,26 +383,6 @@ export function BottomTabBar({
                                         </button>
                                     </li>
                                 ) : null}
-                                {platformCurrent ? PLATFORM_LINKS.links
-                                    .filter((site) => site.key !== platformCurrent)
-                                    .map((site) => (
-                                        <li key={site.key}>
-                                            <a
-                                                className={SHEET_ITEM_CLASS}
-                                                data-xc-menu-item
-                                                href={site.href}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                style={{ textDecoration: 'none' }}
-                                                onClick={() => setSheetOpen(false)}
-                                            >
-                                                <span className={styles.sheetIcon} aria-hidden="true">
-                                                    <Icon.ExternalLinkIcon />
-                                                </span>
-                                                <span>{platformLinkLabel(site)}</span>
-                                            </a>
-                                        </li>
-                                    )) : null}
                             </ul>
                 </OverlaySurface>
             ) : null}

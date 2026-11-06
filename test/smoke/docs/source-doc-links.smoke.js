@@ -72,7 +72,6 @@ const uniqueLinks = new Set(links.map(({ url }) => url));
 
 const docsLinkSurfaces = [
     ['packages/core/src/shared/components/LearnNote.jsx', /<a\b[^>]*href=\{DOCS_URL\}[^>]*>/],
-    ['packages/core/src/shared/components/BottomTabBar.jsx', /<a\b[^>]*href=\{site\.href\}[^>]*>/],
     ['packages/core/src/shared/components/PlatformSwitcher.jsx', /<a\b[^>]*href=\{p\.href\}[^>]*>/],
     ['packages/core/src/shared/components/settings/AboutSection.jsx', /<a\b[^>]*href=\{href\}[^>]*>/],
 ];

@@ -3192,7 +3192,6 @@ function AppInner() {
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             onCommandPalette={palette.openPalette}
-                            platformCurrent="wallet"
                             hasVmAddress={hasVmAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
                             isSignerMode={isSignerMode}
