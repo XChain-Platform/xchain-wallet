@@ -85,9 +85,13 @@ export function PageHeader({
     return (
         <div ref={headerRef} className={styles.header}>
             {showBack ? (
+                // Back is the bare chevron: the shared Button keeps the kit's
+                // size, hit area and disabled state, and .back strips the
+                // border, outline and fill a button shape would draw.
                 <Button
                     size="sm"
-                    variant="secondary"
+                    variant="link"
+                    className={styles.back}
                     icon={<BackIcon />}
                     onClick={onBack}
                     aria-label={accessibleBackLabel}

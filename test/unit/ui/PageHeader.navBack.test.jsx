@@ -127,7 +127,35 @@ describe('PageHeader Back by layout', () => {
         expect(pageHeaderCss).toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm\)/);
         expect(pageHeaderCss).not.toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-page-header-side\)/);
         expect(buttonCss).toMatch(/\.sm\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm,\s*28px\)/);
-        expect(pageHeaderSource).toMatch(/<Button\s+size="sm"[^>]*icon=\{<BackIcon \/>\}/);
+        const back = pageHeaderSource.slice(pageHeaderSource.indexOf('{showBack ? ('), pageHeaderSource.indexOf(') : ('));
+        expect(back).toMatch(/className=\{styles\.back\}/);
+        expect(back).toMatch(/icon=\{<BackIcon \/>\}/);
+        expect(back).toMatch(/aria-label=\{accessibleBackLabel\}/);
+        expect(back).toMatch(/onClick=\{onBack\}/);
+        expect(back).not.toMatch(/variant="secondary"/);
+        const backRule = pageHeaderCss.match(/\n\.header \.back \{([^}]*)\}/)?.[1] || '';
+        expect(backRule).toMatch(/min-height:\s*var\(--xc-control-h-sm\);/);
+    });
+
+    // U38: Back is the header's bare chevron. It paints no border, outline,
+    // shadow or fill, keeps the touch-floor hit area of the other header
+    // controls and shows a focus ring only for keyboard focus.
+    it('draws Back as a bare chevron with no border, outline or fill', () => {
+        const back = pageHeaderCss.match(/\n\.header \.back \{([^}]*)\}/)?.[1] || '';
+        const hit = pageHeaderCss.match(/\n\.header \.back::before \{([^}]*)\}/)?.[1] || '';
+        const focus = pageHeaderCss.match(/\n\.header \.back:focus-visible \{([^}]*)\}/)?.[1] || '';
+        expect(back).toMatch(/background:\s*transparent;/);
+        expect(back).toMatch(/(?:^|\s)border:\s*0;/);
+        expect(back).toMatch(/(?:^|\s)outline:\s*none;/);
+        expect(back).toMatch(/box-shadow:\s*none;/);
+        expect(hit).toMatch(/width:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+        expect(hit).toMatch(/height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
+        expect(focus).toMatch(/outline:\s*2px solid var\(--xc-focus-ring\)/);
+
+        renderAt('sidebar', 'token-detail');
+        const button = screen.getByRole('button', BACK);
+        expect(button.className).toContain('back');
+        expect(button.className).not.toMatch(/secondary/);
     });
 
     // A trailing action takes the same small control height, so a screen with

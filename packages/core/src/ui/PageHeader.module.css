@@ -16,6 +16,40 @@
     min-height: var(--xc-control-h-sm);
 }
 
+/* Back is the header's bare left chevron: no border, outline, shadow or
+   fill, at the small control footprint the trailing actions share. The
+   .header scope outranks the Button variant classes, whatever order the
+   two stylesheets load in. */
+.header .back {
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: var(--xc-control-radius);
+    outline: none;
+    box-shadow: none;
+    text-decoration: none;
+}
+
+/* The hit target stays at the touch floor, centred on the box, as on the
+   trailing actions. */
+.header .back::before {
+    content: '';
+    position: absolute;
+    inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    width: max(100%, var(--xc-control-hit-min, 24px));
+    height: max(100%, var(--xc-control-hit-min, 24px));
+}
+
+.header .back:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .titleGroup {
     display: flex;
     align-items: center;
