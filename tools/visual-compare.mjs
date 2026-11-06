@@ -256,6 +256,10 @@ function makeShooter(page, side, size, entries) {
     const dir = join(OUT, 'shots', side, size.name);
     mkdirSync(dir, { recursive: true });
     return async function shoot(key, expectedHeading = null) {
+        // Park the pointer in the corner before each shot. Navigation clicks
+        // leave it over whatever sits under the clicked control, so a layout
+        // shift in one tree can turn a hover state on in only one side's shots.
+        await page.mouse.move(0, 0).catch(() => {});
         await settle(page);
         if (expectedHeading) await assertScreenHeading(page, expectedHeading);
         for (const phase of ['top', 'bottom']) {
