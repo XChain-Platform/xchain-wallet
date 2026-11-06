@@ -84,15 +84,15 @@ describe('TokenDetail holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
     });
 
-    it('uses the shared row primitive for actions, details, and holders', async () => {
+    it('keeps History a compact quick action while details and holders share the row primitive', async () => {
         const onViewActivity = vi.fn();
         mount({
             holders: { data: [{ address: HOLDER, amount: '7' }] },
             props: { onViewActivity },
         });
 
-        const activityRow = screen.getByRole('button', { name: 'History' });
-        fireEvent.click(activityRow);
+        const activityAction = screen.getByRole('button', { name: 'History' });
+        fireEvent.click(activityAction);
         expect(onViewActivity).toHaveBeenCalledOnce();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
@@ -104,7 +104,7 @@ describe('TokenDetail holders', () => {
         const holderRow = within(holderList).getByRole('listitem').firstElementChild;
 
         const sharedRowClass = detailRow.classList[0];
-        expect(activityRow).toHaveClass(sharedRowClass);
+        expect(activityAction).not.toHaveClass(sharedRowClass);
         expect(holderRow).toHaveClass(sharedRowClass);
     });
 

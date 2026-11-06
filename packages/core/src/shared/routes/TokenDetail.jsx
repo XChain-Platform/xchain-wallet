@@ -703,50 +703,71 @@ function TokenDetailContent({
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
                     {typeof onSend === 'function' && walletModeReady ? (
-                        <ListRow
+                        <Button
+                            variant="secondary"
+                            block
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}
+                            title={sendDisabledReason || undefined}
                             aria-label="Send"
                             aria-busy="false"
-                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>}
-                            title="Send"
-                            subtitle={sendDisabledReason}
-                        />
+                            icon={<span className={styles.quickActionIcon}><Icon.SendIcon /></span>}
+                        >
+                            <span className={styles.quickActionContent}>
+                                <span>Send</span>
+                                {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
+                            </span>
+                        </Button>
                     ) : null}
                     {typeof onReceive === 'function' ? (
-                        <ListRow
+                        <Button
+                            variant="secondary"
+                            block
                             onClick={onReceive}
                             aria-busy="false"
-                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>}
-                            title="Receive"
-                        />
+                            icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
+                        >
+                            Receive
+                        </Button>
                     ) : null}
                     {typeof onBuy === 'function' ? (
-                        <ListRow
+                        <Button
+                            variant="secondary"
+                            block
                             onClick={onBuy}
                             disabled={Boolean(tradeDisabledReason)}
+                            title={tradeDisabledReason || undefined}
                             aria-label="Trade"
                             aria-busy="false"
-                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
-                            title={<span>Market view</span>}
-                            subtitle={tradeDisabledReason}
-                        />
+                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
+                        >
+                            <span className={styles.quickActionContent}>
+                                <span>Market view</span>
+                                {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
+                            </span>
+                        </Button>
                     ) : null}
                     {typeof onViewActivity === 'function' ? (
-                        <ListRow
+                        <Button
+                            variant="secondary"
+                            block
                             onClick={onViewActivity}
                             aria-busy="false"
-                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>}
-                            title="History"
-                        />
+                            icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
+                        >
+                            History
+                        </Button>
                     ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
-                        <ListRow
+                        <Button
+                            variant="secondary"
+                            block
                             onClick={onManageToken}
                             aria-busy="false"
-                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>}
-                            title="Manage"
-                        />
+                            icon={<span className={styles.quickActionIcon}><Icon.GearIcon /></span>}
+                        >
+                            Manage
+                        </Button>
                     ) : null}
                 </div>
 
@@ -983,13 +1004,10 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, 
         );
     }
 
-    if (disabled || currentPrice == null) {
-        return (
-            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
-                <p className={styles.muted}>Price alerts need current market data.</p>
-            </div>
-        );
-    }
+    // Without a live price the market panel already states why; a second
+    // boxed note about the same missing data adds nothing, so the entry
+    // stays out until a price exists to prefill the alert.
+    if (disabled || currentPrice == null) return null;
 
     const onCreate = async (input) => {
         await addAlert(input);
@@ -1214,9 +1232,11 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
                             <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
                         </div>
                     </div>
-                ) : !hint ? (
+                ) : (
+                    // The placeholder holds the slot whenever no chart is drawn; an
+                    // unavailable hint reads under it rather than standing in for it.
                     <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                ) : null}
+                )}
                 {sparkline && isDemo ? (
                     <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                         {CHART_RANGES.map((r) => (
