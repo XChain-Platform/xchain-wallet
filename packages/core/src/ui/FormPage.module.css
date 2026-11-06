@@ -171,10 +171,12 @@
     gap: var(--xc-section-gap);
 }
 
-/* Fill: the form takes the whole scroll area of the Screen body, and its
-   body becomes a flexible column, so a panel marked to grow (for example
-   the license terms) takes the free height and the last row sits at the
-   bottom of the screen instead of floating above empty space. */
+/* Fill: the form is bounded by the scroll area of the Screen body, and its
+   body becomes a shrinkable column, so a panel marked to shrink (for example
+   the license terms) gives up height with its own scroll on a short screen
+   while the actions stay in view. The body never grows into spare height:
+   the actions row sits directly under the content, and any spare height
+   stays below it. */
 .fill {
     height: 100%;
     max-height: 100%;
@@ -190,7 +192,7 @@
 }
 
 .fill > .body {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;

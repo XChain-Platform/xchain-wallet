@@ -96,7 +96,7 @@ describe('extension popup main screens at 360x600', () => {
             /\.fill\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow:\s*hidden;/s,
         );
         expect(css.formPage).toMatch(
-            /\.fill > \.body\s*\{[^}]*flex:\s*1 1 0;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s,
+            /\.fill > \.body\s*\{[^}]*flex:\s*0 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s,
         );
         expect(css.formPage).toMatch(
             /\.fill > \.pageHeader,[\s\S]*?\.fill > \.actions\s*\{[^}]*flex:\s*0 0 auto;/,

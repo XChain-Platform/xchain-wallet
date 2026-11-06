@@ -87,9 +87,10 @@ describe('onboarding and Home layout guards', () => {
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
         expect(onboardingSource).toContain('label="License agreement"');
         expect(onboardingSource).toMatch(/label="License agreement"\s+fill\s+fullWidth\b/);
-        // The terms panel fills the free height; it never caps itself at a fraction of the screen.
+        // The terms panel wraps its text and shrinks only when the screen is short;
+        // it never caps itself at a fraction of the screen.
         expect(onboardingCss).not.toMatch(/\.licenseScroll\s*\{[^}]*max-height:/s);
-        expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*1 1 auto/s);
+        expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*0 1 auto/s);
         expect(onboardingSource).toContain('label="Wallet setup"');
         expect(onboardingSource).toContain('title="License agreement"');
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
