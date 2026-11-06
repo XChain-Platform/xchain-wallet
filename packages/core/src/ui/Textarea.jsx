@@ -30,6 +30,9 @@ import { resolveFieldRequirement } from './fieldRequirement.js';
  *   under the text for them and grows with its content instead of scrolling,
  *   so typed text never runs underneath; the resize grip they would cover is
  *   turned off.
+ * @property {import('react').ReactNode} [labelAction]  one small control (an
+ *   icon button such as Scan) drawn at the end of the label row, outside the
+ *   box. Needs `label`.
  */
 export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     {
@@ -46,6 +49,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
         className,
         onChange,
         actions,
+        labelAction,
         required = false,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
@@ -73,6 +77,7 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
     const describedBy = [externalDescribedBy, hintId, errorId, counterId]
         .filter(Boolean).join(' ') || undefined;
     const hasActions = actions != null && actions !== false;
+    const hasLabelAction = labelAction != null && labelAction !== false;
     const textareaClass = [
         styles.input,
         hasActions ? styles.textareaWithActions : '',
@@ -143,7 +148,14 @@ export const Textarea = /* @__PURE__ */ forwardRef(function Textarea(
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
-            {label ? (
+            {label && hasLabelAction ? (
+                <div className={styles.labelRow}>
+                    <label htmlFor={textareaId} className={styles.label}>
+                        {requirement.label}
+                    </label>
+                    <div className={styles.labelAction}>{labelAction}</div>
+                </div>
+            ) : label ? (
                 <label htmlFor={textareaId} className={styles.label}>
                     {requirement.label}
                 </label>

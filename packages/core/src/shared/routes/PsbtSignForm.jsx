@@ -59,6 +59,7 @@ import {
     PageHeader,
     FormPage,
     ListPage,
+    Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -1447,6 +1448,16 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         placeholder="Paste the transaction code (it starts with 70736274ff or cHNid), or drop a .psbt file"
                         rows={6}
                         aria-label="Unsigned transaction code"
+                        labelAction={(
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<Icon.ScanIcon />}
+                                aria-label={scannerOpen ? 'Close scanner' : 'Scan transaction'}
+                                onClick={() => { setScannerOpen((open) => !open); if (error) setError(null); }}
+                                disabled={busy}
+                            />
+                        )}
                         style={{
                             width: '100%',
                             background: 'var(--xc-bg)',
@@ -1485,14 +1496,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         disabled={busy}
                     >
                         Browse for .psbt file
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setScannerOpen((open) => !open); if (error) setError(null); }}
-                        disabled={busy}
-                    >
-                        {scannerOpen ? 'Close scanner' : 'Scan transaction'}
                     </Button>
                 </div>
                 {scannerOpen ? (

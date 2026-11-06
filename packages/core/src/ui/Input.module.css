@@ -36,6 +36,30 @@
     font-weight: 500;
 }
 
+/* Label row with an end action (a Scan icon button): the label keeps its
+   start edge, the action sits at the row's end, and the row carries the
+   label gap so the box below keeps the same offset as a plain label. */
+.labelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-block-end: var(--xc-label-gap);
+}
+
+.labelRow > .label {
+    margin-block-end: 0;
+    min-width: 0;
+}
+
+.labelAction {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 .input {
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
