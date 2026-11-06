@@ -48,6 +48,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { ActivityRow } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/history.js';
 import {
     applyHistoryFilters,
@@ -2070,8 +2071,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
                     // An empty read while balances could not be checked proves
                     // nothing, so the page says that once instead of "No
-                    // activity yet" beside the stale-balances notice.
+                    // activity yet", and names no stale balance: the line is
+                    // about activity, which shows once the network answers.
                     <BalancesUncheckedState
+                        body={t('balances.unchecked.historyBody')}
                         onRetry={() => {
                             recheckBalances();
                             setRefreshTick((n) => n + 1);

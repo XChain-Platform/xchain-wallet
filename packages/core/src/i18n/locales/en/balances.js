@@ -17,6 +17,7 @@ import { addEnglish } from '../../store.js';
 const messages = {
     'balances.unchecked.title': "Balances couldn't be checked",
     'balances.unchecked.body': 'Your balance may be out of date. Try again to refresh it.',
+    'balances.unchecked.historyBody': 'Activity shows here once the wallet reaches the network.',
 
     // Copy moved out of JSX literals by the i18n sweep.
     'balances.noBalancesYet': 'No balances yet',
