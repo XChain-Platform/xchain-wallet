@@ -126,79 +126,92 @@ export function PriceAlertForm({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+            {/* Three groups: the coin, then direction with the price, then the actions.
+                Each group's basis is huge while the form is narrower than the breakpoint, so
+                a phone gives every group its own line; on a wider form the basis is negative
+                (zero), every group keeps its natural (fit-content) width and the row reads as one
+                line. The direction and price group is a span because Settings wraps every div on
+                a phone, and the price takes the width the direction picker leaves. The action
+                group never wraps its labels, so Add alert keeps one line. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                {lockedChainId ? (
-                    <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
-                ) : (
+                <div data-row="coin" style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 'var(--xc-space-2)', flex: '0 1 calc((32rem - 100%) * 999)', minWidth: 'fit-content' }}>
+                    {lockedChainId ? (
+                        <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
+                    ) : (
+                        <Select
+                            aria-label={t('routes.addressList.coin')}
+                            value={chainId}
+                            onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
+                        >
+                            {/* Native options remain because Select owns the listbox control, not its choices. */}
+                            {unavailableChain ? (
+                                <option value={unavailableChain}>
+                                    {t('settings.notifications.coinUnavailable', { coin: coinLabelForChain(unavailableChain) })}
+                                </option>
+                            ) : null}
+                            {MAINNET_PRICE_CHAINS.map((c) => (
+                                <option key={c} value={c}>{coinLabelForChain(c)}</option>
+                            ))}
+                        </Select>
+                    )}
+                </div>
+                <span data-row="filters" style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 'var(--xc-space-2)', flex: '0 1 calc((32rem - 100%) * 999)', minWidth: 'fit-content' }}>
                     <Select
-                        aria-label={t('routes.addressList.coin')}
-                        value={chainId}
-                        onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
+                        aria-label={t('components.priceAlertForm.direction')}
+                        value={direction}
+                        onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                     >
                         {/* Native options remain because Select owns the listbox control, not its choices. */}
-                        {unavailableChain ? (
-                            <option value={unavailableChain}>
-                                {t('settings.notifications.coinUnavailable', { coin: coinLabelForChain(unavailableChain) })}
-                            </option>
-                        ) : null}
-                        {MAINNET_PRICE_CHAINS.map((c) => (
-                            <option key={c} value={c}>{coinLabelForChain(c)}</option>
-                        ))}
+                        <option value="above">{t('settings.notifications.risesAbove')}</option>
+                        <option value="below">{t('settings.notifications.fallsBelow')}</option>
                     </Select>
-                )}
-                <Select
-                    aria-label={t('components.priceAlertForm.direction')}
-                    value={direction}
-                    onChange={(e) => updateInput(setDirection, e.target.value, direction)}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="above">{t('settings.notifications.risesAbove')}</option>
-                    <option value="below">{t('settings.notifications.fallsBelow')}</option>
-                </Select>
-                {/* The currency symbol and its field wrap as one unit, so a narrow row never strands the symbol. */}
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)', flexWrap: 'nowrap' }}>
-                <span aria-hidden="true">{symbol}</span>
-                <Input
-                    size="md"
-                    type="text"
-                    inputMode="decimal"
-                    enterKeyHint="go"
-                    aria-label={t('components.priceAlertForm.targetPrice')}
-                    placeholder={t('components.placeOrderPanel.price')}
-                    value={targetStr}
-                    aria-invalid={invalidTarget}
-                    aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    error={priceError || undefined}
-                    onChange={(e) => updateInput(
-                        setTargetStr,
-                        normalizeDecimalEntry(e.target.value, targetStr),
-                        targetStr,
-                    )}
-                    onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-                    style={{ width: 110 }}
-                />
-                {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
+                    {/* The currency symbol and its field wrap as one unit, so a narrow row never strands the symbol. */}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)', flexWrap: 'nowrap', flex: '1 1 0', minWidth: 0 }}>
+                    <span aria-hidden="true">{symbol}</span>
+                    <Input
+                        size="md"
+                        type="text"
+                        inputMode="decimal"
+                        enterKeyHint="go"
+                        aria-label={t('components.priceAlertForm.targetPrice')}
+                        placeholder={t('components.placeOrderPanel.price')}
+                        value={targetStr}
+                        aria-invalid={invalidTarget}
+                        aria-describedby={disabledReason ? disabledReasonId : undefined}
+                        error={priceError || undefined}
+                        onChange={(e) => updateInput(
+                            setTargetStr,
+                            normalizeDecimalEntry(e.target.value, targetStr),
+                            targetStr,
+                        )}
+                        onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+                        style={{ width: 110 }}
+                    />
+                    {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
+                    </span>
                 </span>
-                <Button
-                    type="button"
-                    onClick={submit}
-                    disabled={!valid || busy}
-                    aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    size="md"
-                    variant="primary"
-                >
-                    {busy ? t('send.saveRecipient.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
-                </Button>
-                {onCancel ? (
+                <div data-row="action" style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 'var(--xc-space-2)', flex: '0 1 calc((32rem - 100%) * 999)', minWidth: 'fit-content', whiteSpace: 'nowrap' }}>
                     <Button
                         type="button"
-                        onClick={onCancel}
+                        onClick={submit}
+                        disabled={!valid || busy}
+                        aria-describedby={disabledReason ? disabledReasonId : undefined}
                         size="md"
-                        variant="secondary"
+                        variant="primary"
                     >
-                        {t('common.cancel')}
+                        {busy ? t('send.saveRecipient.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
                     </Button>
-                ) : null}
+                    {onCancel ? (
+                        <Button
+                            type="button"
+                            onClick={onCancel}
+                            size="md"
+                            variant="secondary"
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                    ) : null}
+                </div>
             </div>
             {/* Why the button is off is said to assistive tech only: sighted users see an empty
                 field and a disabled button, and a notice here would sit inside the indented
