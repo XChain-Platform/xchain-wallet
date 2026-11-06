@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -797,11 +797,22 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <QrScanner onFrame={handleScannerFrame} alt="Cosigner reply QR scanner" />
                 ) : null}
                 <Textarea
+                    label="Cosigner reply chunks"
                     aria-label="Cosigner reply chunks"
                     value={pasteInput}
                     onChange={(e) => setPasteInput(e.target.value)}
                     rows={6}
                     style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    labelAction={(
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.ScanIcon />}
+                            aria-label={scannerOpen ? 'Stop scanner' : 'Scan with camera'}
+                            onClick={() => setScannerOpen((v) => !v)}
+                            disabled={busy}
+                        />
+                    )}
                 />
                 <p className={styles.hint}>
                     Frames received: {collectorState.receivedCount} of{' '}
@@ -815,13 +826,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     </Button>
                     <Button variant="danger" onClick={resetCollector} disabled={busy}>
                         Clear received reply
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={() => setScannerOpen((v) => !v)}
-                        disabled={busy}
-                    >
-                        {scannerOpen ? 'Stop scanner' : 'Scan with camera'}
                     </Button>
                     <Button variant="primary" onClick={handlePasteSubmit} loading={busy} disabled={pasteInput.trim().length === 0}>
                         Submit chunks

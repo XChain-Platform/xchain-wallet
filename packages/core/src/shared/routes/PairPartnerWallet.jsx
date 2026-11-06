@@ -494,26 +494,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     sectioned
                     status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                     actions={(
-                        <>
-                            <Button
-                                variant="ghost"
-                                onClick={() => {
-                                    // A re-opened scanner starts from nothing: half a
-                                    // set left over from a previous attempt would
-                                    // otherwise mix with frames from a different code.
-                                    setPartnerCollector(createXcwCollector());
-                                    setPartnerCodeError(null);
-                                    setScanning((s) => !s);
-                                }}
-                                disabled={busy}
-                                icon={<Icon.ScanIcon />}
-                            >
-                                {scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
-                            </Button>
-                            <Button type="submit" variant="primary" loading={busy} disabled={busy}>
-                                {lane.cta || 'Pair'}
-                            </Button>
-                        </>
+                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+                            {lane.cta || 'Pair'}
+                        </Button>
                     )}
                 >
                     <StepIndicator {...step} />
@@ -583,6 +566,23 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         autoComplete="off"
                         spellCheck={false}
                         disabled={busy}
+                        labelAction={(
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<Icon.ScanIcon />}
+                                aria-label={scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
+                                onClick={() => {
+                                    // A re-opened scanner starts from nothing: half a
+                                    // set left over from a previous attempt would
+                                    // otherwise mix with frames from a different code.
+                                    setPartnerCollector(createXcwCollector());
+                                    setPartnerCodeError(null);
+                                    setScanning((s) => !s);
+                                }}
+                                disabled={busy}
+                            />
+                        )}
                     />
                     </FormSection>
                 </FormPage>
