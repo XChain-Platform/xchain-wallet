@@ -1139,6 +1139,21 @@ export function ImportWallet({
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                     {t('importWallet.recoveryPhrase')}
                 </label>
+                {/* Scan QR sits on the label row as a QR icon button, so the
+                    phrase box stays a plain textarea with no action strip. */}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.ScanIcon />}
+                    onClick={() => {
+                        setScanning((s) => !s);
+                        if (error) setError(null);
+                    }}
+                    disabled={busy}
+                    aria-pressed={scanning}
+                    aria-label={scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
+                />
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
@@ -1178,29 +1193,9 @@ export function ImportWallet({
                     autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
-                    // Two text rows plus the action strip keep the empty box
-                    // the height the three-row box had; it grows as words come.
-                    rows={2}
+                    rows={3}
                     disabled={busy}
                     aria-describedby="xc-mnemonic-status"
-                    actions={(
-                        <>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                icon={null}
-                                onClick={() => {
-                                    setScanning((s) => !s);
-                                    if (error) setError(null);
-                                }}
-                                disabled={busy}
-                                aria-pressed={scanning}
-                            >
-                                {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
-                            </Button>
-                        </>
-                    )}
                 />
                 <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>

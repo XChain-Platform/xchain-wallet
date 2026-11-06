@@ -210,17 +210,16 @@ describe('ImportWallet recovery phrase entry', () => {
     });
 
     it.each([['import', renderImport], ['FreeWallet import', renderFreeWallet]])(
-        'puts Scan QR inside the %s phrase box, with the live count below the hint',
+        'puts Scan QR beside the %s phrase label, with the live count below the hint',
         (_name, renderScreen) => {
             renderScreen();
             const textarea = screen.getByLabelText('Recovery phrase');
             const box = textarea.parentElement;
             const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
 
-            expect(box.contains(scan)).toBe(true);
-            expect(textarea.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            // Nothing sits beside the label any more.
-            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement.querySelector('button')).toBeNull();
+            expect(box.contains(scan)).toBe(false);
+            expect(scan.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement.contains(scan)).toBe(true);
 
             const status = document.getElementById('xc-mnemonic-status');
             const hint = document.getElementById(`${textarea.id}-hint`);

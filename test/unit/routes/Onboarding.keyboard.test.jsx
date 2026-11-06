@@ -253,9 +253,9 @@ describe('import onboarding keyboard flow', () => {
             screen.getByRole('tab', { name: 'Recovery phrase' }),
             screen.getByRole('tab', { name: 'Private key' }),
             screen.getByRole('tab', { name: 'Encrypted backup' }),
-            // Scan QR sits inside the phrase box, so it follows it.
-            screen.getByLabelText('Recovery phrase'),
+            // Scan QR sits on the phrase label row, so it precedes the box.
             screen.getByRole('button', { name: 'Scan QR' }),
+            screen.getByLabelText('Recovery phrase'),
             screen.getByLabelText('Wallet name'),
             screen.getByLabelText('Password'),
             screen.getByLabelText('Confirm password'),
