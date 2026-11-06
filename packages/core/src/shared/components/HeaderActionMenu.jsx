@@ -12,8 +12,6 @@ import { cloneElement, isValidElement, useEffect, useRef, useState } from 'react
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { isNativeShell } from '../nativeShell.js';
-import PLATFORM_LINKS from '../platform-links.json';
-import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './AppHeader.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -50,6 +48,7 @@ function automaticPopOut() {
 /**
  * Header overflow menu. The header keeps only global status, lock, and this
  * trigger visible while secondary actions remain labelled, keyboard reachable rows.
+ * It holds wallet items only; the sibling platform sites are not menu rows.
  */
 export function HeaderActionMenu({
     settingsControl,
@@ -59,7 +58,6 @@ export function HeaderActionMenu({
     onViewAddress,
     onPopOut,
     onMore,
-    platformCurrent,
 }) {
     const [open, setOpen] = useState(false);
     // The Settings popover is portaled to the body and anchored to its row in
@@ -113,9 +111,6 @@ export function HeaderActionMenu({
         close(true);
         handler();
     };
-    const platformLinks = platformCurrent
-        ? PLATFORM_LINKS.links.filter((site) => site.key !== platformCurrent)
-        : [];
     const popOut = supportsPopOut()
         ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
         : null;
@@ -132,7 +127,7 @@ export function HeaderActionMenu({
     ].filter((row) => typeof row.handler === 'function');
     // A menu holding only Search repeats the rail's Search button; the layout
     // hides this trigger whenever a visible rail already offers it.
-    const searchOnly = !settings && platformLinks.length === 0
+    const searchOnly = !settings
         && rows.length > 0 && rows.every((row) => row.id === 'search');
 
     return (
@@ -207,20 +202,6 @@ export function HeaderActionMenu({
                             <span className={styles.rowLabel}>{label}</span>
                             {shortcut ? <span className={styles.shortcut} aria-hidden="true">{shortcut}</span> : null}
                         </button>
-                    ))}
-                    {platformLinks.map((site) => (
-                        <a
-                            key={site.key}
-                            role="menuitem"
-                            className={styles.actionRow}
-                            href={site.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => close()}
-                        >
-                            <span className={styles.rowIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span className={styles.rowLabel}>{platformLinkLabel(site)}</span>
-                        </a>
                     ))}
                 </div>
             ) : null}

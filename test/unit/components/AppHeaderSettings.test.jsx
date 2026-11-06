@@ -24,7 +24,6 @@ import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/co
 import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
-import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
 import { persistActiveNetwork } from '../../../packages/core/src/shared/utils/activeNetworkSwitch.js';
 import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
@@ -404,7 +403,6 @@ describe('AppHeader action row', () => {
                 onSelect={() => {}}
                 onOpenSettings={() => {}}
                 onCommandPalette={onCommandPalette}
-                platformCurrent="wallet"
             />,
         );
 
@@ -414,22 +412,20 @@ describe('AppHeader action row', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
-        for (const site of PLATFORM_LINKS.links.filter((entry) => entry.key !== 'wallet')) {
-            const link = screen.getByRole('link', { name: site.label });
-            expect(link).toHaveAttribute('href', site.href);
-            expect(link).toHaveAttribute('target', '_blank');
-        }
+        // The More sheet lists wallet places only; sibling sites live in the header switcher.
+        expect(screen.queryAllByRole('link')).toHaveLength(0);
     });
 
-    it('fits the complete phone action menu in two columns without an inner scroller', () => {
+    it('pops the complete phone action menu out as one scrolling column', () => {
         render(<AppHeader {...allActions} platformCurrent="wallet" />);
         openHeaderMenu();
 
         expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-        expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(7);
-        expect(appHeaderCss).toMatch(
-            /@media \(max-width: 480px\)[\s\S]*?\.actionMenu\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[^}]*overflow-y:\s*hidden;/,
-        );
+        expect(screen.getAllByRole('menuitem').length).toBe(7);
+        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*display:\s*grid/);
+        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*grid-template-columns/);
+        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*overflow-y:\s*hidden/);
+        expect(appHeaderCss).toMatch(/\.actionMenu\s*\{[^}]*width:\s*min\(280px,[^}]*overflow-y:\s*auto;/);
     });
 
     it('returns focus to the header trigger when Escape closes its menu', () => {

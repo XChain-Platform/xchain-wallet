@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The header menu's site links and the network filter's summary are
-// copy like any other: under the pseudo-rtl locale every one of them must
+// The header menu's rows, the platform site names and the network filter's
+// summary are copy like any other: under the pseudo-rtl locale every one of them must
 // arrive wrapped, so a string that skipped the dictionary shows as plain English.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,19 +40,16 @@ afterEach(async () => {
 });
 
 describe('header menu copy follows the active locale', () => {
-    it('renders Search and every other platform site name wrapped in pseudo-rtl', () => {
-        render(<HeaderActionMenu onCommandPalette={() => {}} platformCurrent="wallet" />);
+    it('renders Search wrapped in pseudo-rtl and lists no platform site', () => {
+        render(<HeaderActionMenu onCommandPalette={() => {}} onScan={() => {}} />);
         fireEvent.click(screen.getByRole('button', { name: WRAPPED }));
 
         const search = screen.getAllByRole('menuitem').find((item) => item.textContent.includes('Search'));
         expect(search.querySelector('span:nth-child(2)').textContent).toMatch(WRAPPED);
 
-        const others = PLATFORM_LINKS.links.filter((site) => site.key !== 'wallet');
-        expect(others.length).toBeGreaterThan(0);
-        for (const site of others) {
-            const link = screen.getAllByRole('menuitem').find((item) => item.getAttribute('href') === site.href);
-            expect(link, site.key).toBeTruthy();
-            expect(link.textContent, site.key).toMatch(WRAPPED);
+        const hrefs = PLATFORM_LINKS.links.map((site) => site.href);
+        for (const item of screen.getAllByRole('menuitem')) {
+            expect(hrefs).not.toContain(item.getAttribute('href'));
         }
     });
 

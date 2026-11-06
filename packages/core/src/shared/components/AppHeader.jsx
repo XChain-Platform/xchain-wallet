@@ -52,7 +52,6 @@ import { t } from '../../i18n/index.js';
  * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
- * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
  * @param {() => void} [props.onPopOut]                              opens this wallet surface in a separate browser window or extension tab
  */
 export function AppHeader({
@@ -79,7 +78,6 @@ export function AppHeader({
     activeNetwork,
     developerMode = false,
     onActiveNetworkChange,
-    platformCurrent,
     onPopOut,
 }) {
     // Lock lives once: the sidebar or rail carries its own Lock row, so the
@@ -153,7 +151,6 @@ export function AppHeader({
                     onViewAddress={onViewAddress}
                     onPopOut={onPopOut}
                     onMore={onMenuOpen}
-                    platformCurrent={platformCurrent}
                 />
             </div>
         </div>

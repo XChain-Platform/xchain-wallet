@@ -136,17 +136,12 @@ describe('PlatformSwitcher', () => {
 });
 
 describe('AppHeader integration', () => {
-    it('shows no switcher unless the host passes platformCurrent', () => {
-        render(<AppHeader onMenuOpen={() => {}} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-        expect(screen.queryByRole('menuitem', { name: LINKS.links.find((site) => site.key === 'explorer').label })).toBeNull();
-    });
-
-    it('moves platform destinations into the menu for a shell that opts in', () => {
+    it('keeps platform destinations out of the wallet menu on every shell', () => {
         render(<AppHeader onMenuOpen={() => {}} platformCurrent="wallet" />);
         fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-        const explorer = LINKS.links.find((site) => site.key === 'explorer');
-        expect(screen.getByRole('menuitem', { name: explorer.label })).toHaveAttribute('href', explorer.href);
+        for (const site of LINKS.links.filter((entry) => entry.key !== 'wallet')) {
+            expect(screen.queryByRole('menuitem', { name: site.label }), site.key).toBeNull();
+        }
     });
 });
 
