@@ -267,7 +267,6 @@
 
 .hint {
     margin-block-start: var(--xc-help-gap);
-    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }

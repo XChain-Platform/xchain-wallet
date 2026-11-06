@@ -26,7 +26,6 @@ describe('readable prose width', () => {
         ['packages/core/src/ui/ListPage.module.css', '.intro'],
         ['packages/core/src/ui/SectionHeader.module.css', '.description'],
         ['packages/core/src/ui/EmptyState.module.css', '.body'],
-        ['packages/core/src/ui/Input.module.css', '.hint'],
         ['packages/core/src/ui/Input.module.css', '.error'],
         ['packages/core/src/ui/Input.module.css', '.capsLock'],
         ['packages/core/src/ui/StatusMessage.module.css', '.text'],
@@ -41,6 +40,7 @@ describe('readable prose width', () => {
         ['packages/core/src/ui/StatusMessage.module.css', '.row'],
         ['packages/core/src/shared/components/LearnNote.module.css', '.note'],
         ['packages/core/src/ui/FormPage.module.css', '.form'],
+        ['packages/core/src/ui/Input.module.css', '.hint'],
     ])('keeps the %s %s container free of the prose cap', (path, selector) => {
         expect(rule(readCss(path), selector)).not.toMatch(/--xc-prose-max-width/);
     });
