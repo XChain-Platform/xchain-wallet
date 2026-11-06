@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let settings;
@@ -320,11 +320,33 @@ describe('price alert manager', () => {
         expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
     });
 
-    it('deletes an alert', async () => {
+    it('asks before deleting an alert and keeps it on cancel', async () => {
         priceAlerts.alerts = [alertRecord()];
         render(<NotificationsSection walletId="wallet-1" />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+
+        const dialog = await screen.findByRole('dialog');
+        expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(screen.getByRole('button', { name: 'Delete Bitcoin price alert' })).toBeTruthy();
+        expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
+
+        await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledTimes(1));
+        expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1');
+    });
+
+    it('deletes an alert after the confirm', async () => {
+        priceAlerts.alerts = [alertRecord()];
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
         await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));
         expect(screen.queryByText('Could not update the price alert. Try again.')).toBeNull();
@@ -336,8 +358,9 @@ describe('price alert manager', () => {
         render(<NotificationsSection walletId="wallet-1" />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
-        expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1');
+        await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not update the price alert. Try again.',
         );
