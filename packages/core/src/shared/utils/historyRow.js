@@ -93,3 +93,50 @@ export function normalizeHistoryRow(row, { chainId, address, link = null }) {
         link,
     };
 }
+
+/** Most rows the Home Activity tab lists; History holds the complete feed. */
+export const RECENT_ACTIVITY_LIMIT = 50;
+
+/** The row array of one explorer list response, or an empty array. */
+export function historyResponseRows(response) {
+    if (!response) return [];
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response.data)) return response.data;
+    if (Array.isArray(response.rows)) return response.rows;
+    return [];
+}
+
+function compareActionIndex(a, b) {
+    const left = String(a || '');
+    const right = String(b || '');
+    if (left.length !== right.length) return left.length - right.length;
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * The newest entries of a wallet's history, at most `limit` of them. An action
+ * read once per own address (a send between two of the wallet's addresses)
+ * lists once. Order is newest first by time, then block, then action index.
+ *
+ * @param {any[] | null | undefined} entries  normalized history entries
+ * @param {number} [limit]
+ * @returns {any[]}
+ */
+export function recentActivityEntries(entries, limit = RECENT_ACTIVITY_LIMIT) {
+    if (!Array.isArray(entries)) return [];
+    const seen = new Set();
+    const unique = [];
+    for (const entry of entries) {
+        if (!entry || !entry.chainId || !entry.actionIndex) continue;
+        const id = `${entry.chainId}:${entry.actionIndex}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        unique.push(entry);
+    }
+    unique.sort((a, b) => (
+        (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)
+        || (Number(b.blockIndex) || 0) - (Number(a.blockIndex) || 0)
+        || compareActionIndex(b.actionIndex, a.actionIndex)
+    ));
+    return unique.slice(0, Math.max(0, limit));
+}

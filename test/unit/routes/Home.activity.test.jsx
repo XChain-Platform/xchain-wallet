@@ -11,7 +11,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import {
     clearDemoWalletId,
@@ -31,6 +31,7 @@ function mountHome(onHistory) {
         getAddressesByChain: vi.fn().mockResolvedValue({}),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({}),
+        getAddressHistory: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     };
 
     return render(
@@ -50,19 +51,16 @@ afterEach(() => {
 });
 
 describe('Home Activity tab', () => {
-    it('points the Activity tab of a real wallet at History', async () => {
+    it('shows an empty Activity tab for a real wallet with no history', async () => {
         const onHistory = vi.fn();
         mountHome(onHistory);
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
 
-        expect(screen.getByText('Your activity is in History')).toBeTruthy();
-        expect(screen.queryByText('Recent activity')).toBeNull();
-
-        const openHistory = screen.getByRole('button', { name: 'Open History' });
-        expect(openHistory.disabled).toBe(false);
-        fireEvent.click(openHistory);
-        expect(onHistory).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByText('No activity yet')).toBeTruthy());
+        expect(screen.queryByText('Your activity is in History')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Open History' })).toBeNull();
+        expect(onHistory).not.toHaveBeenCalled();
     });
 
     it('keeps demo wallets on their synthesized activity list', async () => {
@@ -73,8 +71,8 @@ describe('Home Activity tab', () => {
         fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
 
         expect(screen.getByText('No activity yet')).toBeTruthy();
-        expect(screen.queryByText('Your activity is in History')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Open History' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Recent activity' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
         expect(onHistory).not.toHaveBeenCalled();
     });
 });

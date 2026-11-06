@@ -47,6 +47,8 @@ import { takeInterruptedView } from '../utils/lastViewMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
+import { readHistoryCache } from '../utils/historyCache.js';
+import { historyResponseRows, normalizeHistoryRow, recentActivityEntries } from '../utils/historyRow.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
@@ -339,6 +341,59 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
+    // The Activity tab's newest rows. They load when the tab opens, once per
+    // wallet, account and network: History's saved snapshot paints first, then
+    // one address list read and one first-page history read per address
+    // replace it. The read count follows the address count, never the rows.
+    const recentActivityScope = `${activeWalletId || ''}:${activeAccountId || ''}:${activeNetwork || ''}`;
+    const [recentActivityState, setRecentActivityState] = useState(
+        /** @type {{ scope: string, entries: any[] | null, failed: boolean } | null} */ (null),
+    );
+    const recentActivityRequestRef = useRef(/** @type {string | null} */ (null));
+    const loadRecentActivity = useCallback(() => {
+        if (!activeWalletId || !activeNetwork || isDemoActive) return;
+        if (recentActivityRequestRef.current === recentActivityScope) return;
+        recentActivityRequestRef.current = recentActivityScope;
+        const scope = recentActivityScope;
+        const cached = readHistoryCache(activeWalletId, activeAccountId, activeNetwork);
+        const cachedEntries = cached?.entries ? recentActivityEntries(cached.entries) : null;
+        setRecentActivityState({ scope, entries: cachedEntries, failed: false });
+        const land = (entries, failed) => {
+            if (recentActivityRequestRef.current !== scope) return;
+            setRecentActivityState({ scope, entries, failed });
+        };
+        if (!isNavigatorOnline()
+            || typeof messaging.getAddressesByChain !== 'function'
+            || typeof messaging.getAddressHistory !== 'function') {
+            land(cachedEntries, !cachedEntries);
+            return;
+        }
+        messaging.getAddressesByChain(activeWalletId, activeAccountId)
+            .then((byChain) => {
+                const reads = [];
+                for (const [chainId, addrs] of Object.entries(byChain || {})) {
+                    if (!Array.isArray(addrs)) continue;
+                    for (const a of addrs) {
+                        if (!a?.address) continue;
+                        reads.push(messaging.getAddressHistory({ chainId, address: a.address })
+                            .then((response) => historyResponseRows(response)
+                                .map((row) => normalizeHistoryRow(row, { chainId, address: a.address }))
+                                .filter(Boolean)));
+                    }
+                }
+                return Promise.allSettled(reads);
+            })
+            .then((results) => {
+                const read = results.filter((r) => r.status === 'fulfilled');
+                if (results.length > 0 && read.length === 0) {
+                    land(cachedEntries, !cachedEntries);
+                    return;
+                }
+                land(recentActivityEntries(read.flatMap((r) => r.value)), false);
+            })
+            .catch(() => land(cachedEntries, !cachedEntries));
+    }, [activeWalletId, activeAccountId, activeNetwork, isDemoActive, messaging, recentActivityScope]);
+    const recentActivity = recentActivityState?.scope === recentActivityScope ? recentActivityState : null;
     const backupReminderHasFunds = useMemo(() => hasBackupReminderFunds(
         buildBalanceRows(balancesView, chainRegistry, activeByChain),
     ), [balancesView, activeByChain]);
@@ -1526,6 +1581,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         hasAddresses={Object.keys(balances).length > 0}
                         onAddAddress={handleAddAddress}
                         onHistory={onHistory}
+                        recentActivity={recentActivity?.entries ?? null}
+                        recentActivityFailed={recentActivity?.failed === true}
+                        onActivityOpen={loadRecentActivity}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
                         pinnedKeys={pinnedKeys}

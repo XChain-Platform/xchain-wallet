@@ -79,19 +79,22 @@ const messages = {
         'Tokens appear here after you buy one in Markets or receive a transfer.',
     'home.tabs.tokensOnThisNetworkAppear': 'Tokens on this network appear here after you receive them.',
     'home.tabs.clearFilter': 'Clear filter',
-    'home.tabs.unpricedTokens': 'Unpriced tokens',
     'home.tabs.issuedByYou': 'Issued by you',
-    'home.tabs.aTickAppearsHereWhen':
-        'A tick appears here when it can never be split and its supply can never grow. Everything you hold, collectible or not, is also under Tokens.',
     'home.tabs.noCollectiblesYet': 'No collectibles yet',
     'home.tabs.noCollectiblesOnThisNetwork': 'No collectibles on this network',
     'home.tabs.collectiblesAppearHereAfterYou':
-        'Collectibles appear here after you receive an indivisible token with permanently locked supply.',
+        'Collectibles appear here after you receive them.',
     'home.tabs.collectiblesOnThisNetworkAppear':
         'Collectibles on this network appear here after you receive them.',
-    'home.tabs.yourActivityIsInHistory': 'Your activity is in History',
-    'home.tabs.everySendReceiveAndOther': 'Every send, receive and other transaction, newest first.',
-    'home.tabs.openHistory': 'Open History',
+    'home.tabs.recentActivity': 'Recent activity',
+    'home.tabs.recentActivityNote': 'Your newest actions, newest first.',
+    'home.tabs.loadingRecentActivity': 'Loading recent activity…',
+    'home.tabs.noActivityOnThisNetwork': 'No activity on this network',
+    'home.tabs.sendsReceivesAndOtherActionsAppear':
+        'Sends, receives and other actions appear here once this wallet makes or receives one.',
+    'home.tabs.recentActivityUnavailable': 'Recent activity is unavailable',
+    'home.tabs.recentActivityUnavailableBody': 'History reads every chain again and lists every action.',
+    'home.tabs.openHistory': 'See all activity',
     'home.tabs.noDefiPositionsYet': 'No DeFi positions yet',
     'home.tabs.stakingDispensersContractBalancesAnd':
         'Staking, dispensers, contract balances and open orders will show here.',

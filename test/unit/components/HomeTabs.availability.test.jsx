@@ -192,9 +192,9 @@ describe('HomeTabs empty states', () => {
     it.each([
         ['Coins', 'Fund your wallet'],
         ['DeFi', 'No DeFi positions yet'],
-        ['Activity', 'Your activity is in History'],
+        ['Activity', 'No activity yet'],
     ])('draws the %s empty state with the shared empty state', (tab, heading) => {
-        mount('real-wallet', { onHistory: vi.fn() });
+        mount('real-wallet', { onHistory: vi.fn(), recentActivity: [] });
         fireEvent.click(screen.getByRole('tab', { name: tab }));
 
         const state = screen.getByRole('status');

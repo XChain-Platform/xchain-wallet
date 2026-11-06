@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -38,6 +38,7 @@ import {
 } from '@xchain-wallet/core/flows';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
+import { recentActivityEntries } from '../utils/historyRow.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -175,7 +176,10 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {() => void} [props.onBuy]       opens the coin exchange from the first-funding state
  * @param {boolean} [props.hasAddresses]   whether the active account has any receiving address
  * @param {() => void} [props.onAddAddress] opens address generation for an account with no addresses
- * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
+ * @param {() => void} [props.onHistory]   opens the complete chronological feed from the Activity tab's View all control
+ * @param {any[] | null} [props.recentActivity] the wallet's newest history entries for the Activity tab; null while they load
+ * @param {boolean} [props.recentActivityFailed] the recent-activity read failed and no saved rows exist
+ * @param {() => void} [props.onActivityOpen] asks the host to load recent activity when the Activity tab opens
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
@@ -183,7 +187,7 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
  * @param {boolean} [props.balanceNoticeShown] Home shows its own balance notice, so an empty tab shows no empty state
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, recentActivity = null, recentActivityFailed = false, onActivityOpen, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -398,14 +402,13 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
         });
     }, [tokens, tokenQueryTrim]);
-    const pricedTokens = useMemo(
-        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) !== null),
-        [filteredTokens],
-    );
-    const unpricedTokens = useMemo(
-        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) === null),
-        [filteredTokens],
-    );
+    // Priced tokens lead and tokens without a price follow in the same list,
+    // with no heading or status text: a price shows when one exists.
+    const listedTokens = useMemo(() => {
+        const priced = filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) !== null);
+        const unpriced = filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) === null);
+        return [...priced, ...unpriced];
+    }, [filteredTokens]);
     const pricesFetchedAt = useMemo(() => {
         let oldest = null;
         for (const row of filteredRows) {
@@ -618,9 +621,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         />
                     ) : null}
-                    {pricedTokens.length > 0 ? (
+                    {listedTokens.length > 0 ? (
                         <BalanceList
-                            rows={pricedTokens}
+                            rows={listedTokens}
                             fiatCurrency={settings?.fiatCurrency || 'USD'}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}
@@ -635,27 +638,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                             showChain={networkFilter === 'all'}
                         />
-                    ) : null}
-                    {unpricedTokens.length > 0 ? (
-                        <section aria-label={t('home.tabs.unpricedTokens')}>
-                            <p className={styles.tabNote}>{t('home.tabs.unpricedTokens')}</p>
-                            <BalanceList
-                                rows={unpricedTokens}
-                                fiatCurrency={settings?.fiatCurrency || 'USD'}
-                                onSelectToken={onSelectToken}
-                                pinnedKeys={pinnedKeys}
-                                onTogglePin={onTogglePin}
-                                hiddenKeys={hiddenKeys}
-                                automaticHiddenKeys={automaticHiddenKeys}
-                                onToggleHide={onToggleHide}
-                                verifyMap={verifyMap}
-                                hideSmallBalances={hideSmallBalances}
-                                smallBalanceThreshold={settings?.smallBalanceThreshold}
-                                numberFormat={settings?.numberFormat}
-                                allowRemoteImages={allowRemoteImages}
-                                showChain={networkFilter === 'all'}
-                            />
-                        </section>
                     ) : null}
                     {issuedUnheld.length > 0 ? (
                         <section aria-label={t('home.tabs.issuedByYou')} data-testid="issued-unheld">
@@ -681,16 +663,6 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
 
                 {active === 'nfts' ? (
                     <>
-                        {/* The rule, on screen. A user holding six ticks under
-                            Tokens and two here cannot otherwise tell why, and
-                            guessing "the ones with pictures" is wrong: artwork
-                            plays no part in it. Wording tracks
-                            protocol/NFT_Standard.md. */}
-                        {nfts.length > 0 ? (
-                        <p className={styles.tabNote}>
-                            {t('home.tabs.aTickAppearsHereWhen')}
-                        </p>
-                        ) : null}
                         <RouteErrorBoundary
                             variant="compact"
                             resetKey={`${walletId || ''}:${networkFilter}:collectibles`}
@@ -726,11 +698,15 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <EmptyState
-                            title={t('home.tabs.yourActivityIsInHistory')}
-                            body={t('home.tabs.everySendReceiveAndOther')}
-                            actionLabel={t('home.tabs.openHistory')}
-                            onAction={onHistory}
+                        <RecentActivityList
+                            entries={recentActivity}
+                            failed={recentActivityFailed}
+                            balances={balances}
+                            networkFilter={networkFilter}
+                            onOpen={onActivityOpen}
+                            onHistory={onHistory}
+                            onSelectEntry={onSelectEntry}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     )
                 ) : null}
@@ -1044,6 +1020,74 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
                 />
             ))}
         </ul>
+    );
+}
+
+// The Activity tab of a real wallet: its newest history rows in History's row
+// layout, with View all opening the complete feed. The host loads the rows
+// when the tab opens, so Home's first paint reads no history.
+function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, onHistory, onSelectEntry, allowRemoteImages }) {
+    useEffect(() => {
+        if (typeof onOpen === 'function') onOpen();
+    }, [onOpen]);
+    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
+    const rows = useMemo(() => {
+        const recent = recentActivityEntries(entries);
+        if (networkFilter === 'all') return recent;
+        return recent.filter((e) => coinFromChainId(e.chainId) === networkFilter);
+    }, [entries, networkFilter]);
+    const walletAddresses = useMemo(
+        () => new Set((entries || []).map((e) => e?.address).filter(Boolean)),
+        [entries],
+    );
+    const canOpenHistory = typeof onHistory === 'function';
+
+    if (entries === null && !failed) {
+        return <p className={styles.tabNote} role="status">{t('home.tabs.loadingRecentActivity')}</p>;
+    }
+    if (rows.length === 0) {
+        if (failed) {
+            return (
+                <EmptyState
+                    title={t('home.tabs.recentActivityUnavailable')}
+                    body={t('home.tabs.recentActivityUnavailableBody')}
+                    actionLabel={canOpenHistory ? t('home.tabs.openHistory') : undefined}
+                    onAction={canOpenHistory ? onHistory : undefined}
+                />
+            );
+        }
+        return (
+            <EmptyState
+                title={networkFilter === 'all' ? t('history.empty.noActivityTitle') : t('home.tabs.noActivityOnThisNetwork')}
+                body={t('home.tabs.sendsReceivesAndOtherActionsAppear')}
+            />
+        );
+    }
+    return (
+        <>
+            <p className={styles.tabNote}>
+                {t('home.tabs.recentActivityNote')}
+                {canOpenHistory ? (
+                    <>
+                        {' '}
+                        <Button variant="link" onClick={onHistory}>{t('home.tabs.openHistory')}</Button>
+                    </>
+                ) : null}
+            </p>
+            <ul className={`${styles.demoList} ${styles.activityList}`} aria-label={t('home.tabs.recentActivity')}>
+                {rows.map((e) => (
+                    <ActivityEntryRow
+                        key={e.key}
+                        entry={e}
+                        walletAddresses={walletAddresses}
+                        assetLookup={assetLookup}
+                        chainTip={null}
+                        allowRemoteImages={allowRemoteImages}
+                        onSelectEntry={onSelectEntry}
+                    />
+                ))}
+            </ul>
+        </>
     );
 }
 
