@@ -135,7 +135,9 @@ describe('CreateWallet security options', () => {
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
         fireEvent.click(verify);
 
-        expect(main).toContainElement(within(main).getByRole('button', { name: 'Back' }));
+        expect(within(main).queryByRole('button', { name: 'Back' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Back to previous step' }).closest('header'))
+            .not.toBeNull();
         expect(main).toContainElement(within(main).getByRole('button', { name: 'Create wallet' }));
         expect(screen.getAllByLabelText(/^Word \d+$/)).toHaveLength(3);
     });

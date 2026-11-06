@@ -405,7 +405,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
     useDocumentTitleSection(headerTitle);
     const screenHeader = (
         <PageHeader
-            onBack={stage === 'verify' ? undefined : handleBack}
+            onBack={handleBack}
             backLabel={stage === 'password' ? t('importWallet.backToSetup') : t('createWallet.backToPreviousStep')}
             backDisabled={stage === 'persisting' || stage === 'ads-notice' || stage === 'stale'}
             title={headerTitle}
@@ -485,25 +485,14 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     focusKey={validationAttempt}
                 />}
                 actions={(
-                    <>
-                        {/* Keep verification's step-back beside submit while the shared header leaves its leading lane empty. */}
-                        <Button
-                            variant="secondary"
-                            type="button"
-                            onClick={() => { setQuizError(null); setStage('mnemonic'); }}
-                            disabled={stage === 'persisting'}
-                        >
-                            {t('common.back')}
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={stage === 'persisting'}
-                            icon={<Icon.CheckIcon />}
-                        >
-                            {t('createWallet.createWallet')}
-                        </Button>
-                    </>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'persisting'}
+                        icon={<Icon.CheckIcon />}
+                    >
+                        {t('createWallet.createWallet')}
+                    </Button>
                 )}
             >
                 {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}

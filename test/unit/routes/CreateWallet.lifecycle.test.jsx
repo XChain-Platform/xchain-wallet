@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
@@ -13,7 +12,6 @@ const SECOND_PHRASE = 'account accuse achieve acid acoustic acquire across act a
 const PASSWORD = 'correct-horse-battery';
 const BIP39_PASSPHRASE = 'separate secret';
 const ORIGINAL_VIEWPORT_WIDTH = window.innerWidth;
-const BUTTON_CSS = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
 const mocks = vi.hoisted(() => ({
     generateBip39Mnemonic: vi.fn(),
@@ -115,7 +113,7 @@ afterEach(() => {
 });
 
 describe('CreateWallet lifecycle guards', () => {
-    it('keeps one outlined Back and one primary action on the phone verify step', () => {
+    it('keeps one header Back and one primary action on the phone verify step', () => {
         window.innerWidth = 360;
         render(wallet());
         enterPasswordStep();
@@ -123,8 +121,8 @@ describe('CreateWallet lifecycle guards', () => {
 
         const backButtons = screen.getAllByRole('button', { name: /^Back/ });
         expect(backButtons).toHaveLength(1);
-        expect(backButtons[0]).toHaveClass(buttonStyles.secondary);
-        expect(BUTTON_CSS).toMatch(/\.secondary\s*\{[^}]*background:\s*transparent;/s);
+        expect(backButtons[0].closest('header')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
 
         const createButton = screen.getByRole('button', { name: 'Create wallet' });
         expect(createButton).toHaveClass(buttonStyles.primary);
@@ -139,12 +137,18 @@ describe('CreateWallet lifecycle guards', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
         enterPasswordStep();
         startQuiz();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        answerQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
         fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
 
         expect(mocks.generateBip39Mnemonic).toHaveBeenCalledTimes(1);
         expect(screen.getByText('abandon')).toBeInTheDocument();
         expect(screen.queryByText('account')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        const quizInputs = screen.getAllByLabelText(/^Word \d+$/);
+        expect(quizInputs).toHaveLength(3);
+        for (const input of quizInputs) expect(input).toHaveValue('');
     });
 
     it('checks each requested position without revealing a wrong answer', async () => {
