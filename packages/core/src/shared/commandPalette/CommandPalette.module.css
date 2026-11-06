@@ -148,7 +148,10 @@
     padding: 1px 6px;
 }
 
+/* The results list scrolls inside the panel, so it takes the shared scroll
+   class for the reserved gutter and the themed pointer scrollbar. */
 .list {
+    composes: scrollArea from '../../ui/Screen.module.css';
     list-style: none;
     margin: 0;
     padding: var(--xc-space-2) 0;
