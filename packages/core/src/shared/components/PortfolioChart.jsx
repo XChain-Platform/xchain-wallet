@@ -192,6 +192,10 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                 role="tabpanel"
                 aria-labelledby={selectedTabId}
             >
+                {/* The change row and the chart slot keep the same height in
+                    every state (chart, loading, failure, no history, hidden
+                    balances), so the Home card does not resize as price
+                    history arrives or is missing. */}
                 {hasData && delta != null && !hidden ? (
                     <div
                         className={`${styles.change} ${tone}`}
@@ -202,24 +206,28 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                             {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
                         </bdi>
                     </div>
-                ) : null}
-                {priceLoading ? (
-                    <StatusMessage variant="status">{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
-                ) : priceError ? (
-                    <StatusMessage variant="error">{priceError}</StatusMessage>
-                ) : hasData ? (
-                    <div className={styles.chart}>
-                        <Sparkline
-                            series={series}
-                            height={40}
-                            label={t('components.portfolioChart.portfolioPerformanceChart')}
-                            rangeLabel={range.label}
-                            formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
-                        />
-                    </div>
                 ) : (
-                    <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
+                    <div className={styles.change} aria-hidden="true" />
                 )}
+                <div className={styles.slot}>
+                    {priceLoading ? (
+                        <StatusMessage variant="status" className={styles.slotMessage}>{t('components.portfolioChart.loadingPriceHistory')}</StatusMessage>
+                    ) : priceError ? (
+                        <StatusMessage variant="error" className={styles.slotMessage}>{priceError}</StatusMessage>
+                    ) : hasData ? (
+                        <div className={styles.chart}>
+                            <Sparkline
+                                series={series}
+                                height={40}
+                                label={t('components.portfolioChart.portfolioPerformanceChart')}
+                                rangeLabel={range.label}
+                                formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
+                            />
+                        </div>
+                    ) : (
+                        <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
+                    )}
+                </div>
             </div>
             <div className={styles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
                 {ranges.map((r) => (

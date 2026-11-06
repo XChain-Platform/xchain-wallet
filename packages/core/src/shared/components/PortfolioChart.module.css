@@ -14,6 +14,9 @@
     font-size: var(--xc-text-sm);
     font-weight: 700;
     line-height: 1.2;
+    /* The row keeps its one line when there is no change to print (no
+       history yet, hidden balances), so the card height holds. */
+    min-block-size: calc(1.2 * var(--xc-text-sm));
     overflow-wrap: anywhere;
 }
 
@@ -21,12 +24,33 @@
 .changeNegative { color: var(--xc-danger-fg); }
 .changeNeutral  { color: var(--xc-text-muted); }
 
+/* One slot holds the chart, the loading line, the failure line and the
+   no-history line at the Sparkline height, so the card keeps one height
+   whatever the price history says. */
+.slot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* The slot matches the 40px Sparkline height and has no token equivalent. */
+    min-block-size: 40px;
+}
+
+.slot > .slotMessage {
+    margin-block: 0;
+}
+
 .chart {
     padding: 0;
+    /* The chart matches the 40px Sparkline height and has no token equivalent. */
+    block-size: 40px;
 }
 
 .placeholder {
-    padding: var(--xc-space-2) 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The line matches the 40px Sparkline height and has no token equivalent. */
+    min-block-size: 40px;
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
