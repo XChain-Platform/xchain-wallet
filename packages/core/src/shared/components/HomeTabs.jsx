@@ -344,9 +344,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         () => active === 'tokens'
             ? sortBalanceRows(filteredRows.filter(
                 (r) => r.kind !== 'native',
-            ), sortBy, nativePriceMap)
+            ), 'value', nativePriceMap)
             : [],
-        [active, filteredRows, sortBy, nativePriceMap],
+        [active, filteredRows, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     // Off for a demo wallet: its rows carry the wallet's real addresses, and
@@ -436,8 +436,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             onReceive={hasAddresses ? onReceive : undefined}
         />
     ) : null;
-    const showBalanceSort = (active === 'coins' && !showFirstFunding && coins.length > 0)
-        || (active === 'tokens' && filteredTokens.length > 0);
+    const showBalanceSort = active === 'coins' && !showFirstFunding && coins.length > 0;
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
     // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a

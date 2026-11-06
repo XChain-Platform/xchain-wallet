@@ -255,26 +255,14 @@ describe('balance row sorting', () => {
         expect(screen.getByLabelText('Sort balances')).toHaveValue('value');
     });
 
-    it('keeps unpriced tokens after priced tokens in every sort mode', () => {
+    it('keeps tokens in value order with unpriced tokens last and no sort control', () => {
         mountTokens();
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-        const sort = screen.getByLabelText('Sort balances');
 
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:ZED',
             'bitcoin-mainnet:BETA',
-            'bitcoin-mainnet:AAA',
-        ]);
-        fireEvent.change(sort, { target: { value: 'name' } });
-        expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:BETA',
-            'bitcoin-mainnet:ZED',
-            'bitcoin-mainnet:AAA',
-        ]);
-        fireEvent.change(sort, { target: { value: 'change' } });
-        expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:BETA',
-            'bitcoin-mainnet:ZED',
             'bitcoin-mainnet:AAA',
         ]);
     });
