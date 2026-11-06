@@ -622,7 +622,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                         button only goes disabled, so the countdown is said once. */}
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
                         block
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
