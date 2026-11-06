@@ -35,7 +35,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
 import { RelativeTime } from '../RelativeTime.jsx';
 import { expandDecimalNotation } from '../../utils/amountFormat.js';
@@ -273,33 +275,39 @@ export function NotificationsSection({ walletId } = {}) {
         }
     };
 
+    const renderFlag = (f) => (
+        <div key={f.key} style={STACK}>
+            <div style={ROW}>
+                <Switch
+                    label={f.label}
+                    description={f.hint}
+                    checked={!permissionBlocksDelivery
+                        && (f.defaultOn ? notificationFlags[f.key] !== false : Boolean(notificationFlags[f.key]))}
+                    disabled={permissionBlocksDelivery || pendingKey !== null}
+                    onChange={(event) => onToggle(f.key, f.label, event.target.checked)}
+                />
+            </div>
+            <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
+            {f.key === 'priceAlerts' ? (
+                <PriceAlertsManager
+                    walletId={walletId}
+                    settings={settings}
+                    enabled={!permissionBlocksDelivery && Boolean(notificationFlags.priceAlerts)}
+                />
+            ) : null}
+        </div>
+    );
+
+    // Price alerts render last: their manager (list plus add form) is the
+    // tallest block, so the short Quiet hours and Sounds switches sit above it
+    // instead of below a list that grows with every saved alert.
     return (
         <div style={STACK}>
             <PermissionRow permission={permission} setPermission={setPermission} />
-            {NOTIFICATION_FLAGS.map((f) => (
-                <div key={f.key} style={STACK}>
-                    <div style={ROW}>
-                        <Switch
-                            label={f.label}
-                            description={f.hint}
-                            checked={!permissionBlocksDelivery
-                                && (f.defaultOn ? notificationFlags[f.key] !== false : Boolean(notificationFlags[f.key]))}
-                            disabled={permissionBlocksDelivery || pendingKey !== null}
-                            onChange={(event) => onToggle(f.key, f.label, event.target.checked)}
-                        />
-                    </div>
-                    <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
-                    {f.key === 'priceAlerts' ? (
-                        <PriceAlertsManager
-                            walletId={walletId}
-                            settings={settings}
-                            enabled={!permissionBlocksDelivery && Boolean(notificationFlags.priceAlerts)}
-                        />
-                    ) : null}
-                </div>
-            ))}
+            {NOTIFICATION_FLAGS.filter((f) => f.key !== 'priceAlerts').map(renderFlag)}
             <QuietHoursRow settings={settings} update={update} />
             <SoundsBlock settings={settings} update={update} />
+            {NOTIFICATION_FLAGS.filter((f) => f.key === 'priceAlerts').map(renderFlag)}
         </div>
     );
 }
@@ -430,7 +438,7 @@ function SoundsBlock({ settings, update }) {
 }
 
 /**
- * Do-not-disturb window. When on, every notification kind above
+ * Do-not-disturb window. When on, every notification kind
  * (including price alerts) is suppressed while the local clock is inside
  * [start, end); an end before start wraps past midnight (e.g. 22:00-08:00).
  * Delivery is dropped, not queued: nothing catches up once the window ends.
@@ -546,6 +554,8 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     const [editingId, setEditingId] = useState(/** @type {string | null} */ (null));
     const [actionError, setActionError] = useState(/** @type {string | null} */ (null));
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
+    // Delete asks first: one stray tap on a small control never drops an alert.
+    const confirmDialog = useConfirmModal();
     const priceDataOff = settings?.privacy?.priceDataEnabled === false;
     const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
     const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
@@ -652,10 +662,18 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 icon={null}
                                 disabled={busyId !== null}
                                 aria-label={t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
-                                onClick={() => runAlertAction(a.id, async () => {
-                                    await removeAlert(a.id);
-                                    if (editingId === a.id) setEditingId(null);
-                                }, setBusyId, setActionError)}
+                                onClick={async () => {
+                                    const confirmed = await confirmDialog.confirm({
+                                        title: `${t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}?`,
+                                        confirmLabel: t('settings.notifications.delete'),
+                                        danger: true,
+                                    });
+                                    if (!confirmed) return;
+                                    await runAlertAction(a.id, async () => {
+                                        await removeAlert(a.id);
+                                        if (editingId === a.id) setEditingId(null);
+                                    }, setBusyId, setActionError);
+                                }}
                             >
                                 {t('settings.notifications.delete')}
                             </Button>
@@ -675,6 +693,13 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     fiatCurrency={editingAlert?.fiatCurrency || fiatCurrency}
                     initialAlert={editingAlert || undefined}
                     onCancel={editingAlert ? () => setEditingId(null) : undefined}
+                />
+            ) : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
                 />
             ) : null}
         </div>
