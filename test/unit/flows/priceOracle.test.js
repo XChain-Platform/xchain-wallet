@@ -1,7 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     COINGECKO_SUPPORTED_CHAINS,
     createPriceOracle,
@@ -15,7 +15,16 @@ function response(data, status = 200) {
     };
 }
 
+async function settleBackgroundRefresh() {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('priceOracle', () => {
+    beforeEach(() => {
+        globalThis.localStorage.removeItem('xchain-wallet:price-oracle-spot:v1');
+        globalThis.localStorage.removeItem('xchain-wallet:price-oracle-sparkline:v1');
+    });
+
     it('requires an injected fetch and avoids it for unknown chains', async () => {
         expect(() => createPriceOracle({})).toThrow('fetch is required');
         const fetch = vi.fn();
@@ -103,6 +112,13 @@ describe('priceOracle', () => {
 
         expect(fetch).toHaveBeenCalledTimes(3);
         expect(refreshedSpot.prices['bitcoin-mainnet']).toMatchObject({
+            priceFiat: 65000,
+            sparkline: [64000, 65000],
+            stale: true,
+        });
+        await settleBackgroundRefresh();
+        const refreshedSpotStored = await oracle.getNativePrices({ ...request, includeSparkline: true });
+        expect(refreshedSpotStored.prices['bitcoin-mainnet']).toMatchObject({
             priceFiat: 66000,
             sparkline: [64000, 65000],
         });
@@ -112,10 +128,13 @@ describe('priceOracle', () => {
         const refreshedChart = await oracle.getNativePrices({ ...request, includeSparkline: true });
 
         expect(fetch).toHaveBeenCalledTimes(5);
-        expect(refreshedChart.prices['bitcoin-mainnet'].sparkline).toEqual([67000]);
+        expect(refreshedChart.prices['bitcoin-mainnet'].sparkline).toEqual([64000, 65000]);
+        await settleBackgroundRefresh();
+        const refreshedChartStored = await oracle.getNativePrices({ ...request, includeSparkline: true });
+        expect(refreshedChartStored.prices['bitcoin-mainnet'].sparkline).toEqual([67000]);
     });
 
-    it('labels expired cached data stale after a failed refresh and retries after clearCache', async () => {
+    it('keeps expired cached data after a failed background refresh and retries after clearCache', async () => {
         let time = 0;
         const fetch = vi.fn()
             .mockResolvedValueOnce(response({
@@ -125,7 +144,7 @@ describe('priceOracle', () => {
                     usd_24h_change: 3,
                 },
             }))
-            .mockResolvedValue(response({}, 503));
+            .mockResolvedValue(response({}, 400));
         const oracle = createPriceOracle({ fetch, now: () => time });
         const request = { chainIds: ['dogecoin-mainnet'] };
         const first = await oracle.getNativePrices(request);
@@ -133,20 +152,21 @@ describe('priceOracle', () => {
         time = 6 * 60 * 1000;
         const stale = await oracle.getNativePrices(request);
 
-        // A 503 is retried once by fetchWithRetry before it reports the
-        // service as unavailable, so each failed refresh costs two requests.
-        const unavailable = 'The network service is temporarily unavailable. Please try again.';
         expect(first.prices['dogecoin-mainnet'].priceFiat).toBe(0.2);
         expect(stale).toEqual({
             prices: { 'dogecoin-mainnet': { ...first.prices['dogecoin-mainnet'], stale: true } },
-            error: unavailable,
         });
         expect(stale.prices['dogecoin-mainnet'].stale).toBe(true);
+        expect(fetch).toHaveBeenCalledTimes(2);
+        await settleBackgroundRefresh();
+        time += 60_000;
+        await oracle.getNativePrices(request);
+        expect(fetch).toHaveBeenCalledTimes(2);
         oracle.clearCache();
         await expect(oracle.getNativePrices(request)).resolves.toEqual({
             prices: {},
-            error: unavailable,
+            error: 'HTTP 400',
         });
-        expect(fetch).toHaveBeenCalledTimes(5);
+        expect(fetch).toHaveBeenCalledTimes(3);
     });
 });

@@ -49,8 +49,14 @@ describe('price flow failure handling', () => {
         now = 6 * 60 * 1000;
         const failed = await oracle.getNativePrices(request);
 
-        expect(failed.error).toMatch(/no valid USD price for litecoin/);
-        expect(failed.prices).toEqual(initial.prices);
+        expect(failed.error).toBeUndefined();
+        expect(failed.prices).toEqual({
+            'bitcoin-mainnet': { ...initial.prices['bitcoin-mainnet'], stale: true },
+            'litecoin-mainnet': { ...initial.prices['litecoin-mainnet'], stale: true },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const retained = await oracle.getNativePrices(request);
+        expect(retained.prices).toEqual(failed.prices);
     });
 
     it('reports malformed sparkline data while retaining the valid spot price', async () => {

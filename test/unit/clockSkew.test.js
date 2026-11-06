@@ -46,8 +46,15 @@ describe('device clock skew', () => {
         const refreshed = await oracle.getNativePrices(request);
 
         expect(fetch).toHaveBeenCalledTimes(4);
-        expect(refreshed.prices['bitcoin-mainnet'].priceFiat).toBe(61_000);
-        expect(refreshed.prices['bitcoin-mainnet'].sparkline).toEqual([61_000]);
+        expect(refreshed.prices['bitcoin-mainnet']).toMatchObject({
+            priceFiat: 60_000,
+            sparkline: [60_000],
+            stale: true,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const storedRefresh = await oracle.getNativePrices(request);
+        expect(storedRefresh.prices['bitcoin-mainnet'].priceFiat).toBe(61_000);
+        expect(storedRefresh.prices['bitcoin-mainnet'].sparkline).toEqual([61_000]);
     });
 
     it('does not extend password throttles when the wall clock moves backward', () => {
