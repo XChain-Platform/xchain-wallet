@@ -77,8 +77,11 @@
     justify-content: center;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
-    height: var(--xc-control-h-sm);
-    font-size: var(--xc-control-font-sm);
+    /* A compact 28px chip on every shell: the small control tokens grow to
+       36px and 1rem on touch, so the chip takes fixed spacing tokens and the
+       ::before layer below supplies the 44px touch target. */
+    height: calc(var(--xc-space-6) + var(--xc-space-1));
+    font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
     color: var(--xc-text-muted);
