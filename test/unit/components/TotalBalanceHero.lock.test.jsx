@@ -28,16 +28,18 @@ function renderHero(props) {
     );
 }
 
-describe('balance hero lock button', () => {
+describe('balance hero lock row', () => {
     it('is absent when the shell locks from its own header', () => {
         renderHero({});
-        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        expect(screen.queryByRole('menuitem', { name: 'Lock wallet' })).toBeNull();
     });
 
     it('locks the wallet when a headerless shell passes onLockWallet', () => {
         const onLockWallet = vi.fn();
         renderHero({ onLockWallet });
-        fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Lock wallet' }));
         expect(onLockWallet).toHaveBeenCalledTimes(1);
     });
 });

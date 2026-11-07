@@ -88,7 +88,7 @@ describe('TokenDetail "Manage token" action', () => {
         const hero = screen.getByRole('region', { name: 'S18PROBE balance' });
         const label = within(hero).getByText('Total balance');
         const amountUnit = within(hero).getByText('S18PROBE');
-        const action = within(hero).getByRole('button', { name: 'Hide balance' });
+        const action = within(hero).getByRole('button', { name: 'Balance actions' });
 
         expect(label.compareDocumentPosition(amountUnit) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();

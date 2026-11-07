@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { BalanceHeroMenu } from '../components/BalanceHeroMenu.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -53,6 +54,8 @@ import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
@@ -513,10 +516,10 @@ function TokenDetailContent({
                     </StatusMessage>
                 ) : null}
                 {/* Token balance hero: gradient block, same style as
-                    Home's TotalBalanceHero. Top row carries the label,
-                    a swap button for flipping tick ↔ fiat as primary,
-                    and the hide-balance eye. Big number = primary,
-                    small number underneath = secondary. */}
+                    Home's TotalBalanceHero. Top row carries the label and
+                    the shared Balance actions menu (swap tick and fiat as
+                    primary, hide the chart, hide the balance). Big number
+                    = primary, small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
                     {headerIconUrl || metadataLoading ? (
                         <div className={styles.balanceHeroIconWrap}>
@@ -558,33 +561,32 @@ function TokenDetailContent({
                                     </AutoShrinkText>
                                 )}
                             </div>
-                            <div className={styles.balanceHeroControls}>
-                                <Button
-                                    className={styles.balanceHeroSwap}
-                                    onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
-                                    disabled={!fiatAvailable}
-                                    aria-label="Swap primary unit"
-                                    title="Swap primary unit"
-                                    icon={<Icon.SwapIcon />}
-                                />
-                                {fiatSupported ? (
-                                    <Button
-                                        className={styles.balanceHeroEye}
-                                        onClick={toggleChartVisible}
-                                        aria-pressed={chartVisible ? 'true' : 'false'}
-                                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                                        title={chartVisible ? 'Hide chart' : 'Show chart'}
-                                        icon={<Icon.LineChartIcon />}
-                                    />
-                                ) : null}
-                                <Button
-                                    className={styles.balanceHeroEye}
-                                    onClick={toggleBalanceHidden}
-                                    aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
-                                    title={balanceHidden ? 'Show balance' : 'Hide balance'}
-                                    icon={balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                                />
-                            </div>
+                            <BalanceHeroMenu
+                                className={styles.balanceHeroMenu}
+                                items={[
+                                    {
+                                        id: 'swap',
+                                        label: 'Swap primary unit',
+                                        Icon: Icon.SwapIcon,
+                                        onSelect: () => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick')),
+                                        disabled: !fiatAvailable,
+                                    },
+                                    fiatSupported ? {
+                                        id: 'chart',
+                                        label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'),
+                                        Icon: Icon.LineChartIcon,
+                                        onSelect: toggleChartVisible,
+                                        checked: chartVisible,
+                                    } : null,
+                                    {
+                                        id: 'privacy',
+                                        label: balanceHidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'),
+                                        Icon: balanceHidden ? Icon.EyeOffIcon : Icon.EyeIcon,
+                                        onSelect: toggleBalanceHidden,
+                                        checked: !balanceHidden,
+                                    },
+                                ]}
+                            />
                         </div>
                         {!balanceHidden && fiatAvailable ? (
                             <div className={styles.balanceHeroNote}>

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -62,9 +62,11 @@ describe('mobile refresh', () => {
         ));
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
 
-        const refreshing = screen.getByRole('button', { name: 'Refreshing portfolio' });
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        const refreshing = screen.getByRole('menuitem', { name: 'Refreshing portfolio' });
         expect(refreshing).toBeDisabled();
         fireEvent.click(refreshing);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
@@ -102,13 +104,17 @@ describe('mobile refresh', () => {
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Refresh(ing)? balances/ })).toBeNull();
         const hero = screen.getByRole('region', { name: 'Active address balance' });
-        const refresh = screen.getByRole('button', { name: 'Refresh portfolio' });
+        const trigger = within(hero).getByRole('button', { name: 'Balance actions' });
+        fireEvent.click(trigger);
+        const refresh = screen.getByRole('menuitem', { name: 'Refresh portfolio' });
         expect(hero.contains(refresh)).toBe(true);
-        expect(screen.getAllByRole('button', { name: /Refresh(ing)? portfolio/ })).toHaveLength(1);
+        expect(screen.getAllByRole('menuitem', { name: /Refresh(ing)? portfolio/ })).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: /Refresh(ing)? portfolio/ })).toBeNull();
 
         fireEvent.click(refresh);
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh portfolio' })).not.toBeDisabled());
+        fireEvent.click(trigger);
+        await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Refresh portfolio' })).not.toBeDisabled());
     });
 
     it('treats a resolved per-address balance error as a failed refresh', async () => {
@@ -146,7 +152,8 @@ describe('mobile refresh', () => {
         ));
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
         expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();

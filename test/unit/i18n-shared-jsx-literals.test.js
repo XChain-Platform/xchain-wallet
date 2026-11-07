@@ -141,6 +141,7 @@ const PARTIAL_COPY_FILES = [
     '/routes/ParallelComposer.jsx',
     '/routes/SweepForm.jsx',
     '/routes/TokenAdminForm.jsx',
+    '/routes/TokenDetail.jsx',
     '/routes/TokenWizard.jsx',
 ];
 

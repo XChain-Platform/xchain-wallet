@@ -30,6 +30,11 @@ const heroSource = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/TotalBalanceHero.jsx',
 ), 'utf8');
+// The hero's controls live in the shared balance hero menu (U52).
+const heroMenuSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/components/BalanceHeroMenu.jsx',
+), 'utf8');
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const BALANCES = {
@@ -71,9 +76,10 @@ afterEach(() => {
 describe('Home overflow quick action', () => {
     it('builds Home actions from the shared Button component', () => {
         expect(homeSource).toContain("import { Button, EmptyState, Icon");
-        expect(heroSource).toContain("import { Button, Icon }");
+        expect(heroMenuSource).toContain("import { Button, Icon }");
         expect(homeSource).not.toMatch(/<button\b/);
         expect(heroSource).not.toMatch(/<button\b/);
+        expect(heroMenuSource).not.toMatch(/<button\b/);
     });
 
     it('opens Swap directly instead of a one-item More menu', async () => {

@@ -86,7 +86,8 @@ describe('shared route dark-mode colors', () => {
     it('uses the on-accent token for token hero controls and small text', () => {
         const css = routeCss('TokenDetail');
         expect(css).not.toMatch(/rgba\(255,\s*255,\s*255/);
-        expect(css).toMatch(/\.balanceHeroSwap,[\s\S]*?var\(--xc-on-accent\) 15%/);
+        const heroCss = readFileSync('packages/core/src/shared/components/TotalBalanceHero.module.css', 'utf8');
+        expect(heroCss).toMatch(/\.eye\s*\{[^}]*var\(--xc-on-accent\) 15%/);
         for (const selector of ['balanceHeroAmountCode', 'balanceHeroNoteCode', 'balanceHeroHidden']) {
             expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-on-accent\\)`, 's'));
         }

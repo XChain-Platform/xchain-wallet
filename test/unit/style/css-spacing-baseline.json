@@ -432,14 +432,6 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/components/TotalBalanceHero.module.css",
-    "property": "gap",
-    "value": "6px",
-    "lines": [
-      45
-    ]
-  },
-  {
     "file": "packages/core/src/shared/components/WatcherExport.module.css",
     "property": "gap",
     "value": "2px",

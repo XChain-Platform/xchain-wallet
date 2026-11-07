@@ -30,34 +30,30 @@ describe('measureButtonEdges', () => {
     });
 });
 
-describe('the balance hero swap button', () => {
-    const css = readFileSync(resolve(import.meta.dirname, '../../../packages/core/src/shared/routes/TokenDetail.module.css'), 'utf8');
-    const disabledRule = () => {
-        const rule = css.match(/\.balanceHeroControls \.balanceHeroSwap\.balanceHeroSwap:disabled\s*\{([^}]*)\}/);
-        expect(rule, 'a disabled swap rule outranks .btn:disabled:not(.link)').not.toBeNull();
+describe('the balance hero menu trigger', () => {
+    const heroCss = readFileSync(resolve(import.meta.dirname, '../../../packages/core/src/shared/components/TotalBalanceHero.module.css'), 'utf8');
+    const tokenCss = readFileSync(resolve(import.meta.dirname, '../../../packages/core/src/shared/routes/TokenDetail.module.css'), 'utf8');
+    const triggerRule = () => {
+        const rule = heroCss.match(/\.eye\s*\{([^}]*)\}/);
+        expect(rule, 'the shared Balance actions trigger has a base rule').not.toBeNull();
         return rule[1];
     };
 
-    it('keeps the translucent hero fill while disabled, never the near-white disabled tile', () => {
-        const body = disabledRule();
+    it('keeps the translucent hero fill on the accent card, never the near-white disabled tile', () => {
+        const body = triggerRule();
         expect(body).toContain('background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent)');
+        expect(body).toContain('color: var(--xc-on-accent)');
         expect(body).not.toMatch(/--xc-control-disabled-bg/);
     });
 
-    it('draws a visible on-accent edge while disabled, so the dimmed control still reads as a button', () => {
-        const border = disabledRule().match(/(?:^|;|\s)border\s*:\s*([^;]+);/);
-        expect(border, 'the disabled swap sets a border').not.toBeNull();
-        const value = border[1].trim();
-        expect(value).not.toMatch(/^(none|0)\b/);
-        expect(value).toMatch(/\bsolid\b/);
-        expect(value).toContain('var(--xc-on-accent)');
+    it('sizes the trigger from the small control token', () => {
+        const body = triggerRule();
+        expect(body).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
+        expect(body).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
     });
 
-    it('keeps the 28px hero control size', () => {
-        const base = css.match(/\.balanceHeroSwap,\s*\.balanceHeroEye\s*\{([^}]*)\}/);
-        expect(base).not.toBeNull();
-        expect(base[1]).toMatch(/width:\s*28px/);
-        expect(base[1]).toMatch(/height:\s*28px/);
-        expect(base[1]).toMatch(/box-sizing:\s*border-box/);
+    it('leaves the token hero with no loose swap or eye controls of its own', () => {
+        expect(tokenCss).not.toMatch(/\.balanceHero(?:Swap|Eye|Controls)\b/);
+        expect(tokenCss).toMatch(/\.balanceHeroMenu\s*\{[^}]*grid-area:\s*controls/);
     });
 });

@@ -33,7 +33,8 @@ test('a search typed in the Send picker does not filter the Home Tokens tab', as
 test('a Home token filter that matches nothing clears from the empty state', async ({ page }) => {
     await createWallet(page);
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Show filters' }).click();
+    await main.getByRole('button', { name: 'Balance actions' }).click();
+    await main.getByRole('menuitemcheckbox', { name: 'Show filters' }).click();
     await main.getByRole('searchbox', { name: 'Search tokens by name' }).fill('ZZNOSUCHTICK');
     await main.getByRole('tab', { name: 'Tokens' }).click();
     await expect(main.getByText('No matching tokens')).toBeVisible();

@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Icon } from '@xchain-wallet/core/ui';
+import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
 import { useMessaging } from '../useMessaging.js';
@@ -29,59 +30,15 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/components.js';
 
-const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
-
-function compactActionsMatch() {
-    if (typeof window === 'undefined') return false;
-    if (typeof window.matchMedia === 'function') {
-        return window.matchMedia(COMPACT_ACTIONS_QUERY).matches;
-    }
-    return window.innerWidth < 480;
-}
-
-function useCompactActions() {
-    const [compact, setCompact] = useState(compactActionsMatch);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-        if (typeof window.matchMedia !== 'function') {
-            const onResize = () => setCompact(compactActionsMatch());
-            window.addEventListener('resize', onResize);
-            return () => window.removeEventListener('resize', onResize);
-        }
-
-        const query = window.matchMedia(COMPACT_ACTIONS_QUERY);
-        const onChange = (event) => setCompact(event.matches);
-        setCompact(query.matches);
-        if (typeof query.addEventListener === 'function') {
-            query.addEventListener('change', onChange);
-            return () => query.removeEventListener('change', onChange);
-        }
-        if (typeof query.addListener === 'function') {
-            query.addListener(onChange);
-            return () => query.removeListener(onChange);
-        }
-        return undefined;
-    }, []);
-
-    return compact;
-}
-
-function enabledMenuItems(menu) {
-    return Array.from(menu?.querySelectorAll([
-        '[role="menuitem"]:not([aria-disabled="true"])',
-        '[role="menuitemcheckbox"]:not([aria-disabled="true"])',
-    ].join(',')) || []);
-}
-
 /**
  * Hero block at the top of Home: total fiat value across every
  * priced row (coins + tokens + NFTs). Honours the active network
  * filter so flipping to BTC shows only BTC-side wealth.
  *
- * The eye toggle hides the number for shoulder-surfing scenarios
- * (public coffee-shop unlocks, etc.). State is component-local so
- * it resets on reload, not persisted.
+ * Its controls sit in one "Balance actions" menu at every width (the
+ * same BalanceHeroMenu a token's balance hero uses): hide the chart,
+ * hide the balance for shoulder-surfing moments, then the Home-only
+ * rows below.
  *
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
@@ -91,10 +48,10 @@ function enabledMenuItems(menu) {
  * @param {number | null} [props.pricesFetchedAt] Unix ms of the oldest live price used by the total.
  * @param {() => void} [props.onRefresh]          refreshes balances and any expired prices.
  * @param {boolean} [props.refreshing]            whether a manual refresh is running.
- * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
- * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
- * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
- * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
+ * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter row's checked state
+ * @param {() => void} [props.onToggleFilter]    when provided, adds a filter toggle row to the menu
+ * @param {() => void} [props.onCommandPalette]  when provided, adds a search row that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
+ * @param {() => void} [props.onLockWallet]      when provided, adds a lock row. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
     const labelId = useId();
@@ -118,11 +75,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
-    const compactActions = useCompactActions();
-    const [actionsOpen, setActionsOpen] = useState(false);
-    const actionsWrapRef = useRef(null);
-    const actionsTriggerRef = useRef(null);
-    const actionsMenuRef = useRef(null);
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -246,69 +198,40 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 ? 'Price unavailable'
                 : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
     const balanceIsMessage = testCoinsOnly || priceUnavailable || balanceUnread;
-    const actionItems = [
+    // The hero's own toggles, the same rows a token's balance hero offers;
+    // a checked row means the chart or the balance is on screen.
+    const heroMenuItems = [
+        !testCoinsOnly ? {
+            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, onSelect: toggleChartVisible, checked: chartVisible,
+        } : null,
+        {
+            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, onSelect: toggleHidden, checked: !hidden,
+        },
+    ].filter(Boolean);
+    // Home-only rows. A shell with no header or nav passes the settings,
+    // search and lock handlers, so the menu is where those live there.
+    const homeMenuItems = [
         typeof onRefresh === 'function' ? {
             id: 'refresh',
             label: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
-            title: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
             Icon: Icon.RefreshIcon,
-            handler: onRefresh,
+            onSelect: onRefresh,
             disabled: refreshing,
             className: refreshing ? styles.refreshing : '',
         } : null,
-        typeof onOpenSettings === 'function' ? ({
-            id: 'settings', label: t('components.totalBalanceHero.openSettings'), title: t('home.settings'), Icon: Icon.GearIcon, handler: onOpenSettings,
-        }) : null,
+        typeof onOpenSettings === 'function' ? {
+            id: 'settings', label: t('components.totalBalanceHero.openSettings'), Icon: Icon.GearIcon, onSelect: onOpenSettings,
+        } : null,
         typeof onCommandPalette === 'function' ? {
-            id: 'search', label: t('components.leftNav.openCommandPalette'), title: t('components.leftNav.searchCmdCtrlK'), Icon: Icon.SearchIcon, handler: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
+            id: 'search', label: t('components.leftNav.openCommandPalette'), Icon: Icon.SearchIcon, onSelect: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
         } : null,
         typeof onToggleFilter === 'function' ? {
-            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), title: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, handler: onToggleFilter, pressed: filterOpen,
+            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, onSelect: onToggleFilter, checked: Boolean(filterOpen),
         } : null,
-        !testCoinsOnly ? {
-            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), title: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, handler: toggleChartVisible, pressed: chartVisible,
-        } : null,
-        {
-            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), title: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, handler: toggleHidden,
-        },
         typeof onLockWallet === 'function' ? {
-            id: 'lock', label: t('home.lockWallet'), title: t('home.lockWallet'), Icon: Icon.LockIcon, handler: onLockWallet,
+            id: 'lock', label: t('home.lockWallet'), Icon: Icon.LockIcon, onSelect: onLockWallet,
         } : null,
     ].filter(Boolean);
-
-    useEffect(() => {
-        if (!actionsOpen) return undefined;
-        const onPointerDown = (event) => {
-            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
-        };
-        const onKeyDown = (event) => {
-            if (event.key !== 'Escape') return;
-            event.preventDefault();
-            setActionsOpen(false);
-            actionsTriggerRef.current?.focus();
-        };
-        // Tabbing out of the menu closes it, as the header menu does, so no
-        // menu stays open while focus sits on the page behind it.
-        const onFocusIn = (event) => {
-            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
-        };
-        window.addEventListener('mousedown', onPointerDown);
-        window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('focusin', onFocusIn);
-        return () => {
-            window.removeEventListener('mousedown', onPointerDown);
-            window.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('focusin', onFocusIn);
-        };
-    }, [actionsOpen]);
-
-    useEffect(() => {
-        if (actionsOpen) enabledMenuItems(actionsMenuRef.current)[0]?.focus();
-    }, [actionsOpen]);
-
-    useEffect(() => {
-        if (!compactActions) setActionsOpen(false);
-    }, [compactActions]);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -338,97 +261,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         </>
                     )}
                 </div>
-                {compactActions ? (
-                    <div ref={actionsWrapRef} className={styles.compactActions}>
-                        <Button
-                            ref={actionsTriggerRef}
-                            type="button"
-                            className={styles.eye}
-                            onClick={() => setActionsOpen((open) => !open)}
-                            aria-label={t('components.totalBalanceHero.balanceActions')}
-                            aria-haspopup="menu"
-                            aria-expanded={actionsOpen ? 'true' : 'false'}
-                            title={t('components.totalBalanceHero.balanceActions')}
-                            icon={<Icon.MoreIcon />}
-                        >
-                            {null}
-                        </Button>
-                        {actionsOpen ? (
-                            <div
-                                ref={actionsMenuRef}
-                                className={styles.actionMenu}
-                                role="menu"
-                                aria-label={t('components.totalBalanceHero.balanceActions')}
-                                onKeyDown={(event) => {
-                                    if (!event.target.closest?.('[role="menuitem"], [role="menuitemcheckbox"]')) return;
-                                    const items = enabledMenuItems(actionsMenuRef.current);
-                                    const index = items.indexOf(document.activeElement);
-                                    let nextIndex = null;
-                                    if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
-                                    if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
-                                    if (event.key === 'Home') nextIndex = 0;
-                                    if (event.key === 'End') nextIndex = items.length - 1;
-                                    if (nextIndex === null || items.length === 0) return;
-                                    event.preventDefault();
-                                    items[nextIndex]?.focus();
-                                }}
-                            >
-                                {actionItems.map(({ id, label, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts }) => (
-                                    <Button
-                                        key={id}
-                                        type="button"
-                                        role={pressed === undefined ? 'menuitem' : 'menuitemcheckbox'}
-                                        className={styles.actionRow}
-                                        disabled={disabled}
-                                        aria-disabled={disabled ? 'true' : undefined}
-                                        aria-checked={pressed === undefined ? undefined : String(Boolean(pressed))}
-                                        aria-keyshortcuts={keyShortcuts}
-                                        onClick={() => {
-                                            setActionsOpen(false);
-                                            handler();
-                                        }}
-                                        icon={<ActionIcon />}
-                                    >
-                                        {label}
-                                    </Button>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
-                ) : (
-                    <div className={styles.actions}>
-                        {actionItems.map(({ id, label, title, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts, className }) => (
-                            id === 'settings' ? (
-                                <Button
-                                    key={id}
-                                    type="button"
-                                    className={styles.eye}
-                                    onClick={handler}
-                                    aria-label={t('components.totalBalanceHero.openSettings')}
-                                    title={title}
-                                    icon={<ActionIcon />}
-                                >
-                                    {null}
-                                </Button>
-                            ) : (
-                                <Button
-                                    key={id}
-                                    type="button"
-                                    className={`${styles.eye} ${pressed ? styles.eyeActive : ''} ${className || ''}`}
-                                    onClick={handler}
-                                    disabled={disabled}
-                                    aria-pressed={pressed === undefined ? undefined : String(Boolean(pressed))}
-                                    aria-label={label}
-                                    aria-keyshortcuts={keyShortcuts}
-                                    title={title}
-                                    icon={<ActionIcon />}
-                                >
-                                    {null}
-                                </Button>
-                            )
-                        ))}
-                    </div>
-                )}
+                <BalanceHeroMenu
+                    className={styles.actions}
+                    items={heroMenuItems}
+                    extraItems={homeMenuItems}
+                />
             </div>
             {showMeta ? (
                 <div className={styles.meta} aria-label={t('components.totalBalanceHero.balanceSummary')}>

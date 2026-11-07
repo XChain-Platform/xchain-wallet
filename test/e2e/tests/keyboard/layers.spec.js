@@ -95,7 +95,6 @@ for (const size of SIZES) {
 
         test('balance actions menu closes when Tab leaves it', async ({ page }) => {
             const trigger = page.getByRole('button', { name: 'Balance actions' });
-            test.skip(await trigger.count() === 0, 'Home shows its actions inline at this width');
             await trigger.focus();
             await page.keyboard.press('Enter');
             const menu = page.getByRole('menu', { name: 'Balance actions' });

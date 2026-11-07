@@ -186,7 +186,8 @@ describe('TotalBalanceHero refresh status', () => {
         const status = screen.getByText('Updated 10 minutes ago');
         expect(status.className).toMatch(/stale/);
         expect(screen.getAllByRole('status')).toHaveLength(1);
-        screen.getByRole('button', { name: 'Refresh portfolio' }).click();
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
         expect(onRefresh).toHaveBeenCalledOnce();
 
         rerender(
@@ -201,7 +202,8 @@ describe('TotalBalanceHero refresh status', () => {
                 />
             </MessagingProvider>,
         );
-        expect(screen.getByRole('button', { name: 'Refreshing portfolio' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        expect(screen.getByRole('menuitem', { name: 'Refreshing portfolio' })).toBeDisabled();
     });
 });
 
@@ -212,7 +214,7 @@ describe('TotalBalanceHero responsive layout', () => {
         const label = screen.getByText('Active address balance');
         const region = screen.getByRole('region', { name: 'Active address balance' });
         const total = screen.getByText('$1,234.56');
-        const action = screen.getByRole('button', { name: 'Hide balance' });
+        const action = screen.getByRole('button', { name: 'Balance actions' });
 
         expect(region).toHaveAttribute('aria-labelledby', label.id);
         expect(region).not.toHaveAttribute('aria-label');
@@ -229,13 +231,7 @@ describe('TotalBalanceHero responsive layout', () => {
         expect(cssRule('amountValue')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('collapses narrow-screen icon actions into one overflow menu', () => {
-        vi.stubGlobal('matchMedia', vi.fn((query) => ({
-            matches: query === '(max-width: 479px)',
-            media: query,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-        })));
+    it('holds every hero action in one overflow menu', () => {
         const onOpenSettings = vi.fn();
         const onCommandPalette = vi.fn();
         const onToggleFilter = vi.fn();

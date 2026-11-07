@@ -103,7 +103,8 @@ describe('Home offline behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
         expect(onCreateToken).not.toHaveBeenCalled();
         expect(screen.getByText(/Creating a token needs a network connection/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
         messaging.getWalletBalances.mockResolvedValue(BALANCES);
