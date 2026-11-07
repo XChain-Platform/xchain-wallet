@@ -370,3 +370,100 @@ test('every card in the confirm stack is the same width at every size', async ({
         expect(widths[0], `${size}: cards fill the stack`).toBe(stack);
     }
 });
+
+/**
+ * Runs in the page. A card keeps its inset: every visible line of text and
+ * every field inside a bordered card sits at least the card padding inside
+ * the card's border box on the sides and top. Row lists whose rows carry
+ * their own padding are measured the same way, through their text.
+ */
+function cardInsetFaults() {
+    const root = document.querySelector('main') || document.body;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const pad = parseFloat(rootStyle.getPropertyValue('--xc-card-pad'));
+    const probe = document.createElement('div');
+    probe.style.border = '1px solid var(--xc-border)';
+    document.body.append(probe);
+    const borderColor = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    const sides = ['Top', 'Right', 'Bottom', 'Left'];
+    const isCard = (el) => {
+        const cs = getComputedStyle(el);
+        return sides.every((s) => cs[`border${s}Style`] === 'solid' && cs[`border${s}Width`] === '1px'
+            && cs[`border${s}Color`] === borderColor) && parseFloat(cs.borderTopLeftRadius) > 0;
+    };
+    const describe = (el) => {
+        const cls = [...el.classList].map((c) => c.replace(/^_|_[a-z0-9]{5}(_\d+)?$/gi, '')).slice(0, 2).join('.');
+        return `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''} "${(el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 24)}"`;
+    };
+    const cards = [...root.querySelectorAll('*')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height >= 40 && !el.matches('button, a, label, summary, [role="button"]') && isCard(el);
+    });
+    const faults = [];
+    for (const card of cards) {
+        const box = card.getBoundingClientRect();
+        const targets = [];
+        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            for (const r of range.getClientRects()) targets.push({ r, what: node.textContent.trim().slice(0, 24) });
+        }
+        for (const field of card.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select, textarea')) {
+            targets.push({ r: field.getBoundingClientRect(), what: `field ${field.tagName.toLowerCase()}` });
+        }
+        for (const { r, what } of targets) {
+            if (!r.width || !r.height) continue;
+            // Text scrolled out of a scroll panel is not on screen to touch an edge.
+            if (r.bottom <= box.top || r.top >= box.bottom) continue;
+            const left = r.left - box.left;
+            const right = box.right - r.right;
+            const top = r.top - box.top;
+            // A flush list carries its rows' own spacing: its sides keep the 4px
+            // floor and its top is left to the rows.
+            const padded = parseFloat(getComputedStyle(card).paddingTop) > 0;
+            const need = padded ? pad - 0.5 : 4;
+            const short = [['left', left], ['right', right], ...(padded ? [['top', top]] : [])].filter(([, gap]) => gap < need);
+            if (short.length) {
+                faults.push(`${describe(card)}: "${what}" ${short.map(([side, gap]) => `${side} ${gap.toFixed(1)}px`).join(', ')}, card padding ${pad}px`);
+                break;
+            }
+        }
+    }
+    return { cards: cards.length, faults };
+}
+
+const INSET_VIEWPORTS = [
+    { width: 360, height: 800 },
+    { width: 1440, height: 900 },
+];
+
+test.describe('onboarding cards keep their inset', () => {
+    test.use({ acceptLicense: false });
+    for (const viewport of INSET_VIEWPORTS) {
+        test(`the license card text sits inside the card padding at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            await page.goto('/');
+            await expect(page.getByLabel('License terms')).toBeVisible();
+            await settle(page, { escape: false });
+            const result = await page.evaluate(cardInsetFaults);
+            expect(result.cards, 'onboarding shows the license card').toBeGreaterThan(0);
+            expect(result.faults).toEqual([]);
+        });
+    }
+});
+
+for (const viewport of INSET_VIEWPORTS) {
+    test(`Home card text sits inside the card padding at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+        test.setTimeout(10 * 60 * 1000);
+        await page.setViewportSize(viewport);
+        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        await gotoSection(page, 'Home');
+        await settle(page);
+        const result = await page.evaluate(cardInsetFaults);
+        expect(result.cards, 'Home shows cards to measure').toBeGreaterThan(0);
+        expect(result.faults).toEqual([]);
+    });
+}
