@@ -241,7 +241,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Callback token').fill(PAYOUT_TICK);
             await main.getByLabel('Payout per unit').fill(PAYOUT_AMOUNT);
             await main.getByLabel('Callback allowed from block').fill(String(cbBlock));
-            await main.getByRole('button', { name: 'Update token', exact: true }).click();
+            await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             await approveConfirm(page, 'the callback settings update');
             const txid = await readDoneTxid(page);

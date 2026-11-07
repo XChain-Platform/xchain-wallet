@@ -282,7 +282,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Callback token').fill(PAYOUT_TICK);
             await main.getByLabel('Payout per unit').fill(String(PAYOUT_AMOUNT));
             await main.getByLabel('Callback allowed from block').fill(String(callbackBlock));
-            await main.getByRole('button', { name: 'Update token', exact: true }).click();
+            await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             const update = await waitForValidAction(
                 await approveAndReadTxid(ownerPage, 'the callback settings update'),

@@ -174,6 +174,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     });
 
     const ticker = initialTick || '';
+    const tokenSubject = ticker || 'This token';
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
@@ -361,7 +362,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     ? `${cbAmount} ${cbTick} per unit of ${ticker}`
                     : termsUnread
                         ? t('balances.unavailable')
-                        : <em>No callback configured for {ticker}.</em>}
+                        : <em>No callback configured for {ticker || 'this token'}.</em>}
             </dd>
             {cbBlock != null ? (
                 <>
@@ -961,7 +962,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
             {termsUnread ? null : !configComplete ? (
                 <FormNotice variant="warning" role="alert">
-                    {`${ticker} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
+                    {`${tokenSubject} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
                 </FormNotice>
             ) : !blockReached ? (
                 <FormNotice variant="warning" role="alert">

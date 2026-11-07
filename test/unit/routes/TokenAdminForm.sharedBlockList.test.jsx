@@ -113,7 +113,7 @@ describe('TokenAdminForm shared block lists', () => {
 
         expect(await screen.findByText(/List #204 \(shared from LTC list #9\)/)).toBeTruthy();
         expect(screen.getByText(/3 members/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Update token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update access lists' }));
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
         expect(composeForConfirm.mock.calls[0][0].actionData).toEqual({

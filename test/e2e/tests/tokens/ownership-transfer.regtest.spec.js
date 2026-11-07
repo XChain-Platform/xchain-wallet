@@ -166,7 +166,7 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
             const destination = main.getByLabel('New owner address');
             await expect(destination).toBeVisible({ timeout: 30_000 });
             await destination.fill(newOwner);
-            await main.getByRole('button', { name: 'Update token', exact: true }).click();
+            await main.getByRole('button', { name: 'Transfer ownership', exact: true }).click();
 
             await expectConfirmModal(page, 'the ownership transfer');
             await expect(page.getByTestId('action-intent'))

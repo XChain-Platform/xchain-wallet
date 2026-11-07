@@ -1490,7 +1490,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Update token' : 'Preview'}
+                    {singleEncode ? MODE_SUBMIT_LABEL[mode] : 'Preview'}
                 </Button>
             )}
         >
@@ -2023,6 +2023,16 @@ const MODE_LABEL = {
     'callback-settings': 'Callback settings',
     'access-lists': 'Access lists',
     'bridge-settings': 'Bridge settings',
+};
+
+const MODE_SUBMIT_LABEL = {
+    lock: 'Lock token',
+    description: 'Update description',
+    transfer: 'Transfer ownership',
+    'mint-settings': 'Update mint settings',
+    'callback-settings': 'Update callback settings',
+    'access-lists': 'Update access lists',
+    'bridge-settings': 'Update bridge settings',
 };
 
 const MODE_LABEL_LOWER = {

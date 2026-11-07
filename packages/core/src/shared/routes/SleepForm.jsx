@@ -663,7 +663,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     const stateLine = sleepRead === 'ready' ? (
         <p className={styles.hint}>
-            {isTick ? `${ticker} is currently ` : 'This address is currently '}
+            {isTick ? `${ticker || 'This token'} is currently ` : 'This address is currently '}
             {currentState.paused
                 ? (currentState.indefinite
                     ? 'PAUSED indefinitely.'

@@ -67,7 +67,7 @@ function mountMintSettings(tokenInfo = Promise.resolve(TOKEN_INFO)) {
 // address list resolves and a mint field holds text, and a click on a
 // disabled button is silently dropped.
 async function submitWhenEnabled() {
-    const button = screen.getByRole('button', { name: /update token/i });
+    const button = screen.getByRole('button', { name: /update mint settings/i });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
 }
@@ -235,10 +235,10 @@ describe('TokenAdminForm callback payout token', () => {
         fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: tick } });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '950000' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: /update token/i })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: /update callback settings/i })).toBeEnabled());
         // Let the payout token lookup settle before submitting.
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        fireEvent.click(screen.getByRole('button', { name: /update callback settings/i }));
     }
 
     it('refuses the chain coin as the payout token', async () => {

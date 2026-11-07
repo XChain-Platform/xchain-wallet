@@ -142,7 +142,7 @@ describe('TokenAdminForm description rules', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('New description'), { target: { value: 'one;two' } });
-        const button = screen.getByRole('button', { name: /update token/i });
+        const button = screen.getByRole('button', { name: /update description/i });
         await waitFor(() => expect(button).toBeEnabled());
         fireEvent.click(button);
 

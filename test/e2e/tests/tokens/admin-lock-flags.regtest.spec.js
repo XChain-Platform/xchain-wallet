@@ -164,7 +164,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('set LOCK_MAX_MINT, LOCK_MINT_SUPPLY, LOCK_SLEEP, and LOCK_CALLBACK', async () => {
             await openTokenAdmin(page, 'Lock');
             const main = page.getByRole('main');
-            const submit = main.getByRole('button', { name: 'Update token', exact: true });
+            const submit = main.getByRole('button', { name: 'Lock token', exact: true });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
             const locks = [
@@ -246,7 +246,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByLabel('Callback token')).toBeDisabled();
             await expect(main.getByLabel('Payout per unit')).toBeDisabled();
             await expect(main.getByLabel('Callback allowed from block')).toBeDisabled();
-            await expect(main.getByRole('button', { name: 'Update token', exact: true }))
+            await expect(main.getByRole('button', { name: 'Update callback settings', exact: true }))
                 .toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });

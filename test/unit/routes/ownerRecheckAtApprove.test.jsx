@@ -130,7 +130,7 @@ describe('Access lists reads the owner again at Approve', () => {
     async function bindBlockList() {
         fireEvent.click(await screen.findByRole('button', { name: /Choose block-list/ }));
         fireEvent.click(await screen.findByText(/Address list #42/));
-        const update = await screen.findByRole('button', { name: 'Update token' });
+        const update = await screen.findByRole('button', { name: 'Update access lists' });
         await waitFor(() => expect(update).toBeEnabled());
         fireEvent.click(update);
     }

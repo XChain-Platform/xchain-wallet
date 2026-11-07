@@ -463,7 +463,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // absent.
             await openTokenAdmin(page, 'Lock', MINTABLE_TICK);
             const form = page.getByRole('main');
-            const submit = form.getByRole('button', { name: 'Update token' });
+            const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
             const descriptionLock = form.getByRole('checkbox', { name: /^Description/ });
@@ -583,7 +583,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('lock MINTING, which is the one flag that forbids it', async () => {
             await openTokenAdmin(page, 'Lock', LOCKMINT_TICK);
             const form = page.getByRole('main');
-            const submit = form.getByRole('button', { name: 'Update token' });
+            const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
             // D-165's gate again, on a different flag: the typed word is

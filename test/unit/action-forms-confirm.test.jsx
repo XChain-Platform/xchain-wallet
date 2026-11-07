@@ -728,7 +728,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update token',
+            actionLabel: 'Update description',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
         });
         expectSingleEncode(calls, {
@@ -1302,7 +1302,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update token',
+            actionLabel: 'Update description',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
             software: 'issueToken',
             hardware: 'issueTokenHw',
