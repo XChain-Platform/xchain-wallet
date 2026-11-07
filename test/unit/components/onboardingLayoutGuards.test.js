@@ -94,7 +94,8 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingSource).toContain('label="Wallet setup"');
         expect(onboardingSource).toContain('title="License agreement"');
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
-        expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*row;/s);
+        expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
+        expect(onboardingCss).not.toMatch(/min\(\s*40%\s*,\s*140px\s*\)/);
         expect(onboardingSource.match(/stackedActions/g)).toHaveLength(3);
         expect(createWalletSource).not.toContain('<header className={headClass}>');
         expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);

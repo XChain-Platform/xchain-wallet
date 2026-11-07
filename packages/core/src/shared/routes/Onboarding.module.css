@@ -12,28 +12,24 @@
     margin-bottom: var(--xc-space-4);
 }
 
+/* The welcome brand is one centred stack: the full-size logo, then the
+   title, then the tagline; the logo's own bottom margin spaces it from the title. */
 .welcomeHeader {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
-    text-align: start;
-}
-
-.welcomeHeader > .logoPopup,
-.welcomeHeader > .logoFull {
-    width: min(40%, 140px);
-    margin: 0;
-    flex: 0 1 auto;
+    text-align: center;
 }
 
 .welcomeCopy {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: var(--xc-space-1);
+    width: 100%;
     min-width: 0;
 }
 
