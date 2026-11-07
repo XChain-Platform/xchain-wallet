@@ -146,10 +146,10 @@ describe('Receive keyboard operation', () => {
 
         const addressType = await screen.findByRole('combobox', { name: 'Address type' });
         addressType.focus();
-        // The QR actions sit together below the address and above the request fields.
+        // The address picker sits on the address label row, before its field.
         const expected = [
-            screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
+            screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Copy payment link' }),
             screen.getByRole('button', { name: 'Share QR payment link' }),
             screen.getByRole('link', { name: 'View address in block explorer' }),
@@ -178,8 +178,8 @@ describe('Receive keyboard operation', () => {
             await waitFor(() => expect(copy).not.toBeDisabled());
             addressType.focus();
             const expected = [
-                screen.getByRole('textbox', { name: 'Deposits' }),
                 screen.getByRole('button', { name: 'Choose receive address' }),
+                screen.getByRole('textbox', { name: 'Deposits' }),
                 copy,
                 screen.getByRole('button', { name: 'Share QR payment link' }),
                 screen.getByRole('link', { name: 'View address in block explorer' }),

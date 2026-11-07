@@ -114,7 +114,7 @@ describe('protocol form keyboard operation', () => {
         const outcome0 = utils.getByLabelText('Outcome 0');
         const outcome1 = utils.getByLabelText('Outcome 1');
 
-        await expectTabSequence(user, [network, oracle, chooseOracle, token, label, outcome0, outcome1]);
+        await expectTabSequence(user, [network, chooseOracle, oracle, token, label, outcome0, outcome1]);
 
         label.focus();
         await user.keyboard('{Enter}');
@@ -148,7 +148,7 @@ describe('protocol form keyboard operation', () => {
         const memo = utils.getByLabelText('Memo (optional)');
 
         await expectTabSequence(user, [
-            network, delegateMode, clearMode, from, chooseSource, token, delegateTo, contacts, memo,
+            network, delegateMode, clearMode, chooseSource, from, token, contacts, delegateTo, memo,
         ]);
 
         memo.focus();
@@ -175,7 +175,7 @@ describe('protocol form keyboard operation', () => {
         const amount = utils.getByLabelText('Amount (XCHAIN)');
         const pubkey = utils.getByLabelText('Signing public key');
 
-        await expectTabSequence(user, [network, from, chooseSource, newStake, topUp, amount, pubkey]);
+        await expectTabSequence(user, [network, chooseSource, from, newStake, topUp, amount, pubkey]);
 
         pubkey.focus();
         await user.keyboard('{Enter}');
@@ -202,7 +202,7 @@ describe('protocol form keyboard operation', () => {
         const picker = utils.getByRole('button', { name: 'Add from token picker' });
         const memo = utils.getByLabelText('Memo (optional)');
 
-        await expectTabSequence(user, [network, from, chooseSource, listType, tokens, picker, memo]);
+        await expectTabSequence(user, [network, chooseSource, from, listType, tokens, picker, memo]);
 
         memo.focus();
         await user.keyboard('{Enter}');

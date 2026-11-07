@@ -21,8 +21,8 @@ const ICONS = {
 };
 
 /**
- * AddressField: an address input with an optional trailing icon action
- * inside the field. The two canonical icon uses:
+ * AddressField: an address input with an optional icon action on its label
+ * row. The two canonical icon uses:
  *
  *   - To ("contacts"): outbound destination. The field accepts typed or
  *     pasted addresses; the address-book icon navigates to the user's
@@ -33,7 +33,7 @@ const ICONS = {
  *     icon navigates to the wallet's own address list (the same screen
  *     as change-address) to select one.
  *
- * The component renders the field + icon only; the host owns the picker
+ * The component renders the field + label action only; the host owns the picker
  * screen the icon navigates to and writes the result back via
  * `value` / `onChange` (To) or its own selection state (From).
  *
@@ -80,10 +80,6 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
     ].filter(Boolean).join(' ');
 
-    const endRoom = IconComponent
-        ? 'calc(var(--address-control-height) + var(--xc-space-2))'
-        : null;
-
     const handlePaste = (event) => {
         onPaste?.(event);
         if (event.defaultPrevented || typeof onChange !== 'function') return;
@@ -108,14 +104,23 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                 label={label}
                 size={size}
                 disabled={disabled}
+                labelAction={IconComponent ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={<IconComponent />}
+                        onClick={onIconClick}
+                        disabled={disabled}
+                        aria-label={iconLabel || defaultLabel}
+                        title={iconLabel || defaultLabel}
+                    />
+                ) : null}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={endRoom ? {
-                    '--address-end-room': endRoom,
-                    ...style,
-                } : style}
+                style={style}
                 title={showReadOnlyAddress ? value : undefined}
                 value={value}
                 onChange={onChange}
@@ -128,20 +133,6 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">
                     <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
-                </span>
-            ) : null}
-            {IconComponent ? (
-                <span className={styles.iconButton}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size={size}
-                        icon={<IconComponent />}
-                        onClick={onIconClick}
-                        disabled={disabled}
-                        aria-label={iconLabel || defaultLabel}
-                        title={iconLabel || defaultLabel}
-                    />
                 </span>
             ) : null}
         </div>

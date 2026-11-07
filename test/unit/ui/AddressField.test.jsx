@@ -32,7 +32,7 @@ function ControlledField(props) {
 }
 
 describe('<AddressField>', () => {
-    it.each([320, 360])('keeps the destination icon action clear of text at %ipx', (width) => {
+    it.each([320, 360])('keeps the destination icon action on the label row at %ipx', (width) => {
         render(
             <div style={{ width }}>
                 <AddressCombobox
@@ -46,13 +46,17 @@ describe('<AddressField>', () => {
         );
 
         const input = screen.getByRole('combobox', { name: 'To' });
-        expect(input.style.getPropertyValue('--address-end-room'))
-            .toBe('calc(var(--address-control-height) + var(--xc-space-2))');
-        expect(screen.getByRole('button', { name: 'Open address book' })).toBeInTheDocument();
+        const label = document.querySelector(`label[for="${input.id}"]`);
+        const action = screen.getByRole('button', { name: 'Open address book' });
+        expect(label.parentElement).toContainElement(action);
+        expect(label).not.toContainElement(action);
+        expect(input.parentElement).not.toContainElement(action);
+        expect(action.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(input.style.getPropertyValue('--address-end-room')).toBe('');
         expect(addressComboboxStyles).toMatch(/\.wrap input\s*\{[^}]*min-width:\s*0/s);
     });
 
-    it.each(['md', 'lg'])('gives the input and inline actions the same %s size class', (size) => {
+    it.each(['md', 'lg'])('keeps a %s input with a small label-row action', (size) => {
         const { unmount } = render(
             <AddressField
                 label="From"
@@ -67,7 +71,7 @@ describe('<AddressField>', () => {
         const input = screen.getByLabelText('From');
         expect(input.parentElement.parentElement).toHaveClass(inputStyles[size]);
         expect(screen.getByRole('button', { name: 'Choose address' }))
-            .toHaveClass(buttonStyles[size]);
+            .toHaveClass(buttonStyles.sm);
         unmount();
 
         render(

@@ -4,13 +4,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-/* AddressField: Input + one trailing icon action inside the field.
- * The icon button is anchored over the input box only, never the
- * hint/error lines below it: the wrapper is a grid whose control row holds
- * the input, and the icon and the read-only preview are placed on that row,
- * so a label that wraps under large text moves them with the input. Sizes
- * follow the selected shared Button/Input size contract. Adapted from Send's
- * .inlineContactsButton, which this component supersedes. */
+/* AddressField: Input + a read-only address preview over the control row.
+ * Picker actions belong to Input's labelAction slot, outside the text box. */
 
 .wrap {
     --address-control-height: var(--xc-control-h-md);
@@ -59,36 +54,15 @@
     line-height: 20px;
 }
 
-/* The input is forced left to right so an address always reads in order, which
-   makes its logical sides run opposite to the wrapper's in an RTL app. The
-   actions sit at the wrapper's end edge (the physical left in RTL), so the room
-   for them is reserved on whichever side of the input that is. */
+/* The input is forced left to right so an address always reads in order. */
 .wrap input {
-    padding-inline-end: var(--address-end-room, var(--address-control-padding-x));
+    padding-inline-end: var(--address-control-padding-x);
 }
 
 :global([dir='rtl']) .wrap input {
-    padding-inline-start: var(--address-end-room, var(--address-control-padding-x));
+    padding-inline-start: var(--address-control-padding-x);
     padding-inline-end: var(--address-control-padding-x);
     text-align: end;
-}
-
-.iconButton {
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    grid-column: 1;
-    grid-row: var(--address-control-row);
-    inset-inline-end: 0;
-    top: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.iconButton > button {
-    background: transparent;
-    border-color: transparent;
-    color: var(--xc-text-muted);
 }
 
 .readOnly input {
@@ -99,7 +73,7 @@
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
     inset-inline-start: var(--address-control-padding-x);
-    inset-inline-end: calc(var(--address-control-height) + var(--xc-space-2));
+    inset-inline-end: var(--address-control-padding-x);
     grid-column: 1;
     grid-row: var(--address-control-row);
     top: 0;
@@ -122,8 +96,7 @@
 /* Receive keeps the complete address visible. The taller field gives common
  * Bech32 and Base58 addresses room to wrap without colliding with the picker. */
 .wrappedReadOnly input,
-.wrappedReadOnly .readOnlyValue,
-.wrappedReadOnly .iconButton {
+.wrappedReadOnly .readOnlyValue {
     min-height: 4rem;
 }
 
@@ -145,16 +118,4 @@
 
 .readOnly > :first-child:focus-within + .readOnlyValue {
     visibility: hidden;
-}
-
-.iconButton > button:hover:not(:disabled),
-.iconButton > button:focus-visible {
-    background: transparent;
-    border-color: transparent;
-    color: var(--xc-text);
-}
-
-.iconButton > button:disabled {
-    background: transparent;
-    border-color: transparent;
 }

@@ -88,6 +88,9 @@ export function inspectFieldPaste(value) {
  * @property {string | number} [errorKey]
  * @property {string} [id]
  * @property {string} [compactPlaceholder] concise phone-width placeholder; long placeholders default to the field's accessible name.
+ * @property {import('react').ReactNode} [labelAction] one small control (an
+ *   icon button such as Scan) drawn at the end of the label row, outside the
+ *   box. Needs `label`.
  * @property {boolean} [pasteGuard] guards address-style text fields; decimal and number fields are guarded automatically.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'sm' | 'md' | 'lg'} [size] field size; defaults to 'md'.
@@ -100,6 +103,7 @@ export const Input = forwardRef(function Input(
         error,
         errorKey,
         id,
+        labelAction,
         compactPlaceholder,
         optional = false,
         size = 'md',
@@ -141,6 +145,7 @@ export const Input = forwardRef(function Input(
         required,
         ariaRequired: externalRequired,
     });
+    const hasLabelAction = labelAction != null && labelAction !== false;
     const [dismissedError, setDismissedError] = useState(null);
     const errorIsDismissed = dismissedError !== null && dismissedError.message === error
         && Object.is(dismissedError.key, errorKey);
@@ -316,7 +321,14 @@ export const Input = forwardRef(function Input(
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
-            {label ? (
+            {label && hasLabelAction ? (
+                <div className={styles.labelRow}>
+                    <label htmlFor={inputId} className={styles.label}>
+                        {requirement.label}
+                    </label>
+                    <div className={styles.labelAction}>{labelAction}</div>
+                </div>
+            ) : label ? (
                 <label htmlFor={inputId} className={styles.label}>
                     {requirement.label}
                 </label>

@@ -20,61 +20,13 @@
     --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
 }
 
-/* Trailing in-field icon button, anchored over the input box only (never
- * the hint/error lines below it), keyed to the pinned label metrics
- * (20px label line + space-1 gap) and the selected Input size contract.
- * Mirrors AddressField.iconButton. */
-.wrap label {
-    line-height: 20px;
-}
-
-/* The input is forced left to right so an address always reads in order, which
-   makes its logical sides run opposite to the wrapper's in an RTL app. The
-   actions sit at the wrapper's end edge (the physical left in RTL), so the room
-   for them is reserved on whichever side of the input that is. */
+/* The input is forced left to right so an address always reads in order. */
 .wrap input {
     min-width: 0;
-    padding-inline-end: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
 }
 
 :global([dir='rtl']) .wrap input {
-    padding-inline-start: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
-    padding-inline-end: var(--xc-control-pad-x-md, 12px);
     text-align: end;
-}
-
-.iconButton {
-    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
-       min-height or height here may raise it. */
-    min-block-size: var(--xc-tap-min);
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: 0;
-    top: calc(20px + var(--xc-space-1));
-    width: var(--address-control-height);
-    height: var(--address-control-height);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    border-radius: var(--xc-control-radius);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-.noLabel .iconButton {
-    top: 0;
-}
-
-.iconButton:hover:not(:disabled) {
-    color: var(--xc-text);
-}
-
-.iconButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 .dropdown {

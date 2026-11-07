@@ -218,17 +218,9 @@ describe('<Button>', () => {
             const css = readCss(`ui/${component}.module.css`);
             const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
             expect(source).toMatch(/styles\[size\] \|\| ''/);
-            if (component === 'AddressField') {
-                // The end padding clears the icon action.
-                expect(source).toMatch(/'--address-end-room': endRoom/);
-                expect(source).toMatch(
-                    /'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
-                );
-            } else {
-                expect(source).toMatch(
-                    /'--address-end-room': 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
-                );
-            }
+            expect(source).toMatch(/labelAction=\{IconComponent/);
+            expect(source).toMatch(/<Button[\s\S]*?variant="ghost"[\s\S]*?size="sm"/);
+            expect(source).not.toMatch(/--address-end-room/);
             for (const size of ['sm', 'md', 'lg']) {
                 const block = css.match(new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
                 expect(block).toMatch(new RegExp(
@@ -238,19 +230,7 @@ describe('<Button>', () => {
                     `--xc-icon-size:\\s*var\\(--xc-control-icon-${size},`,
                 ));
             }
-            const iconButton = css.match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
-            expect(iconButton).toMatch(/align-items:\s*center/);
-            expect(iconButton).toMatch(/justify-content:\s*center/);
-            if (component === 'AddressField') {
-                // AddressField wraps the kit Button, which takes its square box from the size prop.
-                expect(source).toMatch(/<Button[\s\S]*?size=\{size\}/);
-                continue;
-            }
-            expect(iconButton).toMatch(/width:\s*var\(--address-control-height\)/);
-            expect(iconButton).toMatch(/height:\s*var\(--address-control-height\)/);
-            expect(iconButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
-            expect(iconButton).toMatch(/align-items:\s*center/);
-            expect(iconButton).toMatch(/justify-content:\s*center/);
+            expect(css).not.toMatch(/\.iconButton\s*\{/);
         }
 
         const amountCss = readCss('shared/components/AmountField.module.css');

@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Content drawn over a kit Input (the read-only address preview, a picker
-// icon, the password toggle) must stack above the input. The input is
+// Content drawn over a kit Input (the read-only address preview and password
+// toggle) must stack above the input. The input is
 // positioned and has an opaque background, so an overlay without its own
 // layer above the input's paints underneath it: on the phone the From and
 // Receive address fields rendered as empty white boxes.
@@ -20,7 +20,6 @@ const css = (path) => readFileSync(path, 'utf8');
 const tokens = css('packages/core/src/ui/tokens.css');
 const inputCss = css('packages/core/src/ui/Input.module.css');
 const addressFieldCss = css('packages/core/src/ui/AddressField.module.css');
-const comboboxCss = css('packages/core/src/ui/AddressCombobox.module.css');
 
 function ruleBody(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -54,8 +53,6 @@ const inputLayer = zIndexOf(ruleBody(inputCss, '.controlHitArea > .input'));
 describe('overlays drawn on a kit Input', () => {
     it.each([
         ['AddressField address preview', addressFieldCss, '.readOnlyValue'],
-        ['AddressField picker icon', addressFieldCss, '.iconButton'],
-        ['AddressCombobox picker icon', comboboxCss, '.iconButton'],
         ['Input password show and hide toggle', inputCss, '.revealToggle'],
     ])('stacks the %s above the input', (_name, text, selector) => {
         const body = ruleBody(text, selector);
@@ -63,7 +60,7 @@ describe('overlays drawn on a kit Input', () => {
         expect(zIndexOf(body)).toBeGreaterThan(inputLayer);
     });
 
-    it('renders the read-only address and its picker icon over the input', () => {
+    it('renders the read-only address over the input and its picker on the label row', () => {
         const { container } = render(
             <AddressField
                 label="From"
@@ -76,18 +73,16 @@ describe('overlays drawn on a kit Input', () => {
 
         const input = screen.getByLabelText('From');
         const preview = container.querySelector('[class*="readOnlyValue"]');
-        const icon = container.querySelector('[class*="iconButton"]');
+        const icon = screen.getByRole('button', { name: 'Choose address' });
+        const label = document.querySelector(`label[for="${input.id}"]`);
 
         expect(preview).not.toBeNull();
         // The single-line preview truncates the middle of the address.
         expect(preview.textContent).toMatch(/^bc1qso.*acking$/);
-        expect(icon).not.toBeNull();
-        expect(icon.querySelector('button')).not.toBeNull();
+        expect(label.parentElement).toContainElement(icon);
+        expect(input.parentElement).not.toContainElement(icon);
         // The preview duplicates the input value, so it is not a second tab stop.
         expect(preview.querySelector('[tabindex]')).toBeNull();
-        // Equal layers paint in tree order, so both overlays also follow the input.
-        for (const overlay of [preview, icon]) {
-            expect(input.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        }
+        expect(input.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });

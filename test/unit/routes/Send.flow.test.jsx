@@ -681,10 +681,11 @@ describe('Send flow with mocked messaging', () => {
         const messaging = mount();
         await screen.findByLabelText('From');
         const destination = await screen.findByLabelText(/^To$/);
-        destination.focus();
+        const contacts = screen.getByRole('button', { name: 'Open address book' });
+        contacts.focus();
 
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
+        expect(document.activeElement).toBe(destination);
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
