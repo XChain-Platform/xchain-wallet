@@ -16,6 +16,7 @@ const tabsCss = readFileSync(
 );
 
 const widgetFailure = vi.hoisted(() => ({ current: null }));
+const collectibleKeys = vi.hoisted(() => new Set());
 let consoleError;
 const preventExpectedError = (event) => event.preventDefault();
 
@@ -49,7 +50,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => {
     return { useMessaging: () => value };
 });
 vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => ({
-    useCollectibleKeys: () => new Set(),
+    useCollectibleKeys: () => collectibleKeys,
 }));
 vi.mock('@xchain-wallet/core/flows', () => ({
     isDemoWallet: (walletId) => walletId === 'demo-wallet',
@@ -91,6 +92,7 @@ function TablistKeyboard({ children }) {
 }
 
 beforeEach(() => {
+    collectibleKeys.clear();
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventExpectedError);
 });
@@ -174,12 +176,33 @@ describe('HomeTabs empty states', () => {
         expect(screen.getByTestId('balance-pending')).toHaveTextContent('0.25000000 pending');
     });
 
-    it('shows only the empty card on an empty NFTs tab', () => {
-        mount('real-wallet');
+    it.each([
+        ['without NFT holdings', {}, null],
+        ['with NFT holdings', {
+            'bitcoin-mainnet': [{
+                address: 'bc1qcollectible',
+                balances: {
+                    tokens: [{
+                        tick: 'RARE',
+                        displayName: 'Rare collectible',
+                        quantity: '1',
+                        divisibility: 0,
+                    }],
+                },
+            }],
+        }, 'bitcoin-mainnet:RARE'],
+    ])('shows no NFT explainer %s', (_label, balances, collectibleKey) => {
+        if (collectibleKey) collectibleKeys.add(collectibleKey);
+        mount('real-wallet', { balances });
         fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
 
-        expect(screen.getByText('No collectibles yet')).toBeTruthy();
+        if (collectibleKey) {
+            expect(screen.getByText('Rare collectible')).toBeTruthy();
+        } else {
+            expect(screen.getByText('No collectibles yet')).toBeTruthy();
+        }
         expect(screen.queryByText(/can never be split/i)).toBeNull();
+        expect(screen.queryByText(/indivisible token with permanently locked supply/i)).toBeNull();
     });
 
     it('keeps the DeFi tab with its empty state for a real wallet', () => {
