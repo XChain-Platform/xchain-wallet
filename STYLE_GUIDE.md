@@ -62,11 +62,12 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `480px` | compact grids and dense controls |
 | `600px` | the form and narrow route boundary |
 | `640px` | rail layout and sidebar begin |
+| `834px` | wide licence terms use a centred two-thirds content column |
 | `900px` | full layout and labelled sidebar begin |
 | `48rem` | wide collectible grids |
 | `1024px` | desktop reference frame and future desktop-only refinements |
 
-The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `834px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
 
 ### The list rule: full width to the scrollbar
 

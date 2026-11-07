@@ -124,10 +124,9 @@
 }
 
 .licenseScroll {
-    /* The licence terms sit in an outline card whose text reaches its inner
-       border edge, so the panel composes the flush card: the same outline
-       with no inset. */
-    composes: flush from '../../ui/Card.module.css';
+    /* The licence terms sit in the shared padded card, so the text never
+       touches the card's edge at any width. */
+    composes: card from '../../ui/Card.module.css';
     /* The card wraps the terms text with no blank space below it, and the
        acknowledgement and Accept and continue sit directly under it. On a
        screen too short for the whole text the panel shrinks to the height
@@ -150,6 +149,30 @@
 .licenseScroll:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) / 2);
+}
+
+/* From 834px the terms read as a centred card two-thirds of the available
+   width that wraps only the text: the card grows with its text up to the
+   height left and scrolls past it, and the checkbox follows it directly. */
+@media (min-width: 834px) {
+    .licenseGate {
+        width: calc(100% * 2 / 3);
+        max-width: calc(100% * 2 / 3);
+    }
+
+    .licenseScroll {
+        flex: 0 1 auto;
+        max-height: 100%;
+    }
+
+    /* The filled form body stops at its content instead of taking the free
+       height, so Accept and continue follows the terms directly; the body
+       still shrinks and scrolls when the terms are taller than the window.
+       The element prefix outranks FormPage's own fill rule whatever order
+       the bundle loads the two modules in. */
+    form.licenseForm > [data-form-stack] {
+        flex: 0 1 auto;
+    }
 }
 
 .licenseParagraph {
@@ -208,6 +231,18 @@
 
     .licenseActions > button {
         width: auto;
+    }
+}
+
+/* From 834px the action row sits outside the gate (FormPage renders actions
+   after the body), so it takes the same centred two-thirds column as the
+   terms card and Accept and continue ends on the card's end edge. A max-width
+   with auto inline margins outranks the stacked row's full width in any
+   bundle order. */
+@media (min-width: 834px) {
+    .licenseActions {
+        max-width: calc(100% * 2 / 3);
+        margin-inline: auto;
     }
 }
 

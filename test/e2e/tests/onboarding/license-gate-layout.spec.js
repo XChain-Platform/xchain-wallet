@@ -15,6 +15,8 @@ const VIEWPORTS = [
 ];
 
 const PIXEL_TOLERANCE = 1;
+// Layouts this wide put the terms in a two-thirds card (U32).
+const TWO_THIRDS_MIN_WIDTH = 834;
 
 async function settleGate(form) {
     await form.evaluate(async (element) => {
@@ -89,7 +91,7 @@ async function expectScrollGate(terms, acknowledgement) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`license gate fills ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`license gate keeps Accept under the terms at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize(viewport);
         await page.goto('/');
 
@@ -105,19 +107,26 @@ for (const viewport of VIEWPORTS) {
         const layout = await measureGate(form);
         const bottomGap = viewport.height - layout.button.bottom;
         expect(bottomGap).toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
-        expect(bottomGap).toBeLessThanOrEqual(24);
+        // U48: at every width, phones included, Accept and continue sits
+        // directly under the acknowledgement, one form gap below it; it is
+        // never pinned to the bottom of a tall screen with a gap above it.
+        expect(layout.button.top).toBeGreaterThan(layout.acknowledgement.bottom);
+        expect(layout.button.top - layout.acknowledgement.bottom)
+            .toBeLessThanOrEqual(layout.formGap + PIXEL_TOLERANCE);
 
         expect(layout.terms.top - layout.hero.bottom)
             .toBeCloseTo(layout.formGap + layout.heroMarginBottom, 0);
+        // The checkbox sits directly under the terms card at every width.
         expect(layout.acknowledgement.top - layout.terms.bottom)
             .toBeCloseTo(layout.gap, 0);
         expect(layout.terms.height).toBeGreaterThan(0);
 
-        if (viewport.width === 1280) {
-            expect(layout.terms.width).toBeGreaterThan(560);
-            expect(Math.abs(layout.terms.left - layout.form.left))
+        if (viewport.width >= TWO_THIRDS_MIN_WIDTH) {
+            // U32: from 834px the terms card takes two-thirds of the form
+            // width, centred, and the actions follow it down the page.
+            expect(Math.abs(layout.terms.width - (layout.form.width * 2) / 3))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
-            expect(Math.abs(layout.form.right - layout.terms.right))
+            expect(Math.abs((layout.terms.left - layout.form.left) - (layout.form.right - layout.terms.right)))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
         }
 

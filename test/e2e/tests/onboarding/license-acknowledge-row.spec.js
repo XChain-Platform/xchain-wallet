@@ -73,27 +73,32 @@ for (const viewport of VIEWPORTS) {
             );
         });
 
-        if (viewport.name === 'desktop') {
-            const widths = await form.evaluate((element) => {
+        let termsBox;
+        if (viewport.width >= 834) {
+            const layout = await form.evaluate((element) => {
                 const termsPanel = element.querySelector('[aria-label="License terms"]');
                 const paragraphs = [...termsPanel.querySelectorAll('p')];
                 return {
                     form: element.getBoundingClientRect().width,
                     terms: termsPanel.getBoundingClientRect().width,
+                    termsBox: termsPanel.getBoundingClientRect().toJSON(),
                     narrowestParagraph: Math.min(
                         ...paragraphs.map((paragraph) => paragraph.getBoundingClientRect().width),
                     ),
                 };
             });
-            expect(widths.terms).toBeGreaterThanOrEqual(widths.form * 0.9);
-            expect(widths.narrowestParagraph).toBeGreaterThanOrEqual(widths.terms * 0.9);
+            expect(Math.abs(layout.terms - (layout.form * 2) / 3)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.narrowestParagraph).toBeGreaterThanOrEqual(layout.terms * 0.9);
+            termsBox = layout.termsBox;
         }
 
         const buttonBox = await accept.boundingBox();
         expect(buttonBox).not.toBeNull();
-        expect(viewport.height - buttonBox.y - buttonBox.height)
-            .toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
-        expect(viewport.height - buttonBox.y - buttonBox.height).toBeLessThanOrEqual(24);
+        if (termsBox) {
+            const gapBelowTerms = buttonBox.y - (termsBox.y + termsBox.height);
+            expect(gapBelowTerms).toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
+            expect(gapBelowTerms).toBeLessThanOrEqual(96);
+        }
 
         await expect(accept).toBeDisabled();
 

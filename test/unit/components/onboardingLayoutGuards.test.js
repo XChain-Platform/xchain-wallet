@@ -83,14 +83,36 @@ describe('onboarding and Home layout guards', () => {
         expect(lockedCss).not.toMatch(/\.hero\s*\{[^}]*padding:/s);
         expect(onboardingCss).not.toMatch(/\.hero(?:Popup|Full)\s*\{[^}]*padding:/s);
         expect(onboardingCss).not.toMatch(/\.heroFull\s*\{[^}]*(?:max-width|margin):/s);
-        expect(onboardingCss).not.toMatch(/\.licenseGate\s*\{[^}]*max-width:/s);
+        // Below 834px the licence gate keeps the full width; only the wide
+        // tier narrows it.
+        expect(onboardingCss).not.toMatch(/^\.licenseGate\s*\{[^}]*max-width:/m);
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
         expect(onboardingSource).toContain('label="License agreement"');
-        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\s+fullWidth\b/);
-        // The terms panel wraps its text and shrinks only when the screen is short;
-        // it never caps itself at a fraction of the screen.
-        expect(onboardingCss).not.toMatch(/\.licenseScroll\s*\{[^}]*max-height:/s);
-        expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*0 1 auto/s);
+        // From 834px the terms card narrows to two-thirds of the lane in CSS
+        // (U32); below it the form keeps the full lane width.
+        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\b/);
+        // The top-level terms panel never caps itself at a fraction of the
+        // screen; only the wide tier bounds it to the gate height.
+        expect(onboardingCss).not.toMatch(/^\.licenseScroll\s*\{[^}]*max-height:/m);
+        // The terms are a padded card at every width (U33).
+        expect(onboardingCss).toMatch(/^\.licenseScroll\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css';/m);
+        // From 834px the gate takes two-thirds of the width and the card
+        // wraps its text, so the checkbox follows it directly.
+        const wideLicense = onboardingCss.match(/@media \(min-width: 834px\) \{\n((?: {4}.*\n|\n)*)\}/)?.[1] ?? '';
+        expect(wideLicense).toMatch(/\.licenseGate\s*\{[^}]*width:\s*calc\(100% \* 2 \/ 3\);/s);
+        expect(wideLicense).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*0 1 auto;/s);
+        // The filled form body stops at its content, so Accept and continue
+        // follows the card instead of the bottom of a tall window.
+        expect(wideLicense).toMatch(/form\.licenseForm > \[data-form-stack\]\s*\{[^}]*flex:\s*0 1 auto;/s);
+        expect(onboardingSource).toMatch(/label="License agreement"\s+fill\s+fullWidth\s+className=\{styles\.licenseForm\}/);
+        // At every width, phones included, the card wraps its text and the
+        // checkbox and Accept follow it directly (U48); the panel only shrinks
+        // and scrolls on a screen too short for the whole text. It never
+        // fills the free height to pin Accept to the bottom.
+        const licenseScrollBase = onboardingCss.match(/(?:^|\n)\.licenseScroll\s*\{[^}]*\}/)?.[0] ?? '';
+        expect(licenseScrollBase).toMatch(/flex:\s*0 1 auto/);
+        expect(licenseScrollBase).not.toMatch(/flex:\s*1 1 auto/);
+        expect(wideLicense).not.toMatch(/flex:\s*1 1 auto/);
         expect(onboardingSource).toContain('label="Wallet setup"');
         expect(onboardingSource).toContain('title="License agreement"');
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');

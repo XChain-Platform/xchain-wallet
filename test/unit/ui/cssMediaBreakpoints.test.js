@@ -12,7 +12,7 @@ import { cachedSourceFiles } from '../../helpers/sourceScan.js';
 
 const root = join(process.cwd(), 'packages', 'core', 'src');
 const guide = readFileSync(join(process.cwd(), 'STYLE_GUIDE.md'), 'utf8');
-const documented = ['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '1024px'];
+const documented = ['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '834px', '1024px'];
 const MEDIA_QUERY_PATTERN = /@media\s+([^\{]+)/g;
 const WIDTH_PATTERNS = [
     /(?:min-|max-)?width\s*:\s*([\d.]+(?:px|rem|em))\b/g,
@@ -45,6 +45,7 @@ describe('core CSS module media breakpoints', () => {
             '48rem',
             '600px',
             '640px',
+            '834px',
         ]);
         for (const width of documented) expect(guide).toContain(`| \`${width}\` |`);
     });

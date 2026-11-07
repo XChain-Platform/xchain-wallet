@@ -418,6 +418,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     label={t('onboarding.licenseAgreement')}
                     fill
                     fullWidth
+                    className={styles.licenseForm}
                     title={t('onboarding.licenseAgreement')}
                     visual={(
                         <img

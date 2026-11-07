@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The licence agreement keeps its terms in one outline card whose text
-// reaches the card's inner border edge: the scroll box draws the card
-// outline and carries no inset, at phone widths, on a short landscape phone
-// and at desktop width.
+// The licence agreement keeps its terms in one outline card with inner
+// padding: the scroll box draws the card outline and insets its text from
+// the inner border edge by its own padding, at phone widths, on a short
+// landscape phone and at desktop width.
 //
 // The spec measures the built renderer (packages/desktop/renderer/dist), so
 // a style change needs a renderer build before it shows here.
@@ -74,7 +74,7 @@ function measureLicence(label) {
 }
 
 for (const view of VIEWS) {
-    test(`licence card at ${view.name}: outlined, text meets the inner border edge`, async () => {
+    test(`licence card at ${view.name}: outlined, text inset by the card padding`, async () => {
         test.setTimeout(3 * 60 * 1000);
         expect(existsSync(join(desktopDir, 'renderer', 'dist', 'index.html')), 'renderer build present').toBe(true);
         const profile = mkdtempSync(join(process.env.XCHAIN_E2E_PROFILE_ROOT || tmpdir(), 'xc-licence-card-'));
@@ -99,9 +99,10 @@ for (const view of VIEWS) {
             expect(m, 'licence terms present').not.toBeNull();
             expect(m.hasParagraph, 'terms carry a first paragraph').toBe(true);
 
-            expect(m.paddingInlineStart, 'the terms scroll box has no inline-start inset').toBe('0px');
-            expect(m.paddingInlineEnd, 'the terms scroll box has no inline-end inset').toBe('0px');
-            expect(Math.abs(m.textInlineStartGap), `first paragraph starts at the card inner border edge (${JSON.stringify(m)})`)
+            const padStart = parseFloat(m.paddingInlineStart);
+            expect(padStart, 'the terms card has inline-start padding').toBeGreaterThan(0);
+            expect(parseFloat(m.paddingInlineEnd), 'the terms card has inline-end padding').toBeGreaterThan(0);
+            expect(Math.abs(m.textInlineStartGap - padStart), `first paragraph starts at the card padding edge (${JSON.stringify(m)})`)
                 .toBeLessThanOrEqual(TOLERANCE);
 
             for (const side of m.sides) {
