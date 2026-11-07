@@ -108,8 +108,7 @@ describe('Home desktop actions', () => {
 
     it.each([
         [360, 4],
-        [844, 4],
-        [1280, 8],
+        [833, 4],
     ])('uses matching buttons in an even grid at %ipx (%i columns)', async (viewportWidth, expectedColumns) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
         mount({
@@ -132,20 +131,72 @@ describe('Home desktop actions', () => {
         actions.forEach((action) => {
             expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
         });
-        if (expectedColumns === 4) {
-            expect(homeStyles).toMatch(
-                /\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
-            );
-            expect(viewportWidth).toBeLessThan(1024);
-        } else {
-            // The row reads the content width, not the window, so it stays one
-            // row of equal tiles only where the content beside the sidebar fits it.
-            expect(homeStyles).toMatch(
-                /@container \(min-width: \d+px\)[\s\S]*\.actionsFull\s*\{[^}]*grid-auto-flow:\s*column;[^}]*grid-auto-columns:\s*minmax\(0, 1fr\);/,
-            );
-            expect(homeStyles).toMatch(/\.actionsFullWrap\s*\{[^}]*container-type:\s*inline-size;/);
-            expect(viewportWidth).toBeGreaterThanOrEqual(1024);
-        }
+        expect(expectedColumns).toBe(4);
+        expect(homeStyles).toMatch(
+            /\.actionsFull\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
+        );
+        expect(viewportWidth).toBeLessThan(834);
+    });
+});
+
+describe('Home wide-layout quick actions', () => {
+    const wideHandlers = {
+        onSend: vi.fn(),
+        onReceive: vi.fn(),
+        onExchange: vi.fn(),
+        onSwap: vi.fn(),
+        onActions: vi.fn(),
+        onCreateToken: vi.fn(),
+        onMarkets: vi.fn(),
+        onMessaging: vi.fn(),
+        onHistory: vi.fn(),
+        onAddresses: vi.fn(),
+        onStaking: vi.fn(),
+    };
+
+    afterEach(() => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    });
+
+    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and More actions at %ipx and no bottom row', async (viewportWidth) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        mount(wideHandlers, 'desktop');
+
+        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
+            .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
+        expect(document.querySelector(`.${homeModuleStyles.actionsFull}`)).toBeNull();
+    });
+
+    it('opens the actions menu from the More actions quick action', async () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+        const onActions = vi.fn();
+        mount({ ...wideHandlers, onActions }, 'desktop');
+
+        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        fireEvent.click(within(row).getByRole('button', { name: 'More actions' }));
+        expect(onActions).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps Swap in the quick actions at 360px', async () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+        mount(wideHandlers, 'desktop');
+
+        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
+            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
+        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
+    });
+
+    it('keeps the Swap button when the shell passes no actions menu', async () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+        mount({ ...wideHandlers, onActions: undefined }, 'desktop');
+
+        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
+            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
     });
 });
 

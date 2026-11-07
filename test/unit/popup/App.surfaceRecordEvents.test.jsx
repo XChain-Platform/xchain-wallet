@@ -52,6 +52,7 @@ afterEach(() => {
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
 });
 
 function boot({ wallets, holdWalletList = false }) {
@@ -286,6 +287,8 @@ describe('an open review survives record changes made in another surface', () =>
     });
 
     async function twoWallets() {
+        // A popup is phone width, where Home keeps History in its action row.
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         const env = boot({ wallets: [{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Bravo' }] });
         localStorage.setItem('xchain.activeWallet', 'w1');
         const { container } = render(<App />);

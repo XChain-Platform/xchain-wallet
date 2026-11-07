@@ -24,6 +24,7 @@ import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
+import { useWideLayout } from '../hooks/useWideLayout.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { SPAM_TOKEN_TOAST_KIND, useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
@@ -206,8 +207,8 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * array "for the small-mode drawer" and never rendered it, so the web
  * shell built 24 entries per render that no user could ever reach from
  * this component. Both variants route to the same dedicated
- * ActionsMenu screen instead: full mode via the "More actions" button in
- * the action grid below (`onActions`), small mode via the pancake menu's
+ * ActionsMenu screen instead: full mode via the "More actions" button (`onActions`)
+ * in the quick actions from 834px up, or in the action grid below on narrower windows, small mode via the pancake menu's
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
@@ -216,6 +217,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // From 834px up, More actions replaces Swap in the quick actions and the
+    // supplementary row below the balances is gone; Swap lives in that menu.
+    const isWide = useWideLayout();
+    const wideMoreActions = isWide && typeof onActions === 'function';
     const {
         overall: reachabilityOverall,
         refresh: recheckReachability,
@@ -502,7 +507,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [isDemoActive, onSwap, runNetworkAction]);
     const quickActionCount = (isDemoActive ? 1 : 2)
         + (onExchange ? 1 : 0)
-        + (homeMoreActions.length > 0 ? 1 : 0);
+        + (wideMoreActions || homeMoreActions.length > 0 ? 1 : 0);
     useEffect(() => {
         setDemoSendNoticeOpen(false);
         setDemoExitConfirmOpen(false);
@@ -1255,7 +1260,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {t('home.exchange')}
                     </Button>
                 ) : null}
-                {homeMoreActions.length === 1 ? (
+                {wideMoreActions ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className={styles.quickAction}
+                        onClick={onActions}
+                        icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
+                    >
+                        {t('actionsMenu.more')}
+                    </Button>
+                ) : null}
+                {!wideMoreActions && homeMoreActions.length === 1 ? (
                     <Button
                         type="button"
                         variant="secondary"
@@ -1267,7 +1283,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {homeMoreActions[0].label}
                     </Button>
                 ) : null}
-                {homeMoreActions.length > 1 ? (
+                {!wideMoreActions && homeMoreActions.length > 1 ? (
                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                         <Button
                             type="button"
@@ -1314,8 +1330,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         </div>
     ), [
         demoExitBusy, demoExitConfirmOpen, demoExitError, handleExitDemo,
-        homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
-        onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
+        homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onActions, onExchange,
+        onReceive, onSend, wideMoreActions, quickActionCount, quickActionsReason, runNetworkAction,
     ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
@@ -1635,7 +1651,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {/* Supplementary action grid is full-mode only. In small mode
                     the actions live in the pancake menu, freeing the body for
                     the balance list. */}
-                {isFull ? (
+                {isFull && !wideMoreActions ? (
                 <div className={styles.actionsFullWrap}>
                 <div className={styles.actionsFull}>
                     <Button
