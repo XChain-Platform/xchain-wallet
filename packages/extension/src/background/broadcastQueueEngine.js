@@ -20,6 +20,7 @@ import {
     owedRecordKey,
     sealBroadcastQueueStore,
 } from './broadcastQueueStore.js';
+import { toStoredQueueSnapshot } from './broadcast_queue_snapshot.js';
 
 /**
  * Carry the commit-landed marker of a queued reveal or phase-2 spend onto a queue
@@ -264,13 +265,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             // is checked on its own: this save would recreate the wiped key.
             if (queueStore.sealed || queueStore.dormant || !queueStore.loaded) return false;
         }
-        /** @type {Record<string, any[]>} */
-        const snapshot = {};
-        for (const [walletId, entries] of queuedBroadcasts.entries()) {
-            if (entries.length > 0) {
-                snapshot[walletId] = entries.map(({ siblingPendingTxIds: _runtimeLinks, ...entry }) => entry);
-            }
-        }
+        const snapshot = toStoredQueueSnapshot(queuedBroadcasts);
         try {
             await queueStore.storage.save(snapshot);
             return true;

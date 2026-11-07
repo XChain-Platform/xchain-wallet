@@ -937,4 +937,19 @@ describe('bridge.signIn offers and enforces the site grant', () => {
         expect(signIn.mock.calls[0][0].payload.addresses).toEqual([{ address: LTC_ADDR, chainId: LTC }]);
         expect(result.address).toBe(LTC_ADDR);
     });
+
+    it('the request chainId narrows what is offered and reaches the approval', async () => {
+        const signIn = pickFrom((list) => list[0]);
+        const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
+        const { result } = await call(host, { chainId: LTC });
+        expect(result).toMatchObject({ ok: true, address: LTC_ADDR, chainId: LTC });
+        expect(signIn.mock.calls[0][0]).toMatchObject({
+            chainId: LTC,
+            payload: { addresses: [{ address: LTC_ADDR, chainId: LTC }] },
+        });
+
+        const unmatched = await call(host, { chainId: 'dogecoin-regtest' });
+        expect(unmatched).toMatchObject({ ok: false, error: { code: 'ADDRESS_NOT_AUTHORIZED' } });
+        expect(signIn).toHaveBeenCalledTimes(1);
+    });
 });

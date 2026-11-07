@@ -350,6 +350,7 @@ const messages = {
         'Possible lookalike domain. Confirm that the highlighted site domain is the one you expect.',
     'components.portfolioChart.portfolioPerformance': 'Portfolio performance',
     'components.portfolioChart.change': '{label} change. {value}; {formatFiatValue}',
+    'components.portfolioChart.changeUnavailable': 'Change unavailable',
     'components.portfolioChart.loadingPriceHistory': 'Loading price history…',
     'components.portfolioChart.portfolioPerformanceChart': 'Portfolio performance chart',
     'components.portfolioChart.noPriceHistoryForThis': 'No price history for this range yet.',

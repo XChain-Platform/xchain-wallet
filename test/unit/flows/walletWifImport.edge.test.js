@@ -10,6 +10,7 @@ const crypto = vi.hoisted(() => ({
     deriveMasterKeyAsync: vi.fn(),
     encrypt: vi.fn(),
     decrypt: vi.fn(),
+    decryptWalletSeed: vi.fn(),
     makeFreshKdfParams: vi.fn(),
 }));
 
@@ -20,6 +21,7 @@ vi.mock('../../../packages/core/src/crypto/index.js', () => ({
     deriveMasterKeyAsync: crypto.deriveMasterKeyAsync,
     encrypt: crypto.encrypt,
     decrypt: crypto.decrypt,
+    decryptWalletSeed: crypto.decryptWalletSeed,
     makeFreshKdfParams: crypto.makeFreshKdfParams,
 }));
 
@@ -33,6 +35,7 @@ import {
 } from '../../../packages/core/src/flows/importWif.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
 import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
+import { copyMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 
 const KDF = {
     algorithm: 'argon2id', salt: 'salt', iterations: 1, memory: 8, parallelism: 1,
@@ -122,9 +125,17 @@ function existingHarness(walletOverrides = {}, argsOverrides = {}) {
 beforeEach(() => {
     crypto.calibrateKdfParamsAsync.mockReset().mockResolvedValue(KDF);
     crypto.makeFreshKdfParams.mockReset().mockReturnValue(KDF);
-    crypto.deriveMasterKeyAsync.mockReset().mockResolvedValue(new Uint8Array([9, 9, 9]));
+    crypto.deriveMasterKeyAsync.mockReset().mockResolvedValue(new Uint8Array(32).fill(9));
     crypto.encrypt.mockReset().mockResolvedValue(new Uint8Array([7, 8]));
     crypto.decrypt.mockReset().mockResolvedValue(new Uint8Array([1, 2]));
+    crypto.decryptWalletSeed.mockReset().mockImplementation(async ({ masterKey }) => {
+        const workingKey = copyMasterKey(masterKey);
+        try {
+            return await crypto.decrypt(workingKey, new Uint8Array([4, 5, 6]));
+        } finally {
+            workingKey.fill(0);
+        }
+    });
 });
 
 describe('importSingleWif persistence edges', () => {
@@ -204,7 +215,7 @@ describe('importWif error and rollback edges', () => {
     it('skips malformed and dangling imported-key links during duplicate detection', async () => {
         const { args, vault } = existingHarness({
             importedKeys: [null, { addressId: 42 }, { addressId: 'missing-address' }],
-        }, { masterKey: new Uint8Array([3, 4]), password: undefined });
+        }, { masterKey: new Uint8Array(32).fill(3), password: undefined });
 
         await expect(importWif(args)).resolves.toMatchObject({
             address: { address: 'm-address' },
@@ -213,23 +224,23 @@ describe('importWif error and rollback edges', () => {
     });
 
     it('keeps a session-owned master key intact when password verification fails', async () => {
-        const sessionKey = new Uint8Array([5, 6, 7]);
+        const sessionKey = new Uint8Array(32).fill(5);
         const { args } = existingHarness({}, { masterKey: sessionKey, password: undefined });
         crypto.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(importWif(args)).rejects.toBeInstanceOf(WrongPasswordError);
-        expect([...sessionKey]).toEqual([5, 6, 7]);
+        expect(sessionKey.every((byte) => byte === 5)).toBe(true);
         expect(crypto.deriveMasterKeyAsync).not.toHaveBeenCalled();
     });
 
     it('zeros a derived master key when password verification fails', async () => {
-        const derivedKey = new Uint8Array([5, 6, 7]);
+        const derivedKey = new Uint8Array(32).fill(5);
         const { args } = existingHarness();
         crypto.deriveMasterKeyAsync.mockResolvedValue(derivedKey);
         crypto.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(importWif(args)).rejects.toBeInstanceOf(WrongPasswordError);
-        expect([...derivedKey]).toEqual([0, 0, 0]);
+        expect(derivedKey.every((byte) => byte === 0)).toBe(true);
     });
 
     it('zeros the decrypted seed when encrypting the imported key fails', async () => {

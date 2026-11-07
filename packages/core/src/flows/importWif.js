@@ -22,6 +22,7 @@ import {
     deriveMasterKeyAsync,
     encrypt,
     decrypt,
+    decryptWalletSeed,
     bytesToBase64,
     base64ToBytes,
 } from '../crypto/index.js';
@@ -175,14 +176,20 @@ export async function importWif({
     const masterKey = hasSessionKey
         ? sessionMasterKey
         : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
-    const probeCiphertext = walletRecord.format === 'wif-only'
-        ? walletRecord.importedKeys?.[0]?.encryptedWif
-        : walletRecord.encryptedSeed;
     let encryptedWif;
     try {
         let seedBytes;
         try {
-            seedBytes = await decrypt(masterKey, base64ToBytes(probeCiphertext ?? ''));
+            seedBytes = walletRecord.format === 'wif-only'
+                ? await decrypt(
+                    masterKey,
+                    base64ToBytes(walletRecord.importedKeys?.[0]?.encryptedWif ?? ''),
+                )
+                : await decryptWalletSeed({
+                    encryptedSeed: walletRecord.encryptedSeed,
+                    kdfParams: walletRecord.kdfParams,
+                    masterKey,
+                });
         } catch (err) {
             // Only a GCM tag mismatch is a wrong password (crypto/aead.js); a
             // damaged seal or a malformed session key propagates as itself.

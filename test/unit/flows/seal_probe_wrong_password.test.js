@@ -85,7 +85,7 @@ describe('importWif password probe', () => {
         await expect(runImport(SHORT_SEAL, RIGHT_KEY)).rejects.toThrow('aead: ciphertext too short');
         await expect(runImport('', RIGHT_KEY)).rejects.toThrow('aead: ciphertext too short');
         await expect(runImport(seed, new Uint8Array(16).fill(7)))
-            .rejects.toThrow('aead: key must be a 32-byte Uint8Array');
+            .rejects.toThrow('masterKey must be a 32-byte Uint8Array');
     });
 });
 

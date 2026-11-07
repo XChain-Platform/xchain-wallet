@@ -59,6 +59,7 @@ function discover(overrides = {}) {
     return discoverUsedAddresses({
         ...createHarness(),
         mnemonic: MNEMONIC,
+        format: 'bip39',
         ...overrides,
     });
 }
@@ -74,6 +75,15 @@ beforeEach(() => {
     cryptoMocks.counterwalletMnemonicToSeedBytes.mockReturnValue(seed);
     cryptoMocks.hdKeyFromSeed.mockReturnValue({ id: 'root' });
     cryptoMocks.derive.mockImplementation((_root, path) => ({ publicKeyHex: path }));
+});
+
+it('rejects an omitted wallet format before deriving a seed', async () => {
+    await expect(discoverUsedAddresses({
+        ...createHarness(),
+        mnemonic: MNEMONIC,
+    })).rejects.toThrow(/format is required/);
+    expect(cryptoMocks.bip39MnemonicToSeed).not.toHaveBeenCalled();
+    expect(cryptoMocks.counterwalletMnemonicToSeedBytes).not.toHaveBeenCalled();
 });
 
 it('uses the BIP44 gap limit and reports progress and results plainly', async () => {

@@ -26,7 +26,9 @@ import { bytesToHex } from '@noble/hashes/utils';
  */
 
 /**
- * @param {Uint8Array} seed        64-byte BIP39 seed
+ * Build a BIP32 root without reshaping its master seed.
+ *
+ * @param {Uint8Array} seed        64-byte BIP39 seed or 16 raw Counterwallet bytes
  * @returns {HDKey}
  */
 export function hdKeyFromSeed(seed) {

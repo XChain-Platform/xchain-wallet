@@ -26,25 +26,23 @@ import {
     base64ToBytes,
 } from './kdf.js';
 
-// Domain separator for the passphrase blob. The seed blob carries no AAD,
-// so without this a passphrase ciphertext and a seed ciphertext would be
-// interchangeable under the same master key: GCM authenticates the AAD in
-// both directions, so tagging one side is enough to make the swap fail.
+// Domain-separate the passphrase blob from the seed blob, which carries no AAD.
+// Route every seed seal and open through the helpers below to keep that rule fixed.
 export const PASSPHRASE_AAD = new TextEncoder().encode('xchain-wallet:bip39-passphrase:v1');
 
 /**
  * Encrypt a seed under a user-supplied password. Returns the fields the
  * Wallet record stores verbatim.
+ * Keep the seed format free of AAD by routing every seal through this helper.
  *
  * @param {Object} input
  * @param {string} input.password
  * @param {Uint8Array} input.seed
  * @param {import('./kdf.js').KdfParams} [input.kdfParams]  override (e.g. calibrated)
- * @param {Uint8Array} [input.aad]                          extra authenticated data
  * @param {Uint8Array} [input.masterKey]                    already-derived key for these kdfParams, used instead of deriving from the password; copied on receipt, the copy is zeroed here, the caller zeroes its own buffer
  * @returns {Promise<{ encryptedSeed: string, kdfParams: import('./kdf.js').KdfParams }>}
  */
-export async function encryptWalletSeed({ password, seed, kdfParams, aad, masterKey }) {
+export async function encryptWalletSeed({ password, seed, kdfParams, masterKey }) {
     // A supplied key belongs to the params it was derived with; minting
     // fresh params beside it would store a record no password opens.
     if (masterKey !== undefined && kdfParams === undefined) {
@@ -55,7 +53,7 @@ export async function encryptWalletSeed({ password, seed, kdfParams, aad, master
         ? await deriveMasterKeyAsync(password, params)
         : copyMasterKey(masterKey);
     try {
-        const blob = await encrypt(workingKey, seed, aad);
+        const blob = await encrypt(workingKey, seed);
         return { encryptedSeed: bytesToBase64(blob), kdfParams: params };
     } finally {
         workingKey.fill(0);
@@ -64,12 +62,12 @@ export async function encryptWalletSeed({ password, seed, kdfParams, aad, master
 
 /**
  * Decrypt a seed from a Wallet record's fields.
+ * Keep the seed format free of AAD by routing every open through this helper.
  *
  * @param {Object} input
  * @param {string} input.password
  * @param {string} input.encryptedSeed
  * @param {import('./kdf.js').KdfParams} input.kdfParams
- * @param {Uint8Array} [input.aad]
  * @param {Uint8Array} [input.masterKey]       already-derived key, used instead of deriving from the password; copied on receipt, the copy is zeroed here, the caller zeroes its own buffer. The AEAD check still runs, so a wrong key fails as a wrong password does
  * @param {(key: Uint8Array) => void} [input.retainMasterKey] receives its own key copy and owns zeroing it
  * @returns {Promise<Uint8Array>}
@@ -78,7 +76,6 @@ export async function decryptWalletSeed({
     password,
     encryptedSeed,
     kdfParams,
-    aad,
     masterKey,
     retainMasterKey,
 }) {
@@ -87,7 +84,7 @@ export async function decryptWalletSeed({
         : copyMasterKey(masterKey);
     try {
         const blob = base64ToBytes(encryptedSeed);
-        const plaintext = await decrypt(workingKey, blob, aad);
+        const plaintext = await decrypt(workingKey, blob);
         // Session retention (§15.5 password-less WIF import): hand the
         // caller its own copy of the derived key instead of re-running
         // the KDF. The caller owns zeroing it.

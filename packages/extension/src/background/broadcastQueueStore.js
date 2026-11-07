@@ -17,6 +17,10 @@
 // store for its whole process and hands it to every host it builds.
 
 import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+import {
+    adoptStoredQueueEntries,
+    toStoredQueueSnapshot,
+} from './broadcast_queue_snapshot.js';
 
 /**
  * @typedef {import('./broadcastQueueStorage.js').BroadcastQueueStorage} BroadcastQueueStorage
@@ -44,7 +48,8 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  *   or after it while their save has not landed,
  *   which the rehydrate merge skips and its write-back drops from the blob;
  *   each add is also written to a durable ledger so a worker evicted before
- *   the read recovers still drops the wallet on the next boot
+ *   the read recovers still drops the wallet on the next boot. The default
+ *   uses chrome.storage or localStorage; shells without either pass a ledger
  * @property {number} bootedAt  wall-clock ms this store was built; the vault restore
  *   reads a 'broadcasting' PendingTx created after it as this process's own live call
  */
@@ -375,11 +380,10 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
     };
 }
 
-// Fold a fresh read into the live map and journal in place: the stored copy
-// wins for everything the key held, and only what never reached it is carried
-// over. Arrays and journal objects keep their identity, because routes splice
-// the arrays `getQueue` handed them and the journal flush retires by identity.
-// Returns whether anything was carried over, which the key now lacks.
+// Fold stored state into live collections without trusting stored sibling links.
+// Preserve live array and journal record identity for active routes and flushes.
+
+// Report whether anything was carried over that the stored key now lacks.
 function adoptStoredState(store, snapshot, settlements, known) {
     const pruned = store.prunedWallets;
     let carried = false;
@@ -389,12 +393,10 @@ function adoptStoredState(store, snapshot, settlements, known) {
             store.queues.delete(walletId);
             continue;
         }
-        const stored = Array.isArray(snapshot[walletId])
-            ? snapshot[walletId].filter((entry) => entry && typeof entry === 'object')
-            : [];
+        const live = store.queues.get(walletId);
+        const stored = adoptStoredQueueEntries(snapshot[walletId], live);
         const storedIds = new Set(stored.map((entry) => entry.id));
         const storedTxs = new Set(stored.map((entry) => entry.pendingTxId).filter(Boolean));
-        const live = store.queues.get(walletId);
         const kept = (live ?? []).filter((entry) => isMemoryOnlyEntry(known.queues, walletId, entry)
             && !storedIds.has(entry.id)
             && !(entry.pendingTxId && storedTxs.has(entry.pendingTxId)));
@@ -490,10 +492,7 @@ export async function refreshBroadcastQueueStore(store) {
         store.loaded = true;
 
         if (carried || pruned?.size > 0) {
-            const queues = {};
-            for (const [walletId, entries] of store.queues.entries()) {
-                if (entries.length > 0) queues[walletId] = [...entries];
-            }
+            const queues = toStoredQueueSnapshot(store.queues);
             try {
                 await store.storage.save(queues);
                 if (typeof store.storage.saveSettlements === 'function') {

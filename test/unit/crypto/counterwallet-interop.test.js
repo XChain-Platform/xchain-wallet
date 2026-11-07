@@ -34,6 +34,7 @@ import {
     counterwalletDerivationPath,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../../../packages/core/src/crypto/counterwallet.js';
+import { hdKeyFromSeed } from '../../../packages/core/src/crypto/hd.js';
 import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
 
 // A real Counterwallet wallet. Kept here as a derivation fixture only.
@@ -78,6 +79,15 @@ describe('crypto/counterwallet interop vector', () => {
             const path = counterwalletDerivationPath(0, want.index);
             expect(path).toBe(want.path);
             const pubkey = root.derive(path).publicKey;
+            if (want.p2pkh) expect(p2pkhAddress(pubkey)).toBe(want.p2pkh);
+            if (want.p2wpkh) expect(p2wpkhAddress(pubkey)).toBe(want.p2wpkh);
+        }
+    });
+
+    it('reproduces the real wallet addresses through the production HD wrapper', () => {
+        const root = hdKeyFromSeed(counterwalletMnemonicToSeedBytes(VECTOR.mnemonic));
+        for (const want of VECTOR.addresses) {
+            const pubkey = root.derive(want.path).publicKey;
             if (want.p2pkh) expect(p2pkhAddress(pubkey)).toBe(want.p2pkh);
             if (want.p2wpkh) expect(p2wpkhAddress(pubkey)).toBe(want.p2wpkh);
         }

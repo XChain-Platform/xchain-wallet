@@ -52,7 +52,13 @@ describe('auto-lock unsaved announcement', () => {
                 removeListener: (fn) => listeners.delete(fn),
             },
             async sendMessage(message) {
-                for (const fn of listeners) fn(message, { id: undefined });
+                for (const fn of listeners) {
+                    fn(message, {
+                        id: 'own-id',
+                        origin: 'chrome-extension://own-id',
+                        url: 'chrome-extension://own-id/background.js',
+                    });
+                }
             },
         };
     }
@@ -60,14 +66,20 @@ describe('auto-lock unsaved announcement', () => {
     it('reaches a surface listener without touching storage', async () => {
         const runtime = fakeRuntime();
         const onUnsaved = vi.fn();
-        const detach = attachAutoLockUnsavedListener(onUnsaved, runtime.onMessage);
-        await announceAutoLockUnsaved(runtime);
-        expect(onUnsaved).toHaveBeenCalledTimes(1);
-        detach();
-        expect(runtime.listeners.size).toBe(0);
+        const prior = globalThis.chrome;
+        globalThis.chrome = { runtime: { id: 'own-id' } };
+        try {
+            const detach = attachAutoLockUnsavedListener(onUnsaved, runtime.onMessage);
+            await announceAutoLockUnsaved(runtime);
+            expect(onUnsaved).toHaveBeenCalledTimes(1);
+            detach();
+            expect(runtime.listeners.size).toBe(0);
+        } finally {
+            globalThis.chrome = prior;
+        }
     });
 
-    it('ignores other messages and a sender that is not this extension', () => {
+    it('accepts extension origins and refuses content-script origins', () => {
         const runtime = fakeRuntime();
         const onUnsaved = vi.fn();
         const prior = globalThis.chrome;
@@ -75,11 +87,21 @@ describe('auto-lock unsaved announcement', () => {
         try {
             attachAutoLockUnsavedListener(onUnsaved, runtime.onMessage);
             const [listener] = runtime.listeners;
-            listener({ type: 'something-else' }, { id: 'own-id' });
-            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { id: 'other-id' });
+            listener({ type: 'something-else' }, { origin: 'chrome-extension://own-id' });
+            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { origin: 'chrome-extension://other-id' });
+            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, {
+                id: 'own-id',
+                origin: 'https://example.test',
+                url: 'https://example.test/',
+                tab: { id: 7 },
+            });
             expect(onUnsaved).not.toHaveBeenCalled();
-            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { id: 'own-id' });
-            expect(onUnsaved).toHaveBeenCalledTimes(1);
+            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { origin: 'chrome-extension://own-id' });
+            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { url: 'chrome-extension://own-id/background.js' });
+            expect(onUnsaved).toHaveBeenCalledTimes(2);
+            globalThis.chrome = { runtime: {} };
+            listener({ type: AUTO_LOCK_UNSAVED_MESSAGE }, { origin: 'chrome-extension://own-id' });
+            expect(onUnsaved).toHaveBeenCalledTimes(2);
         } finally {
             globalThis.chrome = prior;
         }

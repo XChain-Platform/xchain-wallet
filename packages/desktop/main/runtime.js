@@ -101,6 +101,8 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  * @property {import('@xchain-wallet/extension/src/background/broadcastQueueStorage.js').BroadcastQueueStorage | null} [broadcastQueueStorage]
  *        Desktop supplies a file adapter under userData. Other callers retain
  *        the shell default when this dependency is absent.
+ * @property {{ list: () => Promise<string[] | null>, add: (id: string) => Promise<void>, remove: (ids: string[]) => Promise<void>, clear?: () => Promise<void> } | null} [broadcastQueuePrunedLedger]
+ *        Desktop supplies a file ledger so removals survive queue IO failures.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
@@ -162,6 +164,7 @@ export function createRuntime(deps) {
         // wires it into core's freeze before the first window opens.
         panicModeStore: deps.panicModeStore || null,
         broadcastQueueStorage,
+        broadcastQueuePrunedLedger: deps.broadcastQueuePrunedLedger,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
@@ -193,7 +196,10 @@ export function createRuntime(deps) {
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
         // and only a wipe seals and renews it.
-        broadcastQueueStore: newBroadcastQueueStore(broadcastQueueStorage),
+        broadcastQueueStore: newBroadcastQueueStore(
+            broadcastQueueStorage,
+            deps.broadcastQueuePrunedLedger,
+        ),
     };
 }
 
@@ -210,9 +216,9 @@ export async function installPanicModePersistence(runtime) {
     await flowsLib.configurePanicModePersistence(runtime.panicModeStore);
 }
 
-/** Build a queue store over the runtime's process-wide storage adapter. */
-function newBroadcastQueueStore(storage) {
-    return createBroadcastQueueStore({ storage });
+/** Build a queue store with the durable prune ledger supplied by the shell. */
+function newBroadcastQueueStore(storage, prunedLedger) {
+    return createBroadcastQueueStore({ storage, prunedLedger });
 }
 
 /**
@@ -693,6 +699,8 @@ export function tearDownHost(runtime) {
  *                                           somebody else's idle clock
  *   - broadcastQueue `broadcast-queue.json` signed transactions waiting
  *                                           for an explicit retry
+ *   - broadcastQueuePruned                    wallet removals that must
+ *                                           survive a queue IO failure
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -719,7 +727,10 @@ export async function wipeRuntimeStores(runtime) {
     } catch (err) {
         console.error('[xchain] broadcast-queue seal failed:', err);
     }
-    runtime.broadcastQueueStore = newBroadcastQueueStore(runtime.broadcastQueueStorage);
+    runtime.broadcastQueueStore = newBroadcastQueueStore(
+        runtime.broadcastQueueStorage,
+        runtime.broadcastQueuePrunedLedger,
+    );
 
     /** @type {string[]} */
     const cleared = [];
@@ -734,6 +745,7 @@ export async function wipeRuntimeStores(runtime) {
         ['storage', runtime.storageBackend],
         ['session', runtime.sessionBackend],
         ['broadcastQueue', runtime.broadcastQueueStorage],
+        ['broadcastQueuePruned', runtime.broadcastQueuePrunedLedger],
         ['unlockThrottle', runtime.unlockThrottleStore],
         // The auto-lock stamp describes a session that no longer exists
         // after a wipe; carrying it into the next wallet would hand that

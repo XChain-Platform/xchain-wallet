@@ -27,13 +27,13 @@
 import {
     bip39MnemonicToSeed,
     counterwalletMnemonicToSeedBytes,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
     derive,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
     validateCounterwalletMnemonic,
     zeroDerivedKey,
 } from '../crypto/index.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import { isUnknownAddressTypeError } from './sdkAddressTypes.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
@@ -246,9 +246,7 @@ export async function dryRunRestore({
             if (!descriptor) {
                 throw new Error(`dryRunRestore: unknown chainId "${chainId}"`);
             }
-            const addressType = format === 'counterwallet-legacy'
-                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-                : descriptor.defaultAddressType;
+            const addressType = defaultAddressTypeForFormat(descriptor, format);
             const sdk = sdkRegistry.get(chainId);
 
             const main = deriveAndCompare(chainId, descriptor, sdk, addressType, change, gapLimit);

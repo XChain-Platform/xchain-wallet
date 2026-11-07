@@ -51,13 +51,13 @@
 import {
     bip39MnemonicToSeed,
     counterwalletMnemonicToSeedBytes,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
     hdKeyFromSeed,
     isValidBip39Mnemonic,
     validateCounterwalletMnemonic,
 } from '../crypto/index.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 import { indexSpaceSharedAcrossTypes } from './_addressIndexSpace.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import {
     scanChainType,
     scanSharedChainTypes,
@@ -102,7 +102,7 @@ const MAX_TIMEOUT_MS = 0x7fffffff;
 /**
  * @typedef {Object} DiscoverUsedAddressesOpts
  * @property {string} mnemonic
- * @property {'bip39' | 'counterwallet-legacy'} [format]        default 'bip39'
+ * @property {'bip39' | 'counterwallet-legacy'} format         must match the wallet format
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -135,7 +135,7 @@ export async function discoverUsedAddresses(opts) {
     }
     const {
         mnemonic,
-        format = 'bip39',
+        format,
         bip39Passphrase = '',
         chainRegistry,
         sdkRegistry,
@@ -194,6 +194,10 @@ export async function discoverUsedAddresses(opts) {
     }
     if (typeof onProgress !== 'function') {
         throw new Error('discoverUsedAddresses: onProgress must be a function');
+    }
+    // Require the caller to preserve the wallet's seed derivation format.
+    if (format === undefined) {
+        throw new Error('discoverUsedAddresses: format is required ("bip39" or "counterwallet-legacy")');
     }
     throwIfAborted(signal);
 
@@ -325,9 +329,7 @@ function resolveAddressTypes(descriptor, addressTypes, format) {
         // A legacy wallet's own default is the address type Counterwallet
         // showed first; scanning the chain's modern default would miss
         // every address the user actually funded.
-        return [format === 'counterwallet-legacy'
-            ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-            : descriptor.defaultAddressType];
+        return [defaultAddressTypeForFormat(descriptor, format)];
     }
     if (addressTypes === 'all') return descriptor.addressTypes.slice();
     if (Array.isArray(addressTypes)) {

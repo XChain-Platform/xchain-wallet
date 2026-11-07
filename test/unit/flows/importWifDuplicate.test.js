@@ -248,6 +248,7 @@ describe('import flow persistence safety', () => {
 describe('discovery control validation', () => {
     const discoveryDeps = {
         mnemonic: MNEMONIC,
+        format: 'bip39',
         chainRegistry: {},
         sdkRegistry: {},
     };
@@ -270,6 +271,7 @@ describe('discovery control validation', () => {
         const probeStarted = new Promise((resolve) => { markProbeStarted = resolve; });
         const scan = discoverUsedAddresses({
             mnemonic: MNEMONIC,
+            format: 'bip39',
             chainRegistry: {
                 supportedChains: () => [DESCRIPTOR],
                 get: () => DESCRIPTOR,

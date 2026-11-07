@@ -24,7 +24,6 @@ import {
 import {
     counterwalletMnemonicToSeedBytes,
     isValidCounterwalletMnemonic,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/counterwallet.js';
 import { sha256 } from '@noble/hashes/sha2';
 import { accountXpub, derive, hdKeyFromSeed, masterFingerprint, zeroDerivedKey } from '../crypto/hd.js';
@@ -35,12 +34,12 @@ import {
     SignerLockedError,
 } from './Signer.js';
 import { logConsole } from '../shared/utils/logConsole.js';
+import { defaultAddressTypeForFormat } from '../flows/_defaultAddressType.js';
 
 /**
  * @typedef {Object} WalletEncryptionInputs
  * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed; empty string legal when format='wif-only'
  * @property {import('../crypto/kdf.js').KdfParams} kdfParams
- * @property {Uint8Array} [aad]                             extra authenticated data passed at encrypt time
  * @property {boolean} [passphraseEnabled]                  §15.6: the wallet's seed derivation includes a BIP39 passphrase (BIP39 only)
  * @property {string|null} [encryptedPassphrase]            §15.6: base64 passphrase blob sealed under this wallet's own master key; null on a legacy record awaiting capture
  * @property {'bip39' | 'counterwallet-legacy' | 'wif-only'} [format]    Wallet.format; defaults to 'bip39'
@@ -49,8 +48,8 @@ import { logConsole } from '../shared/utils/logConsole.js';
 
 /**
  * @typedef {Object} UnlockedState
- * @property {Uint8Array} mnemonicBytes   UTF-8 bytes of the decrypted BIP39 mnemonic (empty for wif-only)
- * @property {Uint8Array} seed            64-byte BIP39 seed; empty for wif-only
+ * @property {Uint8Array} mnemonicBytes   UTF-8 bytes of the decrypted BIP39 or Counterwallet mnemonic; empty for wif-only
+ * @property {Uint8Array} seed            BIP32 seed: 64 bytes for BIP39 or 16 raw bytes for Counterwallet; empty for wif-only
  * @property {Map<string, Uint8Array>} importedWifs   decrypted WIFs keyed by addressId (bytes, so we can zero on lock)
  */
 
@@ -188,7 +187,6 @@ export class SoftwareSigner extends Signer {
             password,
             encryptedSeed: enc.encryptedSeed,
             kdfParams: enc.kdfParams,
-            aad: enc.aad,
             masterKey: suppliedMasterKey,
             retainMasterKey: (k) => { sessionMasterKey = k; },
         });
@@ -351,10 +349,7 @@ export class SoftwareSigner extends Signer {
         const walletFormat = this._walletEncryption?.format ?? 'bip39';
         // A restored Counterwallet wallet defaults to the legacy address
         // its old wallet showed first, not the chain's modern default.
-        const type = addressType
-            ?? (walletFormat === 'counterwallet-legacy'
-                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-                : descriptor.defaultAddressType);
+        const type = addressType ?? defaultAddressTypeForFormat(descriptor, walletFormat);
         if (!descriptor.addressTypes.includes(type)) {
             throw new Error(
                 `SoftwareSigner.getAddresses: addressType "${type}" not supported on ${chainId}`,

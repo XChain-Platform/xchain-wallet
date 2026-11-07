@@ -82,7 +82,6 @@ export async function revealMnemonic({ vault, walletId, password }) {
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
-        aad: wallet.aad,
         retainMasterKey: hasStoredPassphrase ? (key) => { masterKey = key; } : undefined,
     });
     let passphraseBytes = null;

@@ -107,7 +107,7 @@ const identifier = (name) => ({ type: 'Identifier', name });
 const conditional = (consequent, alternate) => ({
     type: 'ConditionalExpression', test: identifier('flag'), consequent, alternate,
 });
-const logical = (left, right) => ({ type: 'LogicalExpression', operator: '||', left, right });
+const logical = (left, right, operator = '||') => ({ type: 'LogicalExpression', operator, left, right });
 
 // 1. Plain text content is flagged.
 let v = findViolations(jsxElement([jsxText('Sign in to continue')]));
@@ -560,6 +560,11 @@ assert.ok(!NOTE_OR_KICKER_ATTR.test('<div role="note" />'), 'the note/kicker pat
 // non-string entry all stay silent.
 const prop = (name, value) => ({ type: 'Property', key: identifier(name), value, computed: false });
 const objectExpr = (...properties) => ({ type: 'ObjectExpression', properties });
+const tCall = (value) => ({
+    type: 'CallExpression',
+    callee: identifier('t'),
+    arguments: [literal('test.key'), objectExpr(prop('value', value))],
+});
 // `computed` models HINTS[mode]: the property is a runtime value, not a key.
 const member = (object, name, computed = false) => ({
     type: 'MemberExpression', object, computed, property: identifier(name),
@@ -640,6 +645,13 @@ v = findViolations(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('re
 assert.strictEqual(v.length, 0, 'an object on a technical attribute stays silent');
 v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)), { allow: ['Restore'] });
 assert.strictEqual(v.length, 0, 'allowlist suppresses inline object copy');
+
+// Treat translation variables as user-facing even when the enclosing t()
+// call reaches JSX through an attribute CallExpression.
+v = findViolations(tCall(logical(identifier('label'), literal('Change unavailable'), '??')));
+assert.strictEqual(v.length, 1, 'flags nullish fallback copy passed into t() variables');
+v = findViolations(tCall(logical(identifier('label'), tCall(identifier('fallback')), '??')));
+assert.strictEqual(v.length, 0, 'allows a translated nullish fallback passed into t() variables');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -793,6 +805,10 @@ visitors.JSXAttribute(jsxAttr('warningNoun', literal('sign-in')));
 visitors.JSXAttribute(jsxAttr('emptyActionLabel', jsxExpr(conditional(literal('Clear filter'), identifier('undefined')))));
 visitors.JSXAttribute(jsxAttr('feeText', jsxExpr(conditional(trimmedFee, identifier('undefined')))));
 assert.strictEqual(reports.length, 26, 'create() flags the three one-hop copy props, a trimmed fee template included');
+visitors.CallExpression(tCall(logical(identifier('label'), literal('Change unavailable'), '??')));
+assert.strictEqual(reports.length, 27, 'create() flags nullish fallback copy passed into t() variables');
+visitors.CallExpression(tCall(logical(identifier('label'), tCall(identifier('fallback')), '??')));
+assert.strictEqual(reports.length, 27, 'create() allows a translated nullish fallback in t() variables');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

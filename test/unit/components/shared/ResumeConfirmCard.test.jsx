@@ -78,8 +78,19 @@ describe('ResumeConfirmCard: one session', () => {
     it('shows the exact composed action rather than request data', () => {
         mount();
         const action = screen.getByTestId('resume-confirm-action-s1');
+        const resume = screen.getByTestId('resume-confirm-s1');
         expect(action).toHaveTextContent('Action to submit: SEND|0|BTC|1|bc1qcomposed');
         expect(action).not.toHaveTextContent('bc1qrequest');
+        expect(resume.contains(action)).toBe(false);
+        expect(resume.textContent).not.toContain('|');
+    });
+
+    it('humanizes an opcode fallback in both button labels', () => {
+        flows.describeResumeSession.mockReturnValue({ id: 's1', action: 'SEND', label: 'SEND' });
+        mount();
+        expect(screen.getByTestId('resume-confirm-s1')).toHaveTextContent('Finish Send');
+        expect(screen.getByTestId('discard-confirm-s1'))
+            .toHaveAttribute('aria-label', 'Discard unfinished Send');
     });
 
     it('labels the discard button with the session', () => {

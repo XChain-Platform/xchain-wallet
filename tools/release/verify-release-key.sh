@@ -269,6 +269,25 @@ GNUPGHOME="$GNUPGHOME_DIR" \
 # which.
 if [ "$WRITE_PIN" -eq 1 ]; then
     PIN_PATH="$REPO_ROOT/tools/release/pins/release-key-pin.json"
+    PIN_PUBLIC_KEY_REL="../release-signing-key.asc"
+    PIN_PUBLIC_KEY_PATH="$REPO_ROOT/tools/release/pins/$PIN_PUBLIC_KEY_REL"
+    [ -f "$PIN_PUBLIC_KEY_PATH" ] \
+        || die "release public key not found at $PIN_PUBLIC_KEY_PATH. Export it there and re-run."
+    grep -q -- 'BEGIN PGP PUBLIC KEY BLOCK' "$PIN_PUBLIC_KEY_PATH" \
+        || die "$PIN_PUBLIC_KEY_PATH is not an armored public key. Export the release public key there and re-run."
+    PIN_PUBLIC_KEY_GNUPGHOME="$SCRATCH/public-key-check"
+    mkdir -m 700 "$PIN_PUBLIC_KEY_GNUPGHOME"
+    PIN_PUBLIC_KEY_INFO="$(GNUPGHOME="$PIN_PUBLIC_KEY_GNUPGHOME" \
+        gpg --batch --no-options --no-autostart --with-colons \
+        --import-options show-only --import "$PIN_PUBLIC_KEY_PATH" 2>/dev/null)" \
+        || die "could not inspect the release public key at $PIN_PUBLIC_KEY_PATH. Export it again and re-run."
+    PIN_PUBLIC_KEY_FPR="$(printf '%s\n' "$PIN_PUBLIC_KEY_INFO" \
+        | awk -F: '$1 == "fpr" { print toupper($10); exit }')"
+    [ -n "$PIN_PUBLIC_KEY_FPR" ] \
+        || die "could not read a fingerprint from $PIN_PUBLIC_KEY_PATH. Export the release public key again and re-run."
+    PIN_KEY_FPR="$(printf '%s' "$KEY" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+    [ "$PIN_PUBLIC_KEY_FPR" = "$PIN_KEY_FPR" ] \
+        || die "$PIN_PUBLIC_KEY_PATH contains $PIN_PUBLIC_KEY_FPR, not the release key $PIN_KEY_FPR. Export the matching public key and re-run."
     SIGNING_SUBKEY="$(printf '%s\n' "$VERIFY_OUT" \
         | sed -n 's/.*using [A-Za-z0-9]* key \([0-9A-Fa-f]\{16,\}\).*/\1/p' | head -1)"
     [ -n "$SIGNING_SUBKEY" ] || SIGNING_SUBKEY="(not parsed)"
@@ -285,6 +304,7 @@ if [ "$WRITE_PIN" -eq 1 ]; then
     "_comment": "Written by tools/release/verify-release-key.sh after it drove the real signing pipeline end to end. Records that this key was observed SIGNING a release manifest, not merely being present. Do not hand-edit: the value of this file is that only an observation can set it. This is not a publication channel for the fingerprint - SECURITY.md and https://xchain.io/security are the two channels, and a gate compares them against this.",
     "fingerprint": "$KEY",
     "signingSubkey": "$SIGNING_SUBKEY",
+    "publicKey": "$PIN_PUBLIC_KEY_REL",
     "uid": "$KEY_UID",
     "proved": "signed a release manifest, gpg verified the detached signature, and verify.sh confirmed the manifest anchors to its tag",
     "observedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

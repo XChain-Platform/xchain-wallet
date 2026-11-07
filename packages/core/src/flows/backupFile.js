@@ -61,6 +61,8 @@ import {
     bytesToBase64,
     base64ToBytes,
     PASSPHRASE_AAD,
+    decryptWalletSeed,
+    encryptWalletSeed,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
 import {
@@ -758,7 +760,11 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         oldKey = await deriveMasterKeyAsync(walletPassword, wallet.kdfParams);
         if (hasSeed) {
             try {
-                seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
+                seed = await decryptWalletSeed({
+                    encryptedSeed: wallet.encryptedSeed,
+                    kdfParams: wallet.kdfParams,
+                    masterKey: oldKey,
+                });
             } catch (err) {
                 throw sealOpenError(err, 'seed');
             }
@@ -795,7 +801,13 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         });
         newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
         try {
-            if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
+            if (seed) {
+                wallet.encryptedSeed = (await encryptWalletSeed({
+                    seed,
+                    kdfParams: nextParams,
+                    masterKey: newKey,
+                })).encryptedSeed;
+            }
             for (let i = 0; i < sealedKeys.length; i += 1) {
                 sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
             }

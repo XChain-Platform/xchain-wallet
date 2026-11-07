@@ -1,9 +1,20 @@
-/* The resume action is a kit Button; its label stacks the headline, the
-   not-sent notice and the composed action as left-aligned lines. */
+/* Stack the resume headline and not-sent notice as left-aligned lines. */
 .content {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
     text-align: start;
+}
+
+.technicalDetails {
+    margin-block: var(--xc-space-2);
+}
+
+.actionString {
+    margin-block-start: var(--xc-space-1);
+}
+
+.actionString code {
+    overflow-wrap: anywhere;
 }

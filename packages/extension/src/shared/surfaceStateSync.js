@@ -13,6 +13,8 @@
 // changes through
 // chrome.storage.session so every open trusted extension surface sees them.
 
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+
 export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
 // 'wallet' names the newly active wallet; 'wallets' reports a change to the
@@ -124,9 +126,8 @@ export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
     }
     const listener = (message, sender) => {
         if (message?.type !== AUTO_LOCK_UNSAVED_MESSAGE) return undefined;
-        // Only this extension's own background may say the wallet locked.
-        const ownId = globalThis.chrome?.runtime?.id;
-        if (ownId && sender?.id !== ownId) return undefined;
+        // Accept lock notices only from this extension's trusted contexts.
+        if (!isTrustedExtensionSender(sender, globalThis.chrome?.runtime?.id)) return undefined;
         onUnsaved();
         return undefined;
     };

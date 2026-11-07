@@ -22,6 +22,7 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
 import { Button } from '../../ui/Button.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './ResumeConfirmCard.module.css';
 
 /**
@@ -48,6 +49,9 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                 const actionString = typeof session?.composed?.actionString === 'string'
                     ? session.composed.actionString
                     : '';
+                const label = info.label && info.label !== info.action
+                    ? info.label
+                    : actionDisplayLabel(info.action);
                 return (
                     <div key={info.id} className={className} data-testid="resume-confirm-card">
                         <Button
@@ -59,22 +63,28 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                             data-testid={`resume-confirm-${info.id}`}
                         >
                             <span className={styles.content}>
-                                <span>{t('components.resumeConfirmCard.finish')} {info.label}</span>
+                                <span>{t('components.resumeConfirmCard.finish')} {label}</span>
                                 <span>{t('components.resumeConfirmCard.notSentYetApproveTo')}</span>
-                                {actionString ? (
-                                    <span data-testid={`resume-confirm-action-${info.id}`}>
-                                        {t('components.resumeConfirmCard.actionToSubmit')} <code>{actionString}</code>
-                                    </span>
-                                ) : null}
                             </span>
                         </Button>
+                        {actionString ? (
+                            <details
+                                className={styles.technicalDetails}
+                                data-testid={`resume-confirm-action-${info.id}`}
+                            >
+                                <summary>{t('pending.detail.technicalDetails')}</summary>
+                                <div className={styles.actionString}>
+                                    {t('components.resumeConfirmCard.actionToSubmit')} <code>{actionString}</code>
+                                </div>
+                            </details>
+                        ) : null}
                         <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             icon={null}
                             onClick={() => onDiscard(info.id)}
-                            aria-label={t('components.resumeConfirmCard.discardUnfinished', { label: info.label })}
+                            aria-label={t('components.resumeConfirmCard.discardUnfinished', { label })}
                             data-testid={`discard-confirm-${info.id}`}
                         >
                             {t('send.draft.discard')}

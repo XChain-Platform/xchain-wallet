@@ -80,6 +80,9 @@
 //     (`T.file` judges only `file`), a computed key reaches every entry,
 //     and only string-shaped values count, so an id or a nested object
 //     beside the copy stays silent. A table no sink reads is never judged.
+//   - Nullish fallbacks in translation variables:
+//     t('key', { value: label ?? 'Unavailable' }) → flagged. Passing a
+//     second t() call or a runtime value as the fallback stays silent.
 //
 // What the rule cannot see, so a clean run is not proof a screen has no
 // untranslated copy:
@@ -446,6 +449,27 @@ function branchCopy(node, allow = [], minLength = 2) {
     return null;
 }
 
+/** Return untranslated nullish fallback copy passed as a t() variable. */
+function translationVarViolations(node, allow = [], minLength = 2) {
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'Identifier' || node.callee.name !== 't') {
+        return [];
+    }
+    const vars = node.arguments?.[1];
+    if (vars?.type !== 'ObjectExpression') return [];
+    const out = [];
+    for (const prop of vars.properties ?? []) {
+        if ((prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') || prop.computed) continue;
+        if (prop.value?.type !== 'LogicalExpression' || prop.value.operator !== '??') continue;
+        const copy = branchCopy(prop.value, allow, minLength);
+        if (copy === null) continue;
+        out.push({
+            node: prop.value,
+            message: `Translation variable fallback "${truncate(copy)}" should use t('key').`,
+        });
+    }
+    return out;
+}
+
 /**
  * Return the first non-trivial copy an inline object holds under a
  * USER_FACING_ATTRS key, or null.
@@ -696,6 +720,9 @@ export function findViolations(node, options = {}) {
 
     function visit(n) {
         if (!n || typeof n !== 'object') return;
+        if (n.type === 'CallExpression') {
+            out.push(...translationVarViolations(n, allow, minLength));
+        }
         if (n.type === 'ObjectPattern') {
             // Copy shipped as a destructured prop default never reaches a
             // JSX node, so judge the pattern here and let the generic
@@ -941,6 +968,9 @@ function create(context) {
             for (const v of propDefaultViolations(node, allow, minLength)) {
                 context.report({ node: v.node, message: v.message });
             }
+        },
+        CallExpression(node) {
+            for (const v of translationVarViolations(node, allow, minLength)) context.report(v);
         },
     };
 }

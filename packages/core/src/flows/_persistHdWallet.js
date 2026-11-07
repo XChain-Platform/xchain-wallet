@@ -21,7 +21,6 @@ import {
     encryptWalletSeed,
     encryptWalletPassphrase,
     makeFreshKdfParams,
-    COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
@@ -29,6 +28,7 @@ import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { ensureSettings } from './seedSettings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
+import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
 // The same phrase (and passphrase) imported twice derives the same addresses.
 // A second wallet over the same keys would double-count every balance and
@@ -254,9 +254,7 @@ export async function persistHdWallet({
             // A restored Counterwallet wallet opens on the legacy address
             // its old wallet showed first - that is where the user's
             // balances are - not on the chain's modern default.
-            const addressType = format === 'counterwallet-legacy'
-                ? COUNTERWALLET_DEFAULT_ADDRESS_TYPE
-                : descriptor.defaultAddressType;
+            const addressType = defaultAddressTypeForFormat(descriptor, format);
             const [derived] = await signer.getAddresses({
                 chainId,
                 accountIndex: 0,

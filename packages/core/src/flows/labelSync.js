@@ -558,7 +558,6 @@ async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '', mas
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
-        aad: wallet.aad,
         masterKey,
         retainMasterKey: (k) => { sessionMasterKey = k; },
     });

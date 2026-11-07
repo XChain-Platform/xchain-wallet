@@ -199,7 +199,7 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                 {hasData && delta != null && !hidden ? (
                     <div
                         className={`${styles.change} ${tone}`}
-                        aria-label={t('components.portfolioChart.change', { label: range.label, value: pctDisplay?.label ?? 'Change unavailable', formatFiatValue: formatFiat(Math.abs(delta), fiatCurrency) })}
+                        aria-label={t('components.portfolioChart.change', { label: range.label, value: pctDisplay?.label ?? t('components.portfolioChart.changeUnavailable'), formatFiatValue: formatFiat(Math.abs(delta), fiatCurrency) })}
                     >
                         <bdi dir="ltr">
                             {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}

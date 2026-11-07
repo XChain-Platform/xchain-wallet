@@ -191,6 +191,8 @@ export interface ConnectOpts {
 export interface ConnectSuccess {
     ok: true;
     version: string;
+    // Lists every bridge-spec version the wallet can speak.
+    supportedVersions: string[];
     accounts: Account[];
     chains: ChainId[];
     permissions: SitePermissions;
@@ -388,6 +390,8 @@ export interface SignInParams {
     expiresInMs?: number;
     // If set, wallet restricts the address picker to these chains.
     chains?: CoinId[];
+    // Restricts the address picker to one full chain id when set.
+    chainId?: ChainId;
 }
 
 // Structured form of the v2 challenge. The signed bytes are the string

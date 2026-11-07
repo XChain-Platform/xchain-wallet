@@ -19,6 +19,7 @@ import {
     SIGN_IN_CHALLENGE_VERSION,
     SIGN_IN_DEFAULT_EXPIRY_MS,
     BRIDGE_SPEC_VERSION,
+    BRIDGE_SUPPORTED_VERSIONS,
     PROVIDER_READY_EVENT,
     type XChainProvider,
     type ConnectOpts,
@@ -216,6 +217,7 @@ export class MockXChainProvider implements XChainProvider {
         return {
             ok: true,
             version: this.version,
+            supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
             accounts: this.opts.accounts,
             chains,
             permissions: this.grantedPermissions,
@@ -320,8 +322,14 @@ export class MockXChainProvider implements XChainProvider {
         if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
-        const firstAddress = this.opts.addresses[this.opts.activeChains[0]!]?.[0];
-        if (!firstAddress) {
+        const chainId = this.opts.activeChains.find((id) => (
+            (!params.chainId || params.chainId === id)
+            && this.opts.addresses[id]?.some((a) => !params.chains?.length || params.chains.includes(a.chain))
+        ));
+        const firstAddress = chainId
+            ? this.opts.addresses[chainId]?.find((a) => !params.chains?.length || params.chains.includes(a.chain))
+            : undefined;
+        if (!chainId || !firstAddress) {
             return { ok: false, error: 'ADDRESS_NOT_AUTHORIZED' };
         }
         const now = Date.now();
@@ -341,7 +349,7 @@ export class MockXChainProvider implements XChainProvider {
         return {
             ok: true,
             address: firstAddress.address,
-            chainId: this.opts.activeChains[0]!,
+            chainId,
             challenge,
             challengeParts: parts,
             signature: `mock-sig:${challenge.length.toString(16)}`,

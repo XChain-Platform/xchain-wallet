@@ -22,8 +22,8 @@ import {
     decryptWalletPassphrase,
     PASSPHRASE_AAD,
 } from '../../../packages/core/src/crypto/walletBlob.js';
-import { AeadAuthError, encrypt } from '../../../packages/core/src/crypto/aead.js';
-import { deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import { AeadAuthError, decrypt, encrypt } from '../../../packages/core/src/crypto/aead.js';
+import { base64ToBytes, deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 
 // password -> KDF -> AES-256-GCM: every case pays a real Argon2id derivation.
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
@@ -101,19 +101,20 @@ describe('crypto/walletBlob', () => {
         expect(keyError.message).toBe(passwordError.message);
     });
 
-    it('AAD binding: omitting AAD on decrypt fails when AAD was supplied on encrypt', async () => {
-        const aad = new TextEncoder().encode('vault-v2');
+    it('seals the seed without AAD and rejects the passphrase domain separator', async () => {
         const { encryptedSeed, kdfParams } = await encryptWalletSeed({
             password: 'p',
             seed: SEED,
             kdfParams: KDF_PARAMS,
-            aad,
         });
-        await expect(decryptWalletSeed({
-            password: 'p',
-            encryptedSeed,
-            kdfParams,
-        })).rejects.toThrow();
+        const key = deriveMasterKey('p', kdfParams);
+        try {
+            await expect(decrypt(key, base64ToBytes(encryptedSeed))).resolves.toEqual(SEED);
+            await expect(decrypt(key, base64ToBytes(encryptedSeed), PASSPHRASE_AAD))
+                .rejects.toBeInstanceOf(AeadAuthError);
+        } finally {
+            key.fill(0);
+        }
     });
 
     it('mints fresh kdfParams when not supplied', async () => {

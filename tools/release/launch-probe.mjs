@@ -763,11 +763,11 @@ export function summarise(results) {
  * runner, its linux job on a linux runner. There, probing nothing is a
  * broken venue rather than an honest host limit, and this turns it red.
  *
- * A count rather than "no skips allowed", because a legitimate skip
- * survives even in that venue: the x64 mac zip needs Rosetta 2 on an Apple
- * silicon runner, and an arm64 AppImage cannot be executed on an x86-64
- * one. Demanding zero skips would make those jobs fail for the host being
- * what GitHub gives us, and a gate that cannot be satisfied gets removed.
+ * A count rather than "no skips allowed", because a wrong-architecture
+ * build cannot run on some matching-platform hosts. An arm64 AppImage cannot
+ * execute on an x86-64 Linux runner, for example. A missing host facility is
+ * different: an x64 mac zip on Apple silicon without Rosetta 2 is blocked,
+ * and the refusal returns 1 before requireProbed is checked.
  *
  * It is deliberately unset for sign.sh, which runs on the release Mac
  * against a set containing Linux artifacts no Mac can launch; there, the

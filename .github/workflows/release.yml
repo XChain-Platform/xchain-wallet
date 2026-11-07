@@ -776,14 +776,16 @@ jobs:
       # for diagnosis while the job goes red.
       #
       # WHAT IT COVERS AND WHAT IT DOES NOT. It probes the mac zip, which
-      # holds the same .app the dmg wraps, so both are answered. It probes
-      # the runner's NATIVE architecture; the other arch's zip is launched
-      # only if Rosetta 2 is present, and the probe labels such a pass as
-      # translated. That distinction is measured rather than theoretical:
+      # holds the same .app the dmg wraps, so both are answered. The native
+      # zip runs natively, while the x64 zip runs under Rosetta 2 and its pass
+      # is labelled translated. That distinction is measured rather than
+      # theoretical:
       # the v0.338.0 x64 bundle starts perfectly under Rosetta on Apple
       # silicon while its arm64 twin dies, because hardened-runtime JIT
-      # restrictions bite per architecture. So `--require-probed 1` demands
-      # one real launch and not two.
+      # restrictions bite per architecture, so translated evidence is weaker.
+      # Rosetta 2 is required here: without it the x64 zip is blocked and the
+      # step fails before `--require-probed` is checked. The minimum prevents
+      # probing nothing; it never waives a missing host facility.
       #
       # It needs a macOS GUI session (launchctl managername = Aqua). If a
       # runner image ever stops providing one, the probe reports NOT PROBED

@@ -512,7 +512,7 @@ describe('settings form validation', () => {
 
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByRole('dialog').textContent).toContain(
-            'Transaction actions produce unsigned PSBTs',
+            'Transactions you build here stay unsigned',
         );
         expect(container.querySelector('input[type="password"]')).toBeNull();
 
