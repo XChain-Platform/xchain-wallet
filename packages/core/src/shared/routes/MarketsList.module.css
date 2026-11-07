@@ -148,6 +148,7 @@
     justify-content: space-between;
     gap: var(--xc-space-3);
     flex-wrap: wrap;
+    padding: var(--xc-card-pad);
 }
 
 .paginationCount {
