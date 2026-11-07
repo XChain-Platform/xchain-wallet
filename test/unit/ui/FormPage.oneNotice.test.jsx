@@ -156,13 +156,12 @@ describe('one notice box per form', () => {
         expect(screen.queryByText(/may be out of date/)).toBeNull();
     });
 
-    it('leaves the shell notice in place over a form with no notice of its own', () => {
+    it('shows no shell notice over a form while degraded', () => {
         const { container } = mountInShell('degraded', (
             <FormPage><input aria-label="Amount" /></FormPage>
         ));
         const shown = boxes(container);
-        expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Some information may be out of date');
-        expect(shown[0].querySelector('[role="status"][aria-live="polite"]')).not.toBeNull();
+        expect(shown).toHaveLength(0);
+        expect(screen.queryByText(/may be out of date/)).toBeNull();
     });
 });

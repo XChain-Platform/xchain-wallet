@@ -150,12 +150,10 @@ describe('Send empty state and the balance check', () => {
         expect(screen.queryByText(/Some information may be out of date/)).toBeNull();
     });
 
-    it('shows the notice once in the page content when Send has a form to show', async () => {
+    it('shows no degraded notice when Send has a form to show', async () => {
         reachability.overall = 'degraded';
         mount('100000000', { inShell: true });
         await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 });
-        const notice = screen.getByText('Some information may be out of date');
-        expect(screen.getByRole('main').contains(notice)).toBe(true);
-        expect(screen.getAllByText('Some information may be out of date')).toHaveLength(1);
+        expect(screen.queryByText('Some information may be out of date')).toBeNull();
     });
 });

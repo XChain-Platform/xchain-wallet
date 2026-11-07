@@ -41,18 +41,18 @@ const css = readFileSync(join(
 ), 'utf8');
 
 function mount(state = {}) {
-    useReachability.mockReturnValue({ loading: false, overall: 'degraded', perChain: [], refresh: () => {}, lastChecked: null, ...state });
+    useReachability.mockReturnValue({ loading: false, overall: 'offline', perChain: [], refresh: () => {}, lastChecked: null, ...state });
     return render(<ReachabilityBanner />);
 }
 
 afterEach(() => { cleanup(); useReachability.mockReset(); });
 
 describe('ReachabilityBanner', () => {
-    it('uses one short atomic notice without technical status text', () => {
+    it('uses one short atomic offline notice without technical status text', () => {
         mount({ perChain: [chain()] });
         const status = screen.getByRole('status');
-        expect(screen.getByText('Some information may be out of date')).toBeTruthy();
-        expect(status).not.toHaveTextContent(/degraded|offline|hub|encoder|explorer/i);
+        expect(status).toHaveTextContent("You're offline. Some information may be out of date.");
+        expect(status).not.toHaveTextContent(/degraded|hub|encoder|explorer/i);
         expect(status).toHaveAttribute('aria-live', 'polite');
         expect(status).toHaveAttribute('aria-atomic', 'true');
         expect(screen.queryByRole('button', { name: /dismiss|close/i })).toBeNull();
@@ -86,7 +86,7 @@ describe('ReachabilityBanner', () => {
         const refresh = vi.fn();
         try {
             useReachability.mockReturnValue({
-                loading: false, overall: 'degraded', perChain: [], refresh, lastChecked: null,
+                loading: false, overall: 'offline', perChain: [], refresh, lastChecked: null,
             });
             const view = render(
                 <ReachabilityNoticeReportContext.Provider value={report}>
@@ -99,7 +99,7 @@ describe('ReachabilityBanner', () => {
             expect(screen.getByRole('button', { name: 'Retry now' })).toBeEnabled();
 
             useReachability.mockReturnValue({
-                loading: true, overall: 'degraded', perChain: [], refresh, lastChecked: null,
+                loading: true, overall: 'offline', perChain: [], refresh, lastChecked: null,
             });
             view.rerender(
                 <ReachabilityNoticeReportContext.Provider value={report}>
@@ -161,7 +161,7 @@ describe('ReachabilityBanner', () => {
 
     it('closes Details when the route changes', () => {
         useReachability.mockReturnValue({
-            loading: false, overall: 'degraded', perChain: [chain()], refresh: () => {}, lastChecked: Date.now(),
+            loading: false, overall: 'offline', perChain: [chain()], refresh: () => {}, lastChecked: Date.now(),
         });
         const view = render(
             <NoticesRouteContext.Provider value="home"><ReachabilityBanner /></NoticesRouteContext.Provider>,
@@ -179,19 +179,33 @@ describe('ReachabilityBanner', () => {
     it('announces only the reachability state when poll details rerender', () => {
         const view = mount({ lastChecked: 100 });
         const announcement = screen.getByRole('status');
-        expect(announcement).toHaveTextContent('Some information may be out of date');
+        expect(announcement).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(announcement).not.toHaveTextContent('Last checked');
 
         useReachability.mockReturnValue({
             loading: false,
-            overall: 'degraded',
+            overall: 'offline',
             perChain: [],
             refresh: () => {},
             lastChecked: 200,
         });
         view.rerender(<ReachabilityBanner />);
         expect(screen.getByRole('status')).toBe(announcement);
-        expect(screen.getByRole('status')).toHaveTextContent('Some information may be out of date');
+        expect(screen.getByRole('status')).toHaveTextContent("You're offline. Some information may be out of date.");
+    });
+
+    it('renders no banner or reported notice for a degraded verdict', async () => {
+        const report = vi.fn();
+        useReachability.mockReturnValue({
+            loading: false, overall: 'degraded', perChain: [chain()], refresh: () => {}, lastChecked: null,
+        });
+        render(
+            <ReachabilityNoticeReportContext.Provider value={report}>
+                <ReachabilityBanner />
+            </ReachabilityNoticeReportContext.Provider>,
+        );
+        expect(screen.queryByRole('status')).toBeNull();
+        await waitFor(() => expect(report).toHaveBeenLastCalledWith(null));
     });
 
     it('renders nothing for a chain that is current', () => {
@@ -207,9 +221,9 @@ describe('ReachabilityBanner', () => {
             const message = screen.getByRole('status');
             const notice = message.closest('[data-variant]');
             expect(window.innerWidth).toBe(360);
-            expect(notice).toHaveAttribute('data-variant', 'warning');
-            expect(notice.querySelector('[aria-hidden="true"]')).toHaveTextContent('⚠');
-            expect(message).toHaveTextContent('Some information may be out of date');
+            expect(notice).toHaveAttribute('data-variant', 'error');
+            expect(notice.querySelector('[aria-hidden="true"]')).toHaveTextContent('✕');
+            expect(message).toHaveTextContent("You're offline. Some information may be out of date.");
             expect(message.parentElement).toContainElement(screen.getByRole('button', { name: 'Details' }));
             expect(notice).toContainElement(screen.getByRole('button', { name: 'Try again' }));
             expect(css).not.toMatch(/\.degraded\b|\.offline\b/);

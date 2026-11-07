@@ -635,29 +635,29 @@ function TokenDetailContent({
                 {/* Market section: stats strip + sparkline. Sits above
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
-                    chart uses, so the toggle persists across both surfaces). */}
+                    chart uses, so the toggle persists across both surfaces).
+                    MarketPanel draws its own card, so an empty price history
+                    can stand outside it at full width. */}
                 {fiatSupported && chartVisible ? (
-                    <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                        <RouteErrorBoundary
-                            variant="compact"
-                            resetKey={`${chainId}:${tick}:market`}
-                        >
-                            <MarketPanel
-                                isNative={isNative}
-                                nativePrice={nativePrice}
-                                showNativeStats={showNativeStats}
-                                isDemo={isDemo}
-                                assetInfo={assetInfo}
-                                tick={tick}
-                                chainId={chainId}
-                                hasMarketData={hasMarketData}
-                                fiatRate={displayFiatRate}
-                                fiatRateSource={fiatRateSource}
-                                fiatCurrency={fiatCurrency}
-                                loading={metadataLoading}
-                            />
-                        </RouteErrorBoundary>
-                    </div>
+                    <RouteErrorBoundary
+                        variant="compact"
+                        resetKey={`${chainId}:${tick}:market`}
+                    >
+                        <MarketPanel
+                            isNative={isNative}
+                            nativePrice={nativePrice}
+                            showNativeStats={showNativeStats}
+                            isDemo={isDemo}
+                            assetInfo={assetInfo}
+                            tick={tick}
+                            chainId={chainId}
+                            hasMarketData={hasMarketData}
+                            fiatRate={displayFiatRate}
+                            fiatRateSource={fiatRateSource}
+                            fiatCurrency={fiatCurrency}
+                            loading={metadataLoading}
+                        />
+                    </RouteErrorBoundary>
                 ) : null}
 
                 {/* The empty state stands alone at full width rather than
@@ -1106,57 +1106,63 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         } else {
             hint = 'No market data available for this network.';
         }
+        // With no line to draw and no hint, the empty state stands below the
+        // card at full width, never inside it.
+        const nativeEmpty = !nativeLoading && !sparkline && !hint;
         return (
             <>
-                <section className={styles.stats}>
-                    <StatCell label="Price" value={priceCell} />
-                    <StatCell label="Market cap" value={marketCapCell} />
-                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
-                </section>
-                {/* Range tabs show only when some range can carry a line: a real
-                    series exists, or the wallet is a demo wallet. */}
-                <div className={styles.marketHistorySlot}>
-                    {nativeLoading ? (
-                        <Skeleton height={64} ariaLabel="Loading price history" />
-                    ) : sparkline ? (
-                        <>
-                            <div
-                                id={`${tabsId}-panel`}
-                                role="tabpanel"
-                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
-                            >
-                                {sparkline ? (
-                                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                        <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
-                                    </div>
-                                ) : (
-                                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                                )}
-                            </div>
-                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                                {availableRanges.map((r) => (
-                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                    <button
-                                        key={r.id}
-                                        id={`${tabsId}-tab-${r.id}`}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                        aria-controls={`${tabsId}-panel`}
-                                        tabIndex={r.id === rangeId ? 0 : -1}
-                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                        onClick={() => setRangeId(r.id)}
+                <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
+                    <section className={styles.stats}>
+                        <StatCell label="Price" value={priceCell} />
+                        <StatCell label="Market cap" value={marketCapCell} />
+                        <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
+                    </section>
+                    {/* Range tabs show only when some range can carry a line: a real
+                        series exists, or the wallet is a demo wallet. */}
+                    {nativeEmpty ? null : (
+                        <div className={styles.marketHistorySlot}>
+                            {nativeLoading ? (
+                                <Skeleton height={64} ariaLabel="Loading price history" />
+                            ) : sparkline ? (
+                                <>
+                                    <div
+                                        id={`${tabsId}-panel`}
+                                        role="tabpanel"
+                                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
                                     >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    ) : !hint ? (
-                        <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                    ) : null}
-                    {hint && !nativeLoading ? <p className={styles.muted}>{hint}</p> : null}
+                                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                                        </div>
+                                    </div>
+                                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                        {availableRanges.map((r) => (
+                                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                                            <button
+                                                key={r.id}
+                                                id={`${tabsId}-tab-${r.id}`}
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                                aria-controls={`${tabsId}-panel`}
+                                                tabIndex={r.id === rangeId ? 0 : -1}
+                                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                                onClick={() => setRangeId(r.id)}
+                                            >
+                                                {r.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : null}
+                            {hint && !nativeLoading ? <p className={styles.muted}>{hint}</p> : null}
+                        </div>
+                    )}
                 </div>
+                {nativeEmpty ? (
+                    <div className={styles.marketHistorySlot}>
+                        <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                    </div>
+                ) : null}
             </>
         );
     }
@@ -1214,53 +1220,63 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         hint = 'Market data is unavailable.';
     }
 
+    // With no chart drawn, the history slot stands below the card at full
+    // width, so the empty state is never a box inside the market card.
+    const tokenEmpty = !loading && !sparkline;
     return (
         <>
-            <section className={styles.stats}>
-                <StatCell label={priceLabel} value={priceCell} />
-                <StatCell label="Market cap" value={marketCapCell} />
-                <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
-            </section>
-            <div className={styles.marketHistorySlot}>
-                {loading ? (
-                    <Skeleton height={64} ariaLabel="Loading price history" />
-                ) : sparkline ? (
-                    <div
-                        id={`${tabsId}-panel`}
-                        role="tabpanel"
-                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
-                    >
-                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
-                        </div>
-                    </div>
-                ) : (
-                    // The placeholder holds the slot whenever no chart is drawn; an
-                    // unavailable hint reads under it rather than standing in for it.
-                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                )}
-                {sparkline && isDemo ? (
-                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                        {CHART_RANGES.map((r) => (
-                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                            <button
-                                key={r.id}
-                                id={`${tabsId}-tab-${r.id}`}
-                                type="button"
-                                role="tab"
-                                aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                aria-controls={`${tabsId}-panel`}
-                                tabIndex={r.id === rangeId ? 0 : -1}
-                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                onClick={() => setRangeId(r.id)}
+            <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
+                <section className={styles.stats}>
+                    <StatCell label={priceLabel} value={priceCell} />
+                    <StatCell label="Market cap" value={marketCapCell} />
+                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
+                </section>
+                {tokenEmpty ? null : (
+                    <div className={styles.marketHistorySlot}>
+                        {loading ? (
+                            <Skeleton height={64} ariaLabel="Loading price history" />
+                        ) : (
+                            <div
+                                id={`${tabsId}-panel`}
+                                role="tabpanel"
+                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
                             >
-                                {r.label}
-                            </button>
-                        ))}
+                                <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                    <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                                </div>
+                            </div>
+                        )}
+                        {sparkline && isDemo ? (
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                {CHART_RANGES.map((r) => (
+                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                                    <button
+                                        key={r.id}
+                                        id={`${tabsId}-tab-${r.id}`}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                        aria-controls={`${tabsId}-panel`}
+                                        tabIndex={r.id === rangeId ? 0 : -1}
+                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                        onClick={() => setRangeId(r.id)}
+                                    >
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
-                ) : null}
-                {hint && !loading ? <p className={styles.muted}>{hint}</p> : null}
+                )}
             </div>
+            {tokenEmpty ? (
+                <div className={styles.marketHistorySlot}>
+                    {/* The placeholder holds the slot whenever no chart is drawn; an
+                        unavailable hint reads under it rather than standing in for it. */}
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                    {hint ? <p className={styles.muted}>{hint}</p> : null}
+                </div>
+            ) : null}
         </>
     );
 }

@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The shell's reachability notice says the screen's information may be out
-// of date on every screen. It never claims balances are stale, since the
-// balance screens state an unchecked balance in their own rows and states.
+// The shell's reachability notice appears only while the device is offline.
+// It never claims balances are stale, since the balance screens state an
+// unchecked balance in their own rows and states.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -19,10 +19,7 @@ import { NoticesRouteContext } from '../../../packages/core/src/shared/component
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
 const ROUTES = ['home:1', 'send:2', 'token-detail:3', 'history:4', 'receive:1'];
-const COPY = {
-    degraded: 'Some information may be out of date',
-    offline: "You're offline. Some information may be out of date.",
-};
+const COPY = "You're offline. Some information may be out of date.";
 
 function mount(overall, routeKey) {
     useReachability.mockReturnValue({
@@ -38,14 +35,17 @@ function mount(overall, routeKey) {
 afterEach(() => { cleanup(); useReachability.mockReset(); });
 
 describe('the shell reachability notice names no stale balances', () => {
-    for (const overall of ['degraded', 'offline']) {
-        it.each(ROUTES)(`says the information may be out of date on %s while ${overall}`, (routeKey) => {
-            mount(overall, routeKey);
-            expect(screen.getAllByRole('status')).toHaveLength(1);
-            expect(screen.getByRole('status')).toHaveTextContent(COPY[overall]);
-            expect(screen.queryByText(/balances/)).toBeNull();
-        });
-    }
+    it.each(ROUTES)('says the device is offline on %s while offline', (routeKey) => {
+        mount('offline', routeKey);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('status')).toHaveTextContent(COPY);
+        expect(screen.queryByText(/balances/)).toBeNull();
+    });
+
+    it.each(ROUTES)('shows no notice on %s while degraded', (routeKey) => {
+        mount('degraded', routeKey);
+        expect(screen.queryByRole('status')).toBeNull();
+    });
 
     it('carries no balances wording in the English copy', () => {
         expect(Object.prototype.hasOwnProperty.call(en, 'reachability.notice.balances')).toBe(false);

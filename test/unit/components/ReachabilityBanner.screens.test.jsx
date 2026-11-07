@@ -3,9 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The reachability notice says the screen's information may be out of date
-// on every screen that holds network data, and every such screen carries
-// exactly one notice. A screen of data held on this device carries none.
+// The reachability notice appears only when the device is offline. A screen
+// of data held on this device carries none.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -49,10 +48,9 @@ describe('ReachabilityBanner copy by screen', () => {
         },
     );
 
-    it('drops the offline claim when only some services are down', () => {
+    it('shows no notice when only some services are down', () => {
         mount('degraded', 'receive:1');
-        expect(screen.getByRole('status')).toHaveTextContent('Some information may be out of date');
-        expect(screen.queryByText(/offline/i)).toBeNull();
+        expect(screen.queryByRole('status')).toBeNull();
     });
 
     it.each(['home:1', 'send:2', 'token-detail:3', 'history:4'])(

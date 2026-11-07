@@ -6,7 +6,8 @@
 // The token market panel keeps one placeholder in its price-history slot
 // whenever no chart is drawn, so the slot never reads as a blank band,
 // including when the token record cannot be read and the panel carries its
-// unavailable hint.
+// unavailable hint. With no chart the slot stands below the market card at the
+// full content width (U15), so the empty state is never a box in the card.
 
 import React from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -69,6 +70,10 @@ function historySlot() {
     return document.querySelector('[class*="marketHistorySlot"]');
 }
 
+function inMarketCard(el) {
+    return el.closest('[class*="marketCardOffset"]') !== null;
+}
+
 async function settledSlot() {
     await vi.waitFor(() => {
         expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
@@ -83,6 +88,7 @@ describe('token market history slot', () => {
         const slot = await settledSlot();
         await vi.waitFor(() => expect(slot.textContent).toContain('Market data is unavailable.'));
         expect(slot.textContent).toContain('No price history yet');
+        expect(inMarketCard(slot)).toBe(false);
     });
 
     it('shows the no-history placeholder when the token record has no market price', async () => {
@@ -90,6 +96,8 @@ describe('token market history slot', () => {
         const slot = await settledSlot();
         await vi.waitFor(() => expect(slot.textContent).toContain('No price history yet'));
         expect(slot.textContent).not.toContain('Market data is unavailable.');
+        expect(inMarketCard(slot)).toBe(false);
+        expect(document.querySelector('[class*="marketCardOffset"]').textContent).toContain('Market cap');
     });
 
     it('draws the chart and no placeholder when a price series loads', async () => {
@@ -98,5 +106,6 @@ describe('token market history slot', () => {
         const slot = historySlot();
         expect(slot.querySelector('[aria-label$="price chart"]')).not.toBeNull();
         expect(slot.textContent).not.toContain('No price history yet');
+        expect(inMarketCard(slot)).toBe(true);
     });
 });

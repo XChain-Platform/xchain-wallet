@@ -49,12 +49,12 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     // A local-data screen can still ask for the notice (the endpoint settings).
     const wantedByScreen = useContext(ReachabilityNoticeWantedContext);
     const holdsNetworkData = routeHoldsNetworkData(routeKey) || wantedByScreen;
-    const unreachable = holdsNetworkData && (overall === 'degraded' || overall === 'offline');
-    const variant = overall === 'offline' ? 'error' : 'warning';
-    // The notice speaks of the screen's information in general on every
-    // screen. A balance that could not be checked says so in its own row or
-    // empty state, so the notice never claims a balance is stale.
-    const text = t(overall === 'offline' ? 'reachability.notice.offline' : 'reachability.notice.degraded');
+    const unreachable = holdsNetworkData && overall === 'offline';
+    const variant = 'error';
+    // The notice speaks only when the device is offline. A balance that could
+    // not be checked says so in its own row or empty state, so the notice
+    // never claims a balance is stale.
+    const text = t('reachability.notice.offline');
     const retryLabel = loading ? t('common.checking') : t('common.tryAgain');
 
     // The route hears what this notice says even while a screen hides it, so

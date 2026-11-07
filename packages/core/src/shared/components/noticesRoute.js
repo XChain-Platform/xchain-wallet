@@ -51,9 +51,9 @@ export const ReachabilityNoticeReportContext = createContext(
 );
 
 /**
- * The shell's reachability notice while the services are degraded or
- * offline on a screen that holds network data, whether or not it is drawn
- * at the moment, with `hiddenCount`, the number of screens hiding it because
+ * The shell's reachability notice while the device is offline on a screen
+ * that holds network data, whether or not it is drawn at the moment, with
+ * `hiddenCount`, the number of screens hiding it because
  * they state the outage themselves; null otherwise. A route reads it to keep its page at one
  * message: an empty state for data that could not be checked steps aside,
  * and a form folds the sentence into its own notice.

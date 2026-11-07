@@ -81,9 +81,11 @@ describe('camera explainer', () => {
 });
 
 describe('reachability notice', () => {
-    it('renders through StatusMessage with the warning and error tones', () => {
+    it('renders only the offline verdict through an error StatusMessage', () => {
         const source = read('packages/core/src/shared/components/ReachabilityBanner.jsx');
         expect(source).toMatch(/<StatusMessage\b/);
-        expect(source).toMatch(/overall === 'offline' \? 'error' : 'warning'/);
+        expect(source).toMatch(/overall === 'offline'/);
+        expect(source).toMatch(/const variant = 'error'/);
+        expect(source).not.toMatch(/const variant = .*warning/);
     });
 });

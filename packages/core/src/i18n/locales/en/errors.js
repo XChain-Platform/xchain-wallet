@@ -15,7 +15,6 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'offline.empty.title': "You're offline",
-    'reachability.notice.degraded': 'Some information may be out of date',
     'reachability.notice.offline': "You're offline. Some information may be out of date.",
 
     'loading.error.title': "The wallet couldn't start.",
