@@ -272,9 +272,20 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
         await test.step('Create token', async () => {
             await gotoSection(page, 'Home');
-            const createToken = page.getByRole('main').getByRole('button', { name: 'Create token' });
+            // Home has no action grid at 834px and wider (ruling U45), and the
+            // Actions menu behind More actions has no wizard entry (its "Issue
+            // token" row opens the plain issue form). The guided Create token
+            // wizard is reached through the command palette at this width.
+            await page.keyboard.press('ControlOrMeta+k');
+            const palette = page.getByRole('dialog', { name: 'Command palette' });
+            await expect(palette).toBeVisible();
+            const paletteInput = palette.getByRole('combobox').first();
+            await expect(paletteInput).toBeEditable();
+            await paletteInput.fill('Create a token');
+            const createToken = page.getByRole('option', { name: /^Create a token\b/ }).first();
             await expect(createToken).toBeVisible();
             await createToken.click();
+            await expect(palette).toBeHidden();
             const custom = page.getByRole('button', { name: /^Custom/ });
             await expect(custom).toBeVisible();
             await custom.click();
