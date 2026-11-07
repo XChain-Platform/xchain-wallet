@@ -19,6 +19,7 @@ import { AmountField } from '../../../packages/core/src/shared/components/Amount
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
+import { BalanceHeroMenu } from '../../../packages/core/src/shared/components/BalanceHeroMenu.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
@@ -194,6 +195,14 @@ const fixtures = [
     )],
     ['BalanceChanges', () => (
         <BalanceChanges result={{ deltas: [{ tick: 'BTC', before: '2', after: '1' }] }} />
+    )],
+    ['BalanceHeroMenu', () => (
+        <BalanceHeroMenu
+            items={[
+                { id: 'currency', label: 'Show balance in BTC', Icon: () => <svg aria-hidden="true" />, onSelect: noop },
+                { id: 'chart', label: 'Hide chart', Icon: () => <svg aria-hidden="true" />, onSelect: noop, checked: true },
+            ]}
+        />
     )],
     ['BalanceList', () => (
         <BalanceList rows={[{
