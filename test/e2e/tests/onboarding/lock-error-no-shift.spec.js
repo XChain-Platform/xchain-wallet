@@ -8,8 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wrong-password message appears under the field in space the locked screen
-// already kept free, so the centred form does not move when it shows.
+// The wrong-password message appears under the field and Unlock sits the form
+// gap under it (U48: no idle space between the field and Unlock). The same line
+// waits below the actions while no error shows, so the centred form keeps one
+// height: the logo and the password field do not move when the error shows.
+// Unlock moves down by the error line, which is the error taking its place.
+
+const FORM_GAP_PX = 16;
 
 import { createWallet, expect, test, lockButton, nav, unlockButton } from '../../fixtures/wallet.js';
 
@@ -32,15 +37,30 @@ for (const size of [{ width: 360, height: 600 }, { width: 360, height: 800 }, { 
         await createWallet(page);
         await lockWallet(page);
         const field = page.getByLabel('Password', { exact: true });
+        const logo = page.locator('img[src*="xchain-color"]');
         const top = async () => (await field.boundingBox()).y;
+        const logoTop = async () => (await logo.boundingBox()).y;
         const before = await top();
+        const logoBefore = await logoTop();
+        // U48 while idle: Unlock sits the form gap under the field.
+        const fieldBox = await field.boundingBox();
+        const idleUnlock = await unlockButton(page).boundingBox();
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/lock-before-error-${size.width}x${size.height}.png` });
         await field.fill('not-the-password-1');
         await unlockButton(page).click();
-        await expect(page.getByRole('alert')).toHaveText('Incorrect password.', { timeout: 120_000 });
+        const alert = page.getByRole('alert');
+        await expect(alert).toHaveText('Incorrect password.', { timeout: 120_000 });
         const after = await top();
+        const logoAfter = await logoTop();
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/lock-after-error-${size.width}x${size.height}.png` });
         expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+        expect(Math.abs(logoAfter - logoBefore)).toBeLessThanOrEqual(1);
+        expect(idleUnlock.y - (fieldBox.y + fieldBox.height)).toBeGreaterThanOrEqual(FORM_GAP_PX - 1);
+        expect(idleUnlock.y - (fieldBox.y + fieldBox.height)).toBeLessThanOrEqual(FORM_GAP_PX + 1);
+        // U48 with the error: Unlock sits the form gap under the error line.
+        const alertBox = await alert.boundingBox();
+        const errorUnlock = await unlockButton(page).boundingBox();
+        expect(Math.abs(errorUnlock.y - (alertBox.y + alertBox.height) - FORM_GAP_PX)).toBeLessThanOrEqual(1);
     });
 }
 

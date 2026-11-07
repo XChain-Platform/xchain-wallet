@@ -842,10 +842,14 @@ export function Locked({ onUnlocked, lockReason = null }) {
     ) : null;
 
     const body = captureForm || form;
+    // The wrong-password line has no idle space between the field and Unlock,
+    // so the same line waits below the actions instead and the centred form
+    // keeps one height: the field stays put when the error shows.
+    const centreClass = body === form && !error ? `${styles.centre} ${styles.centreIdle}` : styles.centre;
 
     return (
         <Screen variant={variant}>
-            <div className={styles.centre}>{body}</div>
+            <div className={centreClass}>{body}</div>
         </Screen>
     );
 }
