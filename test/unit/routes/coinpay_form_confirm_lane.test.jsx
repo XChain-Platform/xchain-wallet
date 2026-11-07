@@ -226,7 +226,8 @@ describe('CoinpayForm shared confirmation', () => {
             finishScan([]);
             await drain();
         });
-        expect(utils.getByText('No payments due')).toBeTruthy();
+        expect(utils.getByText('No order selected')).toBeTruthy();
+        expect(utils.getByText('Open a matched order from Payments due to pay it.')).toBeTruthy();
         expect(utils.queryByText('Scanning for payments due…')).toBeNull();
     });
 

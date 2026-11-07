@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     ListPage,
+    ListRow,
     Screen,
     PageHeader,
     Icon,
@@ -125,17 +126,14 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                         const d = chainRegistry.get(cid);
                         const iconUrl = branding.chainIconSmallUrl(cid);
                         return (
-                            <button
+                            <ListRow
                                 key={cid}
-                                type="button"
-                                className={styles.entry}
                                 onClick={() => onPickValidator(cid)}
-                            >
-                                {iconUrl ? (
+                                leading={iconUrl ? (
                                     <img src={iconUrl} alt="" aria-hidden="true" className={local.chainIcon} />
                                 ) : null}
-                                <span className={local.chainLabel}>{d?.displayName || cid}</span>
-                            </button>
+                                title={d?.displayName || cid}
+                            />
                         );
                     })}
                 </div>
@@ -154,37 +152,23 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
             ) : null}
             <div className={local.options}>
                 {/* Staking choices stay native buttons because each control is the complete clickable row. */}
-                <button
-                    type="button"
-                    className={styles.entry}
+                <ListRow
                     disabled={noStakingChain}
                     onClick={() => {
                         if (stakingChains.length === 1) onPickValidator(stakingChains[0]);
                         else setStep('chain');
                     }}
-                >
-                    <span className={local.optionIcon} aria-hidden="true"><Icon.StakeIcon /></span>
-                    <span className={local.optionBody}>
-                        <span className={local.optionTitle}>{t('stakeNew.validatorTitle')}</span>
-                        <span className={local.optionDesc}>
-                            {t('stakeNew.validatorDescription')}
-                        </span>
-                    </span>
-                </button>
-                <button
-                    type="button"
-                    className={styles.entry}
+                    leading={<span className={local.optionIcon} aria-hidden="true"><Icon.StakeIcon /></span>}
+                    title={t('stakeNew.validatorTitle')}
+                    subtitle={t('stakeNew.validatorDescription')}
+                />
+                <ListRow
                     disabled={noStakingChain}
                     onClick={() => onPickContract()}
-                >
-                    <span className={local.optionIcon} aria-hidden="true"><Icon.ContractIcon /></span>
-                    <span className={local.optionBody}>
-                        <span className={local.optionTitle}>{t('stakeNew.contractTitle')}</span>
-                        <span className={local.optionDesc}>
-                            {t('stakeNew.contractDescription')}
-                        </span>
-                    </span>
-                </button>
+                    leading={<span className={local.optionIcon} aria-hidden="true"><Icon.ContractIcon /></span>}
+                    title={t('stakeNew.contractTitle')}
+                    subtitle={t('stakeNew.contractDescription')}
+                />
             </div>
         </>,
     );

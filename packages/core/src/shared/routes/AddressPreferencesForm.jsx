@@ -439,7 +439,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     <FieldNote variant="error">{currentError}</FieldNote>
                 ) : null}
                 {current ? (
-                    <dl className={styles.detailsList}>
+                    <dl className={`${styles.detailsList} ${styles.flatDetailsList}`}>
                         <DetailRow
                             label="Currently on the network"
                             value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
@@ -472,7 +472,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
             <FormSection title="Dispensers on this address">
                 <RadioGroup
-                    legend="Choose who may open dispensers"
+                    legend={<span className="sr-only">Who may open dispensers</span>}
                     name="dispPref"
                     value={dispPref}
                     onChange={pick('dispenser', setDispPref)}

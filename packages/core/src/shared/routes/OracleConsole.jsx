@@ -341,7 +341,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             </>
         ) : null} toolbar={(
-            <Button type="button" variant="ghost" size="md" disabled={refreshing} onClick={() => load(true)}>
+            <Button type="button" variant="ghost" size="sm" disabled={refreshing} onClick={() => load(true)}>
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>

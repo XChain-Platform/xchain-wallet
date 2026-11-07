@@ -331,15 +331,19 @@ assert.ok(
     /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
     'TokenWizard delegates template cards to ListRow',
 );
+// Templates are rows of one flush card split by dividers, never a grid of
+// bordered cards inside the page card (operator ruling 2026-11-06).
 assert.ok(
-    /\.templateCard\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s.test(css),
-    'template cards use the shared strong border token',
+    /\.templateGrid\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s.test(css)
+        && /\.templateGrid > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s.test(css),
+    'template rows sit in one flush card with divider lines',
 );
 assert.ok(
-    /\.templateGrid\s*\{[^}]*grid-template-columns:\s*1fr/s.test(css)
-        && /@media \(min-width: 480px\)[\s\S]*?\.templateGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, 1fr\)/.test(css),
-    'template cards use one phone column and two wide-screen columns',
+    /\.templateCard\.templateCard\s*\{[^}]*border:\s*0/s.test(css)
+        && !/\.templateCard\s*\{[^}]*var\(--xc-border-strong\)/s.test(css),
+    'template rows draw no box of their own',
 );
+assert.ok(!/grid-template-columns:\s*repeat\(2, 1fr\)/.test(css), 'template rows stay one column at every width');
 assert.ok(!/<button\b/.test(src), 'TokenWizard has no route-level raw button');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');
 

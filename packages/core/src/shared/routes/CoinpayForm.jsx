@@ -608,8 +608,8 @@ function ScopedCoinpayForm({
             ) : null}
             {addressesByChain !== null && !scanning && !scanError && obligations.length === 0 ? (
                 <EmptyState
-                    title="No payments due"
-                    body="When one of your orders matches, the coin payment for it appears here."
+                    title="No order selected"
+                    body="Open a matched order from Payments due to pay it."
                 />
             ) : null}
 

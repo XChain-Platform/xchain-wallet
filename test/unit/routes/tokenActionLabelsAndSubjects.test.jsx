@@ -62,7 +62,7 @@ describe('token action labels', () => {
     it.each([
         ['callback-settings', 'Update callback settings'],
         ['bridge-settings', 'Update bridge settings'],
-        ['description', 'Update description'],
+        ['description', 'Save'],
         ['transfer', 'Transfer ownership'],
     ])('uses the %s action as the primary submit label', async (mode, label) => {
         mount(

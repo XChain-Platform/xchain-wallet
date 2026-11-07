@@ -13,15 +13,20 @@
 }
 
 .vendorGrid {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     padding: 0;
     margin: 0 0 var(--xc-space-3);
-    display: grid;
-    gap: var(--xc-space-2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.vendorGrid > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
 .vendorCard {
-    composes: card from '../../ui/Card.module.css';
     min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
@@ -34,9 +39,14 @@
     width: 100%;
 }
 
+.vendorCard.vendorCard {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
 .vendorCard:hover:not(:disabled) {
     background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
 }
 
 .vendorCard:disabled {

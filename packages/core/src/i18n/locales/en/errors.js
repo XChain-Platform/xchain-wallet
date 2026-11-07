@@ -24,8 +24,8 @@ const messages = {
 
     // --- route fallback -----------------------------------------
     'routeNotFound.title': 'Page not found',
+    'routeNotFound.emptyTitle': "That page isn't here",
     'routeNotFound.body': "This page doesn't exist or is no longer available.",
-    'routeNotFound.backToHome': 'Back to Home',
 
     // --- vault unavailable --------------------------------------
     'vaultUnavailable.recoverySafe': 'Your recovery phrase still holds everything.',

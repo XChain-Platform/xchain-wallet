@@ -16,6 +16,8 @@
 }
 
 .toolbarActions {
+    flex: 0 1 18rem;
+    min-width: min(100%, 14rem);
     align-items: center;
 }
 

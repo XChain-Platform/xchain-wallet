@@ -256,7 +256,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             )}>
 
                 {isLoading ? (
-                    <div className={styles.list} role="status" aria-label="Loading owned tokens">
+                    <div className={styles.loading} role="status" aria-label="Loading owned tokens">
                         <Skeleton.List rows={3} />
                     </div>
                 ) : null}
@@ -288,7 +288,6 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
                                 <ListRow
-                                    className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
                                     aria-label={`Open ${row.tick} token details`}
                                     leading={<span className={styles.rowChain} aria-hidden="true">

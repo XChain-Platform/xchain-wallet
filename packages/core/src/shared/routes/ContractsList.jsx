@@ -395,7 +395,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 onChange={setChainFilter}
             />
             {onDeploy ? (
-                <Button variant="primary" size="md" onClick={onDeploy}>
+                <Button variant="primary" size="sm" onClick={onDeploy}>
                     + Publish contract
                 </Button>
             ) : null}
@@ -426,9 +426,21 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             Couldn't load contracts. Try again.
         </StatusMessage>
     ) : null;
+    const allSectionsEmpty = activeChains.length > 0
+        && [myByChain, interactionsByChain, browseByChain].every((statesByChain) => (
+            activeChains.every((cid) => {
+                const state = statesByChain[cid];
+                return state && !state.loading && !state.error && state.rows.length === 0;
+            })
+        ));
 
     return wrap(
-        <>
+        allSectionsEmpty ? (
+            <EmptyState
+                title="No contracts yet"
+                body="Published and indexed contracts appear here after one is created."
+            />
+        ) : <>
             <ChainSection
                 title="My contracts (published by me)"
                 chains={activeChains}
@@ -546,7 +558,7 @@ function ChainFilterBar({ chains, value, onChange }) {
             <Button
                 type="button"
                 variant={value === 'all' ? 'primary' : 'secondary'}
-                size="md"
+                size="sm"
                 role="tab"
                 aria-selected={value === 'all'}
                 onClick={() => onChange('all')}
@@ -560,7 +572,7 @@ function ChainFilterBar({ chains, value, onChange }) {
                     <Button
                         type="button"
                         variant={value === cid ? 'primary' : 'secondary'}
-                        size="md"
+                        size="sm"
                         role="tab"
                         key={cid}
                         aria-selected={value === cid}

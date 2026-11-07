@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { ToggleRow, ROW_LAYOUT, ROW_HINT } from './settings/_settingsPrimitives.jsx';
-import cardStyles from '../../ui/Card.module.css';
 import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
 
 /**
@@ -63,13 +62,14 @@ import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
  * @param {boolean} [props.mandatory] Chain has no XCHAIN fee lane; no choice to offer.
  * @param {boolean} [props.unverified] Action is priced without a verdict (DEPLOY/EXECUTE).
  * @param {boolean} [props.disabled]
+ * @param {boolean} [props.showHint]  hide supporting copy when the surrounding form already explains the fee.
  * @param {*} [props.fee]  The protocol fee for THIS action if the form already
  *   knows it: a quote object (`{ free, fee }` / `{ xchainFee }`) or a decimal
  *   string. Omit when unknown; never pass a guess.
  */
 export function NativeFeeToggle({
     checked, onChange, coinTicker, mandatory = false, unverified = false, disabled = false,
-    fee = undefined,
+    fee = undefined, showHint = true,
 }) {
     if (!coinTicker) return null;
     const copy = protocolFeeRowCopy({
@@ -85,14 +85,12 @@ export function NativeFeeToggle({
     // choice between two ways of paying nothing.
     if (copy.variant === 'statement') {
         return (
-            <div className={cardStyles.card} style={ROW_LAYOUT}>
+            <div style={ROW_LAYOUT}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
                         {copy.label}
                     </span>
-                    <span style={ROW_HINT}>
-                        {hint}
-                    </span>
+                    {showHint ? <span style={ROW_HINT}>{hint}</span> : null}
                 </div>
             </div>
         );
@@ -101,10 +99,11 @@ export function NativeFeeToggle({
     return (
         <ToggleRow
             label={copy.label}
-            hint={hint}
+            hint={showHint ? hint : undefined}
             checked={!!checked}
             onChange={onChange}
             disabled={disabled}
+            embedded
         />
     );
 }

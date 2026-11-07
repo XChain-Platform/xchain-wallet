@@ -62,12 +62,12 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `480px` | compact grids and dense controls |
 | `600px` | the form and narrow route boundary |
 | `640px` | rail layout and sidebar begin |
-| `834px` | wide licence terms use a centred two-thirds content column |
+| `834px` | wide licence terms use a centred two-thirds content column; menus, lists, and paired panels may gain columns |
 | `900px` | full layout and labelled sidebar begin |
 | `48rem` | wide collectible grids |
 | `1024px` | desktop reference frame and future desktop-only refinements |
 
-The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `834px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `834px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 833px, 899px, and 1023px are aliases, not additional breakpoints.
 
 ### The list rule: full width to the scrollbar
 
@@ -163,7 +163,7 @@ Buttons and field primitives share one visual height scale. Pass the component's
 
 | size | token and height | use it when | do | do not |
 |---|---|---|---|---|
-| `sm` | `--xc-control-h-sm`, 28px (36px on touch) | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
+| `sm` | 28px painted, with a 44px hit area on touch | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
 | `md` | `--xc-control-h-md`, 36px (44px on touch) | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby route-local height such as 40px |
 | `lg` | `--xc-control-h-lg`, 44px (48px on touch) | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
 
@@ -171,7 +171,7 @@ On coarse-pointer or no-hover devices the tokens step up to 36/44/48px, so touch
 
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px with a weightier label), stepping up to 36/44/48px on touch. `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px painted with a 44px hit area on touch), `md` (36px, 44px on touch, default), or `lg` (44px, 48px on touch, with a weightier label). `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same named size scale; any visibly compact control must keep its larger touch target outside the painted box.
 
 **Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 

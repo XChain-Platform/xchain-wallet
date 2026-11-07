@@ -53,7 +53,7 @@ function expectMediumInput(input) {
 afterEach(() => cleanup());
 
 describe('route control row alignment', () => {
-    it('keeps contract search, filter chips, and publish action on the md size', async () => {
+    it('keeps contract search medium and its chips and publish action compact', async () => {
         mount(
             <ContractsList
                 walletId="wallet-1"
@@ -70,9 +70,9 @@ describe('route control row alignment', () => {
         );
 
         expectMediumInput(await screen.findByLabelText('Filter contracts'));
-        expect(screen.getByRole('tab', { name: 'All' })).toHaveClass(buttonStyles.md);
-        expect(screen.getByRole('tab', { name: 'Bitcoin' })).toHaveClass(buttonStyles.md);
-        expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
+        expect(screen.getByRole('tab', { name: 'All' })).toHaveClass(buttonStyles.sm);
+        expect(screen.getByRole('tab', { name: 'Bitcoin' })).toHaveClass(buttonStyles.sm);
+        expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.sm);
     });
 
     it('keeps staking search and network filter on the md size', async () => {

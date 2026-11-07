@@ -88,10 +88,11 @@ describe('Q through Z routes at a 320px viewport', () => {
         expectNoFixedWidthBeyondViewport(container);
     });
 
-    it('keeps the missing-route recovery within the viewport and shows Back to Home', () => {
+    it('keeps the missing-route recovery within the viewport and uses header Back', () => {
         const { container } = renderRoute(<RouteNotFound onHome={vi.fn()} />);
 
-        expect(screen.getByRole('button', { name: 'Back to Home' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: 'Back to Home' })).toBeNull();
         expectNoFixedWidthBeyondViewport(container);
     });
 

@@ -563,7 +563,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <PageHeader
             onBack={stage === 'review' || stage === 'submitting' ? returnToCompose : onBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'compose' ? 'Batch' : 'Review batch'}
+            title={stage === 'compose' ? 'Compose batch' : 'Review batch'}
         />
     );
     const wrap = (children) => (
@@ -778,7 +778,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     Use the dedicated publisher for FILE-gated content.
                 </p>
             </details>
-            <FormSection title="Batch settings">
+            <FormSection title="Source">
                 <ChainPicker
                     label="Network"
                     value={chainId || ''}
@@ -804,7 +804,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             </FormSection>
 
             {rows.map((row, i) => (
-                <FormSection key={row.id} title={`Step ${i + 1}`} headingLevel="h3">
+                <FormSection key={row.id} title={`Action ${i + 1}`} headingLevel="h3">
                     <Select
                         label="Action"
                         value={row.action || ''}

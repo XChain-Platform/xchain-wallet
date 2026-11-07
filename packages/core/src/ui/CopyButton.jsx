@@ -117,7 +117,6 @@ export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLa
                 aria-label={state === 'copied' ? text : ariaLabel || label}
                 title={text}
                 data-state={state}
-                style={{ minHeight: 'var(--xc-control-h-sm)' }}
             >
                 {text}
             </Button>

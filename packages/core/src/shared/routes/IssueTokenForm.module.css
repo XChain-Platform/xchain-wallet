@@ -203,6 +203,18 @@ select.picker {
     border-bottom: none;
 }
 
+/* Upload and contacts buttons share the row at full width, wrapping
+   on a narrow screen, with no box of their own. */
+.importActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.importActions > button {
+    flex: 1 1 10rem;
+}
+
 /* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
@@ -317,10 +329,63 @@ select.picker {
 .detailsList {
     composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
+}
+
+/* A compact key/value group that already lives inside the form's one surface.
+   It keeps the table rhythm from detailsList without drawing a second card. */
+.flatDetailsList {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+/* Native fieldsets draw a browser border by default. Repeated form groups use
+   the form section's dividers instead of turning every group into a card. */
+.flatFieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.flatFieldset + .flatFieldset {
+    padding-top: var(--xc-section-gap);
+    border-top: 1px solid var(--xc-border);
+}
+
+.accessListGroup {
+    composes: flush from '../../ui/Card.module.css';
+    overflow: hidden;
+}
+
+.accessListRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-list-row-padding);
+}
+
+.accessListRow + .accessListRow {
+    border-top: 1px solid var(--xc-border);
+}
+
+.accessListValue {
+    flex: 1 1 12rem;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.accessListValue > span {
+    padding: 0;
+    text-align: start;
 }
 
 .detailsLabel {
@@ -332,6 +397,7 @@ select.picker {
     margin: 0;
     align-self: center;
     padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    padding-bottom: 0;
 }
 
 .detailsValue {
@@ -340,14 +406,52 @@ select.picker {
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
-    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
-    text-align: end;
+    padding: var(--xc-space-1) var(--xc-table-cell-padding-inline) var(--xc-table-cell-padding-block);
+    text-align: start;
     font-variant-numeric: tabular-nums;
 }
 
-.detailsLabel ~ .detailsLabel,
-.detailsValue ~ .detailsValue {
+.detailsLabel ~ .detailsLabel {
     border-top: var(--xc-table-row-divider);
+}
+
+.detailsValue ~ .detailsValue {
+    border-top: 0;
+}
+
+.linkPanels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.linkPanel {
+    min-width: 0;
+    margin: 0;
+}
+
+@media (min-width: 834px) {
+    .detailsList {
+        grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        padding-bottom: var(--xc-table-cell-padding-block);
+    }
+
+    .detailsValue {
+        padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+        text-align: end;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: var(--xc-table-row-divider);
+    }
+
+    .linkPanels {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 /* Confirmation headers omit the redundant chain-name pill. */
@@ -379,22 +483,6 @@ select.picker {
         width: 100%;
     }
 
-    .detailsList {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .detailsValue {
-        padding-top: var(--xc-space-1);
-        text-align: start;
-    }
-
-    .detailsLabel {
-        padding-bottom: 0;
-    }
-
-    .detailsValue ~ .detailsValue {
-        border-top: 0;
-    }
 }
 
 /* Secondary technical identifier trailing a plain-language details value

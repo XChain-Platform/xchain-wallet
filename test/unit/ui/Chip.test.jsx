@@ -98,7 +98,7 @@ describe('<Chip>', () => {
         expect(declaration(btn, 'border-radius')).toMatch(/^var\(--xc-control-radius\b/);
 
         expect(declaration(toggle, 'font-size')).toBe('var(--xc-control-font-sm)');
-        expect(declaration(sm, '--xc-button-font-size')).toMatch(/^var\(--xc-control-font-sm\b/);
+        expect(declaration(sm, '--xc-button-font-size')).toBe('var(--xc-text-xs)');
         expect(declaration(btn, 'font-size')).toMatch(/^var\(--xc-button-font-size\b/);
 
         expect(declaration(toggle, 'font-weight')).toBe(declaration(btn, 'font-weight'));

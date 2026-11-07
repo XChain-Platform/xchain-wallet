@@ -37,28 +37,28 @@
 }
 
 .templateGrid {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     padding: 0;
     margin: 0 0 var(--xc-space-3);
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--xc-space-2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .templateGrid > li {
     display: flex;
 }
 
-@media (min-width: 480px) {
-    .templateGrid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.templateGrid > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
-.templateCard {
+.templateCard.templateCard {
     padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    background: var(--xc-surface);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 /* Cards in a two-column row stretch to the taller one; their text starts

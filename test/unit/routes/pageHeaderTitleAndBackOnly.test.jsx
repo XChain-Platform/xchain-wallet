@@ -296,10 +296,15 @@ describe('My tokens', () => {
 
 describe('Payments due', () => {
     it('puts Refresh payments in the actions row, not the page header', async () => {
-        mount(ObligationsView, { getAutopayStatus: vi.fn().mockResolvedValue(null) }, { onPay: vi.fn() });
+        const onBack = vi.fn();
+        mount(ObligationsView, { getAutopayStatus: vi.fn().mockResolvedValue(null) }, { onPay: vi.fn(), onBack });
         const refresh = await screen.findByRole('button', { name: 'Refresh payments' });
         expect(actionsRow()).toContainElement(refresh);
         expect(headerActions('Payments due')).toEqual([]);
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
+        expect(pageHeaderOf('Payments due')).toContainElement(back);
+        fireEvent.click(back);
+        expect(onBack).toHaveBeenCalledOnce();
     });
 });
 

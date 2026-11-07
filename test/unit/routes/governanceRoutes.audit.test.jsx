@@ -334,10 +334,20 @@ describe('governance route audit', () => {
     it('keeps delegation required-field messages reachable from the primary action', async () => {
         mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Delegate votes' });
+        const action = screen.getByRole('button', { name: 'Review' });
         expect(action).toBeEnabled();
         fireEvent.click(action);
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
+    });
+
+    it('puts the delegate and clear switch above every field so the form fields sit together', async () => {
+        mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
+        const from = await screen.findByDisplayValue(ADDRESS.address);
+        const toggle = screen.getByRole('button', { name: 'Clear' });
+        const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+        expect(toggle.compareDocumentPosition(screen.getByRole('button', { name: /^Network:/ })) & follows).toBeTruthy();
+        expect(toggle.compareDocumentPosition(from) & follows).toBeTruthy();
+        expect(toggle.compareDocumentPosition(screen.getByLabelText('Delegate to address')) & follows).toBeTruthy();
     });
 
     it('validates the source address and governance token before delegation compose', async () => {
@@ -351,7 +361,7 @@ describe('governance route audit', () => {
         }, sourceMessaging);
         await screen.findByDisplayValue(invalidSource.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('The selected source address is not valid for this network.')).toBeTruthy();
         expect(sourceMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
 
@@ -362,7 +372,7 @@ describe('governance route audit', () => {
         }, tickMessaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText(/Governance token can only use letters/)).toBeTruthy();
         expect(tickMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
 
@@ -373,7 +383,7 @@ describe('governance route audit', () => {
         }, idMessaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('Governance token cannot contain ^. That form is reserved for token IDs.')).toBeTruthy();
         expect(idMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -390,20 +400,20 @@ describe('governance route audit', () => {
         await screen.findByDisplayValue(source.address);
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'not-an-address' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText(/Delegate-to address is not valid/)).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: source.address } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('Delegate-to address must be different from the source address.')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad|memo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -418,21 +428,21 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
 
         for (const rate of ['0', '-1']) {
             fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
-            fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
             expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         }
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -734,7 +744,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
-        expect(screen.getByText('Polls created on this network appear here.')).toBeTruthy();
+        expect(screen.queryByText('Polls created on this network appear here.')).toBeNull();
     });
 
     it('hides poll rows that belong to the previous wallet while the next list loads', async () => {

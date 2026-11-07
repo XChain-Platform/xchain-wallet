@@ -71,7 +71,7 @@ describe('large text layout styles', () => {
         expect(rule(networkFilter, '.triggerLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
-    it('keeps button labels whole while truncating balance names without icon shrinkage', () => {
+    it('keeps button and balance labels whole without icon shrinkage', () => {
         const button = readCore('ui', 'Button.module.css');
         const balances = readCore('shared', 'components', 'BalanceList.module.css');
 
@@ -82,7 +82,9 @@ describe('large text layout styles', () => {
         expect(rule(button, '.btn')).toMatch(/overflow-wrap:\s*break-word/);
         expect(rule(button, '.label')).not.toMatch(/white-space:\s*nowrap/);
         expect(rule(button, '.label')).not.toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balances, '.name')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(balances, '.name')).toMatch(/white-space:\s*normal/);
+        expect(rule(balances, '.name')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(balances, '.name')).not.toMatch(/text-overflow|overflow:\s*hidden/);
         expect(rule(balances, '.name')).toMatch(/min-width:\s*0/);
         expect(rule(balances, '.iconWrap')).toMatch(/flex:\s*0 0 auto/);
         expect(balances).not.toMatch(/font-size:\s*\d*\.?\d+px/);

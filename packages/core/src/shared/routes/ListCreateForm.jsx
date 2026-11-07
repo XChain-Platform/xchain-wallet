@@ -815,7 +815,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* Wraps, and drives a hidden file input from a real
                         button: the browser's own picker is unstyled and,
                         beside the Contacts button, ran off a phone screen. */}
-                    <div className={styles.fromLine} style={{ flexWrap: 'wrap' }}>
+                    <div className={styles.importActions}>
                         <div style={{ display: 'none' }}>
                             <Input
                                 {...recipientsDrop.pickerProps}

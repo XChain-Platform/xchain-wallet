@@ -21,8 +21,8 @@ import pickerStyles from './WalletPicker.module.css';
 
 /**
  * WalletPicker: full-screen list of all wallets in the vault, with
- * thumb-reachable add and current-wallet management actions in the
- * footer. Reached from the gear popover's Wallet summary row. Picking
+ * thumb-reachable add and current-wallet management actions directly
+ * under the list. Reached from the gear popover's Wallet summary row. Picking
  * a wallet calls `onSwitch`
  * and returns to the screen that opened the picker.
  *
@@ -89,8 +89,8 @@ export function WalletPicker({
 
     const header = <PageHeader onBack={onBack} backDisabled={switching} title={t('walletPicker.title')} />;
     const activeWallet = wallets?.find((wallet) => wallet.id === activeWalletId) || null;
-    const footer = (
-        <div className={pickerStyles.footerActions}>
+    const actions = (
+        <div className={pickerStyles.pickerActions}>
             <Button
                 variant="primary"
                 onClick={onAddWallet}
@@ -113,7 +113,7 @@ export function WalletPicker({
     );
 
     return (
-        <Screen variant={variant} header={header} footer={footer}>
+        <Screen variant={variant} header={header}>
             <ListPage>
                 {switchError ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{switchError}</StatusMessage>
@@ -165,6 +165,7 @@ export function WalletPicker({
                             {onShowDetails ? (
                                 <Button
                                     type="button"
+                                    size="sm"
                                     icon={<Icon.InfoIcon />}
                                     variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
@@ -180,6 +181,7 @@ export function WalletPicker({
                         </div>
                     );
                 })}
+                {actions}
             </ListPage>
         </Screen>
     );

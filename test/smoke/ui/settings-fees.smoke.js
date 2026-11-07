@@ -64,7 +64,7 @@ assert.match(src, /checked=\{Boolean\(fees\.rbfByDefault\)\}/, 'RBF toggle prese
 assert.match(src, /disabled=\{!descriptor\?\.feeStrategy\?\.rbfSupported\}/, 'RBF toggle gates on the network support');
 
 // Empty-state message when no fee profiles present
-assert.match(src, /No network fee profiles yet/, 'empty-state copy present');
+assert.match(src, /(?:t\('settings\.fees\.noChainFeeProfilesYet'\)|No network fee profiles yet)/, 'empty-state copy present');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

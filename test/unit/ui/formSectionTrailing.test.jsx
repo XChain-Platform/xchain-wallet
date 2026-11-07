@@ -32,7 +32,7 @@ describe('FormSection trailing slot', () => {
 describe('OracleForm help affordance', () => {
     it('passes its InfoTip to the section heading instead of floating above it', () => {
         const source = readFileSync('packages/core/src/shared/routes/OracleForm.jsx', 'utf8');
-        expect(source).toMatch(/title="My published prices"\s+trailing=\{<InfoTip/);
+        expect(source).toMatch(/title="Prices"\s+trailing=\{<InfoTip/);
         expect(source.match(/<InfoTip/g)).toHaveLength(1);
     });
 });

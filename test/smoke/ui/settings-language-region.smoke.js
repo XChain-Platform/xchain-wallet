@@ -45,9 +45,9 @@ assert.match(src, /setI18nLocale\(next\)/, 'onLanguageChange flips the live i18n
 for (const code of ['USD', 'EUR', 'GBP', 'JPY']) {
     assert.ok(src.includes(`code: '${code}'`), `FIAT_CURRENCIES has '${code}'`);
 }
-assert.match(src, /placeholder="Search by code or name"/, 'currency picker advertises both search fields');
+assert.match(src, /placeholder=(?:\{t\('settings\.languageRegion\.searchByCodeOrName'\)\}|"Search by code or name")/, 'currency picker advertises both search fields');
 assert.match(src, /currencyDisplay:\s*'symbol'/, 'currency labels derive symbols from Intl');
-assert.match(src, /No supported currencies match\./, 'unsupported searches produce no selectable currency');
+assert.match(src, /(?:t\('settings\.languageRegion\.noSupportedCurrenciesMatch'\)|No supported currencies match\.)/, 'unsupported searches produce no selectable currency');
 assert.doesNotMatch(src, /__custom__|Custom currency code/, 'arbitrary unsupported currencies are not offered');
 
 // Loading / error guards

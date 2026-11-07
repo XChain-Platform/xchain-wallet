@@ -135,27 +135,21 @@ describe('<Button>', () => {
         expect(screen.getByTestId('sm')).toHaveClass(styles.sm);
         expect(screen.getByTestId('md')).toHaveClass(styles.md);
         expect(screen.getByTestId('lg')).toHaveClass(styles.lg);
-        const sizes = [['sm', '28'], ['md', '36'], ['lg', '44']];
-        const followsSharedScale = (candidate) => sizes.every(([size, height]) => new RegExp(
-            `\\.${size}\\s*\\{[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
-            's',
-        ).test(candidate));
-        for (const [size] of sizes) {
+        const compact = css.match(/\.sm\s*\{([^}]*)\}/s)?.[1] || '';
+        expect(compact).toMatch(/--xc-button-height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/);
+        expect(compact).toMatch(/--xc-button-font-size:\s*var\(--xc-text-xs\)/);
+        expect(compact).toMatch(/min-height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/);
+        expect(compact).not.toMatch(/--xc-control-h-sm|--xc-control-font-sm/);
+        for (const [size, height] of [['md', '36'], ['lg', '44']]) {
             expect(css).toMatch(new RegExp(
                 `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`
                 + `[^}]*--xc-button-font-size:\\s*var\\(--xc-control-font-${size},\\s*\\d+(?:\\.\\d+)?(?:px|rem)\\)`
                 + `[^}]*--xc-button-padding-x:\\s*var\\(--xc-button-pad-x-${size},\\s*\\d+px\\)`
-                + `[^}]*--xc-icon-size:\\s*var\\(--xc-control-icon-${size},\\s*\\d+px\\)`,
+                + `[^}]*--xc-icon-size:\\s*var\\(--xc-control-icon-${size},\\s*\\d+px\\)`
+                + `[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
                 's',
             ));
         }
-        expect(followsSharedScale(css)).toBe(true);
-        const shortened = css.replace(
-            'min-height: var(--xc-control-h-sm, 28px)',
-            'min-height: 20px',
-        );
-        expect(shortened).not.toBe(css);
-        expect(followsSharedScale(shortened)).toBe(false);
         expect(css).toMatch(/\.btn\s*\{[^}]*padding-block:\s*0[^}]*padding-inline:\s*var\(--xc-button-padding-x,\s*16px\)/s);
         expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius,\s*8px\)/s);
         expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-button-font-size,\s*14px\)/s);

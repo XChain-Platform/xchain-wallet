@@ -3,12 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Manage token's stats strip: the supply and holding values are whole token
-// quantities, and in a quarter of the card below 1024px (768px here) or in
-// half of a 360px row they broke in the middle of the number
-// ("50,000,000,000,0" over "00"). The strip is two by two below 1024px,
-// quantities first, four across from 1024px, and below 600px each quantity
-// takes a full row.
+// Manage token's stats and action grids stay one-up below the 834px tablet
+// boundary, then gain columns only when the shell has room for them.
 
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -25,11 +21,11 @@ const postcss = requireFromVite('postcss');
 const cssPath = join(repoRoot, 'packages/core/src/shared/routes/ManageToken.module.css');
 const jsxPath = join(repoRoot, 'packages/core/src/shared/routes/ManageToken.jsx');
 
-function phoneRules() {
+function mediaRules(pattern) {
     const root = postcss.parse(readFileSync(cssPath, 'utf8'));
     const rules = [];
     root.walkAtRules('media', (media) => {
-        if (!/not all and \(min-width:\s*600px\)/.test(media.params)) return;
+        if (!pattern.test(media.params)) return;
         media.walkRules((rule) => {
             const decls = {};
             rule.walkDecls((d) => { decls[d.prop] = d.value; });
@@ -40,24 +36,35 @@ function phoneRules() {
 }
 
 describe('Manage token stats strip', () => {
-    it('lays the strip out two by two, and four across from 1024px', () => {
+    it('lays the strip out one-up below 834px, two-up from 834px, and four-up from 1024px', () => {
         const root = postcss.parse(readFileSync(cssPath, 'utf8'));
         let base = null;
+        let tablet = null;
         let wide = null;
         root.walkRules('.statsStrip', (rule) => {
             rule.walkDecls('grid-template-columns', (d) => {
                 if (rule.parent.type === 'root') base = d.value;
+                else if (/^\(min-width:\s*834px\)$/.test(rule.parent.params)) tablet = d.value;
                 else if (/^\(min-width:\s*1024px\)$/.test(rule.parent.params)) wide = d.value;
             });
         });
-        expect(base).toBe('repeat(2, minmax(0, 1fr))');
+        expect(base).toBe('minmax(0, 1fr)');
+        expect(tablet).toBe('repeat(2, minmax(0, 1fr))');
         expect(wide).toBe('repeat(4, minmax(0, 1fr))');
-        expect(phoneRules().find((r) => r.selector === '.statsStrip')).toBeUndefined();
     });
 
-    it('gives the first two cells a full row each', () => {
-        const wide = phoneRules().find((r) => /^\.stat:nth-child\(-n\s*\+\s*2\)$/.test(r.selector));
-        expect(wide?.decls['grid-column']).toBe('1 / -1');
+    it('keeps management actions one-up below 834px', () => {
+        const root = postcss.parse(readFileSync(cssPath, 'utf8'));
+        let base = null;
+        root.walkRules('.manageGrid', (rule) => {
+            if (rule.parent.type !== 'root') return;
+            rule.walkDecls('grid-template-columns', (d) => { base = d.value; });
+        });
+        const tablet = mediaRules(/^\(min-width:\s*834px\)$/)
+            .find((rule) => rule.selector === '.manageGrid');
+
+        expect(base).toBe('minmax(0, 1fr)');
+        expect(tablet?.decls['grid-template-columns']).toBe('repeat(4, minmax(0, 1fr))');
     });
 
     it('renders supply and holding as the first two cells', () => {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -1005,6 +1005,7 @@ export function AddressList({
             <Button
                 type="button"
                 variant="secondary"
+                size="sm"
                 icon={<Icon.PlusIcon />}
                 onClick={() => setAddMenuOpen((o) => !o)}
                 aria-haspopup="menu"
@@ -1346,6 +1347,7 @@ export function AddressList({
                     {selected.record?.id && !isActiveRow(selected) ? (
                         <Button
                             type="button"
+                            size="sm"
                             className={local.quickAction}
                             onClick={setAsActive}
                             disabled={detailAction !== null}
@@ -1359,6 +1361,7 @@ export function AddressList({
                     {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
                         <Button
                             type="button"
+                            size="sm"
                             className={local.quickAction}
                             onClick={toggleAddressHidden}
                             disabled={visibilitySaving}
@@ -1372,6 +1375,7 @@ export function AddressList({
                     {canSecret ? (
                         <Button
                             type="button"
+                            size="sm"
                             className={local.quickAction}
                             onClick={() => onShowPrivateKey?.(selected.record)}
                         >
@@ -1382,6 +1386,7 @@ export function AddressList({
                     {explorerUrl ? (
                         <Button
                             type="button"
+                            size="sm"
                             className={local.quickAction}
                             onClick={() => {
                                 try { window.open(explorerUrl, '_blank', 'noopener,noreferrer'); } catch { /* no-op */ }
@@ -1394,6 +1399,7 @@ export function AddressList({
                     {canDelete ? (
                         <Button
                             type="button"
+                            size="sm"
                             className={local.quickAction}
                             onClick={removeAddress}
                             disabled={detailAction !== null}
@@ -1406,7 +1412,7 @@ export function AddressList({
                     </div>
 
                     <div className={local.tabPanel}>
-                    <FormSection title={t('routes.addressList.about')} headingLevel="h3" className={local.detailCard}>
+                    <FormSection title={t('routes.addressList.about')} headingLevel="h3">
                         {/* The testid is derived from the label so every detail field is
                             addressable without hand-maintaining a list. Before it, a spec
                             reading a field had to find the label text and walk to its
@@ -1431,7 +1437,6 @@ export function AddressList({
                     <FormSection
                         title={t('routes.addressList.onChainPreferences')}
                         headingLevel="h3"
-                        className={`${local.detailCard} ${local.detailCardSpaced}`}
                     >
                         <div className={local.detailValue}>
                             {chainPrefsError
@@ -1520,26 +1525,17 @@ export function AddressList({
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </>
         )}>
-            <div className={local.segmented} role="tablist" aria-label={t('routes.addressList.filterByAddressType')}>
-                {[
+            <Tabs
+                aria-label={t('routes.addressList.filterByAddressType')}
+                items={[
                     { id: 'all', label: 'All' },
                     { id: 'normal', label: 'Normal' },
                     { id: 'imported', label: 'Imported' },
                     { id: 'misc', label: 'Misc' },
-                ].map((opt) => (
-                    /* Segmented tabs stay native because the kit has no segmented control. */
-                    <button
-                        key={opt.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={sourceFilter === opt.id}
-                        className={`${local.segment} ${sourceFilter === opt.id ? local.segmentActive : ''}`}
-                        onClick={() => setSourceFilter(opt.id)}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
+                ]}
+                value={sourceFilter}
+                onChange={setSourceFilter}
+            />
             {wifNotice ? (
                 <div className={wifStyles.wifBar}>
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>

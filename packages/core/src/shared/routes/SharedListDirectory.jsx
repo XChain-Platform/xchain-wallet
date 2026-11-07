@@ -222,7 +222,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     // One notice for every chain that did not answer, not one per chain.
     const unavailableNotice = directory.unavailable.length > 0 ? (
         <StatusMessage variant="error">
-            Shared lists unavailable
+            Unavailable
             {unavailableDescriptors.length > 0 ? ' from ' : null}
             {unavailableDescriptors.map((descriptor, index) => (
                 <Fragment key={descriptor.id || index}>
@@ -233,6 +233,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             . Try again in a moment.
         </StatusMessage>
     ) : null;
+    const unavailableOnly = directory.unavailable.length > 0 && visibleLists.length === 0;
 
     const filteredType = listType(filterType);
     return wrap(
@@ -278,7 +279,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 </>
             )}
         </>,
-        toolbar,
+        unavailableOnly ? null : toolbar,
         unavailableNotice,
     );
 }

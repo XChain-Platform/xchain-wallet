@@ -49,15 +49,18 @@ async function expectRowControls(main, viewport) {
 }
 
 async function expectCompactActions(page, viewport) {
-    // Add account and Manage sit in the pinned screen footer, as Add wallet
-    // and Manage wallet do on the Wallets screen.
-    const footer = page.locator('footer').filter({ has: page.getByRole('button', { name: 'Add account', exact: true }) });
-    await expect(footer, `${viewport}: Accounts actions are not in the screen footer`).toHaveCount(1);
-    const add = footer.getByRole('button', { name: 'Add account', exact: true });
-    const manage = footer.getByRole('button', { name: 'Manage', exact: true });
-    await expect(add).toBeVisible();
-    await expect(manage).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Add account', exact: true })).toHaveCount(0);
+    // Add account and Manage sit directly under the account list (U48), as
+    // Add wallet and Manage wallet do on the Wallets screen: in the screen
+    // body, never in a pinned footer.
+    const main = page.getByRole('main');
+    await expect(page.getByRole('button', { name: 'Add account', exact: true }),
+        `${viewport}: Add account renders more than once or not at all`).toHaveCount(1);
+    await expect(page.locator('footer').getByRole('button', { name: 'Add account', exact: true }),
+        `${viewport}: Accounts actions are pinned in a footer`).toHaveCount(0);
+    const add = main.getByRole('button', { name: 'Add account', exact: true });
+    const manage = main.getByRole('button', { name: 'Manage', exact: true });
+    await expect(add, `${viewport}: Add account is not in the screen body`).toBeVisible();
+    await expect(manage, `${viewport}: Manage is not in the screen body`).toBeVisible();
 
     const metrics = await Promise.all([add, manage].map((button) => button.evaluate((element) => {
         const label = element.querySelector('span:last-child');
@@ -82,19 +85,15 @@ async function expectCompactActions(page, viewport) {
     expect(metrics.some(({ overflows }) => overflows), `${viewport}: an action overflows its button`)
         .toBe(false);
 
-    // Pinned: the footer stays below the list at the bottom of the screen
-    // rather than following the last row.
-    const placement = await footer.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        // The screen body (the scrolling list region) precedes the footer.
-        const body = element.previousElementSibling?.getBoundingClientRect();
-        return { top: rect.top, mainBottom: body ? body.bottom : null };
-    });
-    expect(placement.mainBottom, `${viewport}: no screen body to measure`).not.toBeNull();
-    expect(
-        placement.top,
-        `${viewport}: action footer is not pinned below the account list`,
-    ).toBeGreaterThanOrEqual(placement.mainBottom - 1);
+    // Directly under: the action row follows the last account row with only
+    // the list gap between them, not a gap down to the bottom of the screen.
+    const lastRow = await main.getByRole('button', { name: /^Rename\b/ }).last().locator('..').boundingBox();
+    const addBox = await add.boundingBox();
+    expect(lastRow && addBox, `${viewport}: no account row or action to measure`).toBeTruthy();
+    expect(addBox.y, `${viewport}: the actions sit above the last account row`)
+        .toBeGreaterThanOrEqual(lastRow.y + lastRow.height - 1);
+    expect(addBox.y - (lastRow.y + lastRow.height), `${viewport}: the actions are not directly under the list`)
+        .toBeLessThanOrEqual(32);
 }
 
 test('account row controls and actions fit at phone and desktop widths', async ({ page }) => {

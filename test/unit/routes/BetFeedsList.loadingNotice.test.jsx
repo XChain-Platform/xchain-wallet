@@ -40,8 +40,8 @@ describe('BetFeedsList loading notice', () => {
         const page = status.parentElement;
         expect(page.firstElementChild).toBe(status);
 
-        const takingBets = screen.getByRole('button', { name: 'Taking bets' });
-        const allMarkets = screen.getByRole('button', { name: 'All markets' });
+        const takingBets = screen.getByRole('tab', { name: 'Taking bets' });
+        const allMarkets = screen.getByRole('tab', { name: 'All markets' });
         // The toolbar is the page child holding the filter buttons; its row
         // starts with the network field, then the filter button group.
         const toolbar = [...page.children].find((el) => el.contains(takingBets));

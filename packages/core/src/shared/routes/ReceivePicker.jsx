@@ -34,5 +34,12 @@ function ReceiveListPage(props) {
 export function ReceivePicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
-    return <TokenPicker {...rest} purpose="receive" listPageComponent={ReceiveListPage} />;
+    return (
+        <TokenPicker
+            {...rest}
+            title={rest.title ?? 'Choose asset to receive'}
+            purpose="receive"
+            listPageComponent={ReceiveListPage}
+        />
+    );
 }

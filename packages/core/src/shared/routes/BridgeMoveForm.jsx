@@ -856,7 +856,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
 
             {destChainId ? (
-                <dl className={styles.detailsList} aria-label="Bridge route">
+                <dl className={`${styles.detailsList} ${styles.flatDetailsList}`} aria-label="Bridge route">
                     {sourceDescriptor ? (
                         <>
                             <dt className={styles.detailsLabel}>Source network</dt>

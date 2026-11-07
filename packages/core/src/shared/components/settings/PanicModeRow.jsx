@@ -35,7 +35,7 @@ import {
     getPanicRemainingMs,
     subscribePanicModeSaveStatus,
 } from '../../../flows/panicMode.js';
-import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
+import { COMPACT_CONTROL, ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -140,7 +140,7 @@ export function PanicModeRow() {
                     {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
-            <Button ref={swap.target} type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="danger" icon={null} style={COMPACT_CONTROL} onClick={() => setConfirming(true)}>
                 {t('settings.developer.activate2')}
             </Button>
         </div>

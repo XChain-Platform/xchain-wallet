@@ -1239,6 +1239,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <Button
                         type="button"
                         variant="secondary"
+                        size="sm"
                         className={styles.quickAction}
                         onClick={onReceive}
                         disabled={!onReceive}
@@ -1251,6 +1252,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <Button
                         type="button"
                         variant="secondary"
+                        size="sm"
                         className={styles.quickAction}
                         onClick={() => runNetworkAction('Exchange', onExchange)}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
@@ -1275,6 +1277,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <Button
                         type="button"
                         variant="secondary"
+                        size="sm"
                         className={styles.quickAction}
                         onClick={homeMoreActions[0].onSelect}
                         aria-label={homeMoreActions[0].label}
@@ -1288,6 +1291,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         <Button
                             type="button"
                             variant="secondary"
+                            size="sm"
                             className={styles.quickAction}
                             aria-haspopup="menu"
                             aria-expanded={homeMoreOpen}
@@ -1783,7 +1787,7 @@ function HomeLoadingSkeleton({ actionCount }) {
             <Skeleton shape="card" height={96} />
             <div className={styles.quickActions} aria-hidden="true">
                 {Array.from({ length: actionCount }, (_, index) => (
-                    <Skeleton key={index} shape="card" height={72} />
+                    <Skeleton key={index} shape="card" height={28} />
                 ))}
             </div>
             <Skeleton shape="text" height={45} />
@@ -1800,6 +1804,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
             <Button
                 type="button"
                 variant="secondary"
+                size="sm"
                 className={styles.quickAction}
                 onClick={onOffline}
                 aria-disabled="true"
@@ -1814,6 +1819,7 @@ function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
         <Button
             type="button"
             variant="secondary"
+            size="sm"
             className={styles.quickAction}
             onClick={onSend}
             disabled={!onSend}

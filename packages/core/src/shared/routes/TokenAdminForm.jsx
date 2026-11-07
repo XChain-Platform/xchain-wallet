@@ -1490,7 +1490,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
                 >
-                    {singleEncode ? MODE_SUBMIT_LABEL[mode] : 'Preview'}
+                    {mode === 'description' ? 'Save' : singleEncode ? MODE_SUBMIT_LABEL[mode] : 'Preview'}
                 </Button>
             )}
         >
@@ -1526,7 +1526,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'description' ? (
                 <Input
-                    label="New description"
+                    label="Description"
                     hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain and replaces the current one.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -1750,8 +1750,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         members; a block-list denies its members. Both reference an address
                         list (create one in My Lists first).
                     </p>
-                    <div className={styles.detailsList}>
-                        <div className={styles.fromLine}>
+                    <div className={styles.accessListGroup}>
+                    <section className={styles.accessListRow} aria-label="Allow-list">
+                        <div className={styles.accessListValue}>
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
                                 {allowListIdx && allowListIdx !== '0'
@@ -1759,17 +1760,17 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                     : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
                             </span>
                         </div>
-                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('allow')}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setListPickerFor('allow')}>
                             {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
                         </Button>
                         {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
+                            <Button type="button" variant="ghost" size="sm" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
                                 Remove list
                             </Button>
                         ) : null}
-                    </div>
-                    <div className={styles.detailsList}>
-                        <div className={styles.fromLine}>
+                    </section>
+                    <section className={styles.accessListRow} aria-label="Block-list">
+                        <div className={styles.accessListValue}>
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx && blockListIdx !== '0'
@@ -1777,17 +1778,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                     : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
-                        <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setListPickerFor('block')}>
                             {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
                         </Button>
-                        <Button type="button" variant="ghost" onClick={() => setSharedBlockPickerOpen(true)}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setSharedBlockPickerOpen(true)}>
                             Use a shared block list
                         </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
+                            <Button type="button" variant="ghost" size="sm" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
                                 Remove list
                             </Button>
                         ) : null}
+                    </section>
                     </div>
                     <p className={styles.hint}>
                         {listDetachActive

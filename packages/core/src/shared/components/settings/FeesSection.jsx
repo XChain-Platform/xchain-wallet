@@ -62,10 +62,11 @@ const CHAIN_BLOCK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-1)',
-    padding: 'var(--xc-card-pad)',
-    background: 'var(--xc-card-bg)',
-    border: 'var(--xc-card-border)',
-    borderRadius: 'var(--xc-card-radius)',
+    padding: 'var(--xc-settings-row-pad, var(--xc-card-pad))',
+    background: 'var(--xc-settings-row-bg, var(--xc-card-bg))',
+    border: 'var(--xc-settings-row-border, var(--xc-card-border))',
+    borderRadius: 'var(--xc-settings-row-radius, var(--xc-card-radius))',
+    boxShadow: 'inset 0 -1px var(--xc-settings-row-divider, transparent)',
 };
 const CHAIN_HEADER = {
     fontWeight: 600,
@@ -119,7 +120,7 @@ export function FeesSection() {
 
     return (
         <div style={STACK}>
-            {chainIds.map((chainId, index) => {
+            {chainIds.map((chainId) => {
                 // §35.10: stored null = follow the release default; render
                 // the resolved preference. Writes may carry concrete
                 // values - updateSettings normalizes a value equal to the
@@ -139,7 +140,6 @@ export function FeesSection() {
 
                         <SettingsFieldRow
                             label={t('settings.fees.feeStrategy')}
-                            hint={index === 0 ? t('settings.fees.chooseTheBalanceBetweenConfirmation') : undefined}
                             embedded
                         >
                             <Select

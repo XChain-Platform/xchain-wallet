@@ -16,7 +16,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 afterEach(cleanup);
 
 describe('RouteNotFound', () => {
-    it('identifies the missing page and offers a route Home', () => {
+    it('identifies the missing page and routes Home from the header chevron', () => {
         const onHome = vi.fn();
         render(
             <MessagingProvider shell="web" messaging={{}}>
@@ -24,8 +24,10 @@ describe('RouteNotFound', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Home' }));
+        expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 2, name: "That page isn't here" })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Back to Home' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onHome).toHaveBeenCalledOnce();
     });
 

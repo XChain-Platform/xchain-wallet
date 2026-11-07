@@ -73,28 +73,24 @@ describe('DispenserExplorer network scoping', () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
         const action = await screen.findByRole('button', { name: /search/i });
 
-        expect(screen.getByRole('form', { name: 'Find open dispensers' })).toBeTruthy();
-        expect(screen.getByRole('region', { name: 'Find open dispensers' })).toBeTruthy();
+        expect(screen.getByRole('form', { name: 'Dispenser search' })).toBeTruthy();
+        expect(screen.queryByRole('region', { name: 'Find open dispensers' })).toBeNull();
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
-        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeTruthy();
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
     });
 
-    it('says All networks and keeps the ticker hint with the search field', async () => {
+    it('says All networks without repeating ticker guidance', async () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
 
         expect(screen.getByRole('option', { name: 'All networks' })).toBeInTheDocument();
         expect(screen.queryByRole('option', { name: 'All chains' })).toBeNull();
         const field = screen.getByLabelText('Token ticker');
-        const hint = screen.getByText(/Ticker name, such as MYTOKEN/);
-        expect(field.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
-        // The hint sits in the field's own block, before the Search button.
-        const search = screen.getByRole('button', { name: 'Search' });
-        expect(hint.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(field.closest('div[class]').parentElement.contains(hint)).toBe(true);
+        expect(field).not.toHaveAttribute('aria-describedby');
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
     });
 
     it('explains and disables search until the active network is loaded', async () => {
@@ -265,6 +261,6 @@ describe('DispenserExplorer network scoping', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(input).toHaveValue('');
         expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
-        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeInTheDocument();
+        expect(screen.queryByText(/Ticker name, such as MYTOKEN/)).toBeNull();
     });
 });

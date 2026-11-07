@@ -63,11 +63,12 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;/s);
         const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
         expect(listRowCss).toMatch(/\.trailing\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*50%;/s);
-        // The label yields space first. A value never ends in an ellipsis:
-        // one that does not fit beside the name wraps onto its own line.
+        // Neither the label nor value ends in an ellipsis. A value that does
+        // not fit beside the wrapping name moves onto its own line.
         expect(balanceCss).not.toMatch(/\.amountFit\s*\{[^}]*(text-overflow:\s*ellipsis|overflow:\s*hidden)/s);
         expect(balanceCss).toMatch(/\.row > \.rowContent\s*\{[^}]*flex-wrap:\s*wrap;/s);
-        expect(balanceCss).toMatch(/\.name\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+        expect(balanceCss).toMatch(/\.name\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(balanceCss).not.toMatch(/\.name\s*\{[^}]*(text-overflow:\s*ellipsis|overflow:\s*hidden)/s);
         expect(walletPickerCss).toMatch(/\.rowName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         // The hero amount takes a full-width grid row of its own below the
         // label and actions, so a long total never shares a line with them.

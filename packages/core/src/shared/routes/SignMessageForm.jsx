@@ -473,6 +473,9 @@ export function SignMessageForm({ walletId, onBack }) {
                 id="sign-message-address"
                 label="Address"
                 value={addressId || ''}
+                title={selectedAddress
+                    ? `${selectedAddress.label ? `${selectedAddress.label}: ` : ''}${selectedAddress.address}`
+                    : undefined}
                 disabled={confirmAction.composing}
                 onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
                 aria-label="Address"

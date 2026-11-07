@@ -117,6 +117,10 @@
     gap: var(--xc-space-2);
 }
 
+.amountFooter > button {
+    align-self: flex-start;
+}
+
 @media not all and (min-width: 400px) {
     .amountFooter {
         align-items: stretch;

@@ -38,7 +38,7 @@ describe('GovernancePolls states', () => {
     it('shows the initial loading state while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
-        expect(screen.getByRole('heading', { name: 'Governance' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Governance polls' })).toBeInTheDocument();
         const notice = screen.getByRole('status');
         expect(notice).toHaveTextContent(/Loading/);
         expect(notice.parentElement.firstElementChild).toBe(notice);

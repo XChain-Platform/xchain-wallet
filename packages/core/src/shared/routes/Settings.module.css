@@ -21,6 +21,73 @@
     display: contents;
 }
 
+/* One Settings group is one card. Shared row primitives read these variables
+   so their standalone-card fallback becomes a divider row without every
+   section having to restate the flattening rules. */
+.settingsSurface {
+    composes: card from '../../ui/Card.module.css';
+    --xc-settings-row-gap: 0;
+    --xc-settings-row-pad: var(--xc-space-2) 0;
+    --xc-settings-row-bg: transparent;
+    --xc-settings-row-border: 0;
+    --xc-settings-row-radius: 0;
+    --xc-settings-row-divider: var(--xc-border);
+    --xc-form-gap: var(--xc-space-2);
+    --xc-section-gap: var(--xc-space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+}
+
+/* List entries formerly supplied their own card padding. Nested-card
+   flattening removes that padding, so the shared group supplies the row inset. */
+.settingsSurface.settingsSurface.settingsSurface > * {
+    padding: var(--xc-settings-row-pad);
+}
+
+.settingsSurface > * + * {
+    border-top: 1px solid var(--xc-border);
+}
+
+/* Secondary actions remain compact even when their copy wraps on a phone. */
+.settingsSurface [data-settings-actions] {
+    align-items: center;
+}
+
+.settingsSurface [data-settings-row] {
+    padding: var(--xc-settings-row-pad);
+    box-shadow: inset 0 -1px var(--xc-settings-row-divider);
+}
+
+/* Notifications owns the price-alert composition. Keep that landed block's
+   nested cards and row spacing unchanged while the surrounding Settings list
+   adopts the shared surface. */
+.settingsSurface [data-xc-preserve-nested-cards] {
+    --xc-settings-row-gap: var(--xc-space-2);
+    --xc-settings-row-pad: var(--xc-card-pad);
+    --xc-settings-row-bg: var(--xc-card-bg);
+    --xc-settings-row-border: var(--xc-card-border);
+    --xc-settings-row-radius: var(--xc-card-radius);
+    --xc-settings-row-divider: transparent;
+}
+
+.settingsList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.settingsList > * + * {
+    border-top: 1px solid var(--xc-border);
+}
+
+.settingsList.settingsList > .drillRow,
+.settingsList > div {
+    padding: var(--xc-list-row-padding);
+}
+
 .page [data-settings-search-highlight='true'] {
     outline: 2px solid var(--xc-accent-primary);
     outline-offset: 2px;

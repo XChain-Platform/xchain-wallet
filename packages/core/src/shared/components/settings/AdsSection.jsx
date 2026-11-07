@@ -230,7 +230,7 @@ export function AdsSection() {
                 const triggerIsDefault = chainState.triggerAmountSats == null;
                 const displayName = descriptor?.displayName || chainId;
                 return (
-                    <div key={chainId} className={styles.chain}>
+                    <div key={chainId} className={styles.chain} data-settings-row="">
                         <h3 className={styles.chainName}>{displayName}</h3>
 
                         <AmountField

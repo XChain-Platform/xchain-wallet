@@ -47,7 +47,7 @@ import {
     DURESS_SAVE_UNSAVED,
     DURESS_SAVE_CLEAR_FAILED,
 } from '../../../flows/duressPassphrase.js';
-import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
+import { COMPACT_CONTROL, ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
@@ -251,7 +251,7 @@ export function DuressPassphraseRow() {
                     {t('settings.duress.aSecondPasswordThatIf')}
                 </span>
             </div>
-            <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} style={COMPACT_CONTROL} onClick={() => setShowForm(true)}>
                 {t('settings.duress.set')}
             </Button>
         </div>

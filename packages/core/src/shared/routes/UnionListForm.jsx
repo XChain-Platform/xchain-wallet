@@ -405,7 +405,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
             </FormSection>
 
             <FormSection title="Member lists">
-            <fieldset aria-label="Member lists" disabled={sdkSupported !== true}>
+            <fieldset className={styles.flatFieldset} aria-label="Member lists" disabled={sdkSupported !== true}>
                 {candidates.length === 0 ? (
                     <EmptyState
                         title="No usable lists"
@@ -453,14 +453,6 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
                     </p>
                 </div>
             ) : null}
-            <FormNotice
-                variant="warning"
-                role={null}
-                lines={[
-                    "A union follows each member's edits, including a shared list's new versions.",
-                    'A union cannot itself be shared in this release.',
-                ]}
-            />
             </FormSection>
 
         </FormPage>,

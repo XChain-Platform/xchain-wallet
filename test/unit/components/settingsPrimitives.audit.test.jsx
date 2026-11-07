@@ -154,7 +154,7 @@ describe('shared settings row semantics', () => {
         const bump = screen.getByRole('switch', {
             name: 'Bitcoin allow fee bump (Replace-by-Fee)',
         });
-        expect(describedText(strategy)).toMatch(/confirmation speed/i);
+        expect(describedText(strategy)).toBeNull();
         expect(describedText(rate)).toContain('sat/vB');
         expect(describedText(bump)).toMatch(/raise the fee later/i);
         expect(bump.checked).toBe(true);

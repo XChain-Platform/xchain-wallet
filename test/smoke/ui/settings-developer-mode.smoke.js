@@ -36,7 +36,7 @@ assert.match(
     'writes through update({ [field]: next })',
 );
 assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\{t\('settings\.developerMode\.switchAccessibleLabel'\)\}/, 'Developer Mode toggle present');
-assert.match(src, /label="Learn Mode"/, 'Learn Mode toggle present');
+assert.match(src, /label=(?:\{t\('settings\.developer\.learnMode'\)\}|"Learn Mode")/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
 
@@ -48,13 +48,13 @@ assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
 //  - Logs and diagnostics console → replaced by LogConsoleRow (G150, v0.215.0)
 assert.ok(!src.includes('Raw PSBT inspector') && !/Coming soon/.test(src),
     'no Raw PSBT inspector placeholder row (no code delivers it)');
-assert.ok(src.includes('label="Auto-approve localhost dApps"'),
+assert.ok(src.includes("label={t('settings.developer.autoApproveLocalhostDapps')}") || src.includes('label="Auto-approve localhost dApps"'),
     'Auto-approve localhost dApps row present (active, gated on Developer Mode)');
 assert.ok(/RegtestNetworksRow/.test(src),
     'Regtest networks subsection mounted (replaces the deferred Custom chain registry row)');
 assert.ok(/LogConsoleRow/.test(src),
     'Logs and diagnostics console row mounted (replaces the deferred toggle)');
-assert.ok(/Logs and diagnostics console/.test(src),
+assert.ok(/(?:t\('settings\.developer\.logsAndDiagnosticsConsole'\)|Logs and diagnostics console)/.test(src),
     'Logs and diagnostics console label preserved on the LogConsoleRow');
 
 // ─── Regtest reveal in NetworkEndpointsSection ────────────────────

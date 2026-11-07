@@ -38,6 +38,19 @@
     border-radius: 0;
 }
 
+/* A group can opt a self-contained composition out of ancestor flattening.
+   Notifications uses this to preserve its separately ruled price-alert block
+   when the Settings list itself becomes one card. */
+.card [data-xc-preserve-nested-cards] .card,
+.card [data-xc-preserve-nested-cards] .flush,
+.flush [data-xc-preserve-nested-cards] .card,
+.flush [data-xc-preserve-nested-cards] .flush {
+    padding: var(--xc-card-pad);
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+}
+
 /* The form template draws a card on wide screens only (FormPage composes
    formCard), so cards inside a form flatten only where that card exists.
    A full-width form draws no card, so it composes cardless and the cards

@@ -148,7 +148,7 @@ describe('protocol form keyboard operation', () => {
         const memo = utils.getByLabelText('Memo (optional)');
 
         await expectTabSequence(user, [
-            network, delegateMode, clearMode, chooseSource, from, token, contacts, delegateTo, memo,
+            delegateMode, clearMode, network, chooseSource, from, token, contacts, delegateTo, memo,
         ]);
 
         memo.focus();

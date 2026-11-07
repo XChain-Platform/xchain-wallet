@@ -61,12 +61,12 @@ describe('BatchComposerForm rows', () => {
         const add = await screen.findByRole('button', { name: /Add action/ });
         fireEvent.click(add);
 
-        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(2);
+        expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(2);
         const remove = screen.getAllByRole('button', { name: 'Remove' });
         expect(remove[0]).not.toBeDisabled();
         expect(remove[1]).not.toBeDisabled();
         fireEvent.click(remove[1]);
-        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(1);
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
@@ -78,7 +78,7 @@ describe('BatchComposerForm rows', () => {
         const add = await screen.findByRole('button', { name: /Add action/ });
         for (let i = 1; i < flows.BATCH_MAX_COMMANDS; i += 1) fireEvent.click(add);
 
-        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
+        expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
         expect(add).toBeDisabled();
         expect(screen.getByText(new RegExp(`${flows.BATCH_MAX_COMMANDS} actions is the most one batch carries`))).toBeTruthy();
     }, 60000);
@@ -94,7 +94,7 @@ describe('BatchComposerForm rows', () => {
         expect(review).toBeDisabled();
 
         fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
-        const rows = screen.getAllByRole('region', { name: /Step \d/ });
+        const rows = screen.getAllByRole('region', { name: /Action \d/ });
         expect(within(rows[1]).queryByText(/pick an action/)).toBeNull();
         fireEvent.change(within(rows[1]).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TEXT":"hi"}' },
@@ -105,7 +105,7 @@ describe('BatchComposerForm rows', () => {
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: /Add action/ }));
-        const rows = screen.getAllByRole('region', { name: /Step \d/ });
+        const rows = screen.getAllByRole('region', { name: /Action \d/ });
         const second = within(rows[1]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
@@ -165,7 +165,7 @@ describe('BatchComposerForm rows', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         expect(await screen.findByText(`Step 1: ${message}`)).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Step 1' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Action 1' })).toBeInTheDocument();
         expect(messaging.buildBatchCommand).not.toHaveBeenCalled();
     });
 
@@ -198,13 +198,13 @@ describe('BatchComposerForm rows', () => {
                 subStrings: ['not the command that will be signed'],
             }),
         });
-        const first = await screen.findByRole('region', { name: 'Step 1' });
+        const first = await screen.findByRole('region', { name: 'Action 1' });
         fireEvent.change(within(first).getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
         fireEvent.change(within(first).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"6.25","DESTINATION":"alice"}' },
         });
         fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
-        const second = screen.getAllByRole('region', { name: /Step \d/ })[1];
+        const second = screen.getAllByRole('region', { name: /Action \d/ })[1];
         fireEvent.change(within(second).getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
         fireEvent.change(within(second).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"4","DESTINATION":"bob"}' },

@@ -71,20 +71,25 @@ assert.match(
 );
 assert.match(aboutSrc, /export function AboutSection\(/, 'AboutSection is a named export');
 
-for (const label of [
-    'Version',
-    'Update channel',
-    'License',
-    'Notice',
-    'Reproducible build',
-    'Release signatures',
-    'Disclosure policy',
+for (const [label, message] of [
+    ['Version', 'settings.about.version'],
+    ['Update channel', 'settings.about.updateChannel'],
+    ['License', 'settings.about.license'],
+    ['Notice', 'settings.about.notice'],
+    ['Reproducible build', 'settings.about.reproducibleBuild'],
+    ['Release signatures', 'settings.about.releaseSignatures'],
+    ['Disclosure policy', 'settings.about.disclosurePolicy'],
 ]) {
     assert.ok(
-        aboutSrc.includes(`label="${label}"`),
+        aboutSrc.includes(`label={t('${message}')}`) || aboutSrc.includes(`label="${label}"`),
         `AboutSection renders a row labelled "${label}"`,
     );
 }
+assert.match(
+    aboutSrc,
+    /<Row label=(?:\{t\('settings\.about\.license'\)\}|"License")>[\s\S]*?<DocLink path=\{LICENSE_FILE\}/,
+    'the License row links to the license file',
+);
 
 // Items whose underlying artifact isn't published render a muted
 // fallback rather than an inert link. Two such items exist: release

@@ -25,7 +25,7 @@ function runRouteAction(action, ...args) {
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with thumb-reachable add and current-account management
- * actions pinned in the footer, as on the Wallets screen. Reached from
+ * actions directly under the list, as on the Wallets screen. Reached from
  * the gear popover's Account summary row. Picking an account calls
  * `onSwitch` and returns to home.
  *
@@ -76,8 +76,8 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         />
     );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
-    const footer = (
-        <div className={pickerStyles.footerActions}>
+    const actions = (
+        <div className={pickerStyles.pickerActions}>
             <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
             </Button>
@@ -94,7 +94,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     );
 
     return (
-        <Screen variant={variant} header={header} footer={footer}>
+        <Screen variant={variant} header={header}>
             <ListPage>
                 {error ? (
                     <StatusMessage
@@ -167,6 +167,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         </div>
                     );
                 })}
+                {actions}
             </ListPage>
         </Screen>
     );

@@ -79,26 +79,26 @@
     background: color-mix(in srgb, var(--xc-accent-primary) 8%, var(--xc-surface-raised));
 }
 
-.footerActions {
+.pickerActions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-2);
 }
 
-.footerActions > :only-child {
+.pickerActions > :only-child {
     grid-column: 1 / -1;
 }
 
-.footerActions button {
+.pickerActions button {
     min-height: var(--xc-control-h-md, 40px);
 }
 
-.footerActions button > span:last-child {
+.pickerActions button > span:last-child {
     white-space: nowrap;
 }
 
 @media not all and (min-width: 360px) {
-    .footerActions {
+    .pickerActions {
         grid-template-columns: 1fr;
     }
 }

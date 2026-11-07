@@ -15,6 +15,7 @@ import sharedListStyles from '../../../packages/core/src/shared/routes/SharedLis
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import chainPickerStyles from '../../../packages/core/src/ui/ChainPicker.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import tabsStyles from '../../../packages/core/src/ui/Tabs.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -72,7 +73,7 @@ describe('explorer toolbar control alignment', () => {
         expect(fieldFor(search)).toHaveClass(inputStyles.md);
     });
 
-    it('gives the betting network and action row one shared medium control size', async () => {
+    it('gives the betting network and tab row one shared medium control size', async () => {
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: 'bc1qexample' }] }),
             betFeeds: vi.fn().mockResolvedValue({ data: [] }),
@@ -94,8 +95,9 @@ describe('explorer toolbar control alignment', () => {
         const actions = container.querySelector(`.${betStyles.toolbarActions}`);
 
         expect(network.closest(`.${chainPickerStyles.wrap}`)).toHaveClass(chainPickerStyles.md);
-        for (const action of within(actions).getAllByRole('button')) {
-            expect(action).toHaveClass(buttonStyles.md);
+        expect(within(actions).getByRole('tablist')).toHaveClass(tabsStyles.tabs);
+        for (const action of within(actions).getAllByRole('tab')) {
+            expect(action).toHaveClass(tabsStyles.tab);
         }
     });
 });

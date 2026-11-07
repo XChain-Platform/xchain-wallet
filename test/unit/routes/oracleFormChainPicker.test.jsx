@@ -124,7 +124,7 @@ async function mountForm() {
 
 async function pickChain(utils, label) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
+        fireEvent.click(utils.getByRole('button', { name: /^Publishing network:/ }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -156,7 +156,7 @@ async function publish(utils, { tick, value }) {
 describe('D-145: OracleForm chain picker', () => {
     it('renders a Network field listing every chain the wallet holds addresses on', async () => {
         const { utils } = await mountForm();
-        const field = utils.getByRole('button', { name: /^Network:/ });
+        const field = utils.getByRole('button', { name: /^Publishing network:/ });
         expect(field, 'the oracle form mounts no chain picker at all, so the publishing '
             + 'chain is whichever one the wallet lists first').toBeTruthy();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);

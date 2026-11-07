@@ -646,7 +646,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         >
 
             <FormSection
-                title="My published prices"
+                title="Prices"
                 trailing={<InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />}
             >
             {/*
@@ -656,7 +656,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
               * chain may read this oracle, so the two need not match.
               */}
             <ChainPicker
-                label="Network"
+                label="Publishing network"
                 value={chainId}
                 onChange={setChainId}
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
@@ -715,11 +715,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     })}
                 </ul>
             )}
-            </FormSection>
-
-            <FormSection title="Publish a price">
             <Select
-                label="Token's network"
+                label="Priced token network"
                 hint={crossChain
                     ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
                     : 'The network the priced token lives on. It can differ from the publishing network.'}

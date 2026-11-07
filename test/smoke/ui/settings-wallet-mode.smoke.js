@@ -82,7 +82,7 @@ assert.match(
 );
 assert.match(sectionSrc, /import \{ ConfirmModal \}/, 'imports the shared keyboard-safe confirmation modal');
 assert.match(sectionSrc, /<ConfirmModal/, 'mode changes require confirmation');
-assert.match(sectionSrc, /Confirm mode change/, 'confirmation has an explicit action');
+assert.match(sectionSrc, /confirmLabel=(?:\{t\('settings\.walletMode\.confirmModeChange'\)\}|"Confirm mode change")/, 'confirmation has an explicit action');
 assert.match(sectionSrc, /description:\s*opt\.hint/, 'each radio keeps its linked hint');
 
 // ─── 3. Settings.jsx wiring ----------------------------------------

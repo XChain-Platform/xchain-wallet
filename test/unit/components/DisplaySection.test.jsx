@@ -100,8 +100,8 @@ describe('DisplaySection', () => {
         expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
         const thresholdRow = screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement;
         expect(thresholdRow).toHaveClass(layoutStyles.fieldRow);
-        expect(thresholdRow.style.background).toBe('var(--xc-card-bg)');
-        expect(thresholdRow.style.border).toBe('var(--xc-card-border)');
+        expect(thresholdRow.style.background).toBe('var(--xc-settings-row-bg, var(--xc-card-bg))');
+        expect(thresholdRow.style.border).toBe('var(--xc-settings-row-border, var(--xc-card-border))');
         expect(screen.getByRole('combobox', { name: 'Balance number format' }).parentElement.parentElement.parentElement).toHaveClass(layoutStyles.fieldRow);
 
         const search = screen.getByRole('searchbox', { name: 'Search pinned and hidden tokens' });
@@ -341,5 +341,13 @@ describe('DisplaySection', () => {
         expect(screen.getByText('Bitcoin:XCP')).toBeInTheDocument();
         fireEvent.keyDown(search, { key: 'ArrowDown' });
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unpin Bitcoin:XCP' }));
+    });
+
+    it('keeps the hide-unknown-tokens option but words it without pricing status', async () => {
+        setup();
+
+        expect(await screen.findByText('Hide unknown tokens')).toBeInTheDocument();
+        expect(screen.getByText(/Collapse tokens without a name or image/)).toBeInTheDocument();
+        expect(screen.queryByText(/unpriced/i)).toBeNull();
     });
 });

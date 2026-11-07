@@ -121,10 +121,9 @@
 .name {
     font-weight: 600;
     color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .subtitle {
@@ -170,10 +169,9 @@
     unicode-bidi: isolate;
 }
 
-/* The balance figures keep their width and the name gives way: a name
-   ends in an ellipsis and a number never does. On a wrapped row the figures
-   sit at the end of their own line. The doubled class outranks ListRow's own
-   trailing rule whatever order the sheets load in. */
+/* The balance figures keep their width while the name wraps. On a wrapped row
+   the figures sit at the end of their own line. The doubled class outranks
+   ListRow's own trailing rule whatever order the sheets load in. */
 .amountsSlot.amountsSlot {
     flex-shrink: 0;
     max-width: 100%;
@@ -213,6 +211,7 @@
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-2);
 }
+
 
 .rowPinned {
     background: var(--xc-bg-muted-soft, var(--xc-bg-muted));

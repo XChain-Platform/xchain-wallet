@@ -929,11 +929,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             )}
         >
             <FormSection
-                title="Network"
-                description="Both swap legs settle on this network."
+                title="Settlement"
             >
                 <ChainPicker
-                    label="Give and get network"
+                    label="Network"
                     value={chainId}
                     onChange={(cid) => {
                         if (cid === chainId) return;

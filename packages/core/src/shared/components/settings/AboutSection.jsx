@@ -21,7 +21,6 @@ import { copyText } from '../../clipboard.js';
 import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
-    LICENSE_NAME,
     NOTICE_FILE,
     RELEASE_SIGNATURES_DOC,
     RELEASE_SIGNATURES_PUBLISHED,
@@ -215,35 +214,34 @@ export function AboutSection() {
                 />
             ) : null}
             <Row label={t('settings.about.license')}>
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
-                    {/* Cluster J FOLLOWUP 5: surface the full LICENSE.md
-                        text inline so users don't have to navigate to a
-                        repo on GitHub to read what they're agreeing to. */}
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setLicenseOpen((open) => !open)}
-                        aria-expanded={licenseOpen}
-                        aria-controls="full-license-text"
-                    >
-                        {licenseOpen ? t('settings.about.hideFullText') : t('settings.about.showFullText')}
-                    </Button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--xc-space-2)', maxWidth: '36rem' }}>
+                    {/* Plain-language summary shown by default for the wallet's
+                        non-technical audience; the full AGPL text is one tap away. */}
+                    <LicenseParagraphs
+                        text={LICENSE_SUMMARY}
+                        style={{
+                            ...PARAGRAPHS,
+                            margin: 0,
+                            fontSize: 'var(--xc-text-xs)',
+                            color: 'var(--xc-text-muted, var(--xc-text))',
+                            lineHeight: 1.5,
+                            textAlign: 'start',
+                        }}
+                    />
+                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <DocLink path={LICENSE_FILE} label={t('settings.about.licenseFile')} />
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setLicenseOpen((open) => !open)}
+                            aria-expanded={licenseOpen}
+                            aria-controls="full-license-text"
+                        >
+                            {licenseOpen ? t('settings.about.hideFullText') : t('settings.about.showFullText')}
+                        </Button>
+                    </div>
                 </div>
             </Row>
-            {/* Plain-language summary shown by default for the wallet's
-                non-technical audience; the full AGPL text is one tap away
-                via the "Show full text" toggle above. */}
-            <LicenseParagraphs
-                text={LICENSE_SUMMARY}
-                style={{
-                    ...PARAGRAPHS,
-                    margin: 'var(--xc-space-1) 0 0',
-                    fontSize: 'var(--xc-text-xs)',
-                    color: 'var(--xc-text-muted, var(--xc-text))',
-                    lineHeight: 1.5,
-                }}
-            />
             {licenseOpen ? (
                 <LicenseParagraphs
                     id="full-license-text"

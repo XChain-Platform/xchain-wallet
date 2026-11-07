@@ -73,7 +73,8 @@ describe('long content layout', () => {
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
-        expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(balanceCss, '.name')).toMatch(/white-space:\s*normal/);
+        expect(rule(balanceCss, '.name')).toMatch(/overflow-wrap:\s*anywhere/);
         // The shared row keeps the amount column at its full width and lets the label column yield.
         expect(rule(listRowCss, '.content')).toMatch(/flex:\s*1 1 auto;[^}]*min-width:\s*0/s);
         expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
@@ -82,7 +83,7 @@ describe('long content layout', () => {
         // A figure is never cut: no ellipsis and no clipping on the figure or
         // its column. When it does not fit beside the name (large text on a
         // phone) the row wraps and the figures take their own line, ending at
-        // the row's end, while the name column keeps a rem floor and truncates.
+        // the row's end, while the name itself remains available by wrapping.
         for (const selector of ['.amountFit', '.qty', '.fiat', '.amounts', '.amountsSlot.amountsSlot']) {
             expect(rule(balanceCss, selector)).not.toMatch(/text-overflow:\s*ellipsis/);
             expect(rule(balanceCss, selector)).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);

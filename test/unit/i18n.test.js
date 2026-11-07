@@ -481,6 +481,8 @@ describe('translations', () => {
             ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
+            // The governance page title and the settings notification label.
+            ['governance.title', 'settings.notifications.governancePolls'],
             // The History status filter header and the parallel composer's status-pill label prefix.
             ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
             ['home.receive', 'uri.intent.receive'],

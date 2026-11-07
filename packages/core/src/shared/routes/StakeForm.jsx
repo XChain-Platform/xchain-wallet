@@ -782,11 +782,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {qualifyReadout ? (
                 <div style={{
-                    border: 'var(--xc-card-border)',
-                    borderRadius: 'var(--xc-card-radius)',
-                    padding: 'var(--xc-card-pad)',
                     marginBottom: '0.75rem',
-                    background: 'var(--xc-card-bg)',
                 }}>
                     <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
                         Capabilities this stake unlocks

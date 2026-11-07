@@ -8,9 +8,14 @@
 }
 
 .options {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    overflow: hidden;
+}
+
+.options > * + * {
+    border-top: 1px solid var(--xc-border);
 }
 
 .optionIcon {
@@ -25,35 +30,16 @@
     justify-content: center;
 }
 
-.optionBody {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    /* The paired title and description need an optical gap below the spacing scale. */
-    gap: 2px;
-}
-
-.optionTitle {
-    font-weight: 600;
-    font-size: var(--xc-text-md);
-}
-
-.optionDesc {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-}
-
 /* Inline network step (validator arm, >1 Bitcoin chain only). */
 .chainList {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    overflow: hidden;
 }
 
-.chainLabel {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
+.chainList > * + * {
+    border-top: 1px solid var(--xc-border);
 }
 
 .chainIcon {

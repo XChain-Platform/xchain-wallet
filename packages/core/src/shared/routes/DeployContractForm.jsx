@@ -1465,6 +1465,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <Button
                     type="button"
                     variant="ghost"
+                    size="sm"
                     onClick={handleValidate}
                     loading={validationBusy}
                     disabled={!code.trim() || validationBusy || toolBusy !== null}
@@ -1474,6 +1475,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <Button
                     type="button"
                     variant="ghost"
+                    size="sm"
                     onClick={handleCheckSize}
                     loading={sizeBusy}
                     disabled={!code.trim() || sizeBusy || toolBusy !== null}
@@ -1483,6 +1485,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <Button
                     type="button"
                     variant="ghost"
+                    size="sm"
                     onClick={handleSuggestGas}
                     loading={gasBusy}
                     disabled={!code.trim() || gasBusy || toolBusy !== null}

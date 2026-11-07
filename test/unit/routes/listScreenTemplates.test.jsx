@@ -19,7 +19,7 @@ describe('list screen templates', () => {
 
     it('uses the shared list row for menu, stake, and betting choices', () => {
         expect(menuSource).toMatch(/className=\{`\$\{buttonStyles\.btn\} \$\{buttonStyles\.ghost\} \$\{buttonStyles\.md\} \$\{rowStyles\.entry\}`\}/);
-        expect(stakeNewSource).toMatch(/className=\{styles\.entry\}/);
+        expect(stakeNewSource).toMatch(/<ListRow\b/);
         expect(betFeedsSource).toMatch(/<ListRow\b/);
         expect(betFeedsSource).not.toMatch(/className=\{rowStyles\.entry\}/);
         expect(betFeedsSource).not.toMatch(/className=\{styles\.card\}/);

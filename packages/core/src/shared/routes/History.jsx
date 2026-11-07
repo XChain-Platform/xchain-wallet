@@ -1779,6 +1779,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // page notice stays out of its way so one state shows one message.
     const offlineWithoutHistory = offlineVerdict && historyLoaded && loadingChains.size === 0
         && entries.length === 0 && visibleEntries.length === 0;
+    const balancesUnavailableEmpty = balancesUnchecked && !offlineVerdict && !crossChainOnly
+        && historyLoaded && loadingChains.size === 0
+        && entries.length === 0 && visibleEntries.length === 0;
 
     return wrap(
         <ListPage
@@ -1798,7 +1801,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     })}
                 </StatusMessage>
             ) : null}
-            actions={actions}
+            actions={balancesUnavailableEmpty ? null : actions}
             toolbar={entries.length > 0 ? (
             <>
                 <div className={styles.toolbarTop}>
@@ -2079,7 +2082,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             recheckBalances();
                             setRefreshTick((n) => n + 1);
                         }}
-                        onReceive={onReceive}
                     />
                 ) : (
                     <EmptyState

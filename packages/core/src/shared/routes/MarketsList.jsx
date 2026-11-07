@@ -425,7 +425,7 @@ export function MarketsList({
                                     ? 'Matching markets appear here after you reset or change the filters.'
                                     : tab === 'watchlist'
                                         ? `Starred markets for ${selectedAsset.tick} appear here after you star one.`
-                                        : 'Market pairs involving this asset appear here when they become available on its network.'}
+                                        : undefined}
                                 actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />

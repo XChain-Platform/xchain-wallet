@@ -1338,7 +1338,7 @@ describe('SwapForm: every stage renders inside FormPage', () => {
     it('lays out the offline notice in the FormPage status region', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         await mountSwap();
-        await screen.findByRole('button', { name: /^Give and get network: / });
+        await screen.findByRole('button', { name: /^Network: / });
         const notices = screen.getAllByText('Swapping needs a network connection.');
         expect(notices).toHaveLength(1);
         expect(notices[0].closest('[data-form-status]'), 'inside the FormPage status').not.toBeNull();

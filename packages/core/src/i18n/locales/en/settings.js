@@ -409,6 +409,7 @@ const messages = {
     'settings.about.updateChannel': 'Update channel',
     'settings.about.checkForNewVersions': 'Check for new versions',
     'settings.about.license': 'License',
+    'settings.about.licenseFile': 'License file',
     'settings.about.hideFullText': 'Hide full text',
     'settings.about.showFullText': 'Show full text',
     'settings.about.notice': 'Notice',
@@ -551,8 +552,6 @@ const messages = {
     'settings.fees.noChainFeeProfilesYet': 'No network fee profiles yet',
     'settings.fees.noChainFeeProfilesYetBody': "They're seeded automatically when a network is activated.",
     'settings.fees.feeStrategy': 'Fee strategy',
-    'settings.fees.chooseTheBalanceBetweenConfirmation':
-        'Choose the balance between confirmation speed and network cost.',
     'settings.fees.feeStrategy2': '{displayName} fee strategy',
     'settings.fees.customFeeRate': 'Custom fee rate',
     'settings.fees.enterTheRateIn': 'Enter the rate in {unit}.',
@@ -605,8 +604,7 @@ const messages = {
     'settings.appearance.reducedMotion': 'Reduced motion',
     'settings.walletMode.switchToMode': 'Switch to {label} mode?',
     'settings.walletMode.confirmModeChange': 'Confirm mode change',
-    'settings.walletMode.chooseHowThisWalletHandles':
-        'Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing.',
+    'settings.walletMode.transactionHandling': 'Transaction handling',
     'settings.page.searchSettings': 'Search settings…',
     'settings.page.searchSettings2': 'Search settings',
     'settings.page.noMatchingSettings': 'No matching settings',
@@ -729,7 +727,7 @@ const messages = {
         'Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery.',
     'settings.display.collapseBalancesBelowTheSelected': 'Pinned and escrowed balances stay visible.',
     'settings.display.collapseUnpricedTokensWithoutA':
-        'Collapse unpriced tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list.',
+        'Collapse tokens without a name or image unless you pinned, watched, issued, or placed them in an order. Hidden tokens stay available from the expandable Hidden tokens list.',
     'settings.display.displayAStarOnEach': 'A star pins or unpins the token on Home.',
     'settings.display.displayAHideAffordanceOn': "Moves the token to Home's Hidden section.",
     'settings.display.addATokenByChain': 'Keeps zero-balance tokens in Balances.',

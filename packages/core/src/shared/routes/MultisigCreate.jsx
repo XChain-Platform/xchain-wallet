@@ -17,7 +17,6 @@ import { isCompressedPublicKey, validateCosignerXpub } from '../utils/multisigXp
 import { MAX_MULTISIG_COSIGNERS } from '../../schemas/multisigConfig.js';
 import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
 import styles from './IssueTokenForm.module.css';
-import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -520,7 +519,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 </Button>
             )}
         >
-            <FormSection title="Cosigners">
+            <div aria-label="Cosigners" data-form-stack="">
                 <details>
                     <summary>How multisig setup works</summary>
                     <p className={styles.hint}>
@@ -568,7 +567,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     addresses={localAddresses}
                     networkKind={descriptor?.networkKind}
                 />
-            </FormSection>
+            </div>
 
             <FormSection title="Scheme">
                 <RadioGroup
@@ -609,7 +608,7 @@ export function MultisigCreate({ walletId, onBack }) {
 
 function ReviewCosigner({ index, row }) {
     return (
-        <fieldset className={cardStyles.card} style={fieldsetStyle}>
+        <fieldset className={styles.flatFieldset} style={fieldsetStyle}>
             <legend style={legendStyle}>Cosigner {index + 1}: {row.name}</legend>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Origin</dt>
@@ -633,7 +632,7 @@ function ReviewCosigner({ index, row }) {
 
 function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick, onTouch }) {
     return (
-        <fieldset className={cardStyles.card} style={{ ...fieldsetStyle, marginBottom: 'var(--xc-space-2)' }}>
+        <fieldset className={styles.flatFieldset} style={{ ...fieldsetStyle, marginBottom: 'var(--xc-space-2)' }}>
             <legend style={legendStyle}>Cosigner {index + 1}</legend>
 
             <Input

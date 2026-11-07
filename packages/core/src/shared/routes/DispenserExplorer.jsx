@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -304,10 +304,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         />
     );
     const searchForm = (
-        <FormPage className={local.searchForm} onSubmit={handleSearch} sectioned label="Find open dispensers">
-            <FormSection title="Find open dispensers">
+        <FormPage className={local.searchForm} onSubmit={handleSearch} label="Dispenser search">
                 <RadioGroup
-                    legend="Search mode"
+                    legend={<span className="sr-only">Search dispensers by</span>}
                     name="searchMode"
                     value={searchMode}
                     onChange={setSearchMode}
@@ -347,9 +346,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                             autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
                             autoCorrect="off"
                             spellCheck={false}
-                            hint={searchMode === 'token'
-                                ? t('dispenserExplorer.searchHint.token')
-                                : t('dispenserExplorer.searchHint.address')}
                         />
                     </div>
                     <Button
@@ -368,7 +364,6 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searchDisabledReason}
                     </p>
                 ) : null}
-            </FormSection>
         </FormPage>
     );
 

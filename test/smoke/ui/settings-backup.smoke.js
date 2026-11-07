@@ -39,8 +39,8 @@ assert.match(
 );
 
 // Password prompt with confirm + mismatch detection
-assert.match(src, /Backup password/, 'password prompt label present');
-assert.match(src, /Confirm backup password/, 'confirm-password input present');
+assert.match(src, /(?:t\('settings\.backup\.backupPassword'\)|Backup password)/, 'password prompt label present');
+assert.match(src, /(?:t\('settings\.backup\.confirmBackupPassword'\)|Confirm backup password)/, 'confirm-password input present');
 assert.match(src, /mismatch =/, 'mismatch detection present');
 
 // The file is saved through the shell dialog, the browser save picker, or a
@@ -54,12 +54,15 @@ assert.match(src, /BackupDownloadConfirm/, 'a download waits for the user to con
 // Four backup rows (three previously-deferred lanes are now Live as of
 // v0.151.0 (seed reveal), v0.152.0 (dry-run restore), v0.154.0 (publish
 // labels). The smoke keeps the row-presence assertion on the new copy.
-for (const label of [
-    'Back up recovery phrase',
-    'Test backup',
-    'Publish labels on-chain',
+for (const [label, message] of [
+    ['Back up recovery phrase', 'settings.backup.backUpRecoveryPhrase'],
+    ['Test backup', 'settings.backup.testBackupDryRunRestore'],
+    ['Publish labels on-chain', 'settings.backup.publishLabelsOnChain'],
 ]) {
-    assert.ok(src.includes(label), `${label} row present`);
+    assert.ok(
+        src.includes(`label={t('${message}')}`) || src.includes(`label="${label}`),
+        `${label} row present`,
+    );
 }
 
 // Host handler + messaging wrappers

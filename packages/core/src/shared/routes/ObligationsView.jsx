@@ -175,8 +175,8 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                 {!showOffline && !scanning && !scanError && classified.length === 0 ? (
                     <EmptyState
                         icon={<Icon.ClockIcon />}
-                        title="No payments due"
-                        body="When a DEX order matches against BTC, LTC or DOGE, the coin payment that completes it appears here with its deadline."
+                        title="All caught up"
+                        body="Matched-order payments appear here until they are settled."
                     />
                 ) : null}
 

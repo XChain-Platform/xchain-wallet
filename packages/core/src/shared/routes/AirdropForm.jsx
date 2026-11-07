@@ -2085,6 +2085,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <Button
                             type="button"
                             variant="secondary"
+                            size="sm"
                             onClick={recipientsDrop.openFilePicker}
                         >
                             Upload a CSV or text file

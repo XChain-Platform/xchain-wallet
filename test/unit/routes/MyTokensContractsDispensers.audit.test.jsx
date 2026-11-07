@@ -81,7 +81,7 @@ describe('ContractsList ownership and empty actions', () => {
             contractMessaging(),
         );
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         const actions = screen.getAllByRole('button', { name: /Publish contract/ });
         fireEvent.click(actions[actions.length - 1]);
         expect(onDeploy).toHaveBeenCalledTimes(1);
@@ -134,7 +134,7 @@ describe('ContractsList ownership and empty actions', () => {
         expect(document.body.textContent).not.toContain('private transport detail');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(getContractsForSource).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
     });
 
     it('says an empty section once, not once per chain', async () => {
@@ -149,11 +149,12 @@ describe('ContractsList ownership and empty actions', () => {
             messaging,
         );
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryAllByRole('status', { name: /Loading contracts/ })).toHaveLength(0));
-        expect(screen.getAllByText('No published contracts')).toHaveLength(1);
-        expect(screen.getAllByText('No contract interactions')).toHaveLength(1);
-        expect(screen.getAllByText('No indexed contracts')).toHaveLength(1);
+        expect(screen.getAllByText('No contracts yet')).toHaveLength(1);
+        expect(screen.queryByText('No published contracts')).toBeNull();
+        expect(screen.queryByText('No contract interactions')).toBeNull();
+        expect(screen.queryByText('No indexed contracts')).toBeNull();
         // Both chains were asked, so the single message stands for both.
         expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: 'litecoin-testnet' });
         expect(messaging.getContractsBrowseAll).toHaveBeenCalledWith({ chainId: CHAIN });

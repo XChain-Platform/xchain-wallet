@@ -39,8 +39,8 @@ for (const field of ['torRouting', 'changeAddressRotation', 'blurOnBlur', 'label
 }
 assert.ok(!src.includes("onToggle('hideSmallBalances'"),
     'hide-small-balances control lives in Display');
-assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
-assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
+assert.match(src, /(?:t\('settings\.privacy\.blurSensitiveDataOnBlur'\)|Blur sensitive data on blur)/, 'blur-on-blur row present');
+assert.match(src, /(?:t\('settings\.privacy\.labelsSurviveRestore'\)|Labels survive restore)/, 'labels-survive-restore row present');
 
 // The Tor row is the one toggle that is NOT unconditional. It
 // was offered in all three shells and implemented in none, which made it
@@ -71,9 +71,9 @@ assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
     'the non-proxying shells render an explicit unavailable row');
 const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
 const unavailBlock = src.slice(unavailGate, unavailGate + 900);
-assert.match(unavailBlock, /Not available on this platform/,
+assert.match(unavailBlock, /(?:t\('settings\.privacy\.notAvailableOnThisPlatform'\)|Not available on this platform)/,
     'the unavailable row names the platform limit in the hint');
-assert.match(unavailBlock, /isNativeShell\(\)[\s\S]*Not available in the iOS and Android apps/,
+assert.match(unavailBlock, /isNativeShell\(\)[\s\S]*(?:t\('settings\.privacy\.notAvailableInNativeApp'\)|Not available in the iOS and Android apps)/,
     'the iOS and Android apps get their own hint, chosen through the locale');
 assert.match(unavailBlock, /checked=\{false\}/,
     'the unavailable row never draws a switch in the on position');

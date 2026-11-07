@@ -614,6 +614,8 @@ export function ManageToken({
                     </StatusMessage>
                 ) : null}
 
+                <div className={styles.surface}>
+
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
                     <div className={styles.heroIconWrap}>
@@ -766,6 +768,7 @@ export function ManageToken({
                             key={a.id}
                             type="button"
                             variant={a.danger ? 'danger' : 'secondary'}
+                            size="sm"
                             block
                             icon={<a.Icon />}
                             // A row the protocol has frozen stays on screen and
@@ -783,6 +786,7 @@ export function ManageToken({
                             <Button
                                 type="button"
                                 variant="secondary"
+                                size="sm"
                                 block
                                 icon={<Icon.MoreIcon />}
                                 aria-haspopup="menu"
@@ -902,7 +906,8 @@ export function ManageToken({
                                         <dd>{new Date(Number(genesisInfo.timestamp) * (Number(genesisInfo.timestamp) > 1e12 ? 1 : 1000)).toLocaleString()}</dd>
                                     </>
                                 ) : null}
-                                {genesisInfo.source ? (
+                                {genesisInfo.source
+                                    && String(genesisInfo.source).toLowerCase() !== String(owner || '').toLowerCase() ? (
                                     <>
                                         <dt>{t('routes.manageToken.issuer')}</dt>
                                         <dd className={styles.copyableGenesis}>
@@ -931,6 +936,7 @@ export function ManageToken({
                         ) : null}
                     </section>
                 ) : null}
+                </div>
             </ListPage>
         </Screen>
     );

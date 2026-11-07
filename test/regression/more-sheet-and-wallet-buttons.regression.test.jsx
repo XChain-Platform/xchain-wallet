@@ -88,10 +88,10 @@ describe('regression/More sheet and wallet button sizing', () => {
 
         const add = await screen.findByRole('button', { name: 'Add wallet' });
         const manage = screen.getByRole('button', { name: 'Manage wallet' });
-        expect(add.parentElement).toHaveClass(walletPickerStyles.footerActions);
+        expect(add.parentElement).toHaveClass(walletPickerStyles.pickerActions);
         expect(manage.parentElement).toBe(add.parentElement);
 
-        const footerButtonRule = rule(walletPickerCss, '.footerActions button');
+        const footerButtonRule = rule(walletPickerCss, '.pickerActions button');
         expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md,\s*40px\)/);
         expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
     });

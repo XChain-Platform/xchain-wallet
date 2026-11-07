@@ -22,7 +22,7 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount(wallet, tokenInfo = { creator: ISSUER, divisibility: 8 }, props = {}) {
+function mount(wallet, tokenInfo = { creator: ISSUER, divisibility: 8 }, props = {}, messagingOverrides = {}) {
     const messaging = {
         getTokenInfo: vi.fn().mockResolvedValue(tokenInfo),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: wallet }] }),
@@ -30,6 +30,7 @@ function mount(wallet, tokenInfo = { creator: ISSUER, divisibility: 8 }, props =
         getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
         getDispensersForToken: vi.fn().mockResolvedValue({ data: [] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+        ...messagingOverrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -82,5 +83,18 @@ describe('ManageToken owner notice', () => {
         await screen.findByText('Owned by');
 
         expect(screen.queryByText(/issuer address/)).toBeNull();
+    });
+
+    it('does not repeat the owner as a genesis issuer', async () => {
+        mount(ISSUER, undefined, {}, {
+            getGenesisForToken: vi.fn().mockResolvedValue({
+                action_index: 12,
+                source: ISSUER.toUpperCase(),
+            }),
+        });
+
+        expect(await screen.findByRole('heading', { name: 'Genesis' })).toBeInTheDocument();
+        expect(screen.queryByText('Issuer')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Copy genesis issuer address' })).toBeNull();
     });
 });

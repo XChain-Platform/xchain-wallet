@@ -939,7 +939,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
-        expect(utils.container.textContent).toContain("This action's protocol fee is 0.165 XCHAIN.");
+        expect(utils.container.textContent).not.toContain("This action's protocol fee is 0.165 XCHAIN.");
 
         await domAct(async () => {
             fireEvent.click(button(utils, /Review market/i));

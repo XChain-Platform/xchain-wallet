@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Settings subpages share the index's row rhythm: one row gap token between
-// stacked rows and one bordered row component for every row.
+// Settings pages share one group surface, divider rows, and compact actions.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,6 +38,18 @@ afterEach(() => {
 });
 
 describe('Settings subpage row gap', () => {
+    it('draws one shared card surface and flattens its divider rows', () => {
+        const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
+        const surface = css.match(/\.settingsSurface\s*\{([^}]*)\}/)[1];
+        expect(surface).toMatch(/composes:\s*card from/);
+        expect(surface).toMatch(/--xc-settings-row-border:\s*0/);
+        expect(surface).toMatch(/--xc-settings-row-divider:\s*var\(--xc-border\)/);
+
+        const route = readFileSync(join(SETTINGS_DIR, 'routes/Settings.jsx'), 'utf8');
+        expect(route).toMatch(/className=\{settingsStyles\.settingsSurface\}/);
+        expect(route).toMatch(/preserveNestedCards=\{section\.id === 'notifications'\}/);
+    });
+
     it('gives FormSection-based subpages the Settings row gap', () => {
         const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
         const page = css.match(/\.page\s*\{([^}]*)\}/)[1];
@@ -81,6 +92,7 @@ describe('Settings action rows', () => {
         const slot = getByRole('button').parentElement;
         expect(slot.style.marginInlineStart).toBe('auto');
         expect(slot.style.justifyContent).toBe('flex-end');
+        expect(slot.style.flex).toBe('0 0 auto');
     });
 
     it('builds Backup and This wallet rows from the shared action row', () => {
@@ -101,6 +113,13 @@ describe('Settings action rows', () => {
             expect(src, name).not.toMatch(/styles\.(formSection|panel|keyPanel)\b/);
             expect(css, name).not.toMatch(/composes:\s*(card|flush) from/);
             expect(css, name).not.toMatch(/dangerPanel/);
+        }
+    });
+
+    it('keeps the Safety row actions at their compact size', () => {
+        for (const file of ['PanicModeRow.jsx', 'DuressPassphraseRow.jsx']) {
+            const src = readFileSync(join(SETTINGS_DIR, 'components/settings', file), 'utf8');
+            expect(src, file).toMatch(/size="sm"[^>]*style=\{COMPACT_CONTROL\}/);
         }
     });
 });

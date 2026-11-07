@@ -82,64 +82,6 @@
     color: var(--xc-text-muted);
 }
 
-/* Full-width segmented toggle (All | Normal | Imported | Other) between the
-   filter row and the results. Equal-width segments; active one filled. When
-   the labels are wider than the control (a Slide Over window at the largest
-   text size), the segments wrap onto a second row instead of being cut. */
-.segmented {
-    display: flex;
-    flex-wrap: wrap;
-    width: 100%;
-    min-height: var(--xc-control-h-md);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-    background: var(--xc-surface);
-    overflow: hidden;
-}
-
-.segment {
-    position: relative;
-    flex: 1 1 0;
-    min-height: calc(var(--xc-control-h-md) - 2px);
-    appearance: none;
-    /* The group paints the surface and draws the edge, as in SegmentedControl. */
-    background: transparent;
-    border: none;
-    border-inline-start: 1px solid var(--xc-border);
-    padding: var(--xc-space-2) var(--xc-space-1);
-    font: inherit;
-    font-size: var(--xc-control-font-md, var(--xc-control-font));
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-/* A hairline above a wrapped row, drawn as a border so forced colors keep it.
-   On the first row it sits in the control's own border, where the control's
-   overflow clips it. */
-.segment::before {
-    content: '';
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: -1px;
-    border-block-start: 1px solid var(--xc-border);
-    pointer-events: none;
-}
-
-.segment:first-child {
-    border-inline-start: none;
-}
-
-.segment:hover:not(.segmentActive) {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.segmentActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-}
-
 /* Empty state shown when the filter matches no addresses: a calm card so it
    reads as intentional, not a glitch. */
 
@@ -281,15 +223,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-/* Address detail view. */
-.detailCard {
-    composes: card from '../../ui/Card.module.css';
-}
-
-.detailCardSpaced {
-    margin-top: var(--xc-space-3);
-}
-
 .detailName {
     font-size: var(--xc-text-lg);
     font-weight: 600;
@@ -323,7 +256,7 @@
 
 /* Detail cards under the quick actions on the address detail view. */
 .tabPanel {
-    padding: var(--xc-space-3) 0;
+    composes: card from '../../ui/Card.module.css';
 }
 
 .detailField {
@@ -392,9 +325,9 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-1);
@@ -403,7 +336,7 @@
     font-family: inherit;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    min-height: 72px;
+    min-height: var(--xc-tap-min);
     text-align: center;
 }
 
@@ -423,16 +356,16 @@
 
 .quickAction > span {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     gap: var(--xc-space-1);
 }
 
 .quickActionIcon {
-    width: 32px;
-    height: 32px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    background: transparent;
     color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;

@@ -104,11 +104,13 @@
 }
 
 .sm {
-    --xc-button-height: var(--xc-control-h-sm);
-    --xc-button-font-size: var(--xc-control-font-sm, 13px);
+    /* Small controls stay visibly compact on touch shells. The transparent
+       coarse-pointer layer below, not the painted button, grows to 44px. */
+    --xc-button-height: calc(var(--xc-space-6) + var(--xc-space-1));
+    --xc-button-font-size: var(--xc-text-xs);
     --xc-button-padding-x: var(--xc-button-pad-x-sm, 12px);
     --xc-icon-size: var(--xc-control-icon-sm, 16px);
-    min-height: var(--xc-control-h-sm, 28px);
+    min-height: calc(var(--xc-space-6) + var(--xc-space-1));
 }
 
 .lg {
@@ -160,6 +162,20 @@
     background: transparent;
     color: var(--xc-accent-text);
     border-color: var(--xc-border-strong);
+}
+
+/* A compact action inside a flush list row, such as pin or hide. The glyph
+   carries its state, so the row does not contain another bordered box. */
+.rowAction {
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: transparent;
+    background: transparent;
+    color: var(--xc-accent-text);
+    border-color: transparent;
+}
+
+.rowAction[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
 }
 
 .link {

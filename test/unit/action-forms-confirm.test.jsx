@@ -530,7 +530,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DelegateVoteForm,
             props: { presetTick: 'JDOG' },
-            actionLabel: 'Delegate votes',
+            actionLabel: 'Review',
             fill: (utils) => setValue(utils, 'Delegate to address', VOTE_DELEGATE),
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
@@ -728,8 +728,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update description',
-            fill: (utils) => setValue(utils, 'New description', 'a better token'),
+            actionLabel: 'Save',
+            fill: (utils) => setValue(utils, 'Description', 'a better token'),
         });
         expectSingleEncode(calls, {
             action: 'ISSUE',
@@ -1302,8 +1302,8 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Update description',
-            fill: (utils) => setValue(utils, 'New description', 'a better token'),
+            actionLabel: 'Save',
+            fill: (utils) => setValue(utils, 'Description', 'a better token'),
             software: 'issueToken',
             hardware: 'issueTokenHw',
         },
@@ -1579,7 +1579,7 @@ const PROTOCOL_FAILURE_FORMS = [
         name: 'vote',
         Form: DelegateVoteForm,
         props: { presetTick: 'JDOG' },
-        actionLabel: 'Delegate votes',
+        actionLabel: 'Review',
         composeMethod: 'composeVoteForConfirm',
         submitMethod: 'delegateVoteAction',
         fill: (u) => {

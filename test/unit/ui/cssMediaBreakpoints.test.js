@@ -53,14 +53,16 @@ describe('core CSS module media breakpoints', () => {
     it('names lower-side boundaries without one-pixel aliases', () => {
         const combined = [...modules.values()].join('\n');
 
-        expect(combined).not.toMatch(/\b(?:359|399|599|601|639|1023)px\b/);
+        expect(combined).not.toMatch(/\b(?:359|399|599|601|639|833|1023)px\b/);
         expect(modules.get('shared/commandPalette/CommandPalette.module.css'))
             .toContain('@media not all and (min-width: 640px)');
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media not all and (min-width: 400px)');
         expect(modules.get('shared/routes/ManageToken.module.css').match(
-            /@media not all and \(min-width: 600px\)/g,
-        )).toHaveLength(2);
+            /@media \(min-width: 834px\)/g,
+        )).toHaveLength(3);
+        expect(modules.get('shared/routes/IssueTokenForm.module.css'))
+            .toContain('@media (min-width: 834px)');
     });
 
     it('keeps 600px on the wide side of the form rule', () => {

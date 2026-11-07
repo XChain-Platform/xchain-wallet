@@ -301,7 +301,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             <span className={styles.marketSelectorContent}>
                 <TickerIcon chainId={iconChainId} tick={tick} size={40} />
                 <span className={styles.marketSelectorText}>
-                    <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
+                    <span className={styles.marketSelectorName}>{selected.displayName || tick} market</span>
                     <span className={styles.marketSelectorSub}>{tick}</span>
                 </span>
                 <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
@@ -328,7 +328,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : null}
 
                     {loading && offers === null ? (
-                        <div className={styles.list} role="status" aria-label="Loading marketplace activity">
+                        <div className={styles.loading} role="status" aria-label="Loading marketplace activity">
                             <Skeleton height={56} />
                             <Skeleton height={56} />
                             <Skeleton height={56} />

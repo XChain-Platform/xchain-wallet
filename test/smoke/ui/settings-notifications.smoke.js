@@ -36,7 +36,7 @@ assert.match(
 // Notification API is absent).
 assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
 assert.match(src, /Notification\.requestPermission\(\)/, 'requests notification permission');
-assert.match(src, /Request permission/, 'renders a Request permission control');
+assert.match(src, /(?:t\('settings\.notifications\.requestPermission'\)|Request permission)/, 'renders a Request permission control');
 assert.match(
     src,
     /<PermissionRow permission=\{permission\} setPermission=\{setPermission\} \/>/,
@@ -83,14 +83,14 @@ assert.match(src, /import \{ usePriceAlerts \}/, 'imports the usePriceAlerts hoo
 assert.match(src, /PriceAlertForm/, 'renders the shared PriceAlertForm');
 assert.match(src, /PriceAlertsManager/, 'renders the price-alert manager under the toggle');
 assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy opt-out');
-assert.match(src, /Native coin price data/, 'surfaces the price-data dependency to the user');
-assert.match(src, /Re-arm/, 'offers re-arm on a triggered alert');
+assert.match(src, /(?:t\('settings\.notifications\.nativeCoinPriceData'\)|Native coin price data)/, 'surfaces the price-data dependency to the user');
+assert.match(src, /(?:t\('settings\.notifications\.reArm'\)|Re-arm)/, 'offers re-arm on a triggered alert');
 
 // Quiet-hours (DND) scheduling block.
 assert.match(src, /import \{ QUIET_HOURS_DEFAULT \}/, 'imports the schema quiet-hours default');
 assert.match(src, /function QuietHoursRow/, 'defines a QuietHoursRow component');
 assert.match(src, /<QuietHoursRow settings=\{settings\} update=\{update\} \/>/, 'mounts QuietHoursRow under the flag list');
-assert.match(src, /Quiet hours/, 'labels the quiet-hours toggle');
+assert.match(src, /(?:t\('settings\.notifications\.quietHours'\)|Quiet hours)/, 'labels the quiet-hours toggle');
 assert.match(src, /quietHours:\s*\{\s*\.\.\.qh,\s*enabled\s*\}/, 'writes the enabled flag through a nested quietHours patch');
 assert.match(src, /type="time"/, 'renders start/end time inputs');
 const schemaHasQuietHours = /quietHours\??:/.test(schemaSrc) || readFileSync(schemaPath, 'utf8').includes('quietHours');
@@ -117,8 +117,8 @@ assert.match(src, /\bSOUND_PALETTE\b/, 'uses SOUND_PALETTE to populate each fami
 assert.match(src, /\bSOUND_NONE\b/, 'uses the SOUND_NONE sentinel for the muted pick');
 assert.match(src, /\bpickedSoundForFamily\b/, 'reads the resolved pick via pickedSoundForFamily');
 
-assert.match(src, /label="Notification sounds"/, 'renders the master "Notification sounds" toggle');
-assert.match(src, /<option value=\{SOUND_NONE\}>No sound<\/option>/, 'each family select offers a "No sound" option');
+assert.match(src, /label=(?:\{t\('settings\.notifications\.notificationSounds'\)\}|"Notification sounds")/, 'renders the master "Notification sounds" toggle');
+assert.match(src, /<option value=\{SOUND_NONE\}>(?:\{t\('settings\.notifications\.noSound'\)\}|No sound)<\/option>/, 'each family select offers a "No sound" option');
 
 assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging to read the active shell');
 assert.match(src, /const canPreview = shell === 'web'/, 'gates the Preview control on the web shell');

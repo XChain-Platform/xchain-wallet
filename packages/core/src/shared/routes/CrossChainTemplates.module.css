@@ -1,0 +1,17 @@
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.list > article + article {
+    border-top: 1px solid var(--xc-border);
+}
+
+.item.item {
+    padding: var(--xc-list-row-padding);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}

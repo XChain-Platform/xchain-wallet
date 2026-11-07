@@ -13,27 +13,27 @@
 }
 
 /* Outlined segmented control - adjacent chips share a stroke so the
-   pair reads as "pick one of these" instead of two independent toggles.
-   The Input's 36px establishes the baseline while allowing text to grow. */
+   pair reads as "pick one of these" instead of two independent toggles. */
 .chipGroup {
     display: inline-flex;
     flex-direction: row;
     align-items: stretch;
     flex: 0 0 auto;
     box-sizing: border-box;
-    min-height: 36px;
+    height: calc(var(--xc-space-6) + var(--xc-space-1));
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-pill, 999px);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .chip {
+    position: relative;
     background: transparent;
     color: var(--xc-text-muted);
     padding: 0 var(--xc-space-4);
     border: 0;
     border-inline-start: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-text-xs);
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
@@ -46,8 +46,26 @@
     min-height: var(--xc-tap-min);
 }
 
+@media (pointer: coarse), (hover: none) {
+    .chip::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min) / 2));
+        width: max(100%, var(--xc-control-hit-min));
+        height: max(100%, var(--xc-control-hit-min));
+    }
+}
+
 .chip:first-child {
     border-inline-start: 0;
+    border-start-start-radius: inherit;
+    border-end-start-radius: inherit;
+}
+
+.chip:last-child {
+    border-start-end-radius: inherit;
+    border-end-end-radius: inherit;
 }
 
 .chip:hover:not(.chipActive) {
@@ -66,21 +84,21 @@
 }
 
 .list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    overflow: hidden;
     list-style: none;
     padding: 0;
     margin: 0;
 }
 
-.row {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
-.row:hover {
-    border-color: var(--xc-accent-primary);
+.loading {
+    composes: card from '../../ui/Card.module.css';
 }
 
 .rowChain {

@@ -861,6 +861,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         <Button
                             type="button"
                             variant="secondary"
+                            size="sm"
                             onClick={() => fileInputRef.current?.click()}
                         >
                             {fileMeta ? 'Choose a different file' : 'Choose a file'}

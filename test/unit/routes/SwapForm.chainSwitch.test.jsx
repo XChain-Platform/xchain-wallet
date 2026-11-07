@@ -88,7 +88,7 @@ describe('SwapForm network switch', () => {
         expect(screen.getByRole('button', { name: 'Allow-list #12' })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/Receive at/), { target: { value: 'bc1qdevmockabcdef' } });
 
-        fireEvent.click(screen.getByRole('button', { name: /Give and get network: Bitcoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/ }));
         fireEvent.click(screen.getByRole('option', { name: /Dogecoin/ }));
 
         await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token'));

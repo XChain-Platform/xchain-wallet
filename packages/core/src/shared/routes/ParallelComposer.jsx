@@ -706,12 +706,13 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             ]}
             actions={(
                 <>
-                    <Button type="button" variant="secondary" onClick={addRow}>
+                    <Button type="button" variant="secondary" size="sm" onClick={addRow}>
                         + Add action
                     </Button>
                     <Button
                         type="submit"
                         variant="primary"
+                        size="sm"
                         loading={validating}
                         disabled={Boolean(shownComposeError) || validating}
                     >
@@ -806,6 +807,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 <Button
                     type="button"
                     variant="ghost"
+                    size="sm"
                     onClick={onRemove}
                     disabled={!canRemove}
                 >

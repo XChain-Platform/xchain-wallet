@@ -153,11 +153,12 @@ describe('SharedListDirectory', () => {
         });
 
         await screen.findByRole('img', { name: 'Litecoin' });
-        const notices = screen.getAllByText(/Shared lists unavailable/);
+        const notices = screen.getAllByText(/^Unavailable/);
         expect(notices).toHaveLength(1);
         expect(within(notices[0].closest('[role="alert"], [role="status"]') || notices[0]).getByRole('img', { name: 'Dogecoin' }))
             .toBeTruthy();
         expect(screen.queryByText('No shared lists yet')).toBeNull();
+        expect(screen.queryByRole('searchbox', { name: 'Search shared lists' })).toBeNull();
     });
 
     it('does not expose an unknown network kind through fallback text', async () => {

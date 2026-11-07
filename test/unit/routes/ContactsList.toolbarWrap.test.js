@@ -17,6 +17,8 @@ const source = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.jsx'),
     'utf8',
 );
+const addressListSource = readCss('packages/core/src/shared/routes/AddressList.jsx');
+const tabsCss = readCss('packages/core/src/ui/Tabs.module.css');
 const listPageCss = readFileSync(
     resolve(process.cwd(), 'packages/core/src/ui/ListPage.module.css'),
     'utf8',
@@ -76,12 +78,10 @@ describe('list toolbar control alignment', () => {
         mediumControl(routeCss('AddressList'), '.searchField input');
     });
 
-    it('uses medium control tokens for the address type segments', () => {
-        const addressList = routeCss('AddressList');
-        const segmented = rule(addressList, '.segmented');
-        expect(segmented).toMatch(/height:\s*var\(--xc-control-h-md\)/);
-        expect(segmented).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
-        expect(rule(addressList, '.segment'))
-            .toMatch(/font-size:\s*var\(--xc-control-font-md,\s*var\(--xc-control-font\)\)/);
+    it('uses the shared medium-height underline tabs for address types', () => {
+        expect(addressListSource).toMatch(/<Tabs[\s\S]*?value=\{sourceFilter\}/);
+        expect(rule(tabsCss, '.tabs')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
+        expect(rule(tabsCss, '.tab')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
+        expect(rule(tabsCss, '.tab')).toMatch(/border-bottom:\s*2px solid transparent/);
     });
 });

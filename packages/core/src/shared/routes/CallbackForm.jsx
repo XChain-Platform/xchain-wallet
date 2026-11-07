@@ -355,7 +355,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     // Shared preview block: config, live holder count, total payout, and
     // the dust-split caveat. Rendered on the form and the review stage.
     const previewBlock = (
-        <dl className={styles.detailsList}>
+        <dl className={`${styles.detailsList} ${styles.flatDetailsList}`}>
             <dt className={styles.detailsLabel}>Pays holders</dt>
             <dd className={styles.detailsValue}>
                 {configComplete

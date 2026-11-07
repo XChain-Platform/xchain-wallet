@@ -43,12 +43,19 @@ assert.match(
 assert.match(src, /mainnet:\s*0,\s*testnet:\s*1,\s*regtest:\s*2/, 'sort order constant present');
 
 // Three URL fields per chain.
-for (const label of ['Explorer URL', 'Encoder URL', 'Hub URL']) {
-    assert.ok(src.includes(`label="${label}"`), `URL field labelled "${label}"`);
+for (const [label, message] of [
+    ['Explorer URL', 'settings.endpoints.explorerUrl'],
+    ['Encoder URL', 'settings.endpoints.encoderUrl'],
+    ['Hub URL', 'settings.endpoints.hubUrl'],
+]) {
+    assert.ok(
+        src.includes(`label={t('${message}')}`) || src.includes(`label="${label}"`),
+        `URL field labelled "${label}"`,
+    );
 }
 
 // Reset-to-default + Save controls
-assert.match(src, /Reset to default/, 'Reset-to-default action present');
+assert.match(src, /(?:t\('settings\.endpoints\.resetToDefault'\)|Reset to default)/, 'Reset-to-default action present');
 assert.match(src, /onClick=\{onCommit\}/, 'Save action wired (onCommit)');
 
 // `custom` flag derived from whether draft equals defaults.

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -247,11 +247,16 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                             size="md"
                         />
                     </div>
-                    <div className={`${styles.betActions} ${local.toolbarActions}`}>
-                        {/* A two-way filter: the pressed ring shows the active side, and
-                            aria-pressed says the same to a screen reader. */}
-                        <Button size="md" variant="secondary" aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button size="md" variant="secondary" aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
+                    <div className={local.toolbarActions}>
+                        <Tabs
+                            aria-label="Filter betting markets"
+                            items={[
+                                { id: 'open', label: 'Taking bets' },
+                                { id: 'all', label: 'All markets' },
+                            ]}
+                            value={openOnly ? 'open' : 'all'}
+                            onChange={(value) => setOpenOnly(value === 'open')}
+                        />
                     </div>
                 </div>
             )}

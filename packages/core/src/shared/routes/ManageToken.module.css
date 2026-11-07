@@ -8,6 +8,32 @@
     width: 100%;
 }
 
+/* Identity, stats, actions, activity and genesis are parts of one token
+   surface. Their former card classes flatten automatically inside this card. */
+.surface {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
+}
+
+.surface > :not(:first-child) {
+    padding-top: var(--xc-section-gap);
+    border-top: 1px solid var(--xc-border);
+}
+
+.surface ul.list {
+    gap: 0;
+}
+
+.surface ul.list > li {
+    padding: var(--xc-list-row-padding);
+}
+
+.surface ul.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
 /* ───── Hero - token identity (no balance, this is the issuer view). ───── */
 
 .hero {
@@ -114,27 +140,23 @@
     gap: var(--xc-space-3);
 }
 
-/* Supply and holding are whole token quantities (up to 19 digits plus
-   separators and decimals). A quarter of the card is wide enough for them
-   only from 1024px; below that it broke the value mid-number, so the strip
-   goes two by two: quantities on the first row, the two counts on the second. */
+/* Narrow shells keep every statistic on its own row. At the tablet boundary
+   there is enough room for two columns, and wide screens use all four. */
 .statsStrip {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--xc-space-3);
+}
+
+@media (min-width: 834px) {
+    .statsStrip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (min-width: 1024px) {
     .statsStrip {
         grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-}
-
-/* Half a phone row is still too narrow: there each quantity takes a whole
-   row and the two small counts share the row below. */
-@media not all and (min-width: 600px) {
-    .stat:nth-child(-n + 2) {
-        grid-column: 1 / -1;
     }
 }
 
@@ -190,26 +212,26 @@
 
 .manageGrid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--xc-space-2);
 }
 
-@media not all and (min-width: 600px) {
+@media (min-width: 834px) {
     .manageGrid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
 
 .manageGrid > button,
 .manageMoreWrap > button {
-    flex-direction: column;
-    min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6));
+    flex-direction: row;
+    min-height: calc(var(--xc-space-6) + var(--xc-space-1));
 }
 
 .manageGrid > button svg,
 .manageMoreWrap > button svg {
-    width: var(--xc-icon-md);
-    height: var(--xc-icon-md);
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 /* "More" dropdown - mirrors Home's quickActionMore. */
@@ -407,10 +429,17 @@ button.row:hover:not(:disabled) {
 .genesisList {
     margin: 0;
     display: grid;
-    grid-template-columns: max-content 1fr;
+    grid-template-columns: minmax(0, 1fr);
     column-gap: var(--xc-space-4);
     row-gap: var(--xc-space-1);
     font-size: var(--xc-text-sm);
+    min-width: 0;
+}
+
+@media (min-width: 834px) {
+    .genesisList {
+        grid-template-columns: max-content minmax(0, 1fr);
+    }
 }
 
 .genesisList > dt {
@@ -430,7 +459,7 @@ button.row:hover:not(:disabled) {
 }
 
 .copyableGenesis {
-    justify-content: flex-end;
+    justify-content: flex-start;
 }
 
 .subassetList {

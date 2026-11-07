@@ -91,7 +91,7 @@ describe('AccountPicker row subtitle', () => {
         expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
-    it('marks the current account and pins add and manage actions in the footer, as Wallets does', async () => {
+    it('marks the current account and keeps add and manage actions directly under the list, as Wallets does', async () => {
         const account = { id: 'a3', index: 2, name: 'Savings' };
         const onAddAccount = vi.fn();
         const onRenameAccount = vi.fn();
@@ -104,10 +104,11 @@ describe('AccountPicker row subtitle', () => {
         expect(rowFor(account.name)).toHaveAttribute('aria-current', 'true');
         const add = screen.getByRole('button', { name: 'Add account' });
         const manage = screen.getByRole('button', { name: 'Manage' });
-        expect(add.closest('footer')).toBeTruthy();
-        expect(manage.closest('footer')).toBeTruthy();
-        expect(add.closest('main')).toBeNull();
-        expect(pickerCss).toMatch(/\.footerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
+        expect(add.closest('footer')).toBeNull();
+        expect(manage.closest('footer')).toBeNull();
+        expect(add.closest('main')).not.toBeNull();
+        expect(rowFor(account.name).compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(pickerCss).toMatch(/\.pickerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
 
         fireEvent.click(add);
         fireEvent.click(manage);

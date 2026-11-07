@@ -432,7 +432,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 <Button
                     className={styles.pinBtn}
                     size="sm"
-                    variant={pinned ? 'primary' : 'secondary'}
+                    variant="rowAction"
                     icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
                     aria-label={pinned ? t('balances.unpin', { tick: row.tick }) : t('balances.pin', { tick: row.tick })}

@@ -606,7 +606,7 @@ export function Settings({
                     restoreScroll={false}
                 >
                     <WantReachabilityNotice active={section.id === 'network-endpoints'} />
-                    <SettingsPageTemplate view="subpage">
+                    <SettingsPageTemplate view="subpage" sectionId={section.id}>
                         <SettingsSearchHighlight target={searchTarget}>
                             <SectionComponent
                                 key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
@@ -651,6 +651,7 @@ export function Settings({
                     </div>
                 )}
             >
+                <div className={settingsStyles.settingsList}>
                 {filtered.length === 0 ? (
                     <EmptyState title={t('settings.page.noMatchingSettings')} body={t('settings.page.noSettingsMatch', { query })} />
                 ) : null}
@@ -692,6 +693,7 @@ export function Settings({
                                 key={section.id}
                                 title={section.title}
                                 description={section.description}
+                                preserveNestedCards={section.id === 'notifications'}
                             >
                                 <SettingsSearchHighlight target={matchedRow?.target || null}>
                                     <Component {...panelProps} />
@@ -709,12 +711,13 @@ export function Settings({
                         </PanelBlock>
                     );
                 })}
+                </div>
             </SettingsPageTemplate>
         </Screen>
     );
 }
 
-function SettingsPageTemplate({ view, children, ...props }) {
+function SettingsPageTemplate({ view, children, sectionId, ...props }) {
     return (
         <ListPage
             className={settingsStyles.page}
@@ -722,7 +725,12 @@ function SettingsPageTemplate({ view, children, ...props }) {
             data-settings-page-template={view}
             {...props}
         >
-            {children}
+            <div
+                className={settingsStyles.settingsSurface}
+                data-settings-section={sectionId || undefined}
+            >
+                {children}
+            </div>
         </ListPage>
     );
 }
@@ -966,9 +974,12 @@ function UpdateCheckPanel({ updateCheck }) {
     );
 }
 
-function PanelBlock({ title, description, children }) {
+function PanelBlock({ title, description, preserveNestedCards = false, children }) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-settings-row-gap)' }}>
+        <div
+            data-xc-preserve-nested-cards={preserveNestedCards ? '' : undefined}
+            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-settings-row-gap)' }}
+        >
             <SectionHeader
                 className={settingsStyles.sectionHeader}
                 title={title}

@@ -284,10 +284,10 @@ describe('TokenAdminForm double press', () => {
         const target = mount('description', {
             buildActionPsbtRequest: vi.fn(() => compose.promise),
         });
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Save' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: /Review/ });
@@ -306,10 +306,10 @@ describe('TokenAdminForm double press', () => {
             ? fresh.promise
             : Promise.resolve({ chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {} })));
         mount('description', { getTokenInfo });
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Save' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.click(preview);

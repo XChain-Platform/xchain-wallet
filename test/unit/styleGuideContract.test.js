@@ -31,13 +31,17 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(source).toContain("size = 'md'");
         for (const size of ['sm', 'md', 'lg']) {
             expect(source).toContain(`'${size}'`);
-            expect(css).toMatch(new RegExp(
-                `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
-                's',
-            ));
+            if (size === 'sm') {
+                expect(css).toMatch(/\.sm\s*\{[^}]*--xc-button-height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/s);
+            } else {
+                expect(css).toMatch(new RegExp(
+                    `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                    's',
+                ));
+            }
             expect(guide).toContain(`\`--xc-control-h-${size}\``);
         }
-        expect(guide).toContain('`sm` | `--xc-control-h-sm`, 28px (36px on touch)');
+        expect(guide).toContain('`sm` | 28px painted, with a 44px hit area on touch');
         expect(guide).toContain('`md` | `--xc-control-h-md`, 36px (44px on touch)');
         expect(guide).toContain('`lg` | `--xc-control-h-lg`, 44px (48px on touch)');
         // Every badge geometry token in tokens.css has a row in the guide.
@@ -116,7 +120,7 @@ describe('STYLE_GUIDE component contracts', () => {
             ));
             expect(tokens).toContain(`--xc-control-h-${size}: ${height};`);
         }
-        expect(guide).toContain('Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px');
+        expect(guide).toContain('Its `size` prop is `sm` (28px painted with a 44px hit area on touch)');
         expect(guide).toContain('<Input label="Amount" size="lg" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
     });

@@ -210,10 +210,11 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
     });
 
-    it('keeps long names on one line and ellipsizes them', () => {
+    it('wraps long names instead of clipping them', () => {
         const nameRule = balanceListCss.match(/\.name\s*\{([^}]*)\}/)?.[1] || '';
-        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
-        expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        expect(nameRule).toMatch(/white-space:\s*normal/);
+        expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(nameRule).not.toMatch(/text-overflow|overflow:\s*hidden/);
         expect(nameRule).toMatch(/min-width:\s*0/);
     });
 

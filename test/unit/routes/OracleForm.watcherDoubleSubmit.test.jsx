@@ -105,7 +105,7 @@ async function step(fn) {
 }
 
 async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin } = {}) {
-    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Token's network/), { target: { value: coin } }));
+    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Priced token network/), { target: { value: coin } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } }));
     if (fee) await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } }));

@@ -78,43 +78,54 @@ describe('token issuance mobile layout', () => {
         }
     });
 
-    it('renders template ListRows as bordered cards without an empty icon gutter', () => {
+    it('renders template ListRows in one flush card without an empty icon gutter', () => {
         const wizard = readSource(migratedRoutes[0]);
         const css = readCss(routeStyles[0]);
         const listRowCss = readCss('packages/core/src/ui/ListRow.module.css');
 
         expect(wizard).not.toMatch(/<ListRow[\s\S]*?leading=/);
-        expect(ruleBody(css, '.templateCard')).toMatch(/border:\s*1px solid var\(--xc-border-strong\)/);
-        expect(ruleBody(css, '.templateCard')).toMatch(/background:\s*var\(--xc-surface\)/);
+        expect(ruleBody(css, '.templateGrid')).toMatch(/composes:\s*flush/);
+        expect(ruleBody(css, '.templateCard.templateCard')).toMatch(/border:\s*0/);
+        expect(ruleBody(css, '.templateCard.templateCard')).toMatch(/background:\s*transparent/);
         expect(ruleBody(listRowCss, '.title')).toMatch(/color:\s*var\(--xc-text\)/);
         expect(ruleBody(listRowCss, '.subtitle')).toMatch(/color:\s*var\(--xc-text-muted\)/);
     });
 
-    it('keeps template cards one-up on phones and two-up on wide screens', () => {
+    it('keeps every template in one divider-separated list', () => {
         const css = readCss(routeStyles[0]);
-        const wide = mediaBlock(css, '(min-width: 480px)');
 
-        expect(ruleBody(css, '.templateGrid')).toMatch(/grid-template-columns:\s*1fr/);
-        expect(ruleBody(wide, '.templateGrid')).toMatch(
-            /grid-template-columns:\s*repeat\(2, 1fr\)/,
-        );
+        expect(ruleBody(css, '.templateGrid')).toMatch(/flex-direction:\s*column/);
+        expect(ruleBody(css, '.templateGrid > li \+ li')).toMatch(/border-top:\s*1px solid var\(--xc-border\)/);
+        expect(css).not.toMatch(/grid-template-columns:\s*repeat\(2, 1fr\)/);
     });
 
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
-        expect(ruleBody(css, '.detailsList')).toMatch(
-            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
-        );
+        const expectedColumns = path.endsWith('IssueTokenForm.module.css')
+            ? /grid-template-columns:\s*minmax\(0, 1fr\)/
+            : /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/;
+        expect(ruleBody(css, '.detailsList')).toMatch(expectedColumns);
         expect(ruleBody(css, '.detailsValue')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(ruleBody(css, '.detailsValue')).toMatch(/text-align:\s*end/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(
+            path.endsWith('IssueTokenForm.module.css')
+                ? /text-align:\s*start/
+                : /text-align:\s*end/,
+        );
         expect(ruleBody(css, '.detailsValue')).toMatch(/font-variant-numeric:\s*tabular-nums/);
         expect(css).toContain('border-top: var(--xc-table-row-divider);');
         expect(ruleBody(css, '.summary')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it.each(routeStyles)('%s stacks review labels and values at 360px', (path) => {
-        const narrow = mediaBlock(readCss(path), 'not all and (min-width: 400px)');
+    it('adds shared form review columns only from 834px', () => {
+        const wide = mediaBlock(readCss(routeStyles[1]), '(min-width: 834px)');
+        expect(ruleBody(wide, '.detailsList')).toMatch(
+            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
+        );
+    });
+
+    it('keeps the token wizard review stacked at 360px', () => {
+        const narrow = mediaBlock(readCss(routeStyles[0]), 'not all and (min-width: 400px)');
         expect(ruleBody(narrow, '.detailsList')).toMatch(
             /grid-template-columns:\s*minmax\(0, 1fr\)/,
         );

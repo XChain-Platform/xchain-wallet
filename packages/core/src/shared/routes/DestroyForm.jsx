@@ -807,6 +807,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    showEstimateNotice={false}
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />

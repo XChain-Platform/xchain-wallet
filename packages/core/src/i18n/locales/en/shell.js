@@ -14,7 +14,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- shell ---------------------------------------------------
-    'shell.markets.selectAsset': 'Select coin or token',
+    'shell.markets.selectAsset': 'Choose market asset',
     'shell.markets.back': 'Back to markets',
     'shell.settings.back': 'Back to settings',
     'shell.privateKeyQr': 'Private key QR',

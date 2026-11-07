@@ -23,7 +23,7 @@ import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
-import cardStyles from '../../ui/Card.module.css';
+import styles from './CoSignerPolicyEditor.module.css';
 
 // One year: the longest rolling-limit window the editor accepts.
 const MAX_WINDOW_HOURS = 8760;
@@ -361,7 +361,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     return (
         <FormPage as="div" sectioned label="Agent spending policy">
             <FormSection title="Policy rules">
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
                     Which actions may the agent sign? Tick each one. The agent can never
@@ -406,7 +406,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Per-action amount limits</legend>
                 <p style={helpStyle}>
                     Cap how much the agent may move in a single action, per token. Pick
@@ -465,7 +465,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Rolling limit</legend>
                 <p style={helpStyle}>
                     Cap total activity over a rolling time window (for example, at most
@@ -519,7 +519,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Extra-confirmation threshold</legend>
                 <p style={helpStyle}>
                     Flag requests above this amount with a warning on the approval
@@ -549,7 +549,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed recipients</legend>
                 <p style={helpStyle}>
                     Restrict the agent to paying only these addresses. Leave empty to
@@ -572,7 +572,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset className={cardStyles.card} style={fieldsetStyle}>
+            <fieldset className={styles.fieldset} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed transaction outputs</legend>
                 <p style={helpStyle}>
                     Anti-drain guard: the signed transaction may only pay these

@@ -16,6 +16,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
+import local from './CrossChainTemplates.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -180,8 +181,9 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                     {launchError}
                 </StatusMessage>
             ) : null}
+            <div className={local.list}>
             {CROSS_CHAIN_TEMPLATES.map((t) => (
-            <article key={t.id} className={styles.entry} style={{ display: 'block' }}>
+            <article key={t.id} className={`${styles.entry} ${local.item}`} style={{ display: 'block' }}>
                 {/* Block lines: the card is display:block, so these spans
                     were inline and the title ran straight into the text. */}
                 <span className={styles.entryLabel} style={{ display: 'block' }}>{t.name}</span>
@@ -212,6 +214,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 </div>
             </article>
             ))}
+            </div>
         </>,
     );
 }

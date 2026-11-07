@@ -717,7 +717,6 @@ export function CreateBetFeedForm({
 
             <Input
                 label="What is being bet on"
-                hint="The question in one line, e.g. 'Which team wins the final on 12 August?'"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 autoComplete="off"
@@ -752,7 +751,6 @@ export function CreateBetFeedForm({
             <Input
                 label="Betting closes"
                 type="datetime-local"
-                hint="Close betting well before the event. Block times can trail real time by about two hours, so a late deadline may allow bets after it starts."
                 value={deadlineInput}
                 onChange={(e) => setDeadlineInput(e.target.value)}
             />
@@ -761,14 +759,12 @@ export function CreateBetFeedForm({
                 label="Time to publish the result"
                 value={windowPreset}
                 onChange={(e) => setWindowPreset(e.target.value)}
-                hint="Time to publish the result after betting closes. If it expires, every bet is refunded and you earn nothing."
             >
                 {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </Select>
             {windowPreset === 'custom' ? (
                 <Input
                     label="Days to publish the result"
-                    hint="At least an hour (0.05 days) and at most a year."
                     value={windowCustomDays}
                     onChange={(e) => setWindowCustomDays(e.target.value)}
                     inputMode="decimal"
@@ -782,7 +778,7 @@ export function CreateBetFeedForm({
                 the row states the real answer instead of the chain's rule. Most
                 markets are free (the first 90 days cost nothing), and on LTC the
                 row used to promise a coin payment for every one of them. */}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} />
+            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} showHint={false} />
 
             <Input
                 label="Your fee (optional)"

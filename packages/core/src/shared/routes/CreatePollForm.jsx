@@ -800,7 +800,6 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             <FormSection title="Options and rules">
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
-                <span className={styles.fromLabel}>Options</span>
                 {options.map((opt, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
                         <div style={{ flex: 1 }}>

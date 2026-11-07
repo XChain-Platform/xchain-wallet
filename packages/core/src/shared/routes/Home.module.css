@@ -39,9 +39,9 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-1);
@@ -50,8 +50,7 @@
     font-family: inherit;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    /* Keep enough vertical room for the icon and a wrapped label. */
-    min-height: 72px;
+    min-height: var(--xc-tap-min);
     min-width: 0;
     text-align: center;
 }
@@ -93,10 +92,10 @@
 }
 
 .quickActionIcon {
-    width: var(--xc-control-h-sm);
-    height: var(--xc-control-h-sm);
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    background: transparent;
     color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;

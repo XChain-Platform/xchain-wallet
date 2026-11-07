@@ -63,7 +63,7 @@ assert.doesNotMatch(src, /error\.message/, 'error state never shows the raw erro
 
 // ─── 4. Reduced motion is live (schema v2); no accent row until it exists
 
-assert.match(src, /Reduced motion/, 'Reduced motion row present');
+assert.match(src, /label=(?:\{t\('settings\.appearance\.reducedMotion'\)\}|"Reduced motion")/, 'Reduced motion row present');
 assert.match(src, /update\(\{\s*reducedMotion:\s*next\s*\}\)/, 'reducedMotion writes through update');
 assert.match(src, /value:\s*'auto'/, 'auto option present');
 assert.match(src, /value:\s*'always'/, 'always option present');

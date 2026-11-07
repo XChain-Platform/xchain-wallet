@@ -126,7 +126,7 @@ describe('PageHeader Back by layout', () => {
     it('holds the row at the Back control height, so hiding Back keeps the header height', () => {
         expect(pageHeaderCss).toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm\)/);
         expect(pageHeaderCss).not.toMatch(/\.header\s*\{[^}]*min-height:\s*var\(--xc-page-header-side\)/);
-        expect(buttonCss).toMatch(/\.sm\s*\{[^}]*min-height:\s*var\(--xc-control-h-sm,\s*28px\)/);
+        expect(buttonCss).toMatch(/\.sm\s*\{[^}]*min-height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/);
         const back = pageHeaderSource.slice(pageHeaderSource.indexOf('{showBack ? ('), pageHeaderSource.indexOf(') : ('));
         expect(back).toMatch(/className=\{styles\.back\}/);
         expect(back).toMatch(/icon=\{<BackIcon \/>\}/);

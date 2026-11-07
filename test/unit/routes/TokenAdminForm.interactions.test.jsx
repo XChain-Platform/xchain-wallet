@@ -64,10 +64,10 @@ describe('TokenAdminForm review interaction safety', () => {
         });
         mountAdmin('description', { buildActionPsbtRequest }, 'caseSensitive');
 
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Exact ticker update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Save' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
@@ -81,10 +81,10 @@ describe('TokenAdminForm review interaction safety', () => {
         const buildActionPsbtRequest = vi.fn();
         mountAdmin('description', { buildActionPsbtRequest });
 
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: '<b>markup</b>'.repeat(700) },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Save' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -168,23 +168,23 @@ describe('TokenAdminForm review interaction safety', () => {
             buildActionPsbtRequest,
         });
 
-        const description = await screen.findByLabelText('New description');
+        const description = await screen.findByLabelText('Description');
         await waitFor(() => expect(description).toBeDisabled());
         expect(screen.getByRole('alert')).toHaveTextContent(
             'The description for TOKEN is permanently locked and cannot be updated.',
         );
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('refuses a hostile description before watcher review', async () => {
         const buildActionPsbtRequest = vi.fn();
         mountAdmin('description', { buildActionPsbtRequest });
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'safe\u202eunsafe' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Description cannot contain text-direction control characters.');
@@ -236,10 +236,10 @@ describe('TokenAdminForm review interaction safety', () => {
         }));
         mountAdmin('description', { buildActionPsbtRequest });
 
-        fireEvent.change(await screen.findByLabelText('New description'), {
+        fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Updated once' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Save' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: 'Review description update' });

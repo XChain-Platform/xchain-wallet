@@ -49,9 +49,18 @@ describe('ContractsList states', () => {
     it('offers Publish contract once, in the toolbar, with a button-free empty state', async () => {
         mount({}, { onDeploy: vi.fn() });
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: /Publish contract/ })).toHaveLength(1);
         expect(screen.getByRole('button', { name: '+ Publish contract' })).toBeInTheDocument();
+    });
+
+    it('uses one page-level empty message when every contract section is empty', async () => {
+        mount();
+
+        expect(await screen.findAllByText('No contracts yet')).toHaveLength(1);
+        expect(screen.queryByText('No published contracts')).toBeNull();
+        expect(screen.queryByText('No contract interactions')).toBeNull();
+        expect(screen.queryByText('No indexed contracts')).toBeNull();
     });
 
     it('shows loading while wallet addresses resolve', () => {
@@ -102,9 +111,7 @@ describe('ContractsList states', () => {
         markDemoWallet('demo-wallet');
         const { messaging } = mount({}, { walletId: 'demo-wallet' });
 
-        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
-        expect(screen.getByText('No contract interactions')).toBeInTheDocument();
-        expect(screen.getByText('No indexed contracts')).toBeInTheDocument();
+        expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         expect(screen.queryByRole('status', { name: /Loading contracts/ })).toBeNull();
         expect(messaging.getContractsForSource).not.toHaveBeenCalled();
         expect(messaging.getDepositsForAddress).not.toHaveBeenCalled();

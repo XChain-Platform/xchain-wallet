@@ -15,6 +15,7 @@ import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsL
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
 import betStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
+import betListStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
@@ -104,13 +105,13 @@ describe('BetFeedsList market cards', () => {
                 <BetFeedsList walletId="w1" onOpenMarket={() => {}} onBack={() => {}} />
             </MessagingProvider>,
         );
-        const taking = await screen.findByRole('button', { name: 'Taking bets' }, { timeout: 10_000 });
-        const every = screen.getByRole('button', { name: 'All markets' });
-        expect(taking.getAttribute('aria-pressed')).toBe('true');
-        expect(every.getAttribute('aria-pressed')).toBe('false');
+        const taking = await screen.findByRole('tab', { name: 'Taking bets' }, { timeout: 10_000 });
+        const every = screen.getByRole('tab', { name: 'All markets' });
+        expect(taking.getAttribute('aria-selected')).toBe('true');
+        expect(every.getAttribute('aria-selected')).toBe('false');
         fireEvent.click(every);
-        expect(taking.getAttribute('aria-pressed')).toBe('false');
-        expect(every.getAttribute('aria-pressed')).toBe('true');
+        expect(taking.getAttribute('aria-selected')).toBe('false');
+        expect(every.getAttribute('aria-selected')).toBe('true');
     }, 20_000);
 });
 
@@ -192,7 +193,7 @@ describe('bet screens at phone widths', () => {
             />
         ));
         expect(await screen.findByText(longLabel)).toHaveClass(betStyles.betLongText);
-        expect(utils.container.querySelector(`.${betStyles.betActions}`)).toBeTruthy();
+        expect(utils.container.querySelector(`.${betListStyles.toolbarActions}`)).toBeTruthy();
         utils.unmount();
 
         utils = await mountAtWidth(width, (

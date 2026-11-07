@@ -32,14 +32,17 @@ export const ROW_LAYOUT = {
     fontSize: 'var(--xc-text-sm)',
     gap: 'var(--xc-space-3)',
 };
-// The same row as one inline style, drawn from the card tokens, for callers
-// that spread it into their own style object.
+// A row inherits its surface from the Settings page. Outside that shared
+// surface the fallback values still draw the row as a standalone card.
+// Inside it, the page changes the variables once and the inset shadow becomes
+// the divider between rows.
 export const ROW = {
     ...ROW_LAYOUT,
-    padding: 'var(--xc-card-pad)',
-    background: 'var(--xc-card-bg)',
-    border: 'var(--xc-card-border)',
-    borderRadius: 'var(--xc-card-radius)',
+    padding: 'var(--xc-settings-row-pad, var(--xc-card-pad))',
+    background: 'var(--xc-settings-row-bg, var(--xc-card-bg))',
+    border: 'var(--xc-settings-row-border, var(--xc-card-border))',
+    borderRadius: 'var(--xc-settings-row-radius, var(--xc-card-radius))',
+    boxShadow: 'inset 0 -1px var(--xc-settings-row-divider, transparent)',
 };
 export const STACK = {
     display: 'flex',
@@ -61,6 +64,14 @@ export const ROW_COPY = {
     flexDirection: 'column',
     flex: '1 1 280px',
     minWidth: 'min(100%, 280px)',
+};
+// A secondary row action keeps the compact control's intrinsic dimensions.
+// The surrounding row supplies the touch target and may wrap the action, but
+// it never stretches the visible control to the row's height or width.
+export const COMPACT_CONTROL = {
+    flex: '0 0 auto',
+    alignSelf: 'center',
+    width: 'auto',
 };
 // The control keeps to the row end beside the copy. On a phone the Settings
 // page stylesheet widens this slot to the full row once it wraps under the
@@ -103,7 +114,7 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
         'aria-describedby': describedBy,
     });
 
-    const rowStyle = embedded ? EMBEDDED_ROW : ROW_LAYOUT;
+    const rowStyle = embedded ? EMBEDDED_ROW : ROW;
     return (
         <div className={embedded ? undefined : cardStyles.card} style={hint ? rowStyle : { ...rowStyle, ...HINTLESS_ROW }}>
             <div style={ROW_COPY}>
@@ -132,6 +143,7 @@ const ACTION_SLOT = {
     gap: 'var(--xc-space-2)',
     marginInlineStart: 'auto',
     maxWidth: '100%',
+    ...COMPACT_CONTROL,
 };
 
 /**
@@ -148,12 +160,12 @@ const ACTION_SLOT = {
  */
 export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', children }) {
     return (
-        <section className={cardStyles.card} style={ROW_LAYOUT}>
+        <section className={cardStyles.card} data-settings-row="" style={ROW_LAYOUT}>
             <div style={ROW_COPY}>
                 <Heading style={ACTION_TITLE}>{label}</Heading>
                 {hint ? <p style={ACTION_HINT}>{hint}</p> : null}
             </div>
-            {children ? <div style={ACTION_SLOT}>{children}</div> : null}
+            {children ? <div data-settings-actions="" style={ACTION_SLOT}>{children}</div> : null}
         </section>
     );
 }
@@ -180,7 +192,7 @@ export function ToggleRow({
     embedded = false,
 }) {
     return (
-        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
+        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW}>
             <Switch
                 label={label}
                 description={hint}

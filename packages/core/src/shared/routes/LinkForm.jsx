@@ -36,7 +36,6 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
-import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -751,11 +750,7 @@ export function LinkForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
-                gap: 'var(--xc-space-3)',
-            }}>
+            <div className={styles.linkPanels}>
                 <SidePanel
                     title="Network A"
                     chainIds={chainIds}
@@ -849,7 +844,7 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
     const preview = previewKey ? previewCache[previewKey] : null;
 
     return (
-        <fieldset className={cardStyles.card} style={{ margin: 0 }}>
+        <fieldset className={`${styles.flatFieldset} ${styles.linkPanel}`}>
             <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
                 {title}
             </legend>

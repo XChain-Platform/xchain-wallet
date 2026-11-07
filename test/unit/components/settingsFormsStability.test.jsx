@@ -415,7 +415,7 @@ describe('settings form validation', () => {
         });
     });
 
-    it('shows the fee strategy help once across the coin cards', () => {
+    it('does not repeat the fee strategy purpose across the coin cards', () => {
         const profile = { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true };
         settings = {
             ...createDefaultSettings(),
@@ -424,7 +424,7 @@ describe('settings form validation', () => {
         render(<FeesSection />);
 
         expect(screen.getAllByRole('group').length).toBeGreaterThan(1);
-        expect(screen.getAllByText('Choose the balance between confirmation speed and network cost.')).toHaveLength(1);
+        expect(screen.queryByText('Choose the balance between confirmation speed and network cost.')).toBeNull();
     });
 
     it('does not repeat the active network kind in fee headings', () => {

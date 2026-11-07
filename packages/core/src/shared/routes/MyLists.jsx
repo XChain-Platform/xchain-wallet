@@ -221,10 +221,10 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                     </Button>
                 ) : null}
                 {onOpenSharedLists ? (
-                    <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                    <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
                 ) : null}
                 {onCreateUnionList ? (
-                    <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
+                    <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
                 ) : null}
             </>
         ) : null

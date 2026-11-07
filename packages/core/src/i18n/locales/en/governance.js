@@ -16,7 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- governance ----------------------------------------------
-    'governance.title': 'Governance',
+    'governance.title': 'Governance polls',
     'governance.noAddress.title': 'No governance address',
     'governance.noAddress.body': 'Governance requires an address on a supported network.',
     'governance.createPoll': 'Create poll',
@@ -28,7 +28,7 @@ const messages = {
     'governance.error.addresses': "Couldn't load governance addresses. Try again.",
     'governance.error.polls': "Couldn't load governance polls. Try again.",
     'governance.empty.title': 'No polls yet',
-    'governance.empty.body': 'Polls created on this network appear here.',
+    'governance.empty.body': 'Create the first poll for this network.',
     'governance.closesAtBlock': 'Closes at block {block}',
 };
 

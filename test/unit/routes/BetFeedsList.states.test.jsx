@@ -42,13 +42,23 @@ describe('BetFeedsList states', () => {
     });
 
     it('shows the empty state after an empty market response', async () => {
+        const betFeeds = vi.fn().mockResolvedValue({ data: [] });
         mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            betFeeds,
         });
 
         expect(await screen.findByRole('heading', { name: 'No markets' })).toBeInTheDocument();
         expect(screen.getByText(/No markets are taking bets/)).toBeInTheDocument();
+        const takingBets = screen.getByRole('tab', { name: 'Taking bets' });
+        const allMarkets = screen.getByRole('tab', { name: 'All markets' });
+        expect(takingBets).toHaveAttribute('aria-selected', 'true');
+        expect(allMarkets).toHaveAttribute('aria-selected', 'false');
+
+        fireEvent.click(allMarkets);
+        expect(allMarkets).toHaveAttribute('aria-selected', 'true');
+        expect(await screen.findByText(/Markets created on this network/)).toBeInTheDocument();
+        expect(betFeeds).toHaveBeenLastCalledWith({ chainId: CHAIN, opts: { limit: 50 } });
     });
 
     it('shows address-loading failures without an empty-state claim', async () => {

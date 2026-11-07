@@ -58,7 +58,7 @@ describe('WalletPicker row layout', () => {
         expect(nameRule).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
     });
 
-    it('marks the current wallet and keeps add and manage actions in the footer', async () => {
+    it('marks the current wallet and keeps add and manage actions directly under the list', async () => {
         const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
         const onShowDetails = vi.fn();
         await act(async () => {
@@ -82,16 +82,19 @@ describe('WalletPicker row layout', () => {
         expect(screen.getByRole('button', { current: true })).toHaveTextContent('Primary');
         const add = screen.getByRole('button', { name: 'Add wallet' });
         const manage = screen.getByRole('button', { name: 'Manage wallet' });
-        expect(add.closest('footer')).toBeTruthy();
-        expect(manage.closest('footer')).toBeTruthy();
+        expect(add.closest('footer')).toBeNull();
+        expect(manage.closest('footer')).toBeNull();
+        const row = screen.getByRole('button', { current: true });
+        expect(row.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(add.closest('main')).not.toBeNull();
 
         const css = readFileSync(
             join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
             'utf8',
         );
-        const footerButtonRule = /\.footerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
-        expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
-        expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
+        const pickerButtonRule = /\.pickerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(pickerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
+        expect(pickerButtonRule).not.toMatch(/--xc-tap-min/);
 
         fireEvent.click(manage);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);

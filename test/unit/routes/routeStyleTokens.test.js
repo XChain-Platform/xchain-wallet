@@ -26,9 +26,8 @@ describe('route style tokens', () => {
         expect(input).toContain('width: calc(var(--xc-control-h-md) - var(--xc-space-1));');
 
         expect(manageToken).toContain('width: var(--xc-icon-xs);');
-        expect(manageToken).toContain('width: var(--xc-icon-md);');
         expect(manageToken).toContain('width: var(--xc-icon-sm);');
-        expect(manageToken).toContain('min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6));');
+        expect(manageToken).toContain('min-height: calc(var(--xc-space-6) + var(--xc-space-1));');
         expect(manageToken).toContain('font-size: var(--xc-text-xs);');
         expect(manageToken).not.toMatch(/var\(--xc-radius-[^)]+,\s*\d+px\)/);
 

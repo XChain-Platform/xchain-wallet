@@ -62,6 +62,14 @@ describe('Sign message address list', () => {
         await waitFor(() => expect(select).toHaveValue(SOFT.id));
     });
 
+    it('keeps the complete selected address in the select title', async () => {
+        mount([{ ...SOFT, label: 'BTC Address #1' }]);
+        const select = await screen.findByLabelText('Address');
+
+        await waitFor(() => expect(select).toHaveValue(SOFT.id));
+        expect(select).toHaveAttribute('title', `BTC Address #1: ${SOFT.address}`);
+    });
+
     it("says hardware addresses can't sign when they are the only ones", async () => {
         mount([HW]);
         expect(await screen.findByText(/Trezor and Ledger addresses can't sign messages/)).toBeTruthy();
