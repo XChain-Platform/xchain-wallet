@@ -22,14 +22,17 @@ const messages = {
     // --- alerts --------------------------------------------------
     'alerts.empty.title': 'No alerts',
     'alerts.empty.body': 'Wallet activity, security, and price changes appear here.',
-    'alerts.empty.action': 'Manage notifications',
     'alerts.unreadCount': '{count} unread',
     'alerts.markAllRead': 'Mark all read',
-    'alerts.clear': 'Clear alerts',
     'alerts.unread': 'Unread',
-    'alerts.read': 'Read',
-    'alerts.markRead': 'Mark read',
-    'alerts.markReadLabel': 'Mark {title} read',
+    'alerts.search': 'Search alerts',
+    'alerts.clearSearch': 'Clear search',
+    'alerts.filterType': 'Filter alert type',
+    'alerts.matches': '{count} alerts match',
+    'alerts.type.all': 'All types',
+    'alerts.type.payments': 'Payments',
+    'alerts.type.messages': 'Messages',
+    'alerts.type.security': 'Security',
 };
 
 addEnglish(messages);

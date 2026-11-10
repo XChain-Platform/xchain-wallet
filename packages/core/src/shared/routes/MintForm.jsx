@@ -29,7 +29,8 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
-    mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage, mintLockMessage,
+    compareDecimal, mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage,
+    mintLockMessage, subtractDecimal,
 } from '../utils/mintHeadroom.js';
 import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
@@ -50,10 +51,8 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
-import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -127,27 +126,76 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     const [ticker, setTicker] = useState(initialTick || '');
 
-    // What a MINT can carry is the token's remaining headroom -
-    // min(MAX_MINT, MAX_SUPPLY - current supply) - never the minter's
-    // balance. The form used to size Max and its "available" footer off
-    // the holdings lookup every other amount form reaches for, so a token
-    // sitting at its cap offered a Max of its whole supply: an amount the
-    // chain rejects by construction, after a fee-paying broadcast. Same
-    // defect as D-23 (contract Withdraw sized off the wallet, not the
-    // contract's custody), on a sibling form.
+    // What a MINT can carry is the token's remaining transaction, supply and
+    // source-address headroom, never the minter's balance. The address cap is
+    // cumulative over valid mints authored by this source, regardless of the
+    // destination those mints credited.
     const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker });
+    const addressCap = tokenInfo?.mintAddressMax ?? null;
+    const addressReadKey = addressCap && chainId && fromAddress?.address && ticker
+        ? `${chainId}\n${fromAddress.address}\n${ticker}`
+        : '';
+    const [addressMintRead, setAddressMintRead] = useState(
+        /** @type {{ key: string, status: 'idle'|'loading'|'loaded'|'failed', amount: string | null }} */ (
+            { key: '', status: 'idle', amount: null }
+        ),
+    );
+    useEffect(() => {
+        if (!addressReadKey) {
+            setAddressMintRead({ key: '', status: 'idle', amount: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setAddressMintRead({ key: addressReadKey, status: 'loading', amount: null });
+        if (typeof messaging?.getMintedAmountForAddress !== 'function') {
+            setAddressMintRead({ key: addressReadKey, status: 'failed', amount: null });
+            return undefined;
+        }
+        messaging.getMintedAmountForAddress({
+            chainId,
+            address: fromAddress.address,
+            tick: ticker,
+        }).then((result) => {
+            if (cancelled) return;
+            const minted = result?.amount;
+            if (compareDecimal(minted, '0') === null || compareDecimal(minted, '0') === -1) {
+                throw new Error('Mint history returned an unreadable amount.');
+            }
+            setAddressMintRead({
+                key: addressReadKey,
+                status: 'loaded',
+                amount: String(minted).trim(),
+            });
+        }).catch(() => {
+            if (!cancelled) {
+                setAddressMintRead({ key: addressReadKey, status: 'failed', amount: null });
+            }
+        });
+        return () => { cancelled = true; };
+    }, [addressReadKey, chainId, fromAddress?.address, messaging, ticker]);
+    const addressMintStatus = addressCap
+        ? (addressMintRead.key === addressReadKey ? addressMintRead.status : 'loading')
+        : 'idle';
+    const mintedByAddress = addressMintStatus === 'loaded'
+        ? addressMintRead.amount
+        : (addressMintStatus === 'failed' ? '0' : null);
+    const addressRoom = addressMintStatus === 'loaded'
+        ? subtractDecimal(addressCap, addressMintRead.amount)
+        : null;
     const headroom = useMemo(
         () => mintHeadroom({
             maxSupply: tokenInfo?.maxSupply ?? null,
             totalSupply: tokenInfo?.totalSupply ?? null,
             mintMax: tokenInfo?.mintMax ?? null,
+            mintAddressMax: addressCap,
+            mintedByAddress,
         }),
-        [tokenInfo],
+        [addressCap, mintedByAddress, tokenInfo],
     );
     // Nothing bounds a mint of an uncapped token with no MAX_MINT, so
     // there is no Max to offer and no number to quote; say so instead of
     // leaving a bare field that looks like a still-loading one.
-    const uncapped = !!tokenInfo && headroom === null;
+    const uncapped = !!tokenInfo && headroom === null && !addressCap;
 
     // D-164: a token can also be un-mintable for a reason that is not a
     // quantity. `mint.js` gates on MINT_START_BLOCK and MINT_STOP_BLOCK, and
@@ -184,11 +232,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const lockNotice = mintLockMessage(tokenInfo?.locks, ticker);
     const mintBlocked = !!lockNotice || windowShut;
     const blockedNotice = lockNotice || mintWindowMessage(mintWindow, ticker);
-    // The per-address cap cannot be turned into a remaining figure here: it is
-    // cumulative over this address's whole MINT history and nothing the wallet
-    // reads carries that total. So it is STATED rather than subtracted, which
-    // is the honest version of the same warning.
-    const addressCap = tokenInfo?.mintAddressMax ?? null;
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
@@ -198,19 +241,12 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+    const { formatNativeFee } = useFeeFiat({
         chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
     });
-
-    // PC-51: opt in to pay the XCHAIN protocol fee in the native coin. MINT is
-    // a quotable fee-bearing action; the authoritative price/validity check
-    // runs at submit time (applyNativeFeePreflight) and forfeit-warns if the
-    // action can't be priced.
-    const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
-        useNativeFee(coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -332,15 +368,20 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     chainId,
                     from,
                     actionData: { action: 'MINT', params: actionParams },
-                    // PC-51: the native-fee opt-in must reach COMPOSE so the
-                    // FEE_DESTINATION output sits inside the PSBT the user
-                    // approves, not folded in on a later rebuild.
                     encoderOpts: {
-                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
                 }),
-                preflight: (o) => messaging.preflight({ chainId, ...o }),
+                // MINT has no protocol fee. Mark that consensus fact in the
+                // report so the generic confirm surface does not show an
+                // unavailable protocol-fee estimate for a deliberately free action.
+                preflight: async (o) => {
+                    const report = await messaging.preflight({ chainId, ...o });
+                    return {
+                        ...report,
+                        quote: { ...(report?.quote || {}), xchainFee: '0' },
+                    };
+                },
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
@@ -351,14 +392,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     reserve: (e) => messaging.reserve(e),
                     release: (id) => messaging.releaseReservation({ id }),
                 },
-                // Re-price the native-coin protocol fee at Approve.
-                // The output was sized at compose, and the amount consensus
-                // requires moves inversely with the coin price, so a move while
-                // the confirm screen sits open leaves it short - which the
-                // chain rejects while keeping the fee.
-                requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
-                    chainId, actionString, source,
-                }),
                 // Read the token once more at Approve. The confirm page can sit
                 // open while the issuer locks minting, closes the window or
                 // another mint uses the headroom, and a MINT signed against the
@@ -386,7 +419,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     params: actionParams,
                     password: passwordValueRef.current,
                     extraBase: {
-                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                         ...(feePerKb != null ? { feePerKb } : {}),
                         // The shared mapping, envelope and deferred outputs included.
                         prebuiltPsbt: prebuiltPsbtFromComposed(composed),
@@ -402,7 +434,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             setFormError(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
-                mandatory: nativeFeeMandatory,
                 fallback: humanizeError(err, 'mint').message,
             }));
         }
@@ -456,8 +487,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // Stop an over-mint here rather than three screens later.
         // The confirm page already catches it (MAX_MINT + supply-headroom
         // preflight, plus the dry run), but only behind three individual
-        // "sign anyway" overrides, and a user who takes them pays a
-        // protocol fee for an action the chain will reject.
+        // "sign anyway" overrides and after the user has left this field.
         // D-164: the same reason, one bound over. A mint outside the window is
         // refused whatever its size, so stopping it here costs the user a
         // round trip they cannot win and tells them WHEN instead - the one
@@ -469,9 +499,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         }
         if (exceedsHeadroom(amt, headroom)) {
             const TICK = ticker.trim();
-            setFormError(Number(headroom) > 0
-                ? `Only ${formatWithThousands(headroom)} ${TICK} can still be minted.`
-                : `${TICK} is at its supply cap - no more can be minted.`);
+            setFormError(addressRoom === '0'
+                ? 'This address has reached its per-address cap.'
+                : (Number(headroom) > 0
+                    ? `Only ${formatWithThousands(headroom)} ${TICK} can still be minted.`
+                    : `${TICK} is at its supply cap - no more can be minted.`));
             return;
         }
         // The gates above ran on the record read when the form opened. A lock,
@@ -514,11 +546,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 params: actionParams,
                 password,
                 extraBase: {
-                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
                 encoderOpts: {
-                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
             });
@@ -533,7 +563,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     : submitFailureMessage(err, {
                         chainId,
                         coinTicker,
-                        mandatory: nativeFeeMandatory,
                         fallback: err?.message || 'Mint failed.',
                     }),
             );
@@ -723,7 +752,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 password={password}
                 onPasswordChange={setPassword}
                 formatNativeFee={formatNativeFee}
-                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -868,12 +896,20 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 // mint" over a closed window is a claim the network refuses on
                 // the same screen, so the window's own sentence replaces it
                 // rather than sitting beside it.
-                balanceText={blockedNotice || (headroom !== null && ticker
-                    ? `${formatWithThousands(headroom)} ${String(ticker)} available to mint`
-                        + (addressCap
-                            ? `, ${formatWithThousands(addressCap)} per address in total`
-                            : '')
-                    : (uncapped && ticker ? 'No supply cap' : null))}
+                balanceText={blockedNotice || (addressRoom === '0'
+                    ? 'This address has reached its per-address cap.'
+                    : (headroom !== null && ticker
+                        ? `${formatWithThousands(headroom)} ${String(ticker)} available to mint`
+                            + (addressMintStatus === 'loading'
+                                ? `, ${formatWithThousands(addressCap)} per address in total (mint history loading)`
+                                : (addressMintStatus === 'loaded'
+                                    ? `, ${formatWithThousands(addressRoom)} left for this address`
+                                    : (addressMintStatus === 'failed'
+                                        ? `, ${formatWithThousands(addressCap)} per address in total`
+                                        : '')))
+                        : (addressMintStatus === 'loading'
+                            ? `${formatWithThousands(addressCap)} per address in total (mint history loading)`
+                            : (uncapped && ticker ? 'No supply cap' : null))))}
             />
             <AddressField
                 label="Destination (optional)"
@@ -892,12 +928,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 value={feePick}
                 onChange={setFeePick}
                 customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-            />
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
-                coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
             />
         </FormPage>,
     );

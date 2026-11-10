@@ -28,8 +28,9 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('an indefinite address lock lands as an indexed SLEEP v0 row', async ({ page }) => {
+    test('a finite address lock lands as an indexed SLEEP v0 row', async ({ page }) => {
         let source;
+        let resumeBlock;
 
         await test.step('onboard and fund both fee lanes', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Address Sleep Wallet' });
@@ -50,9 +51,12 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByRole('banner').getByRole('heading', { name: 'Lock address' }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Address to lock')).toHaveValue(source);
-            await main.getByRole('radio', { name: /Lock indefinitely/ }).check();
+            const endLine = main.getByText(/^Ends at block /);
+            await expect(endLine).toBeVisible({ timeout: 30_000 });
+            resumeBlock = Number((await endLine.innerText()).match(/block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
+            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'the duration has no readable end block').toBe(true);
             await main.getByLabel('Memo (optional)').fill(MEMO);
-            await main.getByRole('button', { name: 'Preview', exact: true }).click();
+            await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
             await expect(main).toContainText('This pauses XChain actions from your address.');
             await main.getByLabel('Type LOCK to confirm').fill('LOCK');
@@ -68,14 +72,14 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             const txid = await readTxid(page);
             const action = await waitForValidAction(txid);
             expect(action.action).toBe('SLEEP');
-            expect(String(action.tx_data)).toContain(`SLEEP|0|-1|${MEMO}`);
+            expect(String(action.tx_data)).toContain(`SLEEP|0|${resumeBlock}|${MEMO}`);
 
             const response = await explorerJson(`sleeps/${source}/address`);
             const rows = Array.isArray(response) ? response : response?.data || [];
             const row = rows.find((candidate) => candidate.tx_hash === txid);
             expect(row, `the explorer returned no address SLEEP row for ${txid}`).toBeTruthy();
             expect(String(row.status)).toBe('valid');
-            expect(String(row.resume_block ?? row.resumeBlock)).toBe('-1');
+            expect(String(row.resume_block ?? row.resumeBlock)).toBe(String(resumeBlock));
             expect(String(row.memo)).toBe(MEMO);
         });
     });

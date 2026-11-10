@@ -42,7 +42,8 @@ const messages = {
     'onboarding.walletSetup': 'Wallet setup',
     'onboarding.createNewWallet': 'Create new wallet',
     'onboarding.fromFreewallet': 'From FreeWallet',
-    'onboarding.pairAWatcherOrSigner': 'Pair a watcher or signer',
+    'onboarding.connectHardwareWallet': 'Connect a hardware wallet',
+    'onboarding.pairAnOfflineSigner': 'Pair an offline signer',
     'onboarding.settingUpDemo': 'Setting up demo…',
     'onboarding.tryInDemoMode': 'Try in demo mode',
 };

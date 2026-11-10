@@ -30,7 +30,7 @@
 // handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { Fragment, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import {
@@ -75,7 +75,6 @@ import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagin
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
-import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -287,11 +286,11 @@ function AppInner() {
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
+        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner' | 'pair-signer'} */
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     useDocumentTitle({
         statusState: status.state,
@@ -330,9 +329,6 @@ function AppInner() {
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
-    );
-    const [resumeConfirmSession, setResumeConfirmSession] = useState(
-        /** @type {any | null} */ (null),
     );
     const [resumeCoinpay, setResumeCoinpay] = useState(
         /** @type {{ chainId: string, address: string, orderMatchActionIndex: string, from?: 'obligations' } | null} */ (null),
@@ -645,7 +641,6 @@ function AppInner() {
         setTokenDetailRef(null);
         setSweepCtx(null);
         setResumeAirdropId(null);
-        setResumeConfirmSession(null);
         setPrivateKeyAddress(null);
         setAddressPrefsTarget(null);
         setResumeCoinpay(null);
@@ -1068,6 +1063,17 @@ function AppInner() {
                     />
                 );
             }
+            if (onboardingStep === 'pair-signer') {
+                return (
+                    <Suspense fallback={<Loading />}>
+                        <PairSignerForm
+                            pairTrezor={pairTrezorSigner}
+                            pairLedger={pairLedgerSigner}
+                            onBack={() => setOnboardingStep('welcome')}
+                        />
+                    </Suspense>
+                );
+            }
             // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below does not offer it.
@@ -1084,6 +1090,7 @@ function AppInner() {
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                    onConnectHardware={() => setOnboardingStep('pair-signer')}
                     onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
                     onWalletFound={refresh}
@@ -1359,7 +1366,6 @@ function AppInner() {
                     <BroadcastForm
                         walletId={activeWalletId}
                         initialChainId={prefillChainId}
-                        initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
                         onDone={formDone}
@@ -1573,21 +1579,6 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
-                    />
-                );
-            }
-            if (unlockedView === 'resume-confirm' && activeWalletId && resumeConfirmSession) {
-                return (
-                    <ResumeConfirm
-                        session={resumeConfirmSession}
-                        onDone={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
-                        onCancel={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
                     />
                 );
             }
@@ -2650,7 +2641,6 @@ function AppInner() {
                                 setResumeAirdropId(null);
                                 setUnlockedView('airdrop');
                             },
-                            onAdvanced: () => setUnlockedView('advanced'),
                             onLockAddress: () => setUnlockedView('lock-address'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                             onPayCoinpay: () => {
@@ -2663,7 +2653,6 @@ function AppInner() {
                             onMySwaps: () => setUnlockedView('my-swaps'),
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
-                            onParallel: () => setUnlockedView('parallel-compose'),
                             onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainOrder: () => setUnlockedView('cross-chain-order'),
@@ -2675,7 +2664,6 @@ function AppInner() {
                             onBridgeMove: () => setUnlockedView('bridge-move'),
                             onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
-                            onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
@@ -2731,6 +2719,8 @@ function AppInner() {
                         }
                         initialSubpageId={settingsSubpage}
                         onNavigateToMint={handleFaucetMint}
+                        onNavigateToAdvanced={() => setUnlockedView('advanced')}
+                        onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}
                     />
                 );
             }
@@ -2903,11 +2893,6 @@ function AppInner() {
                         setUnlockedView('action-detail');
                     } : undefined}
                     onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
-                    onResumeConfirm={activeWalletId ? (session) => {
-                        if (!session) return;
-                        setResumeConfirmSession(session);
-                        setUnlockedView('resume-confirm');
-                    } : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');

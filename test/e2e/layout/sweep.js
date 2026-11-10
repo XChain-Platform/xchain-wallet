@@ -981,7 +981,7 @@ export function createSweep(page, {
         await measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await measure('onboarding: welcome');
-        for (const name of ['Import wallet', 'From FreeWallet', 'Pair a watcher or signer']) {
+        for (const name of ['Import wallet', 'From FreeWallet', 'Pair an offline signer']) {
             const btn = page.getByRole('button', { name });
             if (await btn.count() === 0) continue;
             await btn.click();

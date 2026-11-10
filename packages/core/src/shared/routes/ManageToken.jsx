@@ -21,7 +21,7 @@ import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
-import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
+import { RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -429,8 +429,10 @@ export function ManageToken({
     // selection reshuffles the synthesis seed the same way PortfolioChart
     // does.
     const isDemo = isDemoWallet(walletId);
-    const [chartRangeId, setChartRangeId] = useState('30d');
-    const chartRange = CHART_RANGES.find((r) => r.id === chartRangeId) || CHART_RANGES[2];
+    // Only the demo wallet draws this chart, so it opens on the demo default.
+    const [chartRangeId, setChartRangeId] = useState(defaultRangeId(true));
+    const chartRange = CHART_RANGES.find((r) => r.id === chartRangeId)
+        || CHART_RANGES.find((r) => r.id === defaultRangeId(true));
     const nativeTick = nativeTickerOf(descriptor);
     const chartSeries = useMemo(() => {
         if (!isDemo) return null;

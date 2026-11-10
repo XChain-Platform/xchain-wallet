@@ -111,25 +111,41 @@ describe('TokenDetail keyboard navigation', () => {
             { getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: creator }] }) },
         );
 
-        await screen.findByRole('button', { name: 'Manage' });
+        await screen.findByRole('button', { name: 'More info' });
         const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
             .getAllByRole('button');
         expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
             'Send',
             'Receive',
-            'Trade',
-            'History',
-            'Manage',
+            'Exchange',
+            'More info',
         ]);
-        expect(actions.map((button) => button.tabIndex)).toEqual([0, 0, 0, 0, 0]);
+        expect(actions.map((button) => button.tabIndex)).toEqual([0, 0, 0, 0]);
         expect(actions.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
 
-        const handlers = [onSend, onReceive, onBuy, onViewActivity, onManageToken];
-        actions.forEach((button, index) => {
+        const handlers = [onSend, onReceive, onBuy];
+        actions.slice(0, 3).forEach((button, index) => {
             keyboardActivate(button);
             expect(document.activeElement).toBe(button);
             expect(handlers[index]).toHaveBeenCalledTimes(1);
         });
+
+        const more = actions[3];
+        keyboardActivate(more);
+        const menu = screen.getByRole('menu', { name: 'More info' });
+        const manage = await within(menu).findByRole('menuitem', { name: 'Manage' });
+        const history = within(menu).getByRole('menuitem', { name: 'History' });
+        expect(document.activeElement).toBe(history);
+        fireEvent.keyDown(history, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(manage);
+        keyboardActivate(manage);
+        expect(onManageToken).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(document.activeElement).toBe(more);
+
+        keyboardActivate(more);
+        keyboardActivate(screen.getByRole('menuitem', { name: 'History' }));
+        expect(onViewActivity).toHaveBeenCalledTimes(1);
     });
 
     it('moves through chart ranges with arrows and keeps one range in the Tab order', async () => {
@@ -137,15 +153,15 @@ describe('TokenDetail keyboard navigation', () => {
 
         const ranges = await screen.findByRole('tablist', { name: 'Chart range' });
         const tabs = within(ranges).getAllByRole('tab');
-        const selected = within(ranges).getByRole('tab', { name: '30d' });
+        const selected = within(ranges).getByRole('tab', { name: '1M' });
         expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([selected]);
 
         selected.focus();
         fireEvent.keyDown(selected, { key: 'ArrowRight' });
-        const next = within(ranges).getByRole('tab', { name: '90d' });
+        const next = within(ranges).getByRole('tab', { name: '3M' });
         expect(document.activeElement).toBe(next);
         expect(next).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByLabelText('90d price chart')).toBeTruthy();
+        expect(screen.getByLabelText('3M price chart')).toBeTruthy();
 
         fireEvent.keyDown(next, { key: 'Home' });
         const first = within(ranges).getByRole('tab', { name: '24h' });

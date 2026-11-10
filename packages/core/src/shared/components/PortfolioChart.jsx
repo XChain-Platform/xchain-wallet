@@ -27,24 +27,34 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/routes.js';
 
-// Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
-// so 24h slices the tail of that real series and 7d uses it as-is.
-// Anything beyond 7d is synthesized via the same helper TokenDetail
-// uses for tokens without a real price history feed.
+// Range definitions. Every wallet, demo or real, offers the same list.
+// CoinGecko's sparkline is 168 hourly points (one week), so 24h slices
+// the tail of that recorded series and 1W uses it as-is; a real wallet
+// shows the no-history message for the longer ranges. The demo wallet
+// synthesizes every range via the same helper TokenDetail uses. Point
+// counts are fixed (YTD included) so demo captures stay reproducible.
 export const RANGES = [
     { id: '24h', label: '24h', points: 24,  realCapable: true  },
-    { id: '7d',  label: '7d',  points: 168, realCapable: true  },
-    { id: '30d', label: '30d', points: 60,  realCapable: false },
-    { id: '90d', label: '90d', points: 90,  realCapable: false },
-    { id: 'all', label: 'All', points: 180, realCapable: false },
+    { id: '1w',  label: '1W',  points: 168, realCapable: true  },
+    { id: '1m',  label: '1M',  points: 60,  realCapable: false },
+    { id: '3m',  label: '3M',  points: 90,  realCapable: false },
+    { id: '6m',  label: '6M',  points: 120, realCapable: false },
+    { id: '1y',  label: '1Y',  points: 180, realCapable: false },
+    { id: 'ytd', label: 'YTD', points: 150, realCapable: false },
+    { id: 'all', label: 'All', points: 240, realCapable: false },
 ];
+
+// A real wallet opens on the recorded week; the demo wallet opens on 1M.
+export function defaultRangeId(isDemo) {
+    return isDemo ? '1m' : '1w';
+}
 
 /**
  * Portfolio performance chart for Home.
  *
  * Sums each row's current fiat value into a single time series sized
  * by the active range. Native rows chart their real CoinGecko sparkline
- * (24h / 7d). A real wallet charts nothing else; only the demo wallet
+ * (24h / 1W). A real wallet charts nothing else; only the demo wallet
  * fills the gaps with the deterministic walk Sparkline.jsx provides.
  * Each row's contribution is scaled so its series ends at the row's
  * current fiat value, which means the series end always equals the
@@ -61,14 +71,14 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
     const chartPanelId = useId();
-    // Only 24h and 7d have recorded prices behind them, so a real wallet
-    // offers just those and opens on 7d; the longer ranges exist for the
-    // demo wallet's synthesized walk.
+    // Every wallet offers every range. Only 24h and 1W have recorded prices
+    // behind them, so a real wallet opens on 1W and a longer range shows
+    // the no-history message; the demo wallet synthesizes every range.
     const isDemo = isDemoWallet(walletId);
-    const ranges = isDemo ? RANGES : RANGES.filter((r) => r.realCapable);
-    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    const ranges = RANGES;
+    const [rangeId, setRangeId] = useState(defaultRangeId(isDemo));
     useEffect(() => {
-        setRangeId(isDemo ? '30d' : '7d');
+        setRangeId(defaultRangeId(isDemo));
     }, [isDemo]);
     const range = ranges.find((r) => r.id === rangeId) || ranges[ranges.length - 1];
 

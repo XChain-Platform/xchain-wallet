@@ -64,7 +64,12 @@ export function createWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.create', opts));
 }
 
-/** @param {object} opts */
+/**
+ * @param {object} opts
+ * @param {string} [opts.wif]
+ * @param {string} [opts.chainId]
+ * @param {string} [opts.addressType]
+ */
 export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
 }
@@ -346,10 +351,9 @@ export function releaseEncoderInputs(opts) {
 }
 
 /**
- * Are the coins the held PSBT spends still unspent? The other
- * half of the Approve-time re-check, and the gate a RESUMED confirm (§5.4)
- * must pass before it may be approved at all - a stored session is by
- * construction the oldest PSBT in the wallet.
+ * Are the coins the held PSBT spends still unspent? This is the other half of
+ * the Approve-time re-check for a confirmation left open long enough for a
+ * competing transaction to spend one of its inputs.
  *
  * Answers `unknown` rather than `spent` for anything it could not observe, so
  * a dead explorer can never hard-block a good transaction (§4.2).
@@ -376,45 +380,6 @@ export function checkInputLiveness(opts) {
  */
 export function requoteNativeFee(opts) {
     return /** @type {any} */ (sendMessage('action.requoteNativeFee', opts));
-}
-
-/**
- * Persist the in-flight confirm so a window CLOSE costs a tap instead of
- * re-entering the whole form.
- *
- * INERT ON THIS SHELL. The store behind it is `chrome.storage.session`
- * (`createConfirmActionSessionStorage`), which resolves to null outside an
- * extension, so the host answers `{ supported: false, stored: false }` here and
- * no confirm is ever resumed on desktop. Kept for surface parity: shared routes
- * call it by name on every shell.
- *
- * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
- * @returns {Promise<{ supported: boolean, stored: boolean }>}
- */
-export function putConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
-}
-
-/**
- * The stored confirms, for the Home resume card. Always
- * `{ supported: false, sessions: [] }` on this shell; `supported` is what
- * separates "nothing stored" from "this shell cannot store confirms".
- *
- * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
- */
-export function listConfirmSessions() {
-    return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
-}
-
-/**
- * Drop a stored confirm. Called on EVERY terminal state, not as
- * tidy-up: a session outliving its confirm invites a re-approve of a
- * transaction that may already be signed and broadcast (§5.3.4).
- *
- * @param {{ id: string }} opts
- */
-export function clearConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.clear', opts));
 }
 
 /**
@@ -1343,6 +1308,11 @@ export function getSupplyHistory(req) {
     return /** @type {any} */ (sendMessage('token.supplyHistory', req));
 }
 
+/** @param {{ chainId: string, address: string, tick: string }} req */
+export function getMintedAmountForAddress(req) {
+    return /** @type {any} */ (sendMessage('token.mintedAmountForAddress', req));
+}
+
 /** @param {{ chainId: string, query: string, limit?: number }} req */
 export function searchTokens(req) {
     return /** @type {any} */ (sendMessage('tokens.search', req));
@@ -1539,6 +1509,9 @@ export function savePriceAlert(req) { return /** @type {any} */ (sendMessage('pr
 export function clearPriceAlert(req) { return /** @type {any} */ (sendMessage('priceAlert.clear', req)); }
 /** @param {{ id: string }} req */
 export function rearmPriceAlert(req) { return /** @type {any} */ (sendMessage('priceAlert.rearm', req)); }
+export function listAlertInbox() { return /** @type {any} */ (sendMessage('alertInbox.list', {})); }
+export function markAlertRead(req) { return /** @type {any} */ (sendMessage('alertInbox.markRead', req)); }
+export function markAllAlertsRead() { return /** @type {any} */ (sendMessage('alertInbox.markAllRead', {})); }
 
 // §41.3.4 ORDER + §41.3.5 CANCEL
 /** @param {object} opts */

@@ -1,0 +1,184 @@
+.typeField,
+.thresholdField,
+.cosignersSection,
+.mainActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.fieldLabelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.fieldLabelRow label,
+.fieldLabel {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.thresholdRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.stepper {
+    display: grid;
+    grid-template-columns: auto minmax(2.5rem, auto) auto;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.stepper > button {
+    min-width: var(--xc-control-h-sm);
+    padding-inline: var(--xc-space-2);
+}
+
+.thresholdValue {
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    text-align: center;
+}
+
+.cosignersCard {
+    composes: flush from '../../ui/Card.module.css';
+    overflow: hidden;
+}
+
+.cosignerRow {
+    min-width: 0;
+    margin: 0;
+    padding: var(--xc-card-pad);
+    border: 0;
+}
+
+.cosignerRow + .cosignerRow,
+.addCosigner {
+    border-top: 1px solid var(--xc-border);
+}
+
+.cosignerSummary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.cosignerIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-control-bg-hover);
+    color: var(--xc-text-muted);
+}
+
+.cosignerIdentity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.cosignerIdentity strong {
+    overflow: hidden;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cosignerIdentity code {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--xc-text-muted);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kindTag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-control-bg-hover);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cosignerEditor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+    padding-top: var(--xc-space-4);
+}
+
+.removeRow {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.addCosigner {
+    width: 100%;
+    border-radius: 0;
+}
+
+.mainActions {
+    align-items: stretch;
+}
+
+.shareLink {
+    align-self: center;
+    max-width: 100%;
+    min-height: auto;
+    padding: var(--xc-space-1) 0;
+    text-align: center;
+    white-space: normal;
+}
+
+.reviewLegend {
+    padding: 0 var(--xc-space-2);
+    font-weight: 600;
+}
+
+.reviewKey {
+    display: block;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    word-break: break-word;
+}
+
+.fingerprintNote {
+    text-align: start;
+}
+
+@media (max-width: 420px) {
+    .cosignerSummary {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .kindTag {
+        grid-column: 2;
+        justify-self: start;
+    }
+}

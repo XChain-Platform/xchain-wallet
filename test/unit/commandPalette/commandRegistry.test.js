@@ -154,13 +154,12 @@ describe('buildCommands', () => {
         expect(findById(explicitNoVm, 'nav-staking')).toBeDefined();
     });
 
-    // The actions menu listed Create multisig and Multisig signing, but a
-    // palette search for "multisig" found nothing.
-    it('finds both multisig surfaces for "multisig" behind the Bitcoin gate', () => {
+    it('finds multisig creation but hides multisig signing from the palette', () => {
         const navigate = vi.fn();
         const btc = buildCommands({ navigate, hasBtcAddress: true });
         const ids = filterCommands(btc, 'multisig').map((c) => c.id);
-        expect(ids).toEqual(expect.arrayContaining(['nav-multisig-create', 'nav-multisig-sign']));
+        expect(ids).toContain('nav-multisig-create');
+        expect(ids).not.toContain('nav-multisig-sign');
         findById(btc, 'nav-multisig-create').run();
         expect(navigate).toHaveBeenCalledWith('multisig-create');
 
@@ -279,7 +278,7 @@ describe('buildCommands', () => {
         expect(ids.has('sign-message')).toBe(false);
         expect(ids.has('sign-psbt')).toBe(false);
         expect(ids.has('nav-multisig-create')).toBe(true);
-        expect(ids.has('nav-multisig-sign')).toBe(true);
+        expect(ids.has('nav-multisig-sign')).toBe(false);
         expect(ids.has('nav-send')).toBe(true);
         expect(ids.has('create-issue')).toBe(true);
         expect(ids.has('sign-verify')).toBe(true);
@@ -329,6 +328,15 @@ describe('buildCommands', () => {
             'sign-verify',
             'nav-settings',
         ]));
+    });
+
+    it('opens Action queue from its renamed palette command', () => {
+        const navigate = vi.fn();
+        const command = findById(buildCommands({ navigate }), 'create-action-queue');
+
+        expect(command.title).toBe('Action queue');
+        command.run();
+        expect(navigate).toHaveBeenCalledWith('parallel-compose');
     });
 });
 

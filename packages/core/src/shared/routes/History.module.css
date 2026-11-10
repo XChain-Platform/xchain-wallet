@@ -438,24 +438,6 @@
    monospaced like the address line above, because the leading half is a
    human-written name and the address is short enough to read either way. */
 
-/* Confirmation count pill rendered next to the block number on line 3.
-   Uses the accent color so it pops against the row's muted meta line;
-   confirmations are a key on-chain finality signal and shouldn't blend
-   into the rest of the meta text. */
-.confirmationsPill {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-text);
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.7;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-}
-
 /* Vertical connector between two adjacent threaded rows. We render
  * the connector on the "later" row in the pair (the one rendered
  * second in DESC time order); it sits flush above the row's top
@@ -1122,7 +1104,6 @@
 
 .dateRow input,
 .paginationCount,
-.confirmationsPill,
 .copyableText,
 .pendingSegments,
 .pendingAmount {

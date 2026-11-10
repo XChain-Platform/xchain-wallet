@@ -11,7 +11,7 @@
 import { t } from '../../i18n/index.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -248,6 +248,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'LOCK');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [callbackTokenPickerOpen, setCallbackTokenPickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
@@ -1387,6 +1388,24 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    if (callbackTokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                chainIdFilter={chainId}
+                kindFilter="tokens"
+                kindLocked
+                title="Select callback token"
+                onSelect={(sel) => {
+                    setCallbackTick(String(sel.tick || ''));
+                    setCallbackTokenPickerOpen(false);
+                }}
+                onBack={() => setCallbackTokenPickerOpen(false)}
+            />
+        );
+    }
+
     if (contactsPickerOpen) {
         return (
             <ContactsPickerScreen
@@ -1490,7 +1509,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
                 >
-                    {mode === 'description' ? 'Save' : singleEncode ? MODE_SUBMIT_LABEL[mode] : 'Preview'}
+                    {singleEncode ? MODE_SUBMIT_LABEL[mode] : 'Preview'}
                 </Button>
             )}
         >
@@ -1525,7 +1544,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             )}
 
             {mode === 'description' ? (
-                <Input
+                <Textarea
                     label="Description"
                     hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain and replaces the current one.`}
                     value={description}
@@ -1533,6 +1552,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     disabled={descriptionLocked}
                     autoComplete="off"
                     maxLength={MAX_ISSUE_TEXT_LENGTH}
+                    rows={4}
                 />
             ) : null}
 
@@ -1555,9 +1575,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <FormNotice variant="warning" role="alert" lead="Locking is permanent.">
-                        Each flag below is a one-way switch: once checked and submitted, it can never be unlocked or reversed.
-                    </FormNotice>
                     {allLocksSet ? (
                         <p className={styles.hint}>
                             Every lock is already permanently set for {ticker}.
@@ -1701,12 +1718,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             {`${ticker} already has holders${distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''}, so its callback settings are frozen. They can only be set before any supply leaves your address.`}
                         </FormNotice>
                     ) : null}
-                    <Input
+                    <TokenField
                         label="Callback token"
-                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
-                        value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value)}
-                        autoComplete="off"
+                        value={callbackTick && chainId ? { chainId, tick: callbackTick } : null}
+                        onOpenPicker={() => setCallbackTokenPickerOpen(true)}
                         disabled={callbackFieldsDisabled}
                     />
                     <Input

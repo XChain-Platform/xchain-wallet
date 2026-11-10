@@ -38,7 +38,7 @@
         },
         "packages/core/src/shared/routes/BroadcastForm.jsx": {
             "heading": {
-                "count": 2,
+                "count": 1,
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },

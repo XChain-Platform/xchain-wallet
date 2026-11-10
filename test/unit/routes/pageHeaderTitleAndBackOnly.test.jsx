@@ -10,7 +10,7 @@
 
 // The page header holds only the screen title and Back. Dispensers,
 // Messaging, Lists, Contacts, History, Addresses, Staking, My orders, My
-// swaps, My tokens and Payments due used to put their create or refresh
+// swaps and Payments due used to put their create or refresh
 // button in it, and the rename forms their Save; the action now sits in the
 // ListPage actions row (or the form's own action row),
 // the first item of the page content below any notice. When the list is
@@ -267,7 +267,7 @@ describe('My orders and My swaps', () => {
 });
 
 describe('My tokens', () => {
-    it('puts Issue new token in the actions row once there are tokens', async () => {
+    it('puts Create token in the page header once there are tokens', async () => {
         const onIssue = vi.fn();
         mount(MyTokens, {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
@@ -275,22 +275,23 @@ describe('My tokens', () => {
                 { chainId: CHAIN, tick: 'DANKEST', description: 'Test token', locked: false },
             ]),
         }, { onIssue, onSelectTick: vi.fn() });
-        const issue = await screen.findByRole('button', { name: 'Issue new token' });
-        expect(actionsRow()).toContainElement(issue);
-        expect(headerActions('My tokens')).toEqual([]);
-        fireEvent.click(issue);
+        const create = await screen.findByRole('button', { name: 'Create token' });
+        expect(actionsRow()).toBeNull();
+        expect(headerActions('My tokens')).toEqual([create]);
+        expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
+        fireEvent.click(create);
         expect(onIssue).toHaveBeenCalledOnce();
     });
 
-    it('offers Issue token once on an empty list', async () => {
+    it('offers Create token in both the header and empty state', async () => {
         mount(MyTokens, {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getOwnedTokens: vi.fn().mockResolvedValue([]),
         }, { onIssue: vi.fn(), onSelectTick: vi.fn() });
         await screen.findByText('No owned tokens yet');
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
-        expect(screen.getAllByRole('button', { name: 'Issue token' })).toHaveLength(1);
-        expect(headerActions('My tokens')).toEqual([]);
+        expect(screen.getAllByRole('button', { name: 'Create token' })).toHaveLength(2);
+        expect(headerActions('My tokens')).toHaveLength(1);
     });
 });
 

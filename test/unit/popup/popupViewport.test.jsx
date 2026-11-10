@@ -26,6 +26,7 @@ const cssFiles = {
     bottomBar: 'packages/core/src/shared/components/BottomTabBar.module.css',
     locked: 'packages/core/src/shared/routes/Locked.module.css',
     home: 'packages/core/src/shared/routes/Home.module.css',
+    tile: 'packages/core/src/ui/QuickActionTile.module.css',
     homeTabs: 'packages/core/src/shared/components/HomeTabs.module.css',
     hero: 'packages/core/src/shared/components/TotalBalanceHero.module.css',
 };
@@ -47,7 +48,6 @@ const messaging = {
     getWalletBalances: vi.fn().mockResolvedValue({}),
     getActiveAddresses: vi.fn().mockResolvedValue({}),
     listPendingAirdropsForWallet: vi.fn().mockResolvedValue([]),
-    listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     getNativePricesRequest: vi.fn().mockResolvedValue({ prices: {} }),
 };
 
@@ -151,7 +151,7 @@ describe('extension popup main screens at 360x600', () => {
             'Create new wallet',
             'Import wallet',
             'From FreeWallet',
-            'Pair a watcher or signer',
+            'Pair an offline signer',
             'Try in demo mode',
         ]) {
             expectCompleteButtonLabel(label);
@@ -199,7 +199,7 @@ describe('extension popup main screens at 360x600', () => {
         expect(css.screen).toMatch(/\.body\s*\{[\s\S]*?overflow-x:\s*hidden/);
         // Onboarding actions live in FormPage now, which owns their shrinkable column.
         expect(css.onboarding).not.toMatch(/\.actionsPopup/);
-        expect(css.home).toMatch(/\.quickAction\s*\{[\s\S]*?min-width:\s*0/);
+        expect(css.tile).toMatch(/\.tile\.tile\s*\{[^}]*min-width:\s*0/);
     });
 
     it('keeps banners inside the 600px shell and document scrolling disabled', () => {

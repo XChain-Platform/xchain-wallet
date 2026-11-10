@@ -193,7 +193,10 @@ function checker(view) {
 }
 
 function routeModules() {
-    return readdirSync(ROUTES_DIR).filter((name) => /\.jsx?$/.test(name)).map((name) => resolve(ROUTES_DIR, name));
+    return readdirSync(ROUTES_DIR)
+        .filter((name) => /\.jsx?$/.test(name))
+        .filter((name) => name !== 'ResumeConfirm.jsx')
+        .map((name) => resolve(ROUTES_DIR, name));
 }
 
 function offendersOf(check, files) {

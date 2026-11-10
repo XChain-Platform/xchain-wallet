@@ -46,6 +46,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import callbackStyles from './CallbackForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
@@ -174,7 +175,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     });
 
     const ticker = initialTick || '';
-    const tokenSubject = ticker || 'This token';
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
@@ -356,8 +356,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     // the dust-split caveat. Rendered on the form and the review stage.
     const previewBlock = (
         <dl className={`${styles.detailsList} ${styles.flatDetailsList}`}>
-            <dt className={styles.detailsLabel}>Pays holders</dt>
-            <dd className={styles.detailsValue}>
+            <dt className={callbackStyles.summaryLabel}>Pays holders</dt>
+            <dd className={callbackStyles.summaryValue}>
                 {configComplete
                     ? `${cbAmount} ${cbTick} per unit of ${ticker}`
                     : termsUnread
@@ -366,8 +366,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             </dd>
             {cbBlock != null ? (
                 <>
-                    <dt className={styles.detailsLabel}>Allowed from block</dt>
-                    <dd className={styles.detailsValue}>
+                    <dt className={callbackStyles.summaryLabel}>Allowed from block</dt>
+                    <dd className={callbackStyles.summaryValue}>
                         {cbBlock.toLocaleString('en-US')}
                         {currentHeight != null
                             ? (blockReached ? ' (reached)' : ` (current ${currentHeight.toLocaleString('en-US')})`)
@@ -375,8 +375,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     </dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>Holders to pay</dt>
-            <dd className={styles.detailsValue}>
+            <dt className={callbackStyles.summaryLabel}>Holders to pay</dt>
+            <dd className={callbackStyles.summaryValue}>
                 {summaryLoading && !summary
                     ? 'Loading…'
                     : summary
@@ -385,8 +385,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             </dd>
             {summary && summary.totalPayout != null ? (
                 <>
-                    <dt className={styles.detailsLabel}>Total payout</dt>
-                    <dd className={styles.detailsValue}>
+                    <dt className={callbackStyles.summaryLabel}>Total payout</dt>
+                    <dd className={callbackStyles.summaryValue}>
                         {formatWithThousands(summary.totalPayout)} {cbTick}
                         {summary.partial ? ' (at least)' : ''}
                     </dd>
@@ -505,7 +505,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             return false;
         }
         if (!configComplete) {
-            setFormError(`${ticker} has no callback configured, so there is nothing to recall. Set the callback token and payout first.`);
             return false;
         }
         const termsError = callbackTermsError(assetInfo, payoutDivisibility);
@@ -933,10 +932,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            <FormNotice variant="warning" role="alert" lead="Callback recalls everything.">
-                {`Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
-            </FormNotice>
-
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : null}
@@ -960,11 +955,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
             {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
-            {termsUnread ? null : !configComplete ? (
-                <FormNotice variant="warning" role="alert">
-                    {`${tokenSubject} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
-                </FormNotice>
-            ) : !blockReached ? (
+            {termsUnread || !configComplete ? null : !blockReached ? (
                 <FormNotice variant="warning" role="alert">
                     {`Callback is not allowed yet. It becomes available at block ${cbBlock?.toLocaleString('en-US') ?? ''}`
                         + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}

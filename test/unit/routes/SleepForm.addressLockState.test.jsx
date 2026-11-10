@@ -54,10 +54,6 @@ function mount(sleepState) {
     return messaging;
 }
 
-async function pickIndefinite() {
-    fireEvent.click(await screen.findByLabelText('Lock indefinitely (permanent)'));
-}
-
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
@@ -67,12 +63,11 @@ describe('Lock address refuses an address it cannot lock', () => {
     it('refuses an address that is already locked until a later block', async () => {
         const messaging = mount(vi.fn().mockResolvedValue({ resumeBlock: 999 }));
         expect(await screen.findByText('This address is currently PAUSED until block 999.')).toBeInTheDocument();
-        await pickIndefinite();
         expect(screen.getByText(
             "This address is locked until block 999. A locked address can't create any XChain action, a new lock included, until it wakes.",
         )).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
-        fireEvent.submit(screen.getByRole('button', { name: 'Preview' }).closest('form'));
+        expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
+        fireEvent.submit(screen.getByRole('button', { name: 'Lock address' }).closest('form'));
         expect(screen.queryByLabelText('Type LOCK to confirm')).toBeNull();
         expect(messaging.sleepAction).not.toHaveBeenCalled();
     });
@@ -83,18 +78,17 @@ describe('Lock address refuses an address it cannot lock', () => {
         expect(screen.getByText(
             "This address is locked for good. A locked address can't create any XChain action, a new lock included.",
         )).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
         expect(messaging.sleepAction).not.toHaveBeenCalled();
     });
 
     it('refuses while the lock state cannot be read', async () => {
         const messaging = mount(vi.fn().mockRejectedValue(new Error('explorer 500')));
         expect(await screen.findByText('The current pause state could not be read.')).toBeInTheDocument();
-        await pickIndefinite();
         expect(screen.getByText(
             "The wallet couldn't check whether this address is already locked, so it can't lock it. Check your connection and try again.",
         )).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
         expect(messaging.sleepAction).not.toHaveBeenCalled();
     });
 
@@ -104,8 +98,7 @@ describe('Lock address refuses an address it cannot lock', () => {
             .mockResolvedValue({ resumeBlock: -1 });
         const messaging = mount(sleepState);
         expect(await screen.findByText('This address is currently active (not paused).')).toBeInTheDocument();
-        await pickIndefinite();
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         expect(await screen.findByText(
@@ -119,8 +112,7 @@ describe('Lock address refuses an address it cannot lock', () => {
     it('signs an address that is awake', async () => {
         const messaging = mount(vi.fn().mockResolvedValue({ resumeBlock: 50 }));
         expect(await screen.findByText('This address is currently active (not paused).')).toBeInTheDocument();
-        await pickIndefinite();
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         expect(await screen.findByText('Lock address broadcast')).toBeInTheDocument();

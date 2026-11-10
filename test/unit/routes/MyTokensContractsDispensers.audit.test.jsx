@@ -36,7 +36,7 @@ function contractMessaging(overrides = {}) {
 afterEach(() => cleanup());
 
 describe('MyTokens list states and actions', () => {
-    it('offers the first issue action from the true empty state', async () => {
+    it('offers token creation from the true empty state', async () => {
         const onIssue = vi.fn();
         mount(
             <MyTokens walletId="w" onBack={() => {}} onIssue={onIssue} onSelectTick={() => {}} />,
@@ -47,7 +47,7 @@ describe('MyTokens list states and actions', () => {
         );
 
         expect(await screen.findByText('Tokens this wallet owns appear here.')).toBeInTheDocument();
-        const actions = screen.getAllByRole('button', { name: 'Issue token' });
+        const actions = screen.getAllByRole('button', { name: 'Create token' });
         fireEvent.click(actions[actions.length - 1]);
         expect(onIssue).toHaveBeenCalledTimes(1);
     });

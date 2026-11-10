@@ -43,8 +43,12 @@ assert.match(
     'typed-SWEEP confirm uses the shared exact-match gate',
 );
 assert.match(form, /sweepPreview\(\{ chainId, address \}\)/, 'API-derived preview wired');
-assert.match(form, /including anything the preview did not list|including anything not listed/,
-    'typed-confirm copy covers unlisted holdings (preview is indicative)');
+// U83: the item lists are gone; the counts are a snapshot and the typed
+// confirm covers whatever the selected categories hold at confirmation.
+assert.match(form, /typed confirm covers everything in the selected categories/,
+    'typed-confirm copy covers everything in the selected categories (counts are a snapshot)');
+assert.match(form, /The counts are a snapshot; the sweep moves whatever the/,
+    'the top notice says the counts are a snapshot');
 assert.match(form, /thirdPartyDestination/, 'third-party destination detection present');
 assert.match(form, /not one of this wallet's addresses/,
     'loud third-party warning copy present');

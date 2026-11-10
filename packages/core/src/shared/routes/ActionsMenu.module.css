@@ -21,6 +21,7 @@
 
 .listItem {
     display: flex;
+    align-items: stretch;
 }
 
 .entry {
@@ -28,7 +29,7 @@
     min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
@@ -51,7 +52,7 @@
     min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
@@ -84,14 +85,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
+    width: auto;
+    height: auto;
     color: var(--xc-accent-text);
 }
 
 .entryIcon > svg {
-    width: var(--xc-icon-xl);
-    height: var(--xc-icon-xl);
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+}
+
+.entryHead {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .entryText {

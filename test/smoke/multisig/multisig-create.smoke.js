@@ -222,6 +222,14 @@ assert.ok(/messaging.createMultisigConfig/.test(route),
     'MultisigCreate calls messaging.createMultisigConfig');
 assert.ok(/Bitcoin-only/.test(route),
     'MultisigCreate states the BTC-only constraint');
+assert.ok(/export function clampThreshold\b/.test(route),
+    'MultisigCreate exports its threshold clamp');
+assert.ok(/<Select[\s\S]*?id="multisig-type"[\s\S]*?<option/.test(route),
+    'MultisigCreate offers its schemes through the Type dropdown');
+assert.doesNotMatch(route, /How multisig setup works/,
+    'MultisigCreate omits the old setup disclosure');
+assert.ok(/Review multisig/.test(route),
+    'MultisigCreate names the primary action Review multisig');
 
 // --- App.jsx wiring (all three shells) ---
 
@@ -244,5 +252,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: multisig create smoke (schema + buildMultisigConfig + duplicate-pubkey guard + threshold > N guard + taproot-musig2 aggregated pubkey requirement + createMultisigConfig core flow guards + bg handler + 3-shell messaging exports + getActionByIndex de-duplication + MultisigCreate route with all three schemes + 3-shell App.jsx + ActionsMenu BTC gate)',
+    'OK: multisig create smoke (schema + buildMultisigConfig + duplicate-pubkey guard + threshold > N guard + taproot-musig2 aggregated pubkey requirement + createMultisigConfig core flow guards + bg handler + 3-shell messaging exports + getActionByIndex de-duplication + MultisigCreate Type dropdown and threshold clamp + 3-shell App.jsx + ActionsMenu BTC gate)',
 );

@@ -87,7 +87,13 @@ export const EXTERNAL_EXPLORERS = Object.freeze({
 // bundler-friendly URL. Keep these as strings so chain descriptors can
 // carry them without importing Vite-specific syntax.
 export const LOGO_FILE = 'xchain-color-750.png';
+// Keep Trezor's own, unmodified bytes from https://trezor.visualbook.pro/media/pages/trezor/logos/symbol/4d3d8267d7-1786016192/trezor-symbol-black-rgb.svg.
+export const TREZOR_LOGO_FILE = 'trezor-symbol-black-rgb.svg';
+// Keep Ledger's own, unmodified bytes from the press kit at https://www.ledger.com/press
+// (Ledger_Press_kit_october_2025.zip, Logos/Ledger/LEDGER-WORDMARK-SINGLE-CHARACTER-BLACK-CMYK-01.svg, renamed only).
+export const LEDGER_LOGO_FILE = 'ledger-symbol-black.svg';
 export const FAVICON_FILE = 'favicon.png';
+export const FREEWALLET_WALLY_FILE = 'freewallet-wally-180.png';
 
 /**
  * Small chain icon filenames keyed by ChainDescriptor.id. The "20" is the
@@ -136,9 +142,21 @@ export function logoUrl() {
     return brandingUrl(LOGO_FILE);
 }
 
+/** @returns {string | null} Official hardware signer vendor logo URL. */
+export function signerVendorLogoUrl(vendor) {
+    if (vendor === 'trezor') return brandingUrl(TREZOR_LOGO_FILE);
+    if (vendor === 'ledger') return brandingUrl(LEDGER_LOGO_FILE);
+    return null;
+}
+
 /** @returns {string} Favicon URL. */
 export function faviconUrl() {
     return brandingUrl(FAVICON_FILE);
+}
+
+/** @returns {string} FreeWallet Wally logo URL. */
+export function freeWalletWallyUrl() {
+    return brandingUrl(FREEWALLET_WALLY_FILE);
 }
 
 /**

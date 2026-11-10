@@ -71,11 +71,11 @@ describe('confirm screen protocol-fee disclosure', () => {
         render(<ConfirmActionModal {...base({
             composed: { psbt: 'x', protocolFeeSats: 2000, quote: { requiredFeeSats: 2000 } },
             nativeTicker: 'BTC',
-            formatNativeFee: () => '≈ $2.00 USD',
+            formatNativeFee: () => '~$2.00',
         })} />);
         expect(screen.queryByTestId('confirm-protocol-fee')).toBeNull();
         expect(screen.getByTestId('confirm-native-protocol-fee')).toHaveTextContent(
-            'Protocol fee: 0.00002 BTC (≈ $2.00 USD)',
+            'Protocol fee: 0.00002 BTC (~$2.00)',
         );
     });
 

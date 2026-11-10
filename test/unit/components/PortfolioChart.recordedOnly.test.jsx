@@ -9,9 +9,8 @@
 // contact legal@dankest.llc.
 
 // §45.4: a real wallet's portfolio chart draws only recorded prices. With
-// no recorded history it says so instead of drawing a synthesized walk, and
-// it offers only the ranges recorded history can fill. The demo wallet
-// keeps its synthesized chart and every range.
+// no recorded history it says so instead of drawing a synthesized walk. Both
+// wallets offer every range; the demo wallet keeps its synthesized chart.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -100,12 +99,12 @@ describe('PortfolioChart on a real wallet', () => {
         expect(screen.getByRole('region', { name: 'Portfolio performance' })).not.toHaveAttribute('aria-busy');
     });
 
-    it('offers only the ranges recorded history covers, opening on 7d', async () => {
+    it('offers every range, opening on 1W', async () => {
         mount('real-wallet-1', {});
         await screen.findByText(/No price history/);
-        expect(rangeLabels()).toEqual(['24h', '7d']);
+        expect(rangeLabels()).toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All']);
         const selected = screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true');
-        expect(selected.textContent).toBe('7d');
+        expect(selected.textContent).toBe('1W');
     });
 
     it('draws the recorded sparkline when the price service has one', async () => {
@@ -116,15 +115,15 @@ describe('PortfolioChart on a real wallet', () => {
 
         const chart = screen.getByRole('img');
         expect(chart).toHaveAccessibleName(expect.stringMatching(
-            /^Portfolio performance chart\. Range 7d\. Values range from .* USD\. Start .* USD\. End \$40,000\.00 USD\. Change \+/,
+            /^Portfolio performance chart\. Range 1W\. Values range from .* USD\. Start .* USD\. End \$40,000\.00 USD\. Change \+/,
         ));
         expect(chart.querySelector('title')).toHaveTextContent('USD');
-        const change = screen.getByLabelText(/7d change\./);
-        expect(change).toHaveTextContent(/\(\+.*%\) · 7d/);
+        const change = screen.getByLabelText(/1W change\./);
+        expect(change).toHaveTextContent(/\(\+.*%\) · 1W/);
 
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         const panel = screen.getByRole('tabpanel');
-        const selected = screen.getByRole('tab', { name: '7d' });
+        const selected = screen.getByRole('tab', { name: '1W' });
         const unselected = screen.getByRole('tab', { name: '24h' });
         expect(tablist).toContainElement(selected);
         expect(selected).toHaveAttribute('tabindex', '0');
@@ -171,7 +170,7 @@ describe('PortfolioChart on a real wallet', () => {
         const sparkline = Array.from({ length: 168 }, (_, index) => 100 - index / 10);
         mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline } } });
 
-        expect(await screen.findByLabelText(/7d change\. Decrease/)).toHaveTextContent('· 7d');
+        expect(await screen.findByLabelText(/1W change\. Decrease/)).toHaveTextContent('· 1W');
         fireEvent.click(screen.getByRole('tab', { name: '24h' }));
         expect(screen.getByLabelText(/24h change\. Decrease/)).toHaveTextContent('· 24h');
     });
@@ -205,7 +204,7 @@ describe('PortfolioChart on the demo wallet', () => {
         markDemoWallet('demo-wallet-1');
         mount('demo-wallet-1', {});
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
-        expect(rangeLabels()).toEqual(['24h', '7d', '30d', '90d', 'All']);
+        expect(rangeLabels()).toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All']);
     });
 
     it('opens each wallet mode on its own default range when the active wallet changes', async () => {
@@ -224,7 +223,7 @@ describe('PortfolioChart on the demo wallet', () => {
             .find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent;
 
         await screen.findByRole('img');
-        expect(selectedRange()).toBe('7d');
+        expect(selectedRange()).toBe('1W');
 
         markDemoWallet('demo-wallet-1');
         view.rerender(
@@ -233,7 +232,7 @@ describe('PortfolioChart on the demo wallet', () => {
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(selectedRange()).toBe('30d'));
+        await waitFor(() => expect(selectedRange()).toBe('1M'));
 
         clearDemoWalletId();
         view.rerender(
@@ -242,6 +241,6 @@ describe('PortfolioChart on the demo wallet', () => {
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(selectedRange()).toBe('7d'));
+        await waitFor(() => expect(selectedRange()).toBe('1W'));
     });
 });

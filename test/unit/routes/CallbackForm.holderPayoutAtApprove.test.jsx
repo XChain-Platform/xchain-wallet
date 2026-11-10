@@ -95,6 +95,7 @@ function mount(messaging) {
 async function openConfirm() {
     const execute = await screen.findByRole('button', { name: 'Execute callback' });
     await waitFor(() => expect(execute).toBeEnabled());
+    expect(screen.queryByText(/Callback recalls everything/i)).toBeNull();
     await act(async () => { fireEvent.click(execute); });
     await screen.findByRole('button', { name: 'Approve' });
     fireEvent.change(screen.getByLabelText('Type "CALLBACK" to confirm'), { target: { value: 'CALLBACK' } });

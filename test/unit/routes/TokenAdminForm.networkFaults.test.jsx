@@ -287,7 +287,7 @@ describe('TokenAdminForm double press', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Save' });
+        const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: /Review/ });
@@ -309,7 +309,7 @@ describe('TokenAdminForm double press', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Save' });
+        const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.click(preview);

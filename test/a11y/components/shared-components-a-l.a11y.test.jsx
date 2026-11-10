@@ -27,6 +27,7 @@ import { CollectiblesView } from '../../../packages/core/src/shared/components/C
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { ContactsPickerScreen } from '../../../packages/core/src/shared/components/ContactsPickerScreen.jsx';
+import { DurationSlider } from '../../../packages/core/src/shared/components/DurationSlider.jsx';
 import { ContractConsentPanel } from '../../../packages/core/src/shared/components/ContractConsentPanel.jsx';
 import { DemoExitConfirm } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
 import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/components/DerivationPathCrossCheck.jsx';
@@ -248,6 +249,9 @@ const fixtures = [
     )],
     ['ConfirmModal', () => (
         <ConfirmModal title="Delete item?" message="This cannot be undone." onConfirm={noop} onCancel={noop} />
+    )],
+    ['DurationSlider', () => (
+        <DurationSlider coin="BTC" value="144" onChange={noop} wakeText="Ends at block 900,144, est. tomorrow" />
     )],
     ['ContactsPickerScreen', () => (
         <ContactsPickerScreen

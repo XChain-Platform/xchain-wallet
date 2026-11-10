@@ -31,6 +31,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import styles from './PairPartnerWallet.module.css';
 import {
     importPhraseFormat,
     importPhraseFormatArg,
@@ -397,25 +398,35 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             <Screen variant={variant} header={header}>
                 <ListPage>
                     <StepIndicator {...step} />
-                    <div style={STACK}>
-                        <Button
-                            variant="primary"
-                            block
-                            onClick={() => pickRole('watcher')}
-                            icon={<Icon.EyeIcon />}
-                        >
-                            This device watches. Pair a signer
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={() => pickRole('signer')}
-                            icon={<Icon.KeyIcon />}
-                        >
-                            This device signs. Pair a watcher
-                        </Button>
+                    <div className={styles.overview}>
+                        <p>You are pairing an online wallet with an offline one.</p>
+                        <p>Choose what this device does, then set up the other device as its partner.</p>
+                        <p>Write the recovery phrase down once, then type it into each device separately. It never travels between them.</p>
                     </div>
-                    <p style={COPY}>An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them.</p>
+                    <div className={styles.roleChoices}>
+                        <div className={styles.roleChoice}>
+                            <Button
+                                variant="primary"
+                                block
+                                onClick={() => pickRole('watcher')}
+                                icon={<Icon.EyeIcon />}
+                            >
+                                This device watches. Pair a signer
+                            </Button>
+                            <p>This device stays online. It holds no keys that can sign, builds transactions, and shows balances.</p>
+                        </div>
+                        <div className={styles.roleChoice}>
+                            <Button
+                                variant="secondary"
+                                block
+                                onClick={() => pickRole('signer')}
+                                icon={<Icon.KeyIcon />}
+                            >
+                                This device signs. Pair a watcher
+                            </Button>
+                            <p>This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.</p>
+                        </div>
+                    </div>
                 </ListPage>
             </Screen>
         );

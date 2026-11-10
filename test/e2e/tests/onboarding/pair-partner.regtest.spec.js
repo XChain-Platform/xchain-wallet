@@ -125,7 +125,7 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
     // it has no baseURL and needs the absolute one.
     await page.goto(url);
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Pair a watcher or signer' }).click();
+    await page.getByRole('button', { name: 'Pair an offline signer' }).click();
 
     // The role stage names the OTHER half, which is the wording a user reasons
     // about ("this device watches") - not the mode string.

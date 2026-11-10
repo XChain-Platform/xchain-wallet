@@ -42,6 +42,7 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { controllerBindValidationError } from '../../flows/controllerBind.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { toggleActionClass, waitForTxOutputsVisible } from '../utils/controllerBindClasses.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -93,7 +94,8 @@ function controllerBindErrorField(message) {
  * deployed contract; `actionClass` ∈ {transfer, trade, burn, mint,
  * stake, ownership, all} names which native actions the guard gates
  * (`all` is the catch-all: every class, present and future, wherever no
- * class-specific controller covers one); `cooldownBlocks`
+ * class-specific controller covers one); several checked classes become
+ * separate transactions under one review. `cooldownBlocks`
  * delays an unbind taking effect (bind only).
  *
  * Stage machine mirrors the other contract forms: form → review →
@@ -102,7 +104,7 @@ function controllerBindErrorField(message) {
  * through the same `advancedAction` (createAction → sign → broadcast)
  * path every other action form uses. The SDK controller helper ships
  * under Phase F Part 2 and may not exist yet. The form degrades
- * gracefully: the action-class dropdown falls back to the locked-fact
+ * gracefully: the action-class checkboxes fall back to the locked-fact
  * list, and a build/submit against a too-old SDK surfaces a clear error
  * and keeps the user on the review screen.
  *
@@ -135,9 +137,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     // 'token' → ISSUE v6 (gate a TICK); 'address' → ADDRESS v1 (gate the signer).
     const [target, setTarget] = useState(/** @type {'token' | 'address'} */ (tick ? 'token' : 'address'));
+    const [selectedTick, setSelectedTick] = useState('');
+    const [ownedTokens, setOwnedTokens] = useState(
+        /** @type {Array<{ tick: string, ownerAddress: string, ownerAddressId: string }> | null} */ (null),
+    );
     const [unbind, setUnbind] = useState(false);
     const [controller, setController] = useState('');
-    const [actionClass, setActionClass] = useState('transfer');
+    const [selectedActionClasses, setSelectedActionClasses] = useState(/** @type {string[]} */ (['transfer']));
     const [cooldownBlocks, setCooldownBlocks] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -153,10 +159,16 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const errorFor = (field) => (fieldError && fieldError.field === field ? fieldError.message : undefined);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [sequenceResults, setSequenceResults] = useState(
+        /** @type {Array<{ actionClass: string, status: 'pending' | 'submitting' | 'success' | 'failed', txid?: string, error?: string, result?: any }>} */ ([]),
+    );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // Set from the press until the confirm page settles, so a second press in
     // that gap does not start a second compose.
     const composingRef = useRef(false);
+    // Keep a double press from starting the same multi-class sequence twice
+    // before the submitting stage has rendered and disabled its button.
+    const submittingSequenceRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -224,6 +236,66 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging, isWatcherMode]);
 
+    // Load ownership separately for every eligible signing address because a
+    // token choice also determines which wallet address must author the bind.
+    useEffect(() => {
+        if (!chainId || !addressesByChain) return undefined;
+        let cancelled = false;
+        setOwnedTokens(null);
+        const sources = (addressesByChain[chainId] || []).filter(isFormSource);
+        if (typeof messaging?.getOwnedTokens !== 'function' || sources.length === 0) {
+            setOwnedTokens([]);
+            setTarget('address');
+            setSelectedTick('');
+            return undefined;
+        }
+        Promise.all(sources.map((source) => Promise.resolve(
+            messaging.getOwnedTokens({ chainId, address: source.address }),
+        ).then((rows) => ({ source, rows: Array.isArray(rows) ? rows : [] }))
+            .catch(() => ({ source, rows: [] }))))
+            .then((batches) => {
+                if (cancelled) return;
+                const seen = new Set();
+                const merged = [];
+                for (const { source, rows } of batches) {
+                    for (const row of rows) {
+                        const ownedTick = String(row?.tick || '').trim();
+                        const key = ownedTick.toLowerCase();
+                        if (!ownedTick || seen.has(key)) continue;
+                        seen.add(key);
+                        merged.push({
+                            tick: ownedTick,
+                            ownerAddress: source.address,
+                            ownerAddressId: source.id,
+                        });
+                    }
+                }
+                merged.sort((a, b) => a.tick.localeCompare(b.tick));
+                setOwnedTokens(merged);
+                if (merged.length === 0) {
+                    setTarget('address');
+                    setSelectedTick('');
+                    return;
+                }
+                const requested = String(tick || '').trim().toLowerCase();
+                setSelectedTick((current) => {
+                    const requestedRow = merged.find((row) => row.tick.toLowerCase() === requested);
+                    const currentRow = merged.find((row) => row.tick === current);
+                    const next = requestedRow || currentRow || merged[0];
+                    return next.tick;
+                });
+            });
+        return () => { cancelled = true; };
+    }, [addressesByChain, chainId, messaging, tick]);
+
+    // Keep a token bind anchored to its recorded owner even when ownership
+    // finishes loading after the user has already selected the token target.
+    useEffect(() => {
+        if (target !== 'token' || !selectedTick || !ownedTokens) return;
+        const token = ownedTokens.find((row) => row.tick === selectedTick);
+        if (token && token.ownerAddressId !== fromAddressId) setFromAddressId(token.ownerAddressId);
+    }, [fromAddressId, ownedTokens, selectedTick, target]);
+
     // Action-class list from the SDK (degrades to the locked-fact list).
     useEffect(() => {
         if (!chainId) return undefined;
@@ -242,7 +314,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     : null;
                 if (list && list.length > 0) {
                     setActionClasses(list);
-                    setActionClass((current) => (list.includes(current) ? current : list[0]));
+                    setSelectedActionClasses((current) => {
+                        const available = current.filter((value) => list.includes(value));
+                        return available.length > 0 ? available : [list[0]];
+                    });
                 }
                 setActionClassesChainId(chainId);
             })
@@ -261,12 +336,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
-    const tokenInfo = useTokenInfo({ chainId, tick, skip: target !== 'token' || !tick });
+    const tokenInfo = useTokenInfo({ chainId, tick: selectedTick, skip: target !== 'token' || !selectedTick });
     const issuerEligibility = tokenIssuerEligibility({
         tokenInfo: target === 'token' ? tokenInfo : { creator: fromAddress?.address },
         addressesByChain,
         chainId,
-        tick,
+        tick: selectedTick,
         sourceAddress: fromAddress?.address,
     });
 
@@ -308,7 +383,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // forms the wire action/params are built HOST-side (the SDK's controller
     // helper lives there) and passed directly to the confirm page.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     // Hardware signs the SAME prebuilt PSBT through the same host
@@ -322,23 +396,25 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         hardware: 'advancedActionHw',
     });
     // Label the pending record: on the wire a bind is an ADDRESS or ISSUE, not a bind.
-    const bindSummary = () => {
+    const bindSummary = (actionClass) => {
         const verb = unbind ? 'Unbind' : 'Bind';
-        return target === 'token' ? `${verb} controller on ${String(tick).trim()}` : `${verb} address controller`;
+        return target === 'token'
+            ? `${verb} controller on ${selectedTick} (${actionClass})`
+            : `${verb} address controller (${actionClass})`;
     };
 
-    const bindRequest = () => ({
+    const bindRequest = (actionClass) => ({
         chainId,
         target,
         unbind,
-        tick: target === 'token' ? String(tick ?? '').trim() : undefined,
+        tick: target === 'token' ? selectedTick : undefined,
         controller: String(controller).trim(),
-        actionClass: String(actionClass).trim().toLowerCase(),
+        actionClass: String(actionClass || '').trim().toLowerCase(),
         ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
         ...(memo.trim() !== '' && { memo: memo.trim() }),
     });
 
-    async function openConfirmScreen() {
+    async function openConfirmScreen(actionClass) {
         if (composingRef.current) return;
         composingRef.current = true;
         const from = {
@@ -351,7 +427,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         };
         setSubmitError(null);
         try {
-            const { action, params } = await messaging.buildControllerBindParams(bindRequest());
+            const { action, params } = await messaging.buildControllerBindParams(bindRequest(actionClass));
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -363,7 +439,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     from,
                     action,
                     params,
-                    actionSummary: bindSummary(),
+                    actionSummary: bindSummary(actionClass),
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -391,7 +467,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             return;
         }
         if (target === 'token' && issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            setFormError(`Wait for the wallet to verify the current owner of ${selectedTick}.`);
             return;
         }
         if (target === 'token' && issuerEligibility.error) {
@@ -410,7 +486,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setFormError('Action classes are still refreshing for this network. Try again in a moment.');
             return;
         }
-        const validationError = controllerBindValidationError(bindRequest());
+        if (selectedActionClasses.length === 0) {
+            setFieldError({ field: 'actionClass', message: 'Choose at least one action class.' });
+            setFormError(null);
+            return;
+        }
+        const validationError = selectedActionClasses
+            .map((actionClass) => controllerBindValidationError(bindRequest(actionClass)))
+            .find(Boolean);
         if (validationError) {
             // An error that belongs to one field shows on that field, tied to it for
             // assistive tech; the rest stay in the status line.
@@ -421,73 +504,117 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         }
         setFieldError(null);
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        setSequenceResults(selectedActionClasses.map((actionClass) => ({ actionClass, status: 'pending' })));
+        if (!isWatcherMode && selectedActionClasses.length === 1) {
+            openConfirmScreen(selectedActionClasses[0]);
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submittingSequenceRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submittingSequenceRef.current = true;
         setStage('submitting');
         setSubmitError(null);
-        try {
-            const { action, params } = await messaging.buildControllerBindParams(bindRequest());
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                action,
-                params,
-                actionSummary: bindSummary(),
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            let res;
-            if (isWatcherMode) {
-                res = await messaging.buildActionPsbtRequest({
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        let nextResults = sequenceResults.map((entry) => (
+            entry.status === 'success' ? entry : { actionClass: entry.actionClass, status: 'pending' }
+        ));
+        for (let index = 0; index < nextResults.length; index += 1) {
+            if (nextResults[index].status === 'success') continue;
+            const actionClass = nextResults[index].actionClass;
+            nextResults = nextResults.map((entry, rowIndex) => (
+                rowIndex === index ? { ...entry, status: 'submitting', error: undefined } : entry
+            ));
+            setSequenceResults(nextResults);
+            try {
+                // A bind sent earlier in this sequence may not be in the tracker's
+                // view yet; compose only once its change is listed (bounded wait).
+                const previousTxid = [...nextResults.slice(0, index)].reverse()
+                    .find((entry) => entry.status === 'success' && entry.txid)?.txid;
+                if (previousTxid && !isWatcherMode && typeof messaging.getAddressUtxos === 'function') {
+                    await waitForTxOutputsVisible({
+                        getUtxos: () => messaging.getAddressUtxos(chainId, from.address),
+                        txid: previousTxid,
+                    });
+                }
+                // Build immediately before each send so a failed transaction
+                // cannot consume or invalidate the inputs of a later one.
+                const { action, params } = await messaging.buildControllerBindParams(bindRequest(actionClass));
+                const base = {
+                    walletId,
                     chainId,
-                    from: base.from,
-                    actionData: { action, params },
-                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                });
-            } else if (isHwSource) {
-                res = await messaging.advancedActionHw({ ...base, signerId: fromAddress.signerId });
-            } else {
-                res = await messaging.advancedAction({ ...base, password });
-            }
-            setResult(res);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
+                    from,
+                    action,
+                    params,
+                    actionSummary: bindSummary(actionClass),
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                };
+                let response;
+                if (isWatcherMode) {
+                    response = await messaging.buildActionPsbtRequest({
+                        chainId,
+                        from,
+                        actionData: { action, params },
+                        ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                    });
+                } else if (isHwSource) {
+                    response = await messaging.advancedActionHw({ ...base, signerId: fromAddress.signerId });
+                } else {
+                    response = await messaging.advancedAction({ ...base, password });
+                }
+                nextResults = nextResults.map((entry, rowIndex) => (rowIndex === index ? {
+                    ...entry,
+                    status: 'success',
+                    txid: response?.txid || response?.tx_hash,
+                    result: response,
+                } : entry));
+                setSequenceResults(nextResults);
+            } catch (err) {
+                const isBadPassword = err?.name === 'InvalidPasswordError';
+                const message = isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
                         chainId,
                         coinTicker,
                         fallback: err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
-                    }),
-            );
-            setStage('review');
-            if (!isWatcherMode && !isHwSource) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
+                    });
+                nextResults = nextResults.map((entry, rowIndex) => (
+                    rowIndex === index ? { ...entry, status: 'failed', error: message } : entry
+                ));
+                setSequenceResults(nextResults);
+                setSubmitError(message);
+                setStage('review');
+                submittingSequenceRef.current = false;
+                if (!isWatcherMode && !isHwSource) {
+                    passwordRef.current?.focus();
+                    passwordRef.current?.select();
+                }
+                return;
             }
         }
+        const responses = nextResults.map((entry) => entry.result);
+        setResult(responses.length === 1 ? responses[0] : { sequence: nextResults });
+        setPassword('');
+        setStage('done');
+        submittingSequenceRef.current = false;
     }
 
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setSequenceResults([]);
         setStage('form');
     }
 
@@ -504,12 +631,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     const verb = unbind ? 'Unbind' : 'Bind';
+    const actionButtonLabel = `${verb} ${target}`;
     // Keep the current chain listed so the field always shows its value.
     const networkChainIds = walletChainIds
         ? (chainId && !walletChainIds.includes(chainId) ? [...walletChainIds, chainId] : walletChainIds)
         : [chainId];
     const subjectLabel = target === 'token'
-        ? `token ${tick || ''}`.trim()
+        ? `token ${selectedTick}`.trim()
         : 'this address';
 
         const header = (
@@ -534,6 +662,24 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     }
     if (!addressesByChain) {
         return wrap(<ListPage><p className={styles.hint}>Loading addresses…</p></ListPage>);
+    }
+
+    if (stage === 'done' && result?.sequence) {
+        return wrap(
+            <ListPage actions={<Button variant="primary" onClick={onBack}>Done</Button>}>
+                <p className={styles.summary}>
+                    {verb} sequence completed. The network will apply each controller change shortly.
+                </p>
+                <dl className={styles.detailsList}>
+                    {result.sequence.map((entry) => (
+                        <div key={entry.actionClass}>
+                            <dt className={styles.detailsLabel}>{entry.actionClass}</dt>
+                            <dd className={styles.detailsValue}>{entry.txid || 'Broadcast queued'}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </ListPage>,
+        );
     }
 
     if (stage === 'done' && result) {
@@ -573,7 +719,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()} controller`}
                 onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
+                status={submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
@@ -595,12 +741,18 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     </Button>
                 )}
             >
-                <p className={styles.summary}>
-                    {unbind
-                        ? `Stop gating the ${actionClass} actions of ${subjectLabel}. `
-                            + 'Whichever contract currently guards that class is released.'
-                        : `Bind guard contract #${String(controller).trim()} over the ${String(actionClass).trim().toLowerCase()} actions of ${subjectLabel}.`}
-                </p>
+                {sequenceResults.map((entry, index) => (
+                    <p className={styles.summary} key={entry.actionClass}>
+                        {unbind
+                            ? `Unbind #${index + 1}: stop gating the ${entry.actionClass} actions of ${subjectLabel}.`
+                            : `Bind guard contract #${String(controller).trim()} over the ${entry.actionClass} actions of ${subjectLabel}.`}
+                        {entry.status === 'success' ? ` Sent: ${entry.txid || 'broadcast queued'}.` : null}
+                        {entry.status === 'failed' ? ` Failed: ${entry.error}` : null}
+                        {entry.status === 'pending' && sequenceResults.some((row) => row.status === 'failed')
+                            ? ' Not sent.'
+                            : null}
+                    </p>
+                ))}
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
@@ -622,8 +774,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                             <dd className={styles.detailsValue}>#{String(controller).trim()}</dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Action class</dt>
-                    <dd className={styles.detailsValue}>{String(actionClass).trim().toLowerCase()}</dd>
+                    <dt className={styles.detailsLabel}>Action classes</dt>
+                    <dd className={styles.detailsValue}>{sequenceResults.map((entry) => entry.actionClass).join(', ')}</dd>
                     <dt className={styles.detailsLabel}>Operation</dt>
                     <dd className={styles.detailsValue}>{unbind ? 'Unbind' : 'Bind'}</dd>
                     {!unbind && cooldownBlocks.trim() !== '' ? (
@@ -744,8 +896,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 label={`${verb} controller`}
                 onSubmit={(event) => event.preventDefault()}
                 actions={(
-                    <Button type="submit" variant="primary" disabled>
-                        {singleEncode ? verb : 'Preview'}
+                    <Button type="submit" variant="success" icon={<Icon.LockIcon />} disabled>
+                        {actionButtonLabel}
                     </Button>
                 )}
             >
@@ -760,23 +912,24 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             demoGuard={demoGuard}
             label={`${verb} controller`}
             onSubmit={handleReview}
-            status={formError || (target === 'token' && issuerEligibility.error) ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            status={formError ? (
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : isBlockedWatchOnlySource ? (
                 <StatusMessage variant="error">{WATCH_ONLY_SIGNING_MESSAGE}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.LockIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
                         || isBlockedWatchOnlySource
                         || (isHwSource && hwStatus !== 'available')
-                        || (target === 'token' && (issuerEligibility.pending || !!issuerEligibility.error))
+                        || (target === 'token' && (ownedTokens === null || !selectedTick))
                         || actionConfirm.composing}
                 >
-                    {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
+                    {actionButtonLabel}
                 </Button>
             )}
         >
@@ -796,7 +949,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
+                    onIconClick={target === 'address' ? () => setSourcePickerOpen(true) : undefined}
                     iconLabel="Choose source address"
                 />
             ) : null}
@@ -812,11 +965,40 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             <Select
                 label="What to protect"
                 value={target}
-                onChange={(e) => setTarget(/** @type {any} */ (e.target.value))}
+                onChange={(e) => {
+                    const nextTarget = /** @type {'token' | 'address'} */ (e.target.value);
+                    setTarget(nextTarget);
+                    if (nextTarget === 'token') {
+                        const token = ownedTokens?.find((row) => row.tick === selectedTick) || ownedTokens?.[0];
+                        if (token) {
+                            setSelectedTick(token.tick);
+                            setFromAddressId(token.ownerAddressId);
+                        }
+                    }
+                }}
             >
-                {tick ? <option value="token">Token {tick}</option> : null}
-                <option value="address">This address</option>
+                {ownedTokens === null || ownedTokens.length > 0 ? <option value="token">Token</option> : null}
+                <option value="address">Address</option>
             </Select>
+
+            {target === 'token' ? (
+                <Select
+                    label="Token"
+                    value={selectedTick}
+                    disabled={ownedTokens === null}
+                    onChange={(event) => {
+                        const nextTick = event.target.value;
+                        const token = ownedTokens?.find((row) => row.tick === nextTick);
+                        setSelectedTick(nextTick);
+                        if (token) setFromAddressId(token.ownerAddressId);
+                    }}
+                >
+                    {ownedTokens === null ? <option value="">Loading tokens</option> : null}
+                    {(ownedTokens || []).map((token) => (
+                        <option value={token.tick} key={`${token.ownerAddressId}:${token.tick}`}>{token.tick}</option>
+                    ))}
+                </Select>
+            ) : null}
 
             {/*
               * Bind only, like the cooldown field below. An unbind sends an
@@ -841,16 +1023,31 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 />
             ) : null}
 
-            <Select
-                label="Action class"
-                value={actionClass}
-                error={errorFor('actionClass')}
-                onChange={(e) => setActionClass(e.target.value)}
-            >
-                {actionClasses.map((ac) => (
-                    <option key={ac} value={ac}>{ac}</option>
+            <fieldset aria-describedby={errorFor('actionClass') ? 'controller-bind-action-class-error' : undefined}>
+                <legend>Action class</legend>
+                {actionClasses.map((actionClass) => (
+                    <Checkbox
+                        className={styles.checkRow}
+                        key={actionClass}
+                        label={actionClass}
+                        checked={selectedActionClasses.includes(actionClass)}
+                        onChange={() => {
+                            setSelectedActionClasses((current) => {
+                                if (isWatcherMode) {
+                                    return current.includes(actionClass) ? [] : [actionClass];
+                                }
+                                return toggleActionClass(current, actionClass);
+                            });
+                            if (errorFor('actionClass')) setFieldError(null);
+                        }}
+                    />
                 ))}
-            </Select>
+            </fieldset>
+            {errorFor('actionClass') ? (
+                <StatusMessage variant="error" id="controller-bind-action-class-error">
+                    {errorFor('actionClass')}
+                </StatusMessage>
+            ) : null}
             {/*
               * Two of the seven classes do not mean what their name suggests,
               * and both are consequential enough that offering them unlabelled
@@ -860,11 +1057,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
               * synonym for `transfer` and is not one.
               */}
             <p className={styles.hintLeft}>
-                {actionClass === 'all'
-                    ? 'all: every class, including ones added later. A class-specific binding still wins over this one.'
-                    : actionClass === 'ownership'
+                {isWatcherMode
+                    ? 'Watch-only mode builds one bind at a time.'
+                    : selectedActionClasses.includes('all')
+                        ? 'Covers every current and future class. A class-specific binding still wins over this one.'
+                        : selectedActionClasses.includes('ownership')
                         ? 'ownership: transfers of the token itself (including a sweep), not transfers of its balances.'
-                        : 'The native actions this guard is asked about. One binding per class.'}
+                            : 'One binding is sent per ticked class.'}
             </p>
 
             <Checkbox

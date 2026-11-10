@@ -58,6 +58,22 @@ describe('buildWalletAlerts', () => {
         expect(alerts[1].action.onSelect).toBe(onMigrateToBip39);
     });
 
+    it('maps derived alerts to inbox types and merges persisted entries by id', () => {
+        const alerts = buildWalletAlerts({
+            activeWallet: legacy,
+            messagingUnread: 2,
+            at: 100,
+            inboxAlerts: [
+                { id: 'unread-messages', type: 'messages', title: 'old', message: 'old', at: 50, read: true },
+                { id: 'price-1', type: 'price', title: 'Price alert', message: 'BTC moved.', at: 200, read: false },
+            ],
+        }, { onMessaging: noop, onMigrateToBip39: noop });
+
+        expect(alerts.map((alert) => alert.id)).toEqual(['price-1', 'legacy-format', 'unread-messages']);
+        expect(alerts.find((alert) => alert.id === 'unread-messages')).toMatchObject({ type: 'messages', read: true, at: 50 });
+        expect(alerts.find((alert) => alert.id === 'legacy-format').type).toBe('wallet');
+    });
+
     it('is the only place in the shipped packages that defines an alert id', () => {
         const root = join(here, '..', '..', '..', 'packages');
         for (const file of [

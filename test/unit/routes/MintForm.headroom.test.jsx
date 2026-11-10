@@ -36,6 +36,24 @@ const ADDRESSES = {
             source: 'hd',
         },
     ],
+    'litecoin-mainnet': [
+        {
+            id: 'addr-ltc',
+            address: 'ltc1qexampleexampleexampleexampleexampleex',
+            publicKey: '02ab',
+            derivationPath: "m/84'/2'/0'/0/0",
+            source: 'hd',
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            id: 'addr-doge',
+            address: 'DExampleExampleExampleExample1234',
+            publicKey: '02ab',
+            derivationPath: "m/44'/3'/0'/0/0",
+            source: 'hd',
+        },
+    ],
 };
 
 // The issuer holds the entire supply, which is exactly why the holdings
@@ -46,22 +64,33 @@ function mountMint({
     maxSupply = '5000',
     totalSupply = '5000',
     mintMax = null,
+    mintAddressMax = null,
+    mintedAmount = '0',
+    mintedError = null,
+    mintedPending = false,
     divisibility = 0,
     initialTick = 'S18PROBE',
+    chainId = 'bitcoin-mainnet',
 } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         listContacts: vi.fn().mockResolvedValue([]),
         getTokenInfo: vi.fn().mockResolvedValue({
-            chainId: 'bitcoin-mainnet',
+            chainId,
             tick: initialTick,
             maxSupply,
             totalSupply,
             mintMax,
+            mintAddressMax,
             divisibility,
             locks: {},
         }),
+        getMintedAmountForAddress: mintedPending
+            ? vi.fn(() => new Promise(() => {}))
+            : (mintedError
+                ? vi.fn().mockRejectedValue(mintedError)
+                : vi.fn().mockResolvedValue({ amount: mintedAmount })),
         // The holdings lookup every other amount form reaches for. Wired
         // here on purpose: if it ever leaks back into this field, the
         // "5,000 available" assertion below fails again.
@@ -85,7 +114,7 @@ function mountMint({
             { shell: 'web', messaging },
             React.createElement(MintForm, {
                 walletId: 'w',
-                initialChainId: 'bitcoin-mainnet',
+                initialChainId: chainId,
                 initialTick,
                 onBack() {},
             }),
@@ -140,6 +169,57 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         expect(await screen.findByText(/100 S18PROBE available to mint/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /max available/i }));
         await waitFor(async () => expect((await amountField()).value).toBe('100'));
+    });
+
+    it('Max subtracts this source address mint history from its per-address cap', async () => {
+        const messaging = mountMint({
+            totalSupply: '1000',
+            mintMax: '500',
+            mintAddressMax: '100',
+            mintedAmount: '60',
+        });
+        expect(await screen.findByText(/40 S18PROBE available to mint/)).toBeInTheDocument();
+        expect(screen.getByText(/40 left for this address/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /max available/i }));
+        await waitFor(async () => expect((await amountField()).value).toBe('40'));
+        expect(messaging.getMintedAmountForAddress).toHaveBeenCalledWith({
+            chainId: 'bitcoin-mainnet',
+            address: ADDRESS,
+            tick: 'S18PROBE',
+        });
+    });
+
+    it('disables Max and names a reached per-address cap', async () => {
+        mountMint({ mintAddressMax: '100', mintedAmount: '100', totalSupply: '1000' });
+        expect(await screen.findByText('This address has reached its per-address cap.'))
+            .toBeInTheDocument();
+        const max = screen.queryByRole('button', { name: /max available/i });
+        expect(max === null || max.disabled).toBe(true);
+    });
+
+    it('falls back to the stated address cap when mint history cannot load', async () => {
+        mountMint({
+            totalSupply: '1000',
+            mintMax: '500',
+            mintAddressMax: '100',
+            mintedError: new Error('explorer unavailable'),
+        });
+        expect(await screen.findByText(/100 S18PROBE available to mint/)).toBeInTheDocument();
+        expect(screen.getByText(/100 per address in total/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /max available/i }));
+        await waitFor(async () => expect((await amountField()).value).toBe('100'));
+    });
+
+    it('uses the other caps and labels address history while that read is loading', async () => {
+        mountMint({
+            totalSupply: '1000',
+            mintMax: '500',
+            mintAddressMax: '100',
+            mintedPending: true,
+        });
+        expect(await screen.findByText(/500 S18PROBE available to mint/)).toBeInTheDocument();
+        expect(screen.getByText(/100 per address in total \(mint history loading\)/))
+            .toBeInTheDocument();
     });
 
     it('says so instead of quoting a number when nothing caps the token', async () => {
@@ -235,5 +315,21 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         fireEvent.change(await amountField(), { target: { value: '5000' } });
         fireEvent.click(submitButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+    });
+
+    it.each([
+        'bitcoin-mainnet',
+        'litecoin-mainnet',
+        'dogecoin-mainnet',
+    ])('does not offer or compose a native protocol fee on %s', async (chainId) => {
+        const messaging = mountMint({ chainId, totalSupply: '1200' });
+        await screen.findByText(/3,800 S18PROBE available to mint/);
+        expect(screen.queryByLabelText(/protocol fee/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/protocol fee/i)).not.toBeInTheDocument();
+        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.click(submitButton());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        const request = messaging.composeForConfirm.mock.calls[0][0];
+        expect(request.encoderOpts).not.toHaveProperty('payFeeInNativeCoin');
     });
 });

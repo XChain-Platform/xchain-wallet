@@ -172,12 +172,6 @@
     overflow-wrap: anywhere;
 }
 
-.readStatus {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-}
-
 .severity {
     color: var(--xc-info-text);
     font-size: var(--xc-text-xs);

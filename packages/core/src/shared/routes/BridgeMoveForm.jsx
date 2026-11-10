@@ -30,7 +30,8 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
-import { addressValidationError } from '../utils/addressValidation.js';
+import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
+import { targetBlockSecondsForCoin } from '../utils/blockDateEstimate.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -64,6 +65,14 @@ const chainRegistry = registryLib.defaultRegistry();
 // user reaches the button.
 const FEE_QUOTE_DEBOUNCE_MS = 400;
 
+// Mirror the platform's factory confirmation depths so the form can explain
+// the normal wait before submission. Token MIN_DEPTH may only raise this floor.
+const PLATFORM_CONFIRMATION_DEPTH_BY_COIN = Object.freeze({
+    bitcoin: 6,
+    litecoin: 12,
+    dogecoin: 60,
+});
+
 /**
  * BridgeMoveForm: "move XCHAIN to Dogecoin / back to Bitcoin", generalized to
  * any bridgeable token (xchain-bridge.md section 13 wallet row, base row 10;
@@ -74,12 +83,10 @@ const FEE_QUOTE_DEBOUNCE_MS = 400;
  * lands on a chain this screen cannot see. The SDK's own describer says so in
  * as many words ("the credit cannot be undone or redirected"), so:
  *
- *   - the destination is RESOLVED FROM THE USER'S OWN ACCOUNT on the other
- *     chain, never typed (D4's wallet row says "never free text"). A typo in a
- *     free-text field is an unrecoverable loss with no counterparty to ask, and
- *     no later action can redirect an applied credit. The address is read-only
- *     here and changed only by picking another of the wallet's OWN addresses on
- *     that chain;
+ *   - the destination starts with the user's own account on the other chain,
+ *     but accepts any address that validates for that destination network. A
+ *     typo is an unrecoverable loss with no counterparty to ask, so the field is
+ *     checked live and the move is refused until it is valid;
  *   - a chain the wallet holds no address on is not offered as a destination at
  *     all, and says why;
  *   - the leg (lock or burn) is derived from the asset, never chosen: locking
@@ -129,6 +136,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [password, setPassword] = useState('');
 
     const [destAddress, setDestAddress] = useState('');
+    const destPrefillRef = useRef('');
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [destPickerOpen, setDestPickerOpen] = useState(false);
@@ -229,24 +237,31 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         });
     }, [offeredDestChainIds]);
 
-    // Destination address, resolved from the wallet's OWN account on that chain.
-    // Never a text input: see the header note.
+    // Prefill from the wallet's own account without replacing an address the
+    // user typed or picked while the newest-address lookup was in flight.
     useEffect(() => {
-        setDestAddress('');
         if (!destChainId) return undefined;
         const known = (addressesByChain?.[destChainId] || [])[0];
+        const previousPrefill = destPrefillRef.current;
+        const applyPrefill = (address) => {
+            if (!address) return;
+            setDestAddress((current) => {
+                if (current && current !== previousPrefill) return current;
+                destPrefillRef.current = address;
+                return address;
+            });
+        };
         if (typeof messaging.getNewestAddress !== 'function') {
-            if (known?.address) setDestAddress(known.address);
+            applyPrefill(known?.address);
             return undefined;
         }
         let cancelled = false;
         messaging.getNewestAddress(walletId, destChainId, accountId)
             .then((rec) => {
                 if (cancelled) return;
-                if (rec?.address) setDestAddress(rec.address);
-                else if (known?.address) setDestAddress(known.address);
+                applyPrefill(rec?.address || known?.address);
             })
-            .catch(() => { if (!cancelled && known?.address) setDestAddress(known.address); });
+            .catch(() => { if (!cancelled) applyPrefill(known?.address); });
         return () => { cancelled = true; };
     }, [walletId, accountId, destChainId, addressesByChain, messaging]);
 
@@ -267,6 +282,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         [tokenInfo],
     );
     const minDepth = readMinDepth(tokenInfo);
+    const requiredDepth = requiredBridgeDepth(sourceDescriptor, minDepth);
 
     const nativeFee = useNativeFee(sourceChainId);
     const [feePick, setFeePick] = useState(
@@ -295,21 +311,22 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const actionParams = useMemo(() => {
         if (!leg.version) return null;
         const amt = String(amount).trim();
+        const destination = String(destAddress).trim();
         const m = memo.trim();
         const base = { VERSION: leg.version, ...(m ? { MEMO: m } : {}) };
         if (leg.version === '0') {
-            return { ...base, DEST_COIN: destCoin, DEST_ADDRESS: destAddress, AMOUNT: amt };
+            return { ...base, DEST_COIN: destCoin, DEST_ADDRESS: destination, AMOUNT: amt };
         }
         if (leg.version === '1') {
-            return { ...base, BTC_ADDRESS: destAddress, AMOUNT: amt };
+            return { ...base, BTC_ADDRESS: destination, AMOUNT: amt };
         }
         if (leg.version === '3') {
             return {
-                ...base, TICK: tick.trim(), DEST_COIN: destCoin, DEST_ADDRESS: destAddress, AMOUNT: amt,
+                ...base, TICK: tick.trim(), DEST_COIN: destCoin, DEST_ADDRESS: destination, AMOUNT: amt,
             };
         }
         return {
-            ...base, TICK: tick.trim(), ORIGIN_ADDRESS: destAddress, AMOUNT: amt,
+            ...base, TICK: tick.trim(), ORIGIN_ADDRESS: destination, AMOUNT: amt,
         };
     }, [leg.version, destCoin, destAddress, amount, memo, tick]);
 
@@ -371,7 +388,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         : sourceChainId && (addressesByChain?.[sourceChainId] || []).length > 0
             ? 'No usable source address is available. Choose another source address.'
             : null;
-    const destinationAddressError = destAddress
+    const destinationAddressValid = !!destAddress
+        && !!destDescriptor?.coin
+        && !!destDescriptor?.networkKind
+        && isValidAddressForChain(destAddress, destDescriptor.coin, destDescriptor.networkKind);
+    const destinationAddressError = destAddress && !destinationAddressValid
         ? addressValidationError(destAddress, destDescriptor)
         : null;
     const tokenError = tick.toUpperCase() === GAS_TICK
@@ -485,7 +506,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         }
         if (blockingError || amountInputError) return;
         if (!destAddress) {
-            setFormError('Pick one of your own destination addresses to receive the transfer.');
+            setFormError('Enter a destination address to receive the transfer.');
+            return;
+        }
+        if (!destinationAddressValid) {
+            setFormError('Enter a valid address for the destination network.');
             return;
         }
         if (!String(amount).trim()) {
@@ -721,6 +746,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         !!blockingError
                         || !!amountInputError
                         || destinationUnavailable
+                        || !destinationAddressValid
                         || !fromAddress
                         || !leg.version
                         || actionConfirm.composing
@@ -740,7 +766,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     setAmount('');
                     setAmountInputError(null);
                     setDestChainId(null);
-                    setDestAddress('');
                     setFeeQuote(null);
                     setFormError(null);
                     setSubmitError(null);
@@ -794,7 +819,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         onChange={(cid) => {
                             if (cid === destChainId) return;
                             setDestChainId(cid);
-                            setDestAddress('');
                             setFeeQuote(null);
                             setFormError(null);
                             setSubmitError(null);
@@ -807,15 +831,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         label="Receive at"
                         icon="addresses"
                         value={destAddress}
-                        readOnly
-                        onChange={() => {}}
+                        onChange={(event) => setDestAddress(event.target.value)}
                         onIconClick={() => setDestPickerOpen(true)}
                         iconLabel="Choose receiving address"
+                        error={destinationAddressError}
                     />
-                    <p className={styles.hint}>
-                        One of your own destination-chain addresses. The bridge
-                        cannot redirect a credit after it applies, so this is never typed by hand.
-                    </p>
                 </>
             )}
 
@@ -855,35 +875,17 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
 
-            {destChainId ? (
-                <dl className={`${styles.detailsList} ${styles.flatDetailsList}`} aria-label="Bridge route">
-                    {sourceDescriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Source network</dt>
-                            <dd className={styles.detailsValue}>
-                                <ChainBadge descriptor={sourceDescriptor} size="sm" showName={false} />
-                            </dd>
-                        </>
-                    ) : null}
-                    {destDescriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Destination network</dt>
-                            <dd className={styles.detailsValue}>
-                                <ChainBadge descriptor={destDescriptor} size="sm" showName={false} />
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>Expected arrival</dt>
-                    <dd className={styles.detailsValue}>{expectedArrivalText(minDepth)}</dd>
-                </dl>
-            ) : null}
-
-            {!blockingError && destChainId && leg.version ? (
-                <p className={styles.hint}>
-                    {leg.leg === 'lock'
-                        ? `This locks ${shown.label} on the source network and credits it on the destination network. The credit cannot be undone or redirected.`
-                        : 'This burns the copy on the source network and releases the original on the destination network. The release cannot be undone or redirected.'}
-                </p>
+            {destChainId && leg.version ? (
+                <FormNotice>
+                    {bridgeMoveNoticeText({
+                        leg,
+                        amount,
+                        tickLabel: shown.label,
+                        sourceDescriptor,
+                        destDescriptor,
+                        requiredDepth,
+                    })}
+                </FormNotice>
             ) : null}
 
             {!isWatcherMode ? (
@@ -978,6 +980,39 @@ function chainsWithAddresses(byChain) {
     return Object.entries(byChain || {})
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
+}
+
+function requiredBridgeDepth(sourceDescriptor, minDepth) {
+    const platformDepth = PLATFORM_CONFIRMATION_DEPTH_BY_COIN[sourceDescriptor?.coin] || 0;
+    return Math.max(platformDepth, minDepth || 0) || null;
+}
+
+function bridgeMoveNoticeText({
+    leg, amount, tickLabel, sourceDescriptor, destDescriptor, requiredDepth,
+}) {
+    const sourceName = sourceDescriptor?.displayName || 'the source network';
+    const destinationName = destDescriptor?.displayName || 'the destination network';
+    const enteredAmount = String(amount).trim();
+    const moved = enteredAmount ? `${formatWithThousands(enteredAmount)} ${tickLabel}` : 'the amount';
+    const depth = requiredDepth || 1;
+    const confirmationWord = depth === 1 ? 'confirmation' : 'confirmations';
+    const targetSeconds = targetBlockSecondsForCoin(sourceDescriptor?.coin);
+    const duration = targetSeconds ? approximateDurationText(depth * targetSeconds) : null;
+    const arrival = `after ${depth} ${confirmationWord}${duration ? ` (~${duration})` : ''}`;
+    if (leg.leg === 'burn') {
+        return `Burns ${moved} on ${sourceName} and releases it on ${destinationName} ${arrival}.`
+            + ' The release cannot be undone or redirected.';
+    }
+    return `Locks ${moved} on ${sourceName} and credits it on ${destinationName} ${arrival}.`
+        + ' The credit cannot be undone or redirected.';
+}
+
+function approximateDurationText(seconds) {
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    if (minutes < 120) return `${minutes} min`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours} hr`;
+    return `${Math.round(hours / 24)} days`;
 }
 
 function expectedArrivalText(minDepth) {

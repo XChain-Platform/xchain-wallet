@@ -153,7 +153,7 @@ describe('useActionConfirmFlow orchestration', () => {
         }), composed);
     });
 
-    it('uses a compose override and adds session persistence only for resumable flows', async () => {
+    it('uses a compose override without adding confirm-session persistence', async () => {
         const messaging = {
             putConfirmSession: vi.fn(async () => {}),
             clearConfirmSession: vi.fn(async () => {}),
@@ -161,34 +161,24 @@ describe('useActionConfirmFlow orchestration', () => {
             releaseReservation: vi.fn(),
         };
         const compose = vi.fn(async () => ({ psbt: 'custom' }));
-        const resume = { software: 'submit', base: { amount: '1' } };
         const from = { address: 'source-address' };
         const { result } = renderHook(() => useActionConfirmFlow({
             messaging, walletId: 'wallet-1',
         }));
 
-        let plain;
-        let resumable;
+        let options;
         await act(async () => {
-            plain = await result.current.run({
+            options = await result.current.run({
                 chainId: 'litecoin', from, compose, onApprove: vi.fn(),
-            });
-            resumable = await result.current.run({
-                chainId: 'litecoin', from, compose, onApprove: vi.fn(), resume,
             });
         });
 
-        expect(plain).not.toHaveProperty('session');
-        expect(plain).not.toHaveProperty('resumeRequest');
-        await expect(resumable.compose()).resolves.toEqual({ psbt: 'custom' });
+        expect(options).not.toHaveProperty('session');
+        expect(options).not.toHaveProperty('resume');
+        expect(options).not.toHaveProperty('resumeRequest');
+        await expect(options.compose()).resolves.toEqual({ psbt: 'custom' });
         expect(compose).toHaveBeenCalledTimes(1);
-        expect(resumable.resume).toBe(resume);
-        expect(resumable.resumeRequest).toEqual({
-            chainId: 'litecoin', from, actionData: undefined, encoderOpts: undefined,
-        });
-        await resumable.session.put({ id: 'session-1' });
-        await resumable.session.clear('session-1');
-        expect(messaging.putConfirmSession).toHaveBeenCalledWith({ id: 'session-1' });
-        expect(messaging.clearConfirmSession).toHaveBeenCalledWith({ id: 'session-1' });
+        expect(messaging.putConfirmSession).not.toHaveBeenCalled();
+        expect(messaging.clearConfirmSession).not.toHaveBeenCalled();
     });
 });

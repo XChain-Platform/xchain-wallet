@@ -100,16 +100,10 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   the form's last re-check before signing (see useConfirmAction); a
      *   non-null answer interrupts Approve with that message.
      * @param {(prebuiltPsbt: import('../../sdk/submitWithSigner.js').PrebuiltPsbt, composed: object) => Promise<any>} args.onApprove
-     * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
-     * §5.4 opt-in. Supply it only when this form's Approve can be
-     *   completed away from the form: `software`/`hardware` name the same
-     *   messaging methods `useConfirmSubmit` dispatches, `base` is the request
-     *   body minus `prebuiltPsbt`/credentials, and `after` carries any
-     *   post-broadcast bookkeeping the form would otherwise have done itself.
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume, recheckBeforeSign }) => (
+    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, recheckBeforeSign }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
@@ -129,18 +123,6 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                 chainId, actionString, source,
             }),
-            // Persistence is opt-in per form, via `resume`. The
-            // store is wired for all of them so opting in is one argument, but
-            // a form that has not said how its Approve completes without it
-            // stores nothing - see the `resume` contract in useConfirmAction.
-            ...(resume ? {
-                resume,
-                resumeRequest: { chainId, from, actionData, encoderOpts },
-                session: {
-                    put: (payload) => messaging.putConfirmSession(payload),
-                    clear: (id) => messaging.clearConfirmSession({ id }),
-                },
-            } : {}),
             compose: compose || (() => messaging.composeForConfirm({
                 walletId,
                 chainId,

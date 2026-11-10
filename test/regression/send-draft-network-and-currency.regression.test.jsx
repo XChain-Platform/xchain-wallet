@@ -130,7 +130,7 @@ describe('Send draft across a network switch', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
 
         await waitFor(() => {
-            expect(document.getElementById('send-amount')).toHaveValue('0.002');
+            expect(document.getElementById('send-amount')).toHaveValue('0.00200000');
         });
     });
 });

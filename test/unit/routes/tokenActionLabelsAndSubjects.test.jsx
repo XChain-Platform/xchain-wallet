@@ -62,7 +62,7 @@ describe('token action labels', () => {
     it.each([
         ['callback-settings', 'Update callback settings'],
         ['bridge-settings', 'Update bridge settings'],
-        ['description', 'Save'],
+        ['description', 'Update description'],
         ['transfer', 'Transfer ownership'],
     ])('uses the %s action as the primary submit label', async (mode, label) => {
         mount(
@@ -80,6 +80,23 @@ describe('token action labels', () => {
         expect(submit.className).toMatch(/primary/);
         expect(screen.queryByRole('button', { name: 'Update token' })).toBeNull();
     });
+
+    it('uses a multiline description field and the specific update action', async () => {
+        mount(
+            <TokenAdminForm
+                walletId="wallet-1"
+                mode="description"
+                initialChainId={CHAIN}
+                initialTick="TOKEN"
+                initialFromAddress={SOURCE.address}
+                onBack={() => {}}
+            />,
+        );
+
+        expect(await screen.findByLabelText('Description')).toBeInstanceOf(HTMLTextAreaElement);
+        expect(screen.getByRole('button', { name: 'Update description' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    });
 });
 
 describe('token action sentence subjects', () => {
@@ -94,7 +111,8 @@ describe('token action sentence subjects', () => {
         );
 
         expect(await screen.findByText('No callback configured for this token.')).toBeInTheDocument();
-        expect(screen.getByText(/^This token has no callback configured\./)).toBeInTheDocument();
+        // U86: the summary row is the one place that says it; no notice repeats it.
+        expect(screen.queryByText(/has no callback configured/)).toBeNull();
     });
 
     it('uses plain token wording when pause context has no ticker', async () => {

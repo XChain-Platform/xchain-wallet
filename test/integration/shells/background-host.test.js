@@ -153,32 +153,18 @@ describe('background message host (all three shells)', () => {
         expect(res.result[0].id).toBe('w1');
     });
 
-    // This suite runs with no `chrome` global, which is the desktop and web
-    // condition exactly: `createConfirmActionSessionStorage()` returns null and
-    // the §5.4 resume feature is present in the messaging surface and inert in
-    // fact. An empty session list is then indistinguishable from an extension
-    // that simply has no pending confirms, so the three routes say which it is.
-    it('reports confirm-session support rather than answering an empty list', async () => {
+    it('does not register retired confirm-session routes', async () => {
         const host = makeHost();
 
-        const list = await host.handle({ type: 'action.confirmSession.list' });
-        expect(list.ok).toBe(true);
-        expect(list.result.supported).toBe(false);
-        expect(list.result.sessions).toEqual([]);
-
-        const put = await host.handle({
-            type: 'action.confirmSession.put',
-            request: { id: 'confirm-1' },
-        });
-        expect(put.ok).toBe(true);
-        expect(put.result).toEqual({ supported: false, stored: false });
-
-        const cleared = await host.handle({
-            type: 'action.confirmSession.clear',
-            request: { id: 'confirm-1' },
-        });
-        expect(cleared.ok).toBe(true);
-        expect(cleared.result).toEqual({ supported: false, cleared: false });
+        for (const type of [
+            'action.confirmSession.put',
+            'action.confirmSession.list',
+            'action.confirmSession.clear',
+        ]) {
+            const response = await host.handle({ type, request: { id: 'confirm-1' } });
+            expect(response.ok).toBe(false);
+            expect(response.error.name).toBe('UnknownMessageTypeError');
+        }
     });
 
     it('answers the list tick-coin probe from the chain SDK, false when it cannot', async () => {

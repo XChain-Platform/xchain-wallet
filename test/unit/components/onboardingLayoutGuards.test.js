@@ -15,7 +15,6 @@ import onboardingRawSource from '../../../packages/core/src/shared/routes/Onboar
 import { withEnglishCopy } from '../../helpers/englishSource.js';
 import adsNoticeSource from '../../../packages/core/src/shared/components/AdsNotice.jsx?raw';
 import carouselSource from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx?raw';
-import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
 const onboardingSource = withEnglishCopy(onboardingRawSource);
 const createWalletSource = withEnglishCopy(createWalletRawSource);
@@ -75,10 +74,6 @@ describe('onboarding and Home layout guards', () => {
         expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*'amount amount';[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
     });
 
-    it('allows a resumed transaction id to wrap', () => {
-        expect(resumeSource).toContain("style={{ overflowWrap: 'anywhere' }}");
-    });
-
     it('leaves route gutters to Screen and form widths to FormPage', () => {
         expect(homeCss).not.toMatch(/\.bodyFull\s*\{[^}]*padding:/s);
         expect(lockedCss).not.toMatch(/\.hero\s*\{[^}]*padding:/s);
@@ -119,7 +114,7 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
         expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
         expect(onboardingCss).not.toMatch(/min\(\s*40%\s*,\s*140px\s*\)/);
-        expect(onboardingSource.match(/stackedActions/g)).toHaveLength(3);
+        expect(onboardingSource.match(/stackedActions/g)).toHaveLength(2);
         expect(createWalletSource).not.toContain('<header className={headClass}>');
         expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);
         expect(importWalletSource).not.toContain('<header className={headClass}>');
@@ -131,17 +126,16 @@ describe('onboarding and Home layout guards', () => {
         expect(carouselCss).toMatch(/\.nav\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(carouselCss).toMatch(/\.actions\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(lockedSource).toContain('<FormPage');
-        expect(resumeSource).toMatch(/<FormPage\s+label=\{title\}/);
-        expect(resumeSource).not.toMatch(/<button\b/);
     });
 
     it('keeps the license gate full-width with one compact acknowledgement row', () => {
         expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*max-width:\s*none;/s);
         expect(onboardingCss).not.toMatch(/\.licenseAck\s*\{[^}]*display:\s*flex;/s);
         expect(onboardingCss).toMatch(/\.licenseAck\s*\{[^}]*white-space:\s*nowrap;/s);
+        // The acknowledgement and Accept share one wrapper, while the
+        // disabled reason remains beside Accept for screen readers.
         expect(onboardingSource).toMatch(
-            // The disabled reason sits beside Accept for screen readers.
-            /actions=\{\(\s*<div className=\{styles\.licenseActions\}>\s*(?:\{licenseDisabledReason \? \([\s\S]*?\) : null\}\s*)?<Button/s,
+            /<div className=\{styles\.licenseControls\}>\s*<Checkbox[\s\S]*?<div className=\{styles\.licenseActions\}>\s*(?:\{licenseDisabledReason \? \([\s\S]*?\) : null\}\s*)?<Button/s,
         );
         expect(onboardingSource).not.toMatch(
             /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,
@@ -151,6 +145,9 @@ describe('onboarding and Home layout guards', () => {
         );
         expect(onboardingCss).toMatch(
             /@media \(min-width: 600px\)[\s\S]*?\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;[^}]*\}[\s\S]*?\.licenseActions > button\s*\{[^}]*width:\s*auto;/,
+        );
+        expect(onboardingCss).toMatch(
+            /@media \(min-width: 834px\)[\s\S]*?\.licenseControls\s*\{[^}]*flex-direction:\s*row;[^}]*align-items:\s*center;[^}]*justify-content:\s*space-between;/,
         );
     });
 

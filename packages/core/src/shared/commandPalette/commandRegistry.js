@@ -25,6 +25,7 @@
 
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/governance.js';
 import '../../i18n/locales/en/issue.js';
 import '../../i18n/locales/en/keyboard.js';
@@ -101,7 +102,6 @@ const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
     'nav-actions',
     'nav-multisig-create',
-    'nav-multisig-sign',
     'nav-cosigner-accounts',
     'sign-message',
     'sign-psbt',
@@ -255,11 +255,10 @@ export function buildCommands(ctx) {
     }
     if (ctx.hasBtcAddress) {
         list.push({ id: 'nav-staking', category: 'Navigate', title: t('home.staking'), subtitle: t('palette.navStaking.subtitle'), keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
-        // Multisig is Bitcoin-only (§10.3), so it shares the staking gate. The
-        // actions menu already listed both; the palette found neither.
+        // Multisig creation is Bitcoin-only, while signing sessions open only
+        // from their existing session flows.
         list.push(
             { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
-            { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
             { id: 'nav-cosigner-accounts', category: 'Navigate', title: t('palette.navCoSignerAccounts.title'), subtitle: t('palette.navCoSignerAccounts.subtitle'), keywords: ['agent', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'], Icon: Icon.UsersIcon, run: go('cosigner-accounts') },
         );
     }
@@ -310,13 +309,14 @@ export function buildCommands(ctx) {
         { id: 'create-bridge-move', category: 'Create', title: t('palette.createBridgeMove.title'), subtitle: t('palette.createBridgeMove.subtitle'), keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
         { id: 'create-bridge-settings', category: 'Create', title: t('palette.createBridgeSettings.title'), subtitle: t('palette.createBridgeSettings.subtitle'), keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
         { id: 'create-advanced', category: 'Create', title: t('palette.createAdvanced.title'), subtitle: t('palette.createAdvanced.subtitle'), keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
+        { id: 'create-action-queue', category: 'Create', title: t('commandPalette.actionQueue.title'), subtitle: t('commandPalette.actionQueue.subtitle'), keywords: ['action', 'queue', 'parallel', 'cross chain'], Icon: Icon.MenuIcon, run: go('parallel-compose') },
     );
 
     // ---- Trade: DEX / cross-chain flows ---------------------------------
     // Ungated here: 'trade-coinpay' SETTLES an order that already matched, which
     // is a payment the user owes - one seed spans shells, so a match made on web
     // can come due on a phone whose build has no DEX. Templates only prefill the
-    // parallel composer, which every build has.
+    // Action queue, which every build has.
     list.push(
         ...(hasDex ? [
             { id: 'trade-swap', category: 'Trade', title: t('palette.tradeSwap.title'), subtitle: t('palette.tradeSwap.subtitle'), keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
@@ -490,7 +490,7 @@ const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'network-endpoints', get title() { return t('settings.page.networkEndpoints'); }, keywords: ['explorer', 'encoder', 'hub', 'url'] },
     { id: 'notifications', get title() { return t('alerts.notificationsTitle'); }, keywords: ['alerts', 'notify'] },
     { id: 'ads', get title() { return t('palette.settings.ads'); }, keywords: ['donation', 'ads', 'support'] },
-    { id: 'developer', get title() { return t('palette.settings.developer'); }, keywords: ['dev', 'debug', 'regtest'] },
+    { id: 'developer', get title() { return t('palette.settings.developer'); }, keywords: ['dev', 'debug', 'regtest', 'advanced', 'raw', 'action', 'queue', 'parallel'] },
     { id: 'about', get title() { return t('routes.addressList.about'); }, keywords: ['version', 'license'] },
 ]);
 

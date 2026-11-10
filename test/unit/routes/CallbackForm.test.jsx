@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
@@ -140,6 +141,42 @@ describe('callback field validation', () => {
 });
 
 describe('CallbackForm review safety', () => {
+    it('keeps the destructive warning off the form', async () => {
+        mount();
+
+        await readySubmit();
+        expect(screen.queryByText(/Callback recalls everything/i)).toBeNull();
+        expect(screen.queryByText(/Every unit of .* returns to your address/i)).toBeNull();
+    });
+
+    it('explains a missing callback only in the summary row and blocks submit', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mount({
+            getTokenInfo: vi.fn().mockResolvedValue({
+                tick: 'CALLABLE',
+                creator: SOURCE.address,
+            }),
+            buildActionPsbtRequest,
+        });
+
+        const messages = await screen.findAllByText(/no callback configured/i);
+        expect(messages).toHaveLength(1);
+        expect(messages[0].closest('dd')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.queryByText(/nothing to recall/i)).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('stretches both wide summary cells to one row height', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/routes/CallbackForm.module.css',
+            'utf8',
+        );
+        const wideRules = css.match(/@media \(min-width: 834px\) \{([\s\S]*)\}\s*$/)?.[1] || '';
+
+        expect(wideRules).toMatch(/\.summaryLabel\s*,\s*\.summaryValue\s*\{[^}]*align-self:\s*stretch/s);
+    });
+
     it('uses the payout token divisibility for the displayed payout', async () => {
         const messaging = mount();
         await readySubmit();

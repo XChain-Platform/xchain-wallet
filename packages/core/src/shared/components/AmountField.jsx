@@ -9,13 +9,13 @@
 // contact legal@dankest.llc.
 
 // Shared "big amount" entry block used by Send and Receive. Bundles
-// the large input, the optional inline Max button, and the footer row
+// the large input, the inline Max button, and the footer row
 // (fiat/coin swap toggle + caller-supplied right-hand status). The
 // canonical amount is always coin-scale; when the user toggles to
 // fiat the input edits `fiatAmount` and the parent derives the coin
 // amount via priceLookup.
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import {
     dropFieldGrouping,
@@ -32,6 +32,37 @@ import '../../i18n/locales/en/send.js';
 // The space kept between typed digits and the first action: the same 4px
 // (--xc-space-1) the actions keep from the field border.
 const ACTIONS_TEXT_GAP_PX = 4;
+
+// No edit in progress; any decimal limit (a number or null) differs from it.
+const NOT_EDITING = Symbol('not-editing');
+
+function decimalPlacesMessage(limit) {
+    return `Amount can have at most ${limit} decimal places.`;
+}
+
+function fractionDigits(amount) {
+    const text = amount == null ? '' : String(amount);
+    const dot = text.indexOf('.');
+    return dot === -1 ? 0 : text.length - dot - 1;
+}
+
+/**
+ * Pads a plain decimal amount with trailing zeros to the asset's decimal
+ * places ("1" at 8 reads "1.00000000"). Display only: the caller keeps the
+ * amount it passed. Empty, non-decimal or already full amounts come back as
+ * given, and a limit of zero or null pads nothing.
+ *
+ * @param {string} amount
+ * @param {number | null} limit
+ * @returns {string}
+ */
+export function padToDecimals(amount, limit) {
+    const text = amount == null ? '' : String(amount);
+    if (!limit || !/^\d*\.?\d*$/.test(text) || !/\d/.test(text)) return text;
+    const digits = fractionDigits(text);
+    if (digits >= limit) return text;
+    return `${text}${text.includes('.') ? '' : '.'}${'0'.repeat(limit - digits)}`;
+}
 
 /**
  * Writes `--amount-actions-room` on the field: how far in from the input's
@@ -75,7 +106,7 @@ export function syncAmountActionsRoom(wrap, input, actions) {
  * @param {(error: string | null) => void} [props.onValidationError]
  * @param {() => void} [props.toggleAmountInputMode]
  * @param {import('react').RefObject<HTMLInputElement>} [props.inputRef]
- * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
+ * @param {() => void} [props.onMax]                         when omitted, the inline Max button shows disabled so every amount field keeps the same shape
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
  * @param {boolean} [props.maxBusy] the Max amount is being priced (a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
@@ -84,6 +115,7 @@ export function syncAmountActionsRoom(wrap, input, actions) {
  * @param {string} [props.id]                             id forwarded to the amount input
  * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
  * @param {'sm' | 'md' | 'lg'} [props.size]                  control size, forwarded to the amount Input and inline Max Button. Defaults to 'md'.
+ * @param {boolean} [props.disabled]                         holds the input and its Max while the form is busy (composing)
  */
 export function AmountField({
     id,
@@ -106,11 +138,11 @@ export function AmountField({
     maxDisabled = false,
     maxBusy = false,
     balanceText,
+    disabled = false,
 }) {
     const [inputError, setInputError] = useState('');
     const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const maxRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
-    const hasMax = Boolean(onMax);
 
     useLayoutEffect(() => {
         const wrap = wrapRef.current;
@@ -123,7 +155,7 @@ export function AmountField({
         observer.observe(input);
         actions().filter(Boolean).forEach((action) => observer.observe(action));
         return () => observer.disconnect();
-    }, [hasMax]);
+    }, []);
     const tickUpper = (typeof tick === 'string' ? tick : '').trim().toUpperCase();
     const fiatCcy = String(fiatRate?.fiatCurrency || fiatCurrency || 'USD').toUpperCase();
     const isFiat = Boolean(amountInputMode === 'fiat' && fiatRate);
@@ -138,12 +170,36 @@ export function AmountField({
         ? parsedDivisibility
         : null;
 
+    // Typed text stays as typed until the field loses focus or the asset's
+    // decimal places change; only then does the display pad the stored
+    // amount. The marker holds the decimal limit the edit started under, so a
+    // divisibility change ends the edit without an effect.
+    const [editingAt, setEditingAt] = useState(NOT_EDITING);
+    const editing = editingAt !== NOT_EDITING && editingAt === decimalLimit;
+    const storedPrecisionError = decimalLimit !== null && fractionDigits(amount) > decimalLimit
+        ? decimalPlacesMessage(decimalLimit)
+        : '';
+    const displayValue = formatWithThousands(
+        isFiat || editing || storedPrecisionError ? inputValue : padToDecimals(amount, decimalLimit),
+    );
+
+    // The parent learns when its stored amount turns finer than the asset
+    // allows (a new asset, a restored draft) and when that clears, so its own
+    // submit gate matches the error the field shows.
+    const reportedPrecisionError = useRef('');
+    useEffect(() => {
+        if (storedPrecisionError === reportedPrecisionError.current) return;
+        reportedPrecisionError.current = storedPrecisionError;
+        onValidationError?.(storedPrecisionError || null);
+    }, [storedPrecisionError]);
+
     const handleChange = (event) => {
+        setEditingAt(decimalLimit);
         // A keystroke inside a grouped display ("1,000" plus a digit) leaves the
         // field's own group mark in the text; it is formatting, not input.
         const typed = /^(insertText|deleteContent)/.test(event.nativeEvent?.inputType || '');
         const rawValue = typed
-            ? dropFieldGrouping(String(event.target.value), formatWithThousands(inputValue))
+            ? dropFieldGrouping(String(event.target.value), displayValue)
             : String(event.target.value);
         const cursorPos = event.target.selectionStart;
         const normalized = normalizeAmountFieldInput(rawValue, {
@@ -165,7 +221,7 @@ export function AmountField({
         }
         const fraction = normalized.includes('.') ? normalized.split('.')[1] : '';
         if (decimalLimit !== null && fraction.length > decimalLimit) {
-            const message = `Amount can have at most ${decimalLimit} decimal places.`;
+            const message = decimalPlacesMessage(decimalLimit);
             setInputError(message);
             onValidationError?.(message);
             return;
@@ -209,9 +265,7 @@ export function AmountField({
     // much. The input is left to right, so its own inline end is
     // the right edge; --amount-end-room lets the stylesheet put the same room
     // on the left edge when the page reads right to left.
-    const actionsEndRoom = onMax
-        ? 'max(var(--amount-action-width), var(--amount-actions-room, 0px))'
-        : null;
+    const actionsEndRoom = 'max(var(--amount-action-width), var(--amount-actions-room, 0px))';
 
     return (
         <div className={styles.amountBlock}>
@@ -229,36 +283,37 @@ export function AmountField({
                     id={id}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
                     hint={hint}
-                    error={inputError || error}
+                    error={inputError || storedPrecisionError || error}
                     inputMode="decimal"
-                    value={formatWithThousands(inputValue)}
+                    value={displayValue}
                     onChange={handleChange}
+                    onBlur={() => setEditingAt(NOT_EDITING)}
+                    disabled={disabled || undefined}
                     autoComplete="off"
                     placeholder="0.00"
-                    style={actionsEndRoom ? {
+                    style={{
                         paddingInlineEnd: actionsEndRoom,
                         '--amount-end-room': actionsEndRoom,
-                    } : undefined}
+                    }}
                 />
-                {onMax ? (
-                    <Button
-                        variant="primary"
-                        size={size}
-                        ref={maxRef}
-                        className={styles.maxAction}
-                        icon={null}
-                        onClick={() => {
-                            setInputError('');
-                            onValidationError?.(null);
-                            onMax();
-                        }}
-                        disabled={maxDisabled || maxBusy}
-                        aria-busy={maxBusy || undefined}
-                        aria-label={t('components.amountField.useMaxAvailableAmount')}
-                    >
-                        {t('components.amountField.max')}
-                    </Button>
-                ) : null}
+                <Button
+                    variant="primary"
+                    size={size}
+                    ref={maxRef}
+                    className={styles.maxAction}
+                    icon={null}
+                    onClick={() => {
+                        if (!onMax) return;
+                        setInputError('');
+                        onValidationError?.(null);
+                        onMax();
+                    }}
+                    disabled={!onMax || disabled || maxDisabled || maxBusy}
+                    aria-busy={maxBusy || undefined}
+                    aria-label={t('components.amountField.useMaxAvailableAmount')}
+                >
+                    {t('components.amountField.max')}
+                </Button>
             </div>
             {/* Rendered only when it has something to show: an empty footer still
                 took its top margin (and, stacked on a phone, a row gap), so the

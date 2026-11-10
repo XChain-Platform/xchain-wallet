@@ -33,4 +33,6 @@ assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && p
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
 assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /\{ VERSION: '0', MESSAGE: message \}/);
+assert.doesNotMatch(formSrc, /broadcastSignedTxRequest|Signed transaction code/);
 console.log('broadcast-watcher-mode smoke OK');

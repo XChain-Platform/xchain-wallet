@@ -26,6 +26,7 @@ const REVIEWED_PADDED_ROW_CONTAINERS = {
     'packages/core/src/shared/routes/IssueTokenForm.module.css | .accessListGroup': 'Every access-list row carries the shared list-row padding.',
     'packages/core/src/shared/routes/MarketActivity.module.css | .list': 'Every market activity entry is a padded ListRow.',
     'packages/core/src/shared/routes/MarketsList.module.css | .marketsCard': 'Market rows and the pagination surface each carry their own padding.',
+    'packages/core/src/shared/routes/MultisigCreate.module.css | .cosignersCard': 'Every cosigner editor and the add-cosigner action carry their own padding.',
     'packages/core/src/shared/routes/MyLists.module.css | .list': 'Every saved-list row carries its own padding.',
     'packages/core/src/shared/routes/MyTokens.module.css | .list': 'Every token entry is a padded ListRow.',
     'packages/core/src/shared/routes/ObligationsView.module.css | .list': 'Every obligation row carries its own padding.',

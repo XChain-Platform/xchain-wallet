@@ -62,7 +62,8 @@ describe('Pause token wake block at Approve', () => {
             </MessagingProvider>,
         );
         await screen.findByText('GATE is currently active (not paused).');
-        fireEvent.change(screen.getByLabelText('Duration (blocks)'), { target: { value: '5' } });
+        fireEvent.change(screen.getByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '5' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
         const approve = await screen.findByRole('button', { name: 'Approve' });
         getIndexerWatermark.mockResolvedValue({ watermark: 110 });

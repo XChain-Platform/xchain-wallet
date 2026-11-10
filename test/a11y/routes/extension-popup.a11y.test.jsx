@@ -70,7 +70,6 @@ function popupMessaging(overrides = {}) {
         }),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         listContacts: vi.fn().mockResolvedValue([]),
-        listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [] }),
         listPendingAirdropsForWallet: vi.fn().mockResolvedValue([]),
         getMultisigReceiveAddress: vi.fn().mockResolvedValue(null),
         getCoinpayObligationsForAddress: vi.fn().mockResolvedValue([]),

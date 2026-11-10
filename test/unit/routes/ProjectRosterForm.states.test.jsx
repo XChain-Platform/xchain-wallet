@@ -44,8 +44,6 @@ function messagingWith(overrides = {}) {
         requoteNativeFee: vi.fn().mockResolvedValue(null),
         reserve: vi.fn().mockResolvedValue({}),
         releaseReservation: vi.fn().mockResolvedValue({}),
-        putConfirmSession: vi.fn().mockResolvedValue({ id: 'cs' }),
-        clearConfirmSession: vi.fn().mockResolvedValue({}),
         createList: vi.fn().mockResolvedValue({ txid: LIST_TXID }),
         getActionByTxid: vi.fn().mockResolvedValue({}),
         linkAction: vi.fn().mockResolvedValue({ txid: LINK_TXID }),

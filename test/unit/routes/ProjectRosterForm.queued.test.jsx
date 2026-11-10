@@ -41,8 +41,6 @@ describe('ProjectRosterForm queued list', () => {
             requoteNativeFee: vi.fn().mockResolvedValue(null),
             reserve: vi.fn().mockResolvedValue({}),
             releaseReservation: vi.fn().mockResolvedValue({}),
-            putConfirmSession: vi.fn().mockResolvedValue({ id: 'cs' }),
-            clearConfirmSession: vi.fn().mockResolvedValue({}),
             createList: vi.fn().mockRejectedValue(transient),
         };
         render(

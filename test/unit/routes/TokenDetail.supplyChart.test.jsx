@@ -152,21 +152,21 @@ describe('TokenDetail supply chart', () => {
     });
 });
 
-describe('TokenDetail Trade action', () => {
+describe('TokenDetail Exchange action', () => {
     it('opens trading regardless of whether the current balance is zero', () => {
         const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
         expect(onBuy).toHaveBeenCalledTimes(1);
 
         cleanup();
         const zero = renderDetail({ history: [], quantity: '0' });
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
         expect(zero.onBuy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
     it('is absent when the shell has no trading surface', () => {
         renderDetail({ history: [], onBuy: null });
-        expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
     });
 });

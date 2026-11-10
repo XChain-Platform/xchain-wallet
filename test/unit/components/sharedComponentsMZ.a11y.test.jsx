@@ -31,7 +31,6 @@ import { RawPsbtViewer } from '../../../packages/core/src/shared/components/RawP
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
 import { RelativeTime } from '../../../packages/core/src/shared/components/RelativeTime.jsx';
-import { ResumeConfirmCard } from '../../../packages/core/src/shared/components/ResumeConfirmCard.jsx';
 import { RouteErrorBoundary } from '../../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
 import { SignCredentials } from '../../../packages/core/src/shared/components/SignCredentials.jsx';
 import { Sparkline } from '../../../packages/core/src/shared/components/Sparkline.jsx';
@@ -294,18 +293,6 @@ const RENDER_CASES = [
         { getMarketHistory: pending },
     )],
     ['RelativeTime', () => <RelativeTime timestamp={Date.now() - 60_000} />],
-    ['ResumeConfirmCard', () => (
-        <ResumeConfirmCard
-            sessions={[{
-                id: 'resume-1',
-                createdAt: Date.now(),
-                composed: { psbt: 'deadbeef', actionString: 'SEND|0|BTC|1|bc1qrecipient' },
-                dispatch: { software: 'sendToken', label: 'Send 1 BTC', base: {} },
-            }]}
-            onResume={noop}
-            onDiscard={noop}
-        />
-    )],
     ['SignCredentials', () => (
         <SignCredentials
             fromAddress={{ address: 'bc1qsource', source: 'hd' }}

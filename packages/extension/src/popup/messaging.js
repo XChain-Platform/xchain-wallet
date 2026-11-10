@@ -75,6 +75,9 @@ export function createWallet(opts) {
  * @param {string} opts.mnemonic
  * @param {string} [opts.name]
  * @param {string} [opts.bip39Passphrase]
+ * @param {string} [opts.wif]
+ * @param {string} [opts.chainId]
+ * @param {string} [opts.addressType]
  */
 export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
@@ -497,10 +500,9 @@ export function releaseEncoderInputs(opts) {
 }
 
 /**
- * Are the coins the held PSBT spends still unspent? The other
- * half of the Approve-time re-check, and the gate a RESUMED confirm (§5.4)
- * must pass before it may be approved at all - a stored session is by
- * construction the oldest PSBT in the wallet.
+ * Are the coins the held PSBT spends still unspent? This is the other half of
+ * the Approve-time re-check for a confirmation left open long enough for a
+ * competing transaction to spend one of its inputs.
  *
  * Answers `unknown` rather than `spent` for anything it could not observe, so
  * a dead explorer can never hard-block a good transaction (§4.2).
@@ -527,40 +529,6 @@ export function checkInputLiveness(opts) {
  */
 export function requoteNativeFee(opts) {
     return /** @type {any} */ (sendMessage('action.requoteNativeFee', opts));
-}
-
-/**
- * Persist the in-flight confirm so a popup CLOSE (which MV3 does
- * on every focus loss, including the one a hardware prompt causes) costs a tap
- * instead of re-entering the whole form. Stored in `chrome.storage.session`,
- * so it dies with the browser session. This is the only shell that HAS that
- * store, which is what `supported` in the answer reports.
- *
- * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
- * @returns {Promise<{ supported: boolean, stored: boolean }>}
- */
-export function putConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
-}
-
-/**
- * The stored confirms, for the Home resume card.
- *
- * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
- */
-export function listConfirmSessions() {
-    return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
-}
-
-/**
- * Drop a stored confirm. Called on EVERY terminal state, not as
- * tidy-up: a session outliving its confirm invites a re-approve of a
- * transaction that may already be signed and broadcast (§5.3.4).
- *
- * @param {{ id: string }} opts
- */
-export function clearConfirmSession(opts) {
-    return /** @type {any} */ (sendMessage('action.confirmSession.clear', opts));
 }
 
 /**
@@ -2053,6 +2021,11 @@ export function getSupplyHistory(req) {
     return /** @type {any} */ (sendMessage('token.supplyHistory', req));
 }
 
+/** @param {{ chainId: string, address: string, tick: string }} req */
+export function getMintedAmountForAddress(req) {
+    return /** @type {any} */ (sendMessage('token.mintedAmountForAddress', req));
+}
+
 /**
  * Substring search for tokens that exist on the platform. Drives
  * ReceivePicker's "On the platform" discovery section so the user
@@ -2403,6 +2376,9 @@ export function clearPriceAlert(req) {
 export function rearmPriceAlert(req) {
     return /** @type {any} */ (sendMessage('priceAlert.rearm', req));
 }
+export function listAlertInbox() { return /** @type {any} */ (sendMessage('alertInbox.list', {})); }
+export function markAlertRead(req) { return /** @type {any} */ (sendMessage('alertInbox.markRead', req)); }
+export function markAllAlertsRead() { return /** @type {any} */ (sendMessage('alertInbox.markAllRead', {})); }
 
 // §41.3.4 ORDER + §41.3.5 CANCEL signing lanes.
 export function orderAction(opts) {

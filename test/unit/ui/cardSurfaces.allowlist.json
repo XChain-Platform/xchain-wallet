@@ -45,10 +45,7 @@
         "packages/core/src/shared/routes/History.module.css | .detailAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/History.module.css | .moreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/History.module.css | .searchInput": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/routes/Home.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/components/PortfolioChart.module.css | .range": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/TokenPicker.module.css | .kindSegments": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/routes/Home.module.css | .actionsFull .quickAction, .quickActions .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/ImportWallet.module.css | .scannerBox": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
@@ -58,6 +55,7 @@
         "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/Send.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
+        "packages/core/src/shared/routes/SignMessageForm.module.css | .signatureBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/StakeDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .balanceHero": "The accent-filled balance hero banner at the top of the screen, not a card.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .fileLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
@@ -128,10 +126,6 @@
         "packages/core/src/shared/routes/PsbtSignForm.jsx": {
             "count": 2,
             "reason": "A raw transaction value box and the paste field."
-        },
-        "packages/core/src/shared/routes/SignMessageForm.jsx": {
-            "count": 2,
-            "reason": "Message and signature value boxes."
         },
         "packages/core/src/ui/AnimatedQrFrames.jsx": {
             "count": 1,

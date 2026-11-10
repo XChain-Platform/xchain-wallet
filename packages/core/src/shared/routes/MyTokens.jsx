@@ -13,7 +13,7 @@ import {
     Button,
     Screen,
     PageHeader,
-    Input,
+    Select,
     Skeleton,
     Icon,
     ListPage,
@@ -25,6 +25,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import styles from './MyTokens.module.css';
 
@@ -35,7 +36,7 @@ import styles from './MyTokens.module.css';
  * handed on drops off the list, and a token someone transferred in shows
  * up here even though this wallet never issued anything (D-82,
  * where every string on the page claimed issuance). Hosts the
- * Issue-new-token affordance, and each row drills into TokenDetail, which
+ * Create-token affordance, and each row drills into TokenDetail, which
  * carries the owner-only actions (Mint, Destroy, Lock supply, …).
  *
  * Data source: messaging.getOwnedTokens({ chainId, address }), wraps
@@ -46,7 +47,7 @@ import styles from './MyTokens.module.css';
  * @param {string} props.walletId
  * @param {string} [props.accountId]                       active BIP44 account; when set, only that account's addresses are queried
  * @param {() => void} props.onBack
- * @param {() => void} props.onIssue                       open the Issue-token form
+ * @param {() => void} props.onIssue                       open token creation
  * @param {(tick: string, chainId: string, row: { divisibility: number | null, locked: boolean }) => void} props.onSelectTick    drill into TokenDetail for a row
  */
 export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick }) {
@@ -64,10 +65,11 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     const [addressesReload, setAddressesReload] = useState(0);
     const [tokensReload, setTokensReload] = useState(0);
     const [query, setQuery] = useState('');
-    // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
-    // it also still holds supply of (row.youOwn is a balance check, not an
-    // ownership one, so the chip is labelled "Holding").
-    const [mode, setMode] = useState(/** @type {'all' | 'owned'} */ ('all'));
+    // "Holding" narrows ownership to tokens whose supply the wallet still
+    // holds; row.youOwn is a balance check, not an ownership check.
+    const [mode, setMode] = useState(
+        /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ ('all'),
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -162,7 +164,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         if (!tokens) return null;
         const q = query.trim().toLowerCase();
         return tokens.filter((row) => {
-            if (mode === 'owned' && !row.youOwn) return false;
+            if (mode === 'holding' && !row.youOwn) return false;
+            if (mode === 'locked' && row.locked !== true) return false;
+            if (mode === 'unlocked' && row.locked !== false) return false;
             if (!q) return true;
             return (
                 row.tick.toLowerCase().includes(q)
@@ -181,16 +185,22 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             onBack={onBack}
             backLabel="Back to home"
             title="My tokens"
+            trailing={(
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onIssue}
+                    aria-label="Create token"
+                    title="Create token"
+                />
+            )}
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {/* The page header holds only the title and Back, so Issue new token
-                sits in the content's actions row. An empty list offers Issue
-                token from its EmptyState instead, so the screen never shows
-                it twice. */}
-            <ListPage notices={loadError || tokensError ? (
+            <ListPage className={styles.page} notices={loadError || tokensError ? (
                 <>
                     {loadError ? (
                         <StatusMessage
@@ -215,44 +225,29 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         </StatusMessage>
                     ) : null}
                 </>
-            ) : null} actions={isEmpty ? null : (
-                <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onIssue}>
-                    Issue new token
-                </Button>
-            )} toolbar={(
-                <>
-                    <div className={styles.search}>
-                        <Input
-                            type="search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search tokens"
-                            aria-label="Search your tokens by ticker or description"
-                        />
-                    </div>
-                    <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
-                        {/* Raw buttons preserve the segmented radio control semantics. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={mode === 'all'}
-                            className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
-                            onClick={() => setMode('all')}
-                        >
-                            All
-                        </button>
-                        {/* Raw buttons preserve the segmented radio control semantics. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={mode === 'owned'}
-                            className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
-                            onClick={() => setMode('owned')}
-                        >
-                            Holding
-                        </button>
-                    </div>
-                </>
+            ) : null} toolbar={(
+                <ListToolbar
+                    query={query}
+                    onQueryChange={setQuery}
+                    searchLabel="Search your tokens by ticker or description"
+                >
+                    <Select
+                        value={mode}
+                        onChange={(event) => setMode(
+                            /** @type {'all' | 'holding' | 'locked' | 'unlocked'} */ (event.target.value),
+                        )}
+                        aria-label="Filter tokens by type"
+                    >
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="all">All</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="holding">Holding</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="locked">Locked</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="unlocked">Unlocked</option>
+                    </Select>
+                </ListToolbar>
             )}>
 
                 {isLoading ? (
@@ -265,7 +260,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <EmptyState
                         title="No owned tokens yet"
                         body="Tokens this wallet owns appear here."
-                        actionLabel="Issue token"
+                        actionLabel="Create token"
                         onAction={onIssue}
                     />
                 ) : null}
@@ -304,11 +299,14 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                                     localCoin={coinFromChainId(row.chainId)}
                                                 />
                                             </span>
-                                            {row.locked ? (
-                                                <span className={styles.lockedBadge} title="Supply locked">
-                                                    <Icon.LockIcon />
-                                                </span>
-                                            ) : null}
+                                            <span
+                                                className={styles.supplyStatus}
+                                                role="img"
+                                                aria-label={row.locked ? 'Supply locked' : 'Supply unlocked'}
+                                                title={row.locked ? 'Supply locked' : 'Supply unlocked'}
+                                            >
+                                                {row.locked ? <Icon.LockIcon /> : <Icon.UnlockIcon />}
+                                            </span>
                                         </span>
                                     )}
                                     subtitle={row.description ? (

@@ -107,8 +107,8 @@ async function pickFile(label) {
     const input = await screen.findByLabelText(label);
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
     fireEvent.change(input, { target: { files: [file] } });
-    // The FileReader is asynchronous; the button relabels once bytes land.
-    await screen.findByText('Choose a different file');
+    // The FileReader is asynchronous; the file summary appears once bytes land.
+    await screen.findByText(/note\.txt/);
 }
 
 const submitFormOf = (el) => fireEvent.submit(el.closest('form'));
@@ -149,9 +149,9 @@ const FORMS = [
         Form: SignMessageForm,
         props: {},
         read: async () => {
-            const select = await screen.findByLabelText('Address');
-            await waitFor(() => { if (!select.value) throw new Error('no default yet'); });
-            return byId(select.value);
+            const field = await screen.findByLabelText('Address');
+            await waitFor(() => { if (!field.value) throw new Error('no default yet'); });
+            return field.value;
         },
     },
     {
@@ -216,9 +216,9 @@ const FORMS = [
         props: {},
         walletMode: 'watcher',
         read: async () => {
-            await pickFile('Choose file to publish');
+            await pickFile(/^File \(up to [\d,]+ bytes\)$/);
             fireEvent.click(screen.getByRole('checkbox'));
-            submitFormOf(screen.getByLabelText('Choose file to publish'));
+            submitFormOf(screen.getByLabelText(/^File \(up to [\d,]+ bytes\)$/));
             return reviewAddress();
         },
     },

@@ -39,6 +39,10 @@ assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\
 assert.match(src, /label=(?:\{t\('settings\.developer\.learnMode'\)\}|"Learn Mode")/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
+assert.match(src, /label=(?:\{t\('settings\.developer\.advancedAction'\)\}|"Advanced action")/, 'Advanced action row present');
+assert.match(src, /onClick=\{onNavigateToAdvanced\}/, 'Advanced action row opens its route');
+assert.match(src, /label=(?:\{t\('settings\.developer\.actionQueue'\)\}|"Action queue")/, 'Action queue row present');
+assert.match(src, /onClick=\{onNavigateToActionQueue\}/, 'Action queue row opens its route');
 
 // No placeholder ToggleRow remains. The Raw PSBT inspector row was a permanently
 // disabled "Coming soon" promise; spec §48.4 describes a "View raw PSBT" button on
@@ -75,8 +79,10 @@ assert.match(hookSrc, /developerMode = Boolean\(settings\?\.developerMode\)/, 'r
 
 assert.match(settingsSrc, /import \{ DeveloperModeSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'developer'");
-const block = settingsSrc.slice(idx, idx + 600);
+const block = settingsSrc.slice(idx, idx + 900);
 assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*DeveloperModeSection/);
+assert.match(block, /onNavigateToAdvanced/);
+assert.match(block, /onNavigateToActionQueue/);
 
 console.log('settings-developer-mode smoke OK');

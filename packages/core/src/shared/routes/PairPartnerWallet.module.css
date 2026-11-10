@@ -1,0 +1,30 @@
+.overview {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.overview p {
+    margin: 0 0 var(--xc-space-2);
+}
+
+.overview p:last-child {
+    margin-bottom: 0;
+}
+
+.roleChoices {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-5);
+}
+
+.roleChoice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.roleChoice p {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}

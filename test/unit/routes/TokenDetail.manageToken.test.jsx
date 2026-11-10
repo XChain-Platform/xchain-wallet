@@ -99,16 +99,17 @@ describe('TokenDetail "Manage token" action', () => {
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
 
-        const manage = await screen.findByRole('button', { name: 'Manage' });
+        const more = await screen.findByRole('button', { name: 'More info' });
         const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
             .getAllByRole('button');
         expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
             'Send',
             'Receive',
-            'Trade',
-            'Manage',
+            'Exchange',
+            'More info',
         ]);
-        fireEvent.click(manage);
+        fireEvent.click(more);
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Manage' }));
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
@@ -117,13 +118,15 @@ describe('TokenDetail "Manage token" action', () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
     });
 
     it('does not render Manage for a native coin', () => {
         renderDetail({ creator: MINE, kind: 'native' });
 
-        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
     });
 
     it('refetches a balance when restored route state omits quantity', async () => {

@@ -37,6 +37,7 @@ describe('controller bind form double submit', () => {
                 }],
             }),
             getControllerActionClasses: async () => ({ actionClasses: ['transfer', 'all'] }),
+            getOwnedTokens: async () => [],
             getSignerStatus: async () => ({ status: 'unavailable' }),
             buildControllerBindParams,
             composeForConfirm: () => new Promise(() => {}),
@@ -51,9 +52,9 @@ describe('controller bind form double submit', () => {
             ),
         );
         const guard = await screen.findByLabelText('Guard contract');
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind address' }).disabled).toBe(false));
         fireEvent.change(guard, { target: { value: '5' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind' })).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind address' })).toBeTruthy());
         const form = guard.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);

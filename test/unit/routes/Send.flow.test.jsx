@@ -805,7 +805,7 @@ describe('Send flow with mocked messaging', () => {
         });
 
         expect(toField).toHaveValue(TO);
-        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25000000');
         fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
         expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Coffee shop');
 

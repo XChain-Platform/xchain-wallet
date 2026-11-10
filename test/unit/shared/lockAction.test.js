@@ -48,7 +48,6 @@ describe('lockImmediately', () => {
         const transientSetters = [
             'setTokenDetailRef(null)',
             'setSweepCtx(null)',
-            'setResumeConfirmSession(null)',
             'setPrivateKeyAddress(null)',
             'setAddressPrefsTarget(null)',
             'setResumeCoinpay(null)',

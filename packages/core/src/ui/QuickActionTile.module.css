@@ -1,0 +1,50 @@
+/* The one quick-action tile every screen shares: a square with rounded
+   corners, the icon centred and the label on its own line under it. The
+   corners come from the kit Button radius; the screen's own row decides the
+   track width, so the tile fills its cell. */
+.tile {
+    flex-direction: column;
+    aspect-ratio: 1 / 1;
+    white-space: normal;
+    text-align: center;
+}
+
+/* Two classes so the tile look outranks the kit Button variant whatever
+   order the bundler emits the stylesheets in. */
+.tile.tile {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-accent-primary);
+    --xc-button-font-size: var(--xc-text-xs);
+    --xc-icon-size: var(--xc-icon-sm);
+    width: 100%;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-space-1);
+    background: var(--xc-surface-raised);
+    border-color: var(--xc-accent-primary);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.tile.tile:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+/* A long label wraps inside the square instead of growing it. */
+.tile > span:last-child {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.icon {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+    color: var(--xc-accent-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}

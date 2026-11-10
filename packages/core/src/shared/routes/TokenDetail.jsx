@@ -20,7 +20,7 @@ import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
-import { RANGES as CHART_RANGES, priceHistoryForRange } from '../components/PortfolioChart.jsx';
+import { RANGES as CHART_RANGES, defaultRangeId, priceHistoryForRange } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
@@ -53,7 +53,9 @@ import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './TokenDetail.module.css';
+import { QuickActionTile } from '../../ui/QuickActionTile.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
@@ -224,6 +226,73 @@ function TokenDetailContent({
         chainId,
         issuerAddress: isNative ? null : (assetInfo?.creator || null),
     });
+
+    // The More info tile opens the secondary per-asset actions; an empty
+    // list drops the tile so it never opens an empty menu.
+    const moreItems = [
+        typeof onViewActivity === 'function'
+            ? { id: 'history', label: 'History', icon: <Icon.HistoryIcon />, onSelect: onViewActivity }
+            : null,
+        !isNative && typeof onManageToken === 'function' && isTokenOwner
+            ? { id: 'manage', label: 'Manage', icon: <Icon.GearIcon />, onSelect: onManageToken }
+            : null,
+    ].filter(Boolean);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const moreTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const moreMenuRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const moreMenuId = useId();
+    const sendReasonId = useId();
+    const tradeReasonId = useId();
+    const closeMore = useCallback((restoreFocus = false) => {
+        setMoreOpen(false);
+        if (restoreFocus) moreTriggerRef.current?.focus();
+    }, []);
+    // The system Back gesture closes the menu before it leaves the screen.
+    useBackHandler(moreOpen ? () => closeMore(true) : undefined);
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        moreMenuRef.current?.querySelector('[role="menuitem"]')?.focus();
+        const onPointerDown = (event) => {
+            if (moreWrapRef.current?.contains(event.target)) return;
+            closeMore();
+        };
+        const onKeyDown = (event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            closeMore(true);
+        };
+        window.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('mousedown', onPointerDown);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [closeMore, moreOpen]);
+    // Arrow keys, Home and End move between menu entries; Tab leaves and closes.
+    const handleMoreMenuKey = (event) => {
+        if (event.key === 'Tab') {
+            closeMore();
+            return;
+        }
+        const entries = Array.from(moreMenuRef.current?.querySelectorAll('[role="menuitem"]') || []);
+        if (entries.length === 0) return;
+        const index = entries.indexOf(document.activeElement);
+        let next = null;
+        if (event.key === 'ArrowDown') next = (index + 1) % entries.length;
+        if (event.key === 'ArrowUp') next = (index - 1 + entries.length) % entries.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = entries.length - 1;
+        if (next === null) return;
+        event.preventDefault();
+        entries[next].focus();
+    };
+    // An entry hands focus back to the tile before it acts, so an entry that
+    // opens nothing new leaves keyboard users where they started.
+    const runMoreItem = (onSelect) => {
+        closeMore(true);
+        onSelect();
+    };
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -497,7 +566,7 @@ function TokenDetailContent({
         ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
         : atomicQuantity <= 0n ? 'No balance to send.'
         : !networkActionsAvailable ? 'Send needs a network connection.' : null;
-    const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
+    const tradeDisabledReason = !networkActionsAvailable ? 'Exchange needs a network connection.' : null;
 
     if (tokenMissing) {
         return (
@@ -700,76 +769,95 @@ function TokenDetailContent({
                     <p className={styles.muted}>Test coins have no value.</p>
                 ) : null}
 
-                {/* Every shell shares this action order. Missing capabilities
+                {/* Every shell shares these four square tiles, as on Home:
+                    Send, Receive, Exchange and More info. History and
+                    Manage live in the More info menu. Missing capabilities
                     disappear, while temporary blocks stay visible with the
-                    reason that prevents the action. */}
-                <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' && walletModeReady ? (
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={onSend}
-                            disabled={Boolean(sendDisabledReason)}
-                            title={sendDisabledReason || undefined}
-                            aria-label="Send"
-                            aria-busy="false"
-                            icon={<span className={styles.quickActionIcon}><Icon.SendIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Send</span>
-                                {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
-                            </span>
-                        </Button>
+                    reason under the row. */}
+                <div className={styles.quickActionsGroup} role="group" aria-label="Quick actions">
+                    <div className={styles.quickActions}>
+                        {typeof onSend === 'function' && walletModeReady ? (
+                            <QuickActionTile
+                                onClick={onSend}
+                                disabled={Boolean(sendDisabledReason)}
+                                title={sendDisabledReason || undefined}
+                                aria-describedby={sendDisabledReason ? sendReasonId : undefined}
+                                aria-busy="false"
+                                icon={<Icon.SendIcon />}
+                            >
+                                Send
+                            </QuickActionTile>
+                        ) : null}
+                        {typeof onReceive === 'function' ? (
+                            <QuickActionTile
+                                onClick={onReceive}
+                                aria-busy="false"
+                                icon={<Icon.ReceiveIcon />}
+                            >
+                                Receive
+                            </QuickActionTile>
+                        ) : null}
+                        {typeof onBuy === 'function' ? (
+                            <QuickActionTile
+                                onClick={onBuy}
+                                disabled={Boolean(tradeDisabledReason)}
+                                title={tradeDisabledReason || undefined}
+                                aria-describedby={tradeDisabledReason ? tradeReasonId : undefined}
+                                aria-busy="false"
+                                icon={<Icon.MarketIcon />}
+                            >
+                                Exchange
+                            </QuickActionTile>
+                        ) : null}
+                        {moreItems.length > 0 ? (
+                            <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
+                                <QuickActionTile
+                                    ref={moreTriggerRef}
+                                    aria-haspopup="menu"
+                                    aria-expanded={moreOpen ? 'true' : 'false'}
+                                    aria-controls={moreOpen ? moreMenuId : undefined}
+                                    aria-busy="false"
+                                    onClick={() => setMoreOpen((open) => !open)}
+                                    onKeyDown={(event) => {
+                                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                                        event.preventDefault();
+                                        setMoreOpen(true);
+                                    }}
+                                    icon={<Icon.MoreIcon />}
+                                >
+                                    More info
+                                </QuickActionTile>
+                                {moreOpen ? (
+                                    <div
+                                        id={moreMenuId}
+                                        ref={moreMenuRef}
+                                        className={styles.quickActionMoreMenu}
+                                        role="menu"
+                                        aria-label="More info"
+                                        onKeyDown={handleMoreMenuKey}
+                                    >
+                                        {moreItems.map((item) => (
+                                            <Button
+                                                key={item.id}
+                                                variant="rowAction"
+                                                role="menuitem"
+                                                className={styles.quickActionMoreEntry}
+                                                onClick={() => runMoreItem(item.onSelect)}
+                                                icon={<span className={styles.quickActionMoreEntryIcon}>{item.icon}</span>}
+                                            >
+                                                {item.label}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+                    </div>
+                    {sendDisabledReason && typeof onSend === 'function' && walletModeReady ? (
+                        <p id={sendReasonId} className={styles.quickActionReason}>{sendDisabledReason}</p>
                     ) : null}
-                    {typeof onReceive === 'function' ? (
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={onReceive}
-                            aria-busy="false"
-                            icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
-                        >
-                            Receive
-                        </Button>
-                    ) : null}
-                    {typeof onBuy === 'function' ? (
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={onBuy}
-                            disabled={Boolean(tradeDisabledReason)}
-                            title={tradeDisabledReason || undefined}
-                            aria-label="Trade"
-                            aria-busy="false"
-                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Market view</span>
-                                {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
-                            </span>
-                        </Button>
-                    ) : null}
-                    {typeof onViewActivity === 'function' ? (
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={onViewActivity}
-                            aria-busy="false"
-                            icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
-                        >
-                            History
-                        </Button>
-                    ) : null}
-                    {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={onManageToken}
-                            aria-busy="false"
-                            icon={<span className={styles.quickActionIcon}><Icon.GearIcon /></span>}
-                        >
-                            Manage
-                        </Button>
+                    {tradeDisabledReason && typeof onBuy === 'function' ? (
+                        <p id={tradeReasonId} className={styles.quickActionReason}>{tradeDisabledReason}</p>
                     ) : null}
                 </div>
 
@@ -1052,12 +1140,12 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     // whether the price oracle is disabled, still loading, or simply
     // doesn't have data for this tick (e.g. testnet, regtest).
 
-    // Range picker: mirrors the PortfolioChart buttons on Home. Native
-    // Coins have a 7d CoinGecko sparkline (168 hourly points), so real
-    // wallets offer the 24h tail and the full 7d series. Demo wallets also
-    // offer longer synthesized ranges.
-    const availableRanges = isDemo ? CHART_RANGES : CHART_RANGES.filter((item) => item.realCapable);
-    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    // Range picker: mirrors the PortfolioChart buttons on Home, one list
+    // for every wallet. Native coins have a one-week CoinGecko sparkline
+    // (168 hourly points) that fills 24h and 1W; a real wallet shows the
+    // no-history message for a longer range, and demo wallets synthesize.
+    const availableRanges = CHART_RANGES;
+    const [rangeId, setRangeId] = useState(defaultRangeId(isDemo));
     const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
 
     let priceCell = '-';
@@ -1073,6 +1161,9 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
 
     if (isNative) {
+        // True when any range has a recorded series, so the tabs stay up even
+        // while the selected range has no history of its own.
+        let anyRecordedRange = false;
         if (nativePrice.disabled) {
             hint = 'Price data is disabled. Enable “Native coin price data” in Settings → Privacy to populate this section.';
         } else if (nativeLoading) {
@@ -1089,6 +1180,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
                 pctTone24h = display?.direction;
             }
             const recordedHistory = priceHistoryForRange(e, range);
+            anyRecordedRange = CHART_RANGES.some((item) => priceHistoryForRange(e, item) !== null);
             if (recordedHistory) {
                 sparkline = recordedHistory;
             } else if (priceFiat !== null && isDemo) {
@@ -1108,7 +1200,8 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         }
         // With no line to draw and no hint, the empty state stands below the
         // card at full width, never inside it.
-        const nativeEmpty = !nativeLoading && !sparkline && !hint;
+        const nativeEmpty = !nativeLoading && !sparkline && !hint && !anyRecordedRange;
+        const showRanges = Boolean(sparkline) || anyRecordedRange;
         return (
             <>
                 <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
@@ -1123,16 +1216,20 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
                         <div className={styles.marketHistorySlot}>
                             {nativeLoading ? (
                                 <Skeleton height={64} ariaLabel="Loading price history" />
-                            ) : sparkline ? (
+                            ) : showRanges ? (
                                 <>
                                     <div
                                         id={`${tabsId}-panel`}
                                         role="tabpanel"
                                         aria-labelledby={`${tabsId}-tab-${rangeId}`}
                                     >
-                                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
-                                        </div>
+                                        {sparkline ? (
+                                            <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                                <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                                            </div>
+                                        ) : (
+                                            <p className={styles.muted}>{NO_PRICE_HISTORY}</p>
+                                        )}
                                     </div>
                                     <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                                         {availableRanges.map((r) => (

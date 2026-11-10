@@ -44,10 +44,33 @@ export function useFeeFiat({ chainId, chainCoin, nativeTicker, settings } = {}) 
         const value = coinToFiat(amount, rate);
         if (value == null || !Number.isFinite(value) || value <= 0) return null;
         const code = String(rate?.fiatCurrency || fiatCurrency).toUpperCase();
-        return `≈ ${formatFiat(value, code)} ${code}`;
+        // The currency symbol carries the currency, so a fee reads "~$1.11"
+        // with no approx sign and no trailing ISO code.
+        return `~${formatFiat(value, code)}`;
     }, [fiatCurrency]);
 
+    // The Fees card's Total: native-coin parts at the coin's rate plus an
+    // XCHAIN part at XCHAIN's rate, summed before formatting. Any part
+    // without a price leaves the total unpriced rather than understated.
+    const formatFeeTotal = useCallback(({ native = [], protocol = null } = {}) => {
+        let total = 0;
+        for (const amount of native) {
+            const value = coinToFiat(amount, nativeRate);
+            if (value == null || !Number.isFinite(value)) return null;
+            total += value;
+        }
+        if (protocol !== null && protocol !== undefined) {
+            const value = coinToFiat(protocol, protocolRate);
+            if (value == null || !Number.isFinite(value)) return null;
+            total += value;
+        }
+        if (!(total > 0)) return null;
+        const code = String(nativeRate?.fiatCurrency || fiatCurrency).toUpperCase();
+        return `~${formatFiat(total, code)}`;
+    }, [fiatCurrency, nativeRate, protocolRate]);
+
     return {
+        formatFeeTotal,
         formatNativeFee: useCallback(
             (amount) => formatAtRate(amount, nativeRate),
             [formatAtRate, nativeRate],

@@ -539,7 +539,8 @@ export async function revealRecoveryPhrase(page) {
     await expect(list).toHaveCount(0);
     await reveal.click();
     await expect(list).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toBeVisible();
+    await expect(reveal).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toHaveCount(0);
     return list;
 }
 

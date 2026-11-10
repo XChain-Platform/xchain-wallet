@@ -26,6 +26,19 @@ function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [CHAIN]: [{
+                address: SOURCE.address,
+                balances: {
+                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [
+                        { tick: 'DIVISIBLE', quantity: '10', divisibility: 8 },
+                        { tick: 'PENDING', quantity: '10', divisibility: 0 },
+                        { tick: 'PAY', quantity: '10', divisibility: 0 },
+                    ],
+                },
+            }],
+        }),
         getTokenInfo: vi.fn().mockResolvedValue({ tick: initialTick, creator: SOURCE.address, locks: {} }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         ...overrides,
@@ -51,6 +64,11 @@ function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
     return messaging;
 }
 
+async function pickCallbackToken(tick) {
+    fireEvent.click(await screen.findByRole('button', { name: /^Callback token:/ }));
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^Select ${tick} on Bitcoin`) }));
+}
+
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
@@ -67,7 +85,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Exact ticker update' },
         });
-        const preview = screen.getByRole('button', { name: 'Save' });
+        const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
@@ -84,7 +102,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: '<b>markup</b>'.repeat(700) },
         });
-        const preview = screen.getByRole('button', { name: 'Save' });
+        const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -173,7 +191,7 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'The description for TOKEN is permanently locked and cannot be updated.',
         );
-        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -184,7 +202,7 @@ describe('TokenAdminForm review interaction safety', () => {
             target: { value: 'safe\u202eunsafe' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Description cannot contain text-direction control characters.');
@@ -229,6 +247,38 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
     });
 
+    it('keeps the irreversible warning in confirmation instead of above the lock flags', async () => {
+        mountAdmin('lock');
+
+        expect(await screen.findByText(/^No one can ever run a callback on this token again/))
+            .toHaveTextContent('No one can ever run a callback on this token again, and its block, token and amount never change');
+        expect(screen.queryByText('Locking is permanent.')).toBeNull();
+
+        fireEvent.click(screen.getByLabelText('Callback'));
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+
+        const confirmation = await screen.findByLabelText('Type LOCK to confirm');
+        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
+        fireEvent.change(confirmation, { target: { value: 'LOCK' } });
+        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeEnabled();
+    });
+
+    it('picks the callback token from held tokens on the form network', async () => {
+        mountAdmin('callback-settings', {
+            tokenHolderSummary: vi.fn().mockResolvedValue({ isDistributed: false }),
+        });
+
+        const field = await screen.findByRole('button', { name: 'Callback token: Select a token' });
+        fireEvent.click(field);
+        expect(await screen.findByRole('heading', { name: 'Select callback token' })).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: /^Select PAY on Bitcoin/ }));
+
+        expect(await screen.findByRole('button', { name: 'Callback token: PAY on Bitcoin' }))
+            .toBeInTheDocument();
+    });
+
     it('starts only one watcher build when review is submitted twice', async () => {
         let resolveBuild;
         const buildActionPsbtRequest = vi.fn(() => new Promise((resolve) => {
@@ -239,7 +289,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Updated once' },
         });
-        const preview = screen.getByRole('button', { name: 'Save' });
+        const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: 'Review description update' });
@@ -273,19 +323,19 @@ describe('TokenAdminForm review interaction safety', () => {
             tokenHolderSummary: vi.fn().mockResolvedValue({ isDistributed: false }),
         });
 
-        const callbackToken = await screen.findByLabelText('Callback token');
+        await screen.findByRole('button', { name: /^Callback token:/ });
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith({
             chainId: CHAIN,
             tick: 'TOKEN',
             demo: false,
         }));
-        fireEvent.change(callbackToken, { target: { value: 'DIVISIBLE' } });
+        await pickCallbackToken('DIVISIBLE');
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith({
             chainId: CHAIN,
             tick: 'DIVISIBLE',
             demo: false,
         }));
-        fireEvent.change(callbackToken, { target: { value: 'PENDING' } });
+        await pickCallbackToken('PENDING');
         fireEvent.change(screen.getByLabelText('Payout per unit'), {
             target: { value: '0.5' },
         });
@@ -309,9 +359,7 @@ describe('TokenAdminForm review interaction safety', () => {
             tokenHolderSummary: vi.fn().mockResolvedValue({ isDistributed: false }),
             buildActionPsbtRequest,
         });
-        fireEvent.change(await screen.findByLabelText('Callback token'), {
-            target: { value: 'PAY' },
-        });
+        await pickCallbackToken('PAY');
         fireEvent.change(screen.getByLabelText('Payout per unit'), {
             target: { value: '1e2' },
         });
@@ -333,7 +381,7 @@ describe('Callback settings reads the holders again at Review', () => {
     // fee is spent. The holder read that disables the fields can fail, or
     // predate the first transfer out, so Review reads it again.
     async function fillCallback(beforeReview = () => {}) {
-        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: 'PAY' } });
+        await pickCallbackToken('PAY');
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '150' } });
         const preview = screen.getByRole('button', { name: 'Preview' });

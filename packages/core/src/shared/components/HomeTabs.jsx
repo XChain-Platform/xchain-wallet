@@ -20,9 +20,7 @@ import {
     coinFromChainId,
     fiatValue,
     isAssetImageSourceAllowed,
-    tickerColor,
 } from './BalanceList.jsx';
-import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx';
 import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
@@ -39,6 +37,7 @@ import {
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { recentActivityEntries } from '../utils/historyRow.js';
+import { compareMergedEntries } from '../utils/pendingHistory.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -53,8 +52,7 @@ import {
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
-import { formatRelativeTime } from '../utils/dateTime.js';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatDecimalAmount } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 import { t } from '../../i18n/index.js';
@@ -693,6 +691,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             balances={balances}
                             networkFilter={networkFilter}
                             walletId={walletId}
+                            onHistory={onHistory}
                             onSelectEntry={onSelectEntry}
                             allowRemoteImages={allowRemoteImages}
                         />
@@ -881,27 +880,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-const ACTION_ICON = {
-    send:       (k) => <Icon.SendIcon key={k} />,
-    receive:    (k) => <Icon.ReceiveIcon key={k} />,
-    issue:      (k) => <Icon.PlusIcon key={k} />,
-    mint:       (k) => <Icon.TokenIcon key={k} />,
-    destroy:    (k) => <Icon.TrashIcon key={k} />,
-    sweep:      (k) => <Icon.DownloadIcon key={k} />,
-    dispenser:  (k) => <Icon.MarketIcon key={k} />,
-    dispense:   (k) => <Icon.DownloadIcon key={k} />,
-    order:      (k) => <Icon.MarketIcon key={k} />,
-    swap:       (k) => <Icon.SwapIcon key={k} />,
-    dividend:   (k) => <Icon.DollarIcon key={k} />,
-    broadcast:  (k) => <Icon.BroadcastIcon key={k} />,
-    message:    (k) => <Icon.MessageIcon key={k} />,
-    link:       (k) => <Icon.LinkIcon key={k} />,
-    crosschain: (k) => <Icon.LinkIcon key={k} />,
-    stake:      (k) => <Icon.StakeIcon key={k} />,
-    contract:   (k) => <Icon.ContractIcon key={k} />,
-    other:      (k) => <Icon.HistoryIcon key={k} />,
-};
-
 const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses, assetLookup, chainTip, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
@@ -916,7 +894,12 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
+    // 'other' is a filter bucket, not a name: a row in it (a contract call,
+    // a stake, any verb the buckets do not list) reads its own action, as
+    // History's rows do.
+    const label = actionDisplayLabel(kind === 'other' ? entry.action : kind)
+        || actionDisplayLabel(entry.action)
+        || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
     // One formatter with History: a SEND carries whole units, every other
     // action base units.
@@ -939,6 +922,7 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
                 amount={displayPrimary}
                 status={status}
                 timestamp={entry.timestamp}
+                block={entry.blockIndex ? formatDecimalAmount(entry.blockIndex) : null}
                 onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry({
                     ...entry,
                     detailContext: {
@@ -955,7 +939,7 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
-function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry, allowRemoteImages }) {
+function DemoActivityList({ chainIds, balances, networkFilter, walletId, onHistory, onSelectEntry, allowRemoteImages }) {
     void walletId;
     const walletAddresses = useMemo(() => new Set(['demo-address']), []);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
@@ -983,7 +967,9 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
                 });
             }
         }
-        return all.sort((a, b) => b.timestamp - a.timestamp);
+        // The demo feed orders like a real wallet's: pending first, then by
+        // confirm time across chains.
+        return all.sort(compareMergedEntries);
     }, [chainIds, networkFilter]);
 
     // Synthetic chain tip per chainId: max blockIndex across visible entries
@@ -1006,24 +992,44 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
         return <EmptyState title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
     }
     return (
-        <ul className={`${styles.demoList} ${styles.activityList}`}>
-            {entries.map((e) => (
-                <ActivityEntryRow
-                    key={e.key}
-                    entry={e}
-                    walletAddresses={walletAddresses}
-                    assetLookup={assetLookup}
-                    chainTip={chainTips[e.chainId] || null}
-                    allowRemoteImages={allowRemoteImages}
-                    onSelectEntry={onSelectEntry}
-                />
-            ))}
-        </ul>
+        <>
+            <ul className={`${styles.demoList} ${styles.activityList}`}>
+                {entries.map((e) => (
+                    <ActivityEntryRow
+                        key={e.key}
+                        entry={e}
+                        walletAddresses={walletAddresses}
+                        assetLookup={assetLookup}
+                        chainTip={chainTips[e.chainId] || null}
+                        allowRemoteImages={allowRemoteImages}
+                        onSelectEntry={onSelectEntry}
+                    />
+                ))}
+            </ul>
+            <SeeAllActivityButton onHistory={onHistory} />
+        </>
+    );
+}
+
+// The Activity tab ends with one full-width primary button that opens the
+// complete History feed; it renders only when the host can open History.
+function SeeAllActivityButton({ onHistory }) {
+    if (typeof onHistory !== 'function') return null;
+    return (
+        <Button
+            variant="primary"
+            block
+            className={styles.seeAllActivity}
+            icon={<Icon.HistoryIcon />}
+            onClick={onHistory}
+        >
+            {t('home.tabs.openHistory')}
+        </Button>
     );
 }
 
 // The Activity tab of a real wallet: its newest history rows in History's row
-// layout, with View all opening the complete feed. The host loads the rows
+// layout, ending with See all activity, which opens the complete feed. The host loads the rows
 // when the tab opens, so Home's first paint reads no history.
 function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, onHistory, onSelectEntry, allowRemoteImages }) {
     useEffect(() => {
@@ -1064,15 +1070,6 @@ function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, 
     }
     return (
         <>
-            <p className={styles.tabNote}>
-                {t('home.tabs.recentActivityNote')}
-                {canOpenHistory ? (
-                    <>
-                        {' '}
-                        <Button variant="link" onClick={onHistory}>{t('home.tabs.openHistory')}</Button>
-                    </>
-                ) : null}
-            </p>
             <ul className={`${styles.demoList} ${styles.activityList}`} aria-label={t('home.tabs.recentActivity')}>
                 {rows.map((e) => (
                     <ActivityEntryRow
@@ -1086,16 +1083,11 @@ function RecentActivityList({ entries, failed, balances, networkFilter, onOpen, 
                     />
                 ))}
             </ul>
+            <SeeAllActivityButton onHistory={onHistory} />
         </>
     );
 }
 
-// DeFi action list: three-line history-row style. Left side is always
-// the XCHAIN product mark (the only thing stakeable on the protocol)
-// with the chain icon overlaid in the bottom-right; right side surfaces
-// the action label + status on line one, the primary subject (amount /
-// token / lock) on line two, and block / confirms / relative time on
-// line three.
 // Convert a synthetic DeFi position into a History-shaped entry so the
 // shared ActionDetail page can render it. action_index / tx_hash are
 // fabricated (the position doesn't have a real on-chain index) but are
@@ -1132,131 +1124,43 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
         return <EmptyState title={t('home.tabs.noDefiPositions')} body={t('home.tabs.noDemoPositionsOnThe')} />;
     }
     return (
-        <ul className={styles.demoList}>
+        <ul className={`${styles.demoList} ${styles.activityList}`}>
             {positions.map((p, idx) => {
-                const chainIconUrl = branding.chainIconSmallUrl(p.chainId);
-                const statusLabel = p.status === 'confirmed' ? 'Confirmed'
-                    : p.status === 'failed' ? 'Failed'
-                    : 'Pending';
-                const statusClass = p.status === 'confirmed' ? styles.statusValid
-                    : p.status === 'failed' ? styles.statusInvalid
-                    : styles.statusPending;
-                // Icon resolution:
-                //   STAKE   → XCHAIN product mark (square) + chain overlay,
-                //             because the only stakeable token on the
-                //             protocol is XCHAIN and stake is BTC-only.
-                //   native  → circular chain icon (no overlay), when the
-                //             row's tick matches the chain's native ticker
-                //             (e.g. a contract holding BTC on Bitcoin).
-                //   token   → square token image / tinted-letter, with a
-                //             chain icon overlay so the user can tell
-                //             which chain it lives on.
+                // A stake is always XCHAIN, the protocol's only stakeable
+                // token, drawn with its product mark; a row whose tick is the
+                // chain's native ticker draws the chain mark; any other
+                // token draws its artwork with the chain overlay.
                 const isStake = p.action === 'STAKE';
                 const nativeTicker = (p.chainId.split('-')[0] || '').toUpperCase()
                     .replace('BITCOIN', 'BTC')
                     .replace('LITECOIN', 'LTC')
                     .replace('DOGECOIN', 'DOGE');
-                const tick = p.tick || '';
-                const isNativeAsset = !isStake && tick && tick === nativeTicker;
+                const tick = isStake ? 'XCHAIN' : (p.tick || '');
+                const isNativeAsset = !isStake && Boolean(tick) && tick === nativeTicker;
                 const tokenInfo = (!isStake && tick && !isNativeAsset)
                     ? assetLookup.get(`${p.chainId}|${tick}`)
                     : null;
-                const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
-                    ? tokenInfo.imageUrl
-                    : null;
+                const imageUrl = isStake
+                    ? branding.faviconUrl()
+                    : isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
+                        ? tokenInfo.imageUrl
+                        : null;
                 return (
                     <li key={p.id}>
-                        <button
-                            type="button"
-                            className={styles.demoRowButton}
-                            onClick={() => {
-                                if (typeof onSelectEntry === 'function') {
-                                    onSelectEntry(defiPositionToEntry(p, idx));
-                                }
-                            }}
-                        >
-                            <div className={balanceStyles.iconWrap}>
-                                {!isStake ? (
-                                    <span
-                                        className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action) }}
-                                        aria-hidden="true"
-                                    >
-                                        {(tick || p.action).slice(0, 1).toUpperCase()}
-                                    </span>
-                                ) : null}
-                                {isStake ? (
-                                    <img
-                                        src={branding.faviconUrl()}
-                                        alt=""
-                                    aria-hidden="true"
-                                    className={styles.tokenIconSquare}
-                                    loading="lazy"
-                                    decoding="async"
-                                    />
-                                ) : isNativeAsset ? (
-                                    chainIconUrl ? (
-                                        <img
-                                            src={chainIconUrl}
-                                            alt=""
-                                            aria-hidden="true"
-                                            className={balanceStyles.iconImg}
-                                            loading="lazy"
-                                            decoding="async"
-                                            style={{ position: 'absolute', inset: 0 }}
-                                        />
-                                    ) : null
-                                ) : tokenImageUrl ? (
-                                    <img
-                                        src={tokenImageUrl}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={styles.tokenIconSquare}
-                                        loading="lazy"
-                                        decoding="async"
-                                        style={{ position: 'absolute', inset: 0 }}
-                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                ) : null}
-                                {!isNativeAsset && chainIconUrl ? (
-                                    <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
-                                ) : null}
-                            </div>
-                            <div className={styles.demoRowBody}>
-                                <div className={styles.demoRowMain}>
-                                    {(() => {
-                                        const iconFn = ACTION_ICON[String(p.action || '').toLowerCase()] || ACTION_ICON.other;
-                                        return (
-                                            <span className={styles.activityActionIcon} aria-hidden="true">
-                                                {iconFn('icon')}
-                                            </span>
-                                        );
-                                    })()}
-                                    <span className={styles.demoActionTag}>{actionDisplayLabel(p.action)}</span>
-                                    <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
-                                </div>
-                                <div className={styles.demoRowPrimary}>
-                                    {balancesHidden ? '•••••' : p.primary}
-                                </div>
-                                <div className={styles.demoRowMeta}>
-                                    {p.blockIndex ? (
-                                        <>
-                                            <span>{t('home.tabs.blockNumber', { block: Number(p.blockIndex) })}</span>
-                                            <span className={styles.confirmationsPill}>
-                                                {p.confirms} {t('home.tabs.confirms')}
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <span className={styles.confirmationsPill}>{t('home.tabs.unconfirmed')}</span>
-                                    )}
-                                    {p.timestamp ? (
-                                        <span className={styles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timestamp)}
-                                        </span>
-                                    ) : null}
-                                </div>
-                            </div>
-                        </button>
+                        <SharedActivityRow
+                            chainId={p.chainId}
+                            tick={tick || p.action}
+                            imageUrl={imageUrl}
+                            isNative={isNativeAsset}
+                            label={actionDisplayLabel(p.action)}
+                            amount={balancesHidden ? '•••••' : p.primary}
+                            status={p.status}
+                            timestamp={p.timestamp}
+                            onClick={typeof onSelectEntry === 'function'
+                                ? () => onSelectEntry(defiPositionToEntry(p, idx))
+                                : undefined}
+                            data-activity-row
+                        />
                     </li>
                 );
             })}

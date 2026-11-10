@@ -37,6 +37,7 @@ const dispensersCss = readCss('packages/core/src/shared/routes/DispensersList.mo
 const stakingCss = readCss('packages/core/src/shared/routes/StakingList.module.css');
 const pageHeaderCss = readCss('packages/core/src/ui/PageHeader.module.css');
 const homeCss = readCss('packages/core/src/shared/routes/Home.module.css');
+const tileCss = readCss('packages/core/src/ui/QuickActionTile.module.css');
 const sendCss = readCss('packages/core/src/shared/routes/Send.module.css');
 const receiveCss = readCss('packages/core/src/shared/routes/Receive.module.css');
 const settingsCss = readCss('packages/core/src/shared/routes/Settings.module.css');
@@ -56,9 +57,8 @@ const SHARED_TEXT_RULES = [
 
 const SCREEN_TEXT_RULES = {
     Home: [
-        [homeCss, '.quickAction'],
-        [homeCss, '.quickAction > span:last-child'],
-        [homeCss, '.quickActionMoreItem'],
+        [tileCss, '.tile'],
+        [tileCss, '.tile > span:last-child'],
         [homeCss, '.quickActionsReason'],
         [homeCss, '.pendingAirdropTitle'],
         [homeCss, '.pendingAirdropHint'],
@@ -84,8 +84,7 @@ const SCREEN_TEXT_RULES = {
 };
 
 const BUTTON_TEXT_RULES = [
-    [homeCss, '.quickAction'],
-    [homeCss, '.quickActionMoreItem'],
+    [tileCss, '.tile'],
     [sendCss, '.detailsToggle'],
 ];
 

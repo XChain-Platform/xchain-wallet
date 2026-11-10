@@ -52,22 +52,20 @@ function mount(addresses) {
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('Sign message address list', () => {
-    it('leaves hardware addresses out of the Address select', async () => {
+    it('defaults to a software address when a hardware address is listed first', async () => {
         mount([HW, SOFT]);
-        const select = await screen.findByLabelText('Address');
-        const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
-        expect(values).toContain(SOFT.id);
-        expect(values).not.toContain(HW.id);
-        // The default address is chosen in an effect after the options render.
-        await waitFor(() => expect(select).toHaveValue(SOFT.id));
+        const field = await screen.findByLabelText('Address');
+        await waitFor(() => expect(field).toHaveValue(SOFT.address));
+        expect(field).not.toHaveValue(HW.address);
     });
 
-    it('keeps the complete selected address in the select title', async () => {
+    it('keeps the complete selected address in the read-only field title', async () => {
         mount([{ ...SOFT, label: 'BTC Address #1' }]);
-        const select = await screen.findByLabelText('Address');
+        const field = await screen.findByLabelText('Address');
 
-        await waitFor(() => expect(select).toHaveValue(SOFT.id));
-        expect(select).toHaveAttribute('title', `BTC Address #1: ${SOFT.address}`);
+        await waitFor(() => expect(field).toHaveValue(SOFT.address));
+        expect(field).toHaveAttribute('title', SOFT.address);
+        expect(field).toHaveAttribute('readonly');
     });
 
     it("says hardware addresses can't sign when they are the only ones", async () => {

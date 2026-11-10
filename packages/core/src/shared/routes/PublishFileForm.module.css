@@ -1,0 +1,29 @@
+.gatedTokenField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    margin-top: var(--xc-space-3);
+}
+
+.tokenPickerCard {
+    composes: card from '../../ui/Card.module.css';
+    padding: 0;
+    overflow: hidden;
+}
+
+.reviewPreview,
+.composePreview {
+    display: block;
+    max-width: 160px;
+    max-height: 160px;
+    object-fit: contain;
+    border-radius: var(--xc-radius-md);
+}
+
+.reviewPreview {
+    margin: 0 auto var(--xc-space-3);
+}
+
+.composePreview {
+    margin: 0 auto var(--xc-space-3);
+}

@@ -24,6 +24,9 @@ const SHELLS = {
 
 // Every entry stays on one line so an exception explains itself in review.
 const UNREACHABLE_ROUTE_BASELINE = Object.freeze({
+    'desktop:multisig-sign': 'Opened by a multisig spending session instead of global navigation.',
+    'extension:multisig-sign': 'Opened by a multisig spending session instead of global navigation.',
+    'web:multisig-sign': 'Opened by a multisig spending session instead of global navigation.',
 });
 
 function registeredRoutes(sources) {

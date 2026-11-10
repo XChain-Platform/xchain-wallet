@@ -29,6 +29,7 @@ import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSuppo
 import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
 import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
+import { mintedAmountForAddress } from '@xchain-wallet/core/flows/mintedAmount.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
 import {
@@ -41,6 +42,7 @@ import {
     installShellErrorCapture,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { getDefaultAlertInbox } from '@xchain-wallet/core/shared/alertInbox.js';
 import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import { assertBroadcastSignaturesVerify } from '@xchain-wallet/core/signers/verifyTxSignatures.js';
 import { MessageHost } from './MessageHost.js';
@@ -71,10 +73,10 @@ import { createLockedSendOutcomeStore, finishPatchFor } from './lockedSendOutcom
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
-    createConfirmActionSessionStorage,
+    createActionSafetySessionStorage,
     ownSpendStoreFrom,
     reservationStoreFrom,
-} from './confirmActionSessionStorage.js';
+} from './actionSafetySessionStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 // Shared with the PRE-HOST fresh-install restore lane, which never reaches this
 // host: one resolver so the two lanes cannot drift on what they will fetch.
@@ -1206,56 +1208,9 @@ export function createBackgroundHost(deps) {
         }
     }
 
-    // LIST and AIRDROP confirms can be resumed or left open in a second
-    // window, so they take the same network check before signing.
+    // LIST and AIRDROP can stay open while their network state changes, so
+    // they take the same network check before signing.
     const REVIEW_ACTION_AGAIN = 'Go back and review the action again.';
-
-    // A stored confirm whose PSBT a send has just broadcast is spent. The popup
-    // clears its own session after the send returns, but a popup that closes
-    // between Approve and that return never does, and Home would then offer to
-    // finish a payment that has already left the wallet. The host drops it at
-    // the moment of the broadcast, so the clear does not depend on the popup
-    // staying open.
-    async function dropConfirmSessionsForPsbt(psbtHex) {
-        if (!confirmSessionStorage || typeof psbtHex !== 'string' || psbtHex.length === 0) return;
-        try {
-            const stored = await confirmSessionStorage.loadSessions();
-            for (const [id, session] of Object.entries(stored || {})) {
-                if (session?.composed?.psbt === psbtHex) await confirmSessionStorage.removeSession(id);
-            }
-        } catch { /* the popup's own clear still runs when it is open */ }
-    }
-
-    // PSBTs of stored confirms that a surface approved and the host is signing
-    // or broadcasting now. A surface that closes and reopens in that window
-    // would otherwise read the stored confirm and offer the payment as not sent.
-    const confirmsInFlight = new Set();
-
-    // LIST and AIRDROP are resumable as well (RESUMABLE_DISPATCH_METHODS), so
-    // a broadcast of either drops its stored confirm the same way a send does.
-    // A queued broadcast (the signed bytes sit in the broadcast queue) and a
-    // permanent refusal (re-signing is forbidden) end the confirm too. Only an
-    // unsaved transient failure keeps it, since it is then the one way back.
-    async function finishStoredConfirm(psbtHex, run) {
-        const tracked = typeof psbtHex === 'string' && psbtHex.length > 0 && !confirmsInFlight.has(psbtHex);
-        if (tracked) confirmsInFlight.add(psbtHex);
-        try {
-            let result;
-            try {
-                result = await run();
-            } catch (err) {
-                if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
-                    || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
-                    await dropConfirmSessionsForPsbt(psbtHex);
-                }
-                throw err;
-            }
-            await dropConfirmSessionsForPsbt(psbtHex);
-            return result;
-        } finally {
-            if (tracked) confirmsInFlight.delete(psbtHex);
-        }
-    }
 
     async function sendWithHold(req, flowDeps) {
         await assertActiveSendNetwork({ ...req, ...flowDeps });
@@ -1305,10 +1260,7 @@ export function createBackgroundHost(deps) {
             if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
             await assertActiveSendNetwork(opts);
         };
-        return finishStoredConfirm(
-            opts.prebuiltPsbt?.psbtHex,
-            () => sendToken({ ...opts, beforeBroadcast }),
-        );
+        return sendToken({ ...opts, beforeBroadcast });
     }
 
     // Every action the background signs claims the coins its reviewed PSBT
@@ -1386,7 +1338,7 @@ export function createBackgroundHost(deps) {
     // (both windows' preflights net each other's approved-but-unbroadcast
     // amounts).
     //
-    // §5.4: in-memory alone is not enough on MV3. Chrome may kill this worker
+    // In-memory alone is not enough on MV3. Chrome may kill this worker
     // after ~30s of perceived idle - well inside the window where a user is
     // reading warnings, typing a password or waking a hardware device - and a
     // kill would silently drop every reservation, so a second window would
@@ -1398,13 +1350,13 @@ export function createBackgroundHost(deps) {
     const errorBuffer = createErrorRingBuffer();
     installShellErrorCapture(globalThis, errorBuffer);
 
-    const confirmSessionStorage = createConfirmActionSessionStorage();
+    const actionSafetyStorage = createActionSafetySessionStorage();
     const reservationLedger = createReservationLedger(
-        confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
+        actionSafetyStorage ? { store: reservationStoreFrom(actionSafetyStorage) } : undefined,
     );
     // Different sends over the same coins stay exclusive too (see ownSpends.js).
     const ownSpends = createOwnSpendLedger(
-        confirmSessionStorage ? { store: ownSpendStoreFrom(confirmSessionStorage) } : undefined,
+        actionSafetyStorage ? { store: ownSpendStoreFrom(actionSafetyStorage) } : undefined,
     );
 
     // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
@@ -3342,75 +3294,6 @@ export function createBackgroundHost(deps) {
         return decoder.withContractCallDescriptions(withListDescriptions, parsed);
     });
 
-    // Confirm-session persistence.
-    //
-    // The store (confirmActionSessionStorage) shipped with slice 1 and its
-    // session half had NO production caller for months - only the reservation
-    // half was wired - which reads exactly like a shipped feature and is why
-    // this item existed. These routes are that caller.
-    //
-    // What this protects is a popup CLOSE, not a worker eviction: a measured
-    // CDP eviction leaves the modal on screen and Approve still signs and
-    // broadcasts. MV3 popups close on every focus loss, including the loss a
-    // hardware prompt causes, and what dies with them is an UNSIGNED composed
-    // PSBT. Nothing money-critical is at stake (signed-but-unbroadcast txs
-    // already persist in chrome.storage.local, and reservations in
-    // storage.session) - this is a re-entry the user would otherwise redo.
-    //
-    // The dispatch descriptor is stored as a messaging METHOD NAME, not a
-    // closure, because it has to cross the boundary; the name is allow-listed
-    // on resume for the same reason `action.vote.composeForConfirm` allow-lists
-    // its builder name.
-    // `supported` says whether this shell HAS the store, which is not the same
-    // answer as "nothing is stored". Without it a caller reads the same empty
-    // list from an extension with no pending confirms and from a desktop or web
-    // shell that can never hold one (`createConfirmActionSessionStorage`
-    // returns null off-extension), so the resume feature reads as present and
-    // inert. Additive: a caller that ignores the field behaves as before.
-    host.register('action.confirmSession.put', async (req) => {
-        if (!confirmSessionStorage) return { supported: false, stored: false };
-        const id = req?.id;
-        if (typeof id !== 'string' || !id) {
-            throw new Error('action.confirmSession.put: id is required');
-        }
-        await confirmSessionStorage.putSession(id, {
-            id,
-            request: req.request || null,
-            composed: req.composed || null,
-            report: req.report || null,
-            dispatch: req.dispatch || null,
-            createdAt: req.createdAt || null,
-        });
-        return { supported: true, stored: true };
-    });
-
-    host.register('action.confirmSession.list', async () => {
-        if (!confirmSessionStorage) return { supported: false, sessions: [] };
-        const all = await confirmSessionStorage.loadSessions();
-        // A confirm whose approval is still signing or broadcasting is not a
-        // payment to finish; it leaves the list once it settles or comes back
-        // when it fails in the one way that keeps it.
-        const sessions = Object.values(all || {})
-            .filter((session) => !confirmsInFlight.has(session?.composed?.psbt));
-        return { supported: true, sessions };
-    });
-
-    // Called on EVERY terminal state (approved, rejected, errored). A session
-    // that outlives its confirm is not merely litter: resuming it would invite
-    // the user to re-approve a transaction that may already be signed and
-    // broadcast, which is the double-broadcast trap §5.3.4 forbids. The resume
-    // path additionally runs the §4.6 input-liveness re-check, so a stale one
-    // interrupts rather than signs - but clearing eagerly is the first line.
-    host.register('action.confirmSession.clear', async (req) => {
-        if (!confirmSessionStorage) return { supported: false, cleared: false };
-        const id = req?.id;
-        if (typeof id !== 'string' || !id) {
-            throw new Error('action.confirmSession.clear: id is required');
-        }
-        await confirmSessionStorage.removeSession(id);
-        return { supported: true, cleared: true };
-    });
-
     // Re-price a composed action's native-coin protocol fee at Approve
     // time. The fee output was sized at COMPOSE from an oracle price, and the
     // amount consensus requires moves inversely with the coin price, so a move
@@ -3508,9 +3391,7 @@ export function createBackgroundHost(deps) {
     // The other half of the Approve-time re-check, and the one that was never
     // built: only the pre-flight re-run shipped, so a confirm page held open
     // past a competing spend signed a dead PSBT and discovered it at broadcast,
-    // in the permanent terminal §5.3.4 forbids re-signing out of. A RESUMED
-    // confirm (§5.4) is the same hazard aged deliberately, which is why the
-    // resume path gates on this before it will let anyone approve.
+    // in the permanent terminal §5.3.4 forbids re-signing out of.
     //
     // Fails to `unknown`, never to `spent` (see flows/inputLiveness.js): an
     // address that did not answer is absent from the map rather than
@@ -4927,11 +4808,11 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.dividend.hw', dividendAction);
     registerHwHandler('action.createList.hw', async (opts) => {
         await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
-        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => createList(opts));
+        return createList(opts);
     });
     registerHwHandler('action.airdrop.hw', async (opts) => {
         await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
-        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => airdropAction(opts));
+        return airdropAction(opts);
     });
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
@@ -5735,6 +5616,12 @@ export function createBackgroundHost(deps) {
         return { ...history, data: history.points.map((p) => ({ ...p, height: p.blockIndex })) };
     });
 
+    // Count the source-authored history used by MINT_ADDRESS_MAX. The token
+    // balance and the mint destination do not answer this protocol limit.
+    host.register('token.mintedAmountForAddress', async (req, { sdkRegistry }) => {
+        return mintedAmountForAddress({ ...req, sdkRegistry });
+    });
+
     host.register('token.info', async (req, { sdkRegistry, vault }) => {
         // settings.privacy.metadataFetchEnabled (default true) gates the
         // description-as-URL TIS fetch. When false the handler still
@@ -5923,16 +5810,12 @@ export function createBackgroundHost(deps) {
 
     host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
-        return finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
-            return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        });
+        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
-        const result = await finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
-            return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        });
+        const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
         return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
@@ -6064,6 +5947,10 @@ export function createBackgroundHost(deps) {
     host.register('priceAlert.rearm', async (req, { vault }) => {
         return rearmAlert({ ...req, vault });
     });
+
+    host.register('alertInbox.list', async () => getDefaultAlertInbox().list());
+    host.register('alertInbox.markRead', async (req) => getDefaultAlertInbox().markRead(req?.id));
+    host.register('alertInbox.markAllRead', async () => getDefaultAlertInbox().markAllRead());
 
     // §40.10 Advanced Actions Form: generic "submit any action"
     // surface. Read-only SDK introspection handlers drive the form's

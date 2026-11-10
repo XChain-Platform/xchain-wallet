@@ -125,7 +125,7 @@ describe('InfoTip target (slice 2)', () => {
         expect(screen.getByRole('tooltip').style.transform).toBe('translateX(var(--xc-tip-center, -50%)) translateX(-51px)');
         expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.placementBottom)).toBe(true);
         expect(screen.getByRole('tooltip').style.maxHeight).toBe('200px');
-        expect(screen.getByRole('tooltip').style.maxWidth).toBe('260px');
+        expect(screen.getByRole('tooltip').style.maxWidth).toBe('304px');
     });
 
     it('keeps the bubble margin when the trigger is against the left edge', () => {
@@ -181,7 +181,7 @@ describe('InfoTip target (slice 2)', () => {
     });
 
     it('lets long tooltip text wrap inside the viewport', () => {
-        expect(infoTipCss).toMatch(/max-width:\s*min\(260px,\s*calc\(100vw/);
+        expect(infoTipCss).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw/);
         expect(infoTipCss).toMatch(/overflow-wrap:\s*anywhere/);
     });
 

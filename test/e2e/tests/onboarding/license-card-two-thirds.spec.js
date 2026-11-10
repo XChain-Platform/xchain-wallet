@@ -63,7 +63,9 @@ async function measure(page) {
             acknowledgementTop: box(acknowledgement).top,
             acknowledgementLeft: box(acknowledgement).left,
             acknowledgementRight: box(acknowledgement).right,
+            acknowledgementBottom: box(acknowledgement).bottom,
             acceptTop: box(accept).top,
+            acceptBottom: box(accept).bottom,
             acceptLeft: box(accept).left,
             acceptRight: box(accept).right,
             acceptWidth: box(accept).width,
@@ -96,8 +98,10 @@ for (const viewport of WIDE) {
         if (layout.fits) {
             expect(layout.termsBottom - layout.lastTextBottom).toBeLessThanOrEqual(layout.paddingTop + 2);
         }
-        expect(layout.acknowledgementTop - layout.termsBottom).toBeLessThanOrEqual(16);
-        expect(layout.acceptTop - layout.termsBottom).toBeLessThanOrEqual(96);
+        expect(layout.acknowledgementTop - layout.termsBottom).toBeLessThanOrEqual(24);
+        expect(layout.acceptTop - layout.termsBottom).toBeLessThanOrEqual(24);
+        expect(layout.acknowledgementTop).toBeLessThan(layout.acceptBottom);
+        expect(layout.acceptTop).toBeLessThan(layout.acknowledgementBottom);
     });
 }
 

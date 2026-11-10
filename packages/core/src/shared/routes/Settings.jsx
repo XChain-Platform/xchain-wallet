@@ -181,6 +181,8 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
         row('Lifetime donations', 'donation total history'),
     ],
     developer: [
+        row('Advanced action', 'raw fields action authoring'),
+        row('Action queue', 'parallel compose cross chain actions'),
         row('Developer Mode', 'development advanced regtest'),
         row('Learn Mode', 'education explain'),
         row('Show variant popover', 'layout preview'),
@@ -238,6 +240,8 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
  * @param {() => void} [props.onOpenAccountPicker]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
+ * @param {() => void} [props.onNavigateToAdvanced]
+ * @param {() => void} [props.onNavigateToActionQueue]
  * @param {() => void} [props.onOpenBackupInTab]
  * @param {() => void} [props.reload]
  */
@@ -249,6 +253,8 @@ export function Settings({
     onOpenAccountPicker,
     initialSubpageId = null,
     onNavigateToMint,
+    onNavigateToAdvanced,
+    onNavigateToActionQueue,
     onOpenBackupInTab,
     reload = reloadPage,
 }) {
@@ -521,10 +527,17 @@ export function Settings({
             id: 'developer',
             title: t('settings.page.developerMode'),
             description: t('settings.page.configureRegtestNetworksCustomEndpoints'),
-            keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
+            keywords: 'developer mode learn variant popover advanced action queue parallel compose raw fields regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
-            props: { activeWallet, activeAccount, onNavigateToMint, reload },
+            props: {
+                activeWallet,
+                activeAccount,
+                onNavigateToMint,
+                onNavigateToAdvanced,
+                onNavigateToActionQueue,
+                reload,
+            },
             summary: developerSummary(settings),
         },
         ...(desktopUpdaterBridge() ? [{
@@ -544,7 +557,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping

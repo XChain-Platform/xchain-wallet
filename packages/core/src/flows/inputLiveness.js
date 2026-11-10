@@ -17,11 +17,6 @@
 // whose inputs were gone and fail at broadcast, which is the permanent-failure
 // terminal §5.3.4 forbids re-signing out of.
 //
-// It matters twice over for a RESUMED confirm (§5.4): a stored session is by
-// construction older than the one on screen, so it is the likeliest holder of
-// a dead outpoint, and resuming one is the double-broadcast trap the store's
-// `clear` contract is written against.
-//
 // FAILS TO UNKNOWN, NEVER TO SPENT. A false "your inputs are gone" is a hard
 // block on an action the network would accept, which §4.2's false-block
 // invariant forbids, so every path that cannot positively observe an outpoint

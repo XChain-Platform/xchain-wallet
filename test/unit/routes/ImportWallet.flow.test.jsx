@@ -200,6 +200,7 @@ describe('wallet import flow', () => {
             password: PASSWORD,
             wif: WIF,
             chainId: 'bitcoin-mainnet',
+            addressType: 'p2sh-p2wpkh',
             name: 'Paper Wallet',
         }, {
             storageBackend: {
@@ -218,6 +219,7 @@ describe('wallet import flow', () => {
             password: PASSWORD,
             wif: WIF,
             chainId: 'bitcoin-mainnet',
+            addressType: 'p2sh-p2wpkh',
             name: 'Paper Wallet',
         }));
         expect(result).toMatchObject({

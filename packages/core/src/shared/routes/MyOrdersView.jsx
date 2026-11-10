@@ -178,6 +178,22 @@ async function readFillStates(messaging, candidates) {
     return fills;
 }
 
+// The list items for a demo wallet: the bundled demo orders, owned by the
+// first address on each chain, each with its hydrated fill state.
+function demoOrderItems(chains, nowMs) {
+    const items = [];
+    for (const [chainId, addrs] of Object.entries(chains || {})) {
+        const owner = (addrs || []).find((a) => typeof a?.address === 'string' && a.address.length > 0);
+        if (!owner) continue;
+        for (const row of flowsLib.synthesizeDemoOrders(chainId, owner.address, { now: nowMs })) {
+            const key = `${chainId}:${row.action_index}`;
+            items.push({ chainId, owner, row, key, cancelled: false, cancelledKeys: new Set(), fill: fillStateOf(row) });
+        }
+    }
+    items.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
+    return items;
+}
+
 function fmtDate(unixSec) {
     const n = Number(unixSec);
     // Protocol expirations are Unix seconds. A current millisecond timestamp
@@ -252,8 +268,14 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
         if (flowsLib.isDemoWallet(walletId)) {
-            setByChain({});
-            setItems([]);
+            // A demo wallet has no explorer history; it lists the bundled
+            // demo orders owned by its first address on each chain.
+            const chains = typeof messaging?.getAddressesByChain === 'function'
+                ? ((await messaging.getAddressesByChain(walletId, accountId).catch(() => null)) || {})
+                : {};
+            if (requestId !== loadRequestId.current) return;
+            setByChain(chains);
+            setItems(demoOrderItems(chains, Date.now()));
             setLoadError(null);
             return;
         }

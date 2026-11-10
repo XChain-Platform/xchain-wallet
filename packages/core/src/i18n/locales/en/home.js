@@ -87,7 +87,6 @@ const messages = {
     'home.tabs.collectiblesOnThisNetworkAppear':
         'Collectibles on this network appear here after you receive them.',
     'home.tabs.recentActivity': 'Recent activity',
-    'home.tabs.recentActivityNote': 'Your newest actions, newest first.',
     'home.tabs.loadingRecentActivity': 'Loading recent activity…',
     'home.tabs.noActivityOnThisNetwork': 'No activity on this network',
     'home.tabs.sendsReceivesAndOtherActionsAppear':
@@ -102,12 +101,9 @@ const messages = {
         'Synthesized demo activity will appear here once the demo wallet has any networks active.',
     'home.tabs.noDefiPositions': 'No DeFi positions',
     'home.tabs.noDemoPositionsOnThe': 'No demo positions on the selected network.',
-    'home.tabs.confirms': 'Confirms',
-    'home.tabs.unconfirmed': 'Unconfirmed',
     'home.filter.searchTokens': 'Search tokens…',
     'home.filter.searchTokensByName': 'Search tokens by name',
     'home.filter.filterByNetwork': 'Filter by network',
-    'home.tabs.blockNumber': 'Block {block, number}',
     'home.tabs.coins': 'Coins',
     'home.tabs.tokens': 'Tokens',
     'home.tabs.nfts': 'NFTs',

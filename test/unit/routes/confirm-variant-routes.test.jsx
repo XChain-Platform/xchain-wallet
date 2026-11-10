@@ -8,12 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §5.6 slice 3: the two surfaces that adopt a NON-action confirm
-// variant. Neither composes anything (the PSBT and the message already
-// exist), so what this pins is that they route through the shared confirm
-// page rather than signing straight from the form, and that the page's
-// contract still holds: the password is collected THERE, Approve dispatches
-// the host call, Reject signs nothing and loses nothing.
+// The PSBT surface retains its transaction approval page. Sign message is
+// covered here as a counterexample: a request started inside the wallet signs
+// directly while external message requests retain their separate approval.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
@@ -305,7 +302,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
     });
 });
 
-describe('§5.5 SignMessageForm routes through the message confirm variant', () => {
+describe('SignMessageForm signs directly from the wallet form', () => {
     it('watcher mode never offers a password or a signing action', async () => {
         const { messaging, calls } = recordingMessaging({
             getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
@@ -324,6 +321,7 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
 
     async function drive(message) {
         const { messaging, calls } = recordingMessaging({
+            signerReady: () => Promise.resolve({ ready: true }),
             signMessageRequest: (args) => {
                 calls.push({ method: 'signMessageRequest', args });
                 return Promise.resolve({ signature: 'sig-abc' });
@@ -345,32 +343,26 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         return { utils, calls };
     }
 
-    it('shows the exact text on the confirm page before anything is signed', async () => {
+    it('submits the exact text without opening a confirm page', async () => {
         const MESSAGE = 'proof of control\n  indented line';
         const { utils, calls } = await drive(MESSAGE);
-        expect(utils.getByTestId('confirm-message-text').textContent).toBe(MESSAGE);
-        expect(calls.some((c) => c.method === 'signMessageRequest')).toBe(false);
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
+        expect(calls.find((c) => c.method === 'signMessageRequest')?.args)
+            .toMatchObject({ message: MESSAGE, addressId: HD_ADDRESS.id });
+        expect(utils.container.textContent).toContain('sig-abc');
     });
 
-    it('signs the message with the password typed on the confirm page', async () => {
+    it('keeps the signature and copy action on the form', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
             value: { writeText },
         });
         const { utils, calls } = await drive('proof of control');
-        await domAct(async () => {
-            typeIn(utils, 'Password', 'hunter2');
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
-            fireEvent.click(utils.getByTestId('confirm-approve'));
-            await drainMicrotasks();
-        });
         const submit = calls.find((c) => c.method === 'signMessageRequest');
         expect(submit).toBeTruthy();
-        expect(submit.args).toMatchObject({ message: 'proof of control', password: 'hunter2' });
-        // Terminal: the signature is rendered back on the form surface.
+        expect(submit.args).toMatchObject({ message: 'proof of control', password: '' });
+        expect(utils.getByLabelText('Message')).toHaveValue('proof of control');
         expect(utils.container.textContent).toContain('sig-abc');
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
@@ -379,63 +371,15 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         expect(writeText).toHaveBeenCalledWith('sig-abc');
     });
 
-    it('keeps the confirmed address, message, result, and copied signature in one submission', async () => {
-        const secondAddress = {
-            ...HD_ADDRESS,
-            id: 'addr-hd-1',
-            address: OTHER,
-            derivationPath: "m/84'/0'/0'/0/1",
-        };
-        const { messaging, calls } = recordingMessaging({
-            getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS, secondAddress] }),
-            signMessageRequest: (args) => {
-                calls.push({ method: 'signMessageRequest', args });
-                return Promise.resolve({ signature: 'signature-for-own' });
-            },
-        });
-        const writeText = vi.fn().mockResolvedValue(undefined);
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { writeText },
-        });
-        let utils;
+    it('clears a settled signature when the message changes', async () => {
+        const { utils } = await drive('approved message');
+        expect(utils.container.textContent).toContain('sig-abc');
         await domAct(async () => {
-            utils = mount(SignMessageForm, messaging);
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Address'), { target: { value: HD_ADDRESS.id } });
-            typeIn(utils, 'Message', 'approved message');
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
-            fireEvent.click(findButton(utils, /Sign message/i));
-            fireEvent.change(utils.getByLabelText('Address'), { target: { value: secondAddress.id } });
             typeIn(utils, 'Message', 'later edit');
             await drainMicrotasks();
         });
-
-        expect(utils.getByTestId('confirm-message-text').textContent).toBe('approved message');
-        expect(utils.container.textContent).toContain(OWN);
-        expect(utils.container.textContent).not.toContain(OTHER);
-        await domAct(async () => {
-            typeIn(utils, 'Password', 'hunter2');
-            fireEvent.click(utils.getByTestId('confirm-approve'));
-            await drainMicrotasks();
-        });
-
-        const submit = calls.find((c) => c.method === 'signMessageRequest');
-        expect(submit.args).toMatchObject({
-            addressId: HD_ADDRESS.id,
-            message: 'approved message',
-        });
-        expect(utils.container.textContent).toContain('signature-for-own');
-        expect(utils.container.textContent).toContain('approved message');
-        await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
-            await drainMicrotasks();
-        });
-        expect(writeText).toHaveBeenCalledWith('signature-for-own');
+        expect(utils.container.textContent).not.toContain('sig-abc');
+        expect(utils.container.textContent).toContain('The signature appears here after you sign.');
     });
 
     it('surfaces a rejected signing request without leaking its promise', async () => {
@@ -449,26 +393,20 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         });
         await domAct(async () => {
             typeIn(utils, 'Message', 'proof of control');
-            fireEvent.click(findButton(utils, /Sign message/i));
-            await drainMicrotasks();
-        });
-        await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
-            fireEvent.click(utils.getByTestId('confirm-approve'));
+            fireEvent.click(findButton(utils, /Sign message/i));
             await drainMicrotasks();
         });
 
         expect(utils.getByRole('alert').textContent).toContain('signing backend unavailable');
     });
 
-    it('Reject signs nothing and returns to the form with the draft intact', async () => {
+    it('never renders approval controls for an in-wallet sign', async () => {
         const { utils, calls } = await drive('keep me');
-        await domAct(async () => {
-            fireEvent.click(utils.getByTestId('confirm-reject'));
-            await drainMicrotasks();
-        });
         expect(utils.queryByTestId('confirm-modal')).toBe(null);
-        expect(calls.some((c) => c.method === 'signMessageRequest')).toBe(false);
+        expect(utils.queryByTestId('confirm-reject')).toBe(null);
+        expect(utils.queryByTestId('confirm-approve')).toBe(null);
+        expect(calls.some((c) => c.method === 'signMessageRequest')).toBe(true);
         expect(utils.getByLabelText('Message').value).toBe('keep me');
     });
 });

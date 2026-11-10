@@ -11,7 +11,8 @@
 // Unit: branding/branding.js: product identity constants + URL helpers.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -34,11 +35,14 @@ import {
     DEFAULT_MINER_URL,
     EXTERNAL_EXPLORERS,
     LOGO_FILE,
+    TREZOR_LOGO_FILE,
+    LEDGER_LOGO_FILE,
     FAVICON_FILE,
     CHAIN_ICON_SMALL,
     CHAIN_ICON_LARGE,
     brandingUrl,
     logoUrl,
+    signerVendorLogoUrl,
     faviconUrl,
     chainIconSmallUrl,
     chainIconLargeUrl,
@@ -162,6 +166,32 @@ describe('logoUrl / faviconUrl', () => {
         expect(typeof url).toBe('string');
         expect(url.length).toBeGreaterThan(0);
         expect(url).toMatch(/^(file|https?):\/\//);
+    });
+});
+
+describe('signerVendorLogoUrl', () => {
+    it('resolves the official vendor logo files and rejects unknown vendors', () => {
+        const trezorUrl = signerVendorLogoUrl('trezor');
+        const ledgerUrl = signerVendorLogoUrl('ledger');
+
+        expect(trezorUrl).toBe(brandingUrl(TREZOR_LOGO_FILE));
+        expect(ledgerUrl).toBe(brandingUrl(LEDGER_LOGO_FILE));
+        expect(existsSync(join(IMAGES_DIR, TREZOR_LOGO_FILE))).toBe(true);
+        expect(existsSync(join(IMAGES_DIR, LEDGER_LOGO_FILE))).toBe(true);
+        expect(signerVendorLogoUrl('other')).toBeNull();
+    });
+
+    it('keeps the official vendor SVG bytes unchanged', () => {
+        const sha256 = (filename) => createHash('sha256')
+            .update(readFileSync(join(IMAGES_DIR, filename)))
+            .digest('hex');
+
+        expect(sha256(TREZOR_LOGO_FILE)).toBe(
+            '84603f597e7d6a23590872bf140141e2daaea971b132c7f5edf3c96f0830d66e',
+        );
+        expect(sha256(LEDGER_LOGO_FILE)).toBe(
+            'ff2408c70d73cd6d1ba3fd91d82d78f4f0fc6a15261678c68701d72b90d407fc',
+        );
     });
 });
 

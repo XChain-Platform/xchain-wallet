@@ -204,8 +204,9 @@ describe('protocol form review accessibility', () => {
             mode: 'address',
             initialChainId: CHAIN,
         });
-        fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         await auditReview(addressReview.container, 'Review lock address');
         cleanup();
         // A TOKEN record cached without an issuer must not answer the owner check.
@@ -221,7 +222,8 @@ describe('protocol form review accessibility', () => {
                 chainId: CHAIN, tick: 'TOKEN', divisibility: 8, locks: {}, creator: SOURCE,
             }),
         });
-        fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
+        fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
         await auditConfirm(tokenConfirm.container);
     });

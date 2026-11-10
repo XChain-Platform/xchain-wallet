@@ -182,12 +182,6 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Connect two existing actions on different chains so History shows them as linked.',
     },
     {
-        id: 'parallel',
-        handler: 'onParallel',
-        label: 'Parallel cross-chain actions',
-        description: 'Compose multiple independent actions across any chains and sign them sequentially. Not all-or-nothing: if one side fails, the sides that already went through are not undone.',
-    },
-    {
         id: 'batch',
         handler: 'onBatch',
         label: 'Batch',
@@ -209,7 +203,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'cross-chain-templates',
         handler: 'onCrossChainTemplates',
         label: 'Cross-chain templates',
-        description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
+        description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills Action queue.',
     },
     // The two XBRIDGE surfaces (ISSUE v7 settings, and the move itself).
     // They shipped as entries appended by each shell after this list, which
@@ -233,12 +227,6 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         handler: 'onMultisigCreate',
         label: 'Create multisig',
         description: 'Set up a shared wallet that requires multiple people to approve each payment. Bitcoin only at launch.',
-    },
-    {
-        id: 'multisig-sign',
-        handler: 'onMultisigSign',
-        label: 'Multisig signing',
-        description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
     },
     {
         id: 'governance-polls',
@@ -283,12 +271,6 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Paste an unsigned transaction (hex / base64) and sign it with one of your keys.',
     },
     {
-        id: 'advanced',
-        handler: 'onAdvanced',
-        label: 'Advanced action',
-        description: 'Power-user form for submitting any supported on-chain action type.',
-    },
-    {
         id: 'lock-address',
         handler: 'onLockAddress',
         label: 'Lock this address',
@@ -327,7 +309,7 @@ export const ACTION_GROUPS = Object.freeze([
         id: 'workflows',
         label: 'Publishing and multi-chain',
         entryIds: Object.freeze([
-            'publish-file', 'link', 'parallel', 'batch', 'cross-chain-swap',
+            'publish-file', 'link', 'batch', 'cross-chain-swap',
             'cross-chain-order', 'cross-chain-templates', 'bridge-move',
             'bridge-settings',
         ]),
@@ -336,7 +318,7 @@ export const ACTION_GROUPS = Object.freeze([
         id: 'shared-control',
         label: 'Communities and shared wallets',
         entryIds: Object.freeze([
-            'multisig-create', 'multisig-sign', 'governance-polls',
+            'multisig-create', 'governance-polls',
             'bet-markets', 'cosigner-accounts',
         ]),
     },
@@ -345,7 +327,7 @@ export const ACTION_GROUPS = Object.freeze([
         label: 'Wallet tools',
         entryIds: Object.freeze([
             'contacts', 'sign-message', 'verify-signature', 'sign-psbt',
-            'advanced', 'lock-address', 'pair-signer',
+            'lock-address', 'pair-signer',
         ]),
     },
 ]);

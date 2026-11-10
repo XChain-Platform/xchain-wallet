@@ -57,7 +57,7 @@ describe('menu row contract', () => {
         ));
 
         expect(screen.getByRole('button', { name: 'Issue token' })).toHaveAttribute('data-xc-menu-item');
-        expect(screen.getByRole('button', { name: 'Destroy' })).toHaveAttribute('data-destructive', 'true');
+        expect(screen.getByRole('button', { name: 'Destroy' })).not.toHaveAttribute('data-destructive');
         expect(screen.getByRole('button', { name: 'Destroy' }).closest('ul'))
             .toHaveAttribute('data-xc-menu-list', 'cards');
 

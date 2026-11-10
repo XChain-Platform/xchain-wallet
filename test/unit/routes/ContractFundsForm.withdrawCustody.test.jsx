@@ -219,7 +219,7 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
         expect(screen.getByText('12.5')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        expect(await screen.findByLabelText(/Quantity/i)).toHaveValue('12.5');
+        expect(await screen.findByLabelText(/Quantity/i)).toHaveValue('12.50000000');
         expect(screen.getByRole('button', { name: /^Token: MEMEVALID/ })).toBeInTheDocument();
     });
 });

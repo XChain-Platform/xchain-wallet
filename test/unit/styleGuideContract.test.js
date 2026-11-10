@@ -65,7 +65,7 @@ describe('STYLE_GUIDE component contracts', () => {
 
         expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
         expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
-        expect(alertsRoute).toMatch(/<Button[\s\S]*?a\.action\.label/);
+        expect(alertsRoute).toMatch(/<Button[\s\S]*?variant="rowAction"[\s\S]*?openAlert\(alert\)/);
         expect(menuRoute).toMatch(/<Button[\s\S]*?variant="danger"[\s\S]*?Lock wallet/);
         expect(amountField).not.toContain('className={styles.amountMaxInline}');
         expect(alertsOverlay).not.toContain('className={styles.alertAction}');

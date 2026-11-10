@@ -101,7 +101,7 @@ export const LOCK_FLAGS = [
         key: 'callback',
         field: 'LOCK_CALLBACK',
         label: 'Callback',
-        hint: 'Freezes the callback configuration (block, token, and amount). It can never change again.',
+        hint: 'No one can ever run a callback on this token again, and its block, token and amount never change.',
     },
 ];
 

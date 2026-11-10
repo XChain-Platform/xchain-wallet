@@ -72,15 +72,15 @@ afterEach(() => {
 });
 
 describe('message signing inputs', () => {
-    it('labels the address choices and updates the selection with the signing network', async () => {
+    it('shows the complete selected address and updates it with the signing network', async () => {
         renderForm(SignMessageForm, messagingFor());
-        await screen.findByRole('option', { name: 'Savings: bc1qexample' });
-        expect(screen.getByRole('option', { name: 'Spending: bc1qspending' })).toBeTruthy();
+        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('bc1qexample'));
+        expect(screen.getByLabelText('Address')).toHaveAttribute('readonly');
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
         pickLitecoinMainnet();
 
-        await waitFor(() => expect(screen.getByLabelText('Address').value).toBe('ltc'));
+        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('ltc1qexample'));
         expect(screen.getByRole('button', { name: /Network: Litecoin/ })).toBeTruthy();
     });
 

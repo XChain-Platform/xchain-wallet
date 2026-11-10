@@ -510,7 +510,7 @@ describe('Onboarding: license gate', () => {
             expect(checkbox).toBeDisabled();
             expect(accept).toBeDisabled();
             expect(accept).toHaveAccessibleDescription('Review all license terms to continue.');
-            expect(buttonCss).toMatch(/\.btn:disabled:not\(\.link\)\s*\{[^}]*background:\s*var\(--xc-control-disabled-bg\)[^}]*border-color:\s*var\(--xc-control-disabled-border\)[^}]*color:\s*var\(--xc-control-disabled-text\)/s);
+            expect(buttonCss).toMatch(/\.btn:disabled:not\(\.link\):not\(\.success\)\s*\{[^}]*background:\s*var\(--xc-control-disabled-bg\)[^}]*border-color:\s*var\(--xc-control-disabled-border\)[^}]*color:\s*var\(--xc-control-disabled-text\)/s);
 
             const terms = screen.getByLabelText('License terms');
             terms.scrollTop = 400;

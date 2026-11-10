@@ -333,11 +333,13 @@ describe('filtered list empty states', () => {
         mount(MyTokens, messaging, { onIssue: () => {}, onSelectTick: () => {} });
         await screen.findByText('FILTERME');
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Holding' }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'Filter tokens by type' }), {
+            target: { value: 'holding' },
+        });
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
-        expect(screen.getByRole('radio', { name: 'All' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('combobox', { name: 'Filter tokens by type' })).toHaveValue('all');
         expect(screen.getByLabelText('Search your tokens by ticker or description')).toHaveValue('');
         expect(await screen.findByText('FILTERME')).toBeInTheDocument();
         expect(screen.queryByText('No owned tokens yet')).toBeNull();

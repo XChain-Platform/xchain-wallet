@@ -193,7 +193,7 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
 });
 
 describe('TokenAdminForm callback payout token', () => {
-    function mountCallbackSettings(payoutInfo) {
+    function mountCallbackSettings(payoutInfo, callbackTick) {
         const composeForConfirm = vi.fn();
         const target = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
@@ -202,7 +202,9 @@ describe('TokenAdminForm callback payout token', () => {
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
             getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve(
-                tick === 'MINTABLE' ? { ...TOKEN_INFO, creator: SOURCE.address, totalSupply: '0' } : payoutInfo(tick),
+                tick === 'MINTABLE'
+                    ? { ...TOKEN_INFO, creator: SOURCE.address, totalSupply: '0', callbackTick }
+                    : payoutInfo(tick),
             )),
             getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
             getHoldersForToken: vi.fn().mockResolvedValue([]),
@@ -231,8 +233,8 @@ describe('TokenAdminForm callback payout token', () => {
         return composeForConfirm;
     }
 
-    async function fillCallback(tick) {
-        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: tick } });
+    async function fillCallback() {
+        await screen.findByRole('button', { name: /^Callback token:/ });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '950000' } });
         await waitFor(() => expect(screen.getByRole('button', { name: /update callback settings/i })).toBeEnabled());
@@ -242,24 +244,24 @@ describe('TokenAdminForm callback payout token', () => {
     }
 
     it('refuses the chain coin as the payout token', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'x', totalSupply: '1' }));
-        await fillCallback('BTC');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'x', totalSupply: '1' }), 'BTC');
+        await fillCallback();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('BTC is Bitcoin itself, not an XChain token.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a payout token that does not exist', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: null, locks: {}, creator: null, totalSupply: null, canonicalTick: null }));
-        await fillCallback('NOPE');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: null, locks: {}, creator: null, totalSupply: null, canonicalTick: null }), 'NOPE');
+        await fillCallback();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('No token named NOPE exists on');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('composes a callback that pays in an existing token', async () => {
-        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'bc1qpayoutissuer', totalSupply: '1000' }));
-        await fillCallback('PAYTOK');
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'bc1qpayoutissuer', totalSupply: '1000' }), 'PAYTOK');
+        await fillCallback();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
     });

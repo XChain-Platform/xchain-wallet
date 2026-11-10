@@ -32,14 +32,16 @@ const rule = (css, selector) => {
 };
 
 describe('device pass layout guards', () => {
-    it('keeps Home quick-action tiles secondary and outranking the Button variant', () => {
-        const jsx = read('packages/core/src/shared/routes/Home.jsx');
-        const css = read('packages/core/src/shared/routes/Home.module.css');
-        const tiles = buttonsWith(jsx, 'className={styles.quickAction}');
-        expect(tiles.length).toBeGreaterThanOrEqual(5);
-        for (const tile of tiles) expect(tile).toContain('variant="secondary"');
-        expect(css).not.toMatch(/(^|\n)\.quickAction\s*\{/);
-        expect(rule(css, '.quickActions .quickAction')).toMatch(/background:\s*var\(--xc-surface-raised\)/);
+    it('keeps quick-action tiles secondary and outranking the Button variant', () => {
+        const jsx = read('packages/core/src/ui/QuickActionTile.jsx');
+        const css = read('packages/core/src/ui/QuickActionTile.module.css');
+        const home = read('packages/core/src/shared/routes/Home.jsx');
+        const tiles = buttonsWith(jsx, 'className={[styles.tile, className]');
+        expect(tiles).toHaveLength(1);
+        expect(tiles[0]).toContain('variant="secondary"');
+        expect(home.match(/<QuickActionTile\b/g)?.length).toBeGreaterThanOrEqual(5);
+        expect(css).not.toMatch(/(^|\n)\.tile\s*\{[^}]*background/);
+        expect(rule(css, '.tile.tile')).toMatch(/background:\s*var\(--xc-surface-raised\)/);
     });
 
     it('keeps the account and wallet row button outlined at the row end', () => {
@@ -56,12 +58,12 @@ describe('device pass layout guards', () => {
 
     it('stacks icon over label in the four-column Home action grid', () => {
         const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
+        expect(css).toMatch(/\n\.actionsFullWrap \.actionsFull > button\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('keeps stacked Home action icons on one line when a label wraps', () => {
         const css = read('packages/core/src/shared/routes/Home.module.css');
-        expect(css).toMatch(/\n\.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
+        expect(css).toMatch(/\n\.actionsFullWrap \.actionsFull > button\s*\{[^}]*justify-content:\s*flex-start/s);
     });
 
     it('hides a search-only header menu when the rail shows Search', () => {

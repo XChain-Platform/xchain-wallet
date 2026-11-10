@@ -133,7 +133,7 @@ describe('regression/price-change-periods', () => {
         expect(balanceChange).toBeTruthy();
         expect(portfolioChange).toBeTruthy();
         expect.soft(renderedLabel(balanceChange)).toMatch(/\b24h\b/i);
-        expect.soft(renderedLabel(portfolioChange)).toMatch(/\b7d\b/i);
+        expect.soft(renderedLabel(portfolioChange)).toMatch(/\b1W\b/i);
 
         home.unmount();
         renderWithMessaging(messaging, nativeTokenDetail());
@@ -149,7 +149,7 @@ describe('regression/price-change-periods', () => {
             <PortfolioChart rows={ROWS} walletId="real-wallet" />,
         );
 
-        expect(await screen.findByRole('img', { name: /^Portfolio performance chart\. Range 7d\./ }))
+        expect(await screen.findByRole('img', { name: /^Portfolio performance chart\. Range 1W\./ }))
             .toBeInTheDocument();
         expect(screen.queryByText(/No price history/)).toBeNull();
 
@@ -158,7 +158,7 @@ describe('regression/price-change-periods', () => {
 
         await waitFor(() => expect(messaging.getNativePricesRequest)
             .toHaveBeenCalledWith(PRICE_HISTORY_REQUEST));
-        expect(await screen.findByRole('img', { name: /^Price trend\. Range 7d\./ }))
+        expect(await screen.findByRole('img', { name: /^Price trend\. Range 1W\./ }))
             .toBeInTheDocument();
         expect(screen.queryByText('No price history yet')).toBeNull();
     });

@@ -10,9 +10,9 @@
 
 // Home's quick actions used auto-fit columns with a 76px floor, so at 360 the
 // gaps pushed four tiles into a 3+1 wrap with "Swap" alone on a second row.
-// Above 360 the tiles now share one row of equal tracks; below it they are two
-// columns and an odd last tile spans both. jsdom has no layout, so this pins
-// the rules.
+// Above 360 the tiles share one row of equal tracks capped at the tile
+// measure; below it they are two columns and an odd last tile spans both.
+// jsdom has no layout, so this pins the rules.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -28,11 +28,12 @@ function ruleBody(selector) {
 }
 
 describe('Home quick actions grid', () => {
-    it('lays the tiles in one row of equal columns by default', () => {
+    it('lays the tiles in one centred row of equal columns by default', () => {
         const body = ruleBody('.quickActions');
         expect(body).toMatch(/display:\s*grid/);
         expect(body).toMatch(/grid-auto-flow:\s*column/);
-        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*7\.5rem\)/);
+        expect(body).toMatch(/justify-content:\s*center/);
         expect(body).not.toMatch(/auto-fit|auto-fill/);
     });
 

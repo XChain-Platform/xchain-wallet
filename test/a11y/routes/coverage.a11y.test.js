@@ -11,6 +11,7 @@ const routeModules = import.meta.glob([
     '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
     '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
     '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+    '!../../../packages/core/src/shared/routes/ResumeConfirm.jsx',
 ]);
 
 const ROUTES_RENDERED_BY_AXE = [
@@ -111,7 +112,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'ReceivePicker',
     'RenameAccountForm',
     'RenameWalletForm',
-    'ResumeConfirm',
     'RouteNotFound',
     'ScanRoute',
     'SellOwnershipForm',

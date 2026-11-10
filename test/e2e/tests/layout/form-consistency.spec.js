@@ -17,7 +17,8 @@
 //     shortcuts), and Max sits inside the amount field it acts on,
 //   - primary, secondary and danger buttons keep the shared Button colours
 //     (secondary keeps its 1px outline) and a button drawn like one is a Button,
-//   - disabled buttons use the shared disabled colours,
+//   - disabled buttons use the shared disabled colours, except the green main
+//     action, which stays green while disabled (ruling U63),
 //   - a label sits above its field, one label-gap token away.
 
 import { writeFileSync } from 'node:fs';
@@ -111,6 +112,7 @@ function formFaults() {
     const strongBorder = resolve('border-color', '--xc-border-strong');
     const accent = resolve('background-color', '--xc-accent-primary');
     const danger = resolve('background-color', '--xc-danger');
+    const successFill = resolve('background-color', '--xc-success-fill');
     const disabledBg = resolve('background-color', '--xc-control-disabled-bg');
     const disabledBorder = resolve('border-color', '--xc-control-disabled-border');
     const disabledText = resolve('color', '--xc-control-disabled-text');
@@ -308,6 +310,11 @@ function formFaults() {
             counts.buttons += 1;
             if (btn.disabled && !sharedClass(btn, 'link')) {
                 counts.disabled += 1;
+                // The main forward action stays green while disabled (U63).
+                if (sharedClass(btn, 'success')) {
+                    if (cs.backgroundColor !== successFill) faults.push(`${name(btn)}: disabled main action fill ${cs.backgroundColor}, token ${successFill}`);
+                    continue;
+                }
                 if (cs.backgroundColor !== disabledBg || cs.borderTopColor !== disabledBorder || cs.color !== disabledText) {
                     faults.push(`${name(btn)}: disabled look bg ${cs.backgroundColor} border ${cs.borderTopColor} text ${cs.color}`);
                 }
@@ -319,7 +326,8 @@ function formFaults() {
                 }
             }
             // The asset and market pickers draw a Button as a card (a design call).
-            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector');
+            // From FreeWallet wears the FreeWallet character's colour (U69).
+            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton');
             if (sharedClass(btn, 'primary') && !asCard && cs.backgroundColor !== accent) {
                 faults.push(`${name(btn)}: primary fill ${cs.backgroundColor}, token ${accent}`);
             }
@@ -454,7 +462,7 @@ for (const viewport of VIEWPORTS) {
             if (process.env.FORM_SWEEP_OUT) await page.screenshot({ path: `${process.env.FORM_SWEEP_OUT}/onb-${sizeKey(viewport)}-${route.replace(/[^a-z0-9]+/gi, '-')}.png` }).catch(() => {});
         };
         await record('Welcome');
-        for (const name of ['Create new wallet', 'Import wallet', 'From FreeWallet', 'Pair a watcher or signer']) {
+        for (const name of ['Create new wallet', 'Import wallet', 'From FreeWallet', 'Pair an offline signer']) {
             const button = page.getByRole('button', { name }).first();
             if (await button.count() === 0) continue;
             await button.click();

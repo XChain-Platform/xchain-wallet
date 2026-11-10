@@ -247,7 +247,7 @@ for (const [shell, msgPath] of [
     assert.ok(/sendMessage\('sdk\.validateAction'/.test(m), `${shell} routes validateAction`);
 }
 
-// --- 10. ActionsMenu entry + App.jsx sub-route ----------------------
+// --- 10. Settings entry + App.jsx sub-route -------------------------
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -258,15 +258,15 @@ for (const [shell, appPath] of [
     assert.ok(app.includes('AdvancedActionsForm'), `${shell} App.jsx imports AdvancedActionsForm`);
     assert.ok(app.includes("'advanced'"), `${shell} App.jsx tracks the advanced sub-route`);
     assert.ok(
-        surfacesEntry(app, 'advanced', 'Advanced action'),
-        `${shell} App.jsx registers the Advanced action entry`,
+        !surfacesEntry(app, 'advanced', 'Advanced action'),
+        `${shell} keeps Advanced action out of All actions`,
     );
     assert.ok(
-        /onAdvanced:\s*\(\)\s*=>\s*setUnlockedView\('advanced'\)/.test(app),
-        `${shell} App.jsx wires onAdvanced to the advanced sub-route`,
+        /onNavigateToAdvanced=\{\(\) => setUnlockedView\('advanced'\)\}/.test(app),
+        `${shell} Settings wires Advanced action to the advanced sub-route`,
     );
 }
 
 console.log(
-    'OK: advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + ActionsMenu entry + App.jsx sub-route in popup/web/desktop)',
+    'OK: advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + Settings entry + App.jsx sub-route in popup/web/desktop)',
 );

@@ -109,25 +109,10 @@ async function reopen(context, extensionId) {
     return page;
 }
 
-async function settleAndFinishIfOffered(reopened, sentBeforeReopen) {
+async function assertNoResumeOffer(reopened) {
     const card = reopened.getByTestId('resume-confirm-card');
     await reopened.waitForTimeout(3_000);
-    const offered = await card.count();
-    expect(
-        sentBeforeReopen && offered,
-        'Home offers to finish a send that has already broadcast',
-    ).toBeFalsy();
-    const text = async (n) => JSON.stringify((await reopened.evaluate(() => document.body.innerText)).replace(/\n+/g, ' | ').slice(0, n));
-    if (offered) {
-        console.log(`[s1] arrivals on destination before Finish = ${await arrivals()}`);
-        await card.first().getByRole('button', { name: /Finish/ }).click();
-        await reopened.waitForTimeout(8_000);
-        console.log(`[s1] resume screen: ${await text(500)}`);
-        await pressApprove(reopened);
-        await reopened.waitForTimeout(15_000);
-        console.log(`[s1] after approve: ${await text(2500)}`);
-    }
-    return offered;
+    await expect(card).toHaveCount(0);
 }
 
 test.setTimeout(900_000);
@@ -142,10 +127,9 @@ test.describe('Approve interrupted by the popup closing or the worker stopping',
             if (delay) await page.waitForTimeout(delay);
             await page.close();
             await new Promise((r) => setTimeout(r, 20_000));
-            const sentBeforeReopen = (await arrivals()) - before === 1;
             const reopened = await reopen(context, extensionId);
-            const offered = await settleAndFinishIfOffered(reopened, sentBeforeReopen);
-            console.log(`[s1] close@${delay}ms: resume cards offered after reopen = ${offered}`);
+            await assertNoResumeOffer(reopened);
+            console.log(`[s1] close@${delay}ms: no resume card offered after reopen`);
             await new Promise((r) => setTimeout(r, 10_000));
             const after = await arrivals();
             console.log(`[s1] close@${delay}ms: arrivals ${before} -> ${after}`);
@@ -161,10 +145,9 @@ test.describe('Approve interrupted by the popup closing or the worker stopping',
         await killServiceWorker(context, page).catch(() => {});
         await waitForServiceWorker(context).catch(() => {});
         await new Promise((r) => setTimeout(r, 20_000));
-        const sentBeforeReopen = (await arrivals()) - before === 1;
         const reopened = await reopen(context, extensionId);
-        const offered = await settleAndFinishIfOffered(reopened, sentBeforeReopen);
-        console.log(`[s1] sw-kill: resume cards offered after reopen = ${offered}`);
+        await assertNoResumeOffer(reopened);
+        console.log('[s1] sw-kill: no resume card offered after reopen');
         await new Promise((r) => setTimeout(r, 10_000));
         const after = await arrivals();
         console.log(`[s1] sw-kill: arrivals ${before} -> ${after}`);

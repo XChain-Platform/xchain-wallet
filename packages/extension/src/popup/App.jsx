@@ -24,7 +24,7 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { Fragment, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import {
@@ -89,7 +89,6 @@ import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNe
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
-import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
@@ -326,14 +325,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
+        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner' | 'pair-signer'} */
         () => takePostDemoIntent()
             || (extensionHandoff?.flow === 'import'
                 ? (extensionHandoff.variant === 'freewallet' ? 'import-freewallet' : 'import')
                 : 'welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ (
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ (
             extensionHandoff?.flow === 'backup'
                 ? 'settings'
                 : extensionHandoff?.flow === 'hardware'
@@ -429,12 +428,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // legacy wallet + locked destination.
     const [sweepCtx, setSweepCtx] = useState(
         /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
-    );
-    // The stored confirm the user chose to finish, held whole
-    // rather than by id so the resume screen never re-reads a store the popup
-    // may have cleared underneath it.
-    const [resumeConfirmSession, setResumeConfirmSession] = useState(
-        /** @type {any} */ (null),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -687,7 +680,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         setTokenDetailRef(null);
         setSweepCtx(null);
         setResumeAirdropId(null);
-        setResumeConfirmSession(null);
         setPrivateKeyAddress(null);
         setAddressPrefsTarget(null);
         setResumeCoinpay(null);
@@ -1221,6 +1213,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     />
                 );
             }
+            if (onboardingStep === 'pair-signer') {
+                return (
+                    <Suspense fallback={<Loading />}>
+                        <PairSignerForm
+                            pairTrezor={null}
+                            pairLedger={pairLedgerSigner}
+                            onBack={() => setOnboardingStep('welcome')}
+                            onOpenInTab={canOpenInTab ? () => openInTab({ flow: 'hardware' }) : undefined}
+                        />
+                    </Suspense>
+                );
+            }
             // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below does not offer it.
@@ -1238,6 +1242,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                    onConnectHardware={() => setOnboardingStep('pair-signer')}
                     onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
                     onWalletFound={refresh}
@@ -1502,7 +1507,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <BroadcastForm
                         walletId={activeWalletId}
                         initialChainId={prefillChainId}
-                        initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
                         onDone={formDone}
@@ -1718,21 +1722,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
-                    />
-                );
-            }
-            if (unlockedView === 'resume-confirm' && activeWalletId && resumeConfirmSession) {
-                return (
-                    <ResumeConfirm
-                        session={resumeConfirmSession}
-                        onDone={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
-                        onCancel={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
                     />
                 );
             }
@@ -2782,7 +2771,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                                 setResumeAirdropId(null);
                                 setUnlockedView('airdrop');
                             },
-                            onAdvanced: () => setUnlockedView('advanced'),
                             onLockAddress: () => setUnlockedView('lock-address'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                             onPayCoinpay: () => {
@@ -2795,7 +2783,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onMySwaps: () => setUnlockedView('my-swaps'),
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
-                            onParallel: () => setUnlockedView('parallel-compose'),
                             onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainOrder: () => setUnlockedView('cross-chain-order'),
@@ -2807,7 +2794,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onBridgeMove: () => setUnlockedView('bridge-move'),
                             onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
-                            onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
@@ -2862,6 +2848,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         }
                         initialSubpageId={settingsInitialSection}
                         onNavigateToMint={handleFaucetMint}
+                        onNavigateToAdvanced={() => setUnlockedView('advanced')}
+                        onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}
                         onOpenBackupInTab={canOpenInTab ? () => openInTab({ flow: 'backup' }) : undefined}
                     />
                 );
@@ -3036,11 +3024,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             setUnlockedView('history');
                         } : undefined}
                         onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
-                        onResumeConfirm={activeWalletId ? (session) => {
-                            if (!session) return;
-                            setResumeConfirmSession(session);
-                            setUnlockedView('resume-confirm');
-                        } : undefined}
                         onResumeAirdrop={activeWalletId ? (id) => {
                             setResumeAirdropId(id);
                             setUnlockedView('airdrop');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
@@ -25,6 +25,7 @@ import {
     Tabs,
     InfoTip,
     FormErrorSummary,
+    Select,
     Switch,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -51,6 +52,13 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
+import { addressTypeLabel } from '../utils/addressTypeLabel.js';
+import {
+    WIF_IMPORT_ADDRESS_TYPES,
+    defaultWifImportAddressType,
+    wifImportPreview,
+    wifImportVersionByte,
+} from '../utils/wifImportPreview.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -69,6 +77,7 @@ import '../../i18n/locales/en/adsNotice.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/renameWallet.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -172,7 +181,8 @@ export function ImportWallet({
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
     const [wif, setWif] = useState('');
-    const [wifChainId, setWifChainId] = useState('bitcoin-mainnet');
+    const [wifChainId, setWifChainId] = useState('');
+    const [wifAddressType, setWifAddressType] = useState('');
     const [wifWarningAck, setWifWarningAck] = useState(false);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -226,9 +236,33 @@ export function ImportWallet({
     const importedWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
     const mountedRef = useRef(true);
     const inputGeneration = inputGenerationRef.current;
-    const wifChains = useSupportedChains().filter(
-        (descriptor) => Number.isInteger(descriptor.wifVersionByte),
+    const supportedChains = useSupportedChains();
+    const wifChains = useMemo(
+        () => supportedChains.filter(
+            (descriptor) => descriptor.networkKind === 'mainnet'
+                && Number.isInteger(descriptor.wifVersionByte),
+        ),
+        [supportedChains],
     );
+    const effectiveWifChainId = wifChainId || wifChains[0]?.id || '';
+    const wifDescriptor = wifChains.find(
+        (descriptor) => descriptor.id === effectiveWifChainId,
+    ) || null;
+    const wifAddressTypes = wifDescriptor
+        ? wifDescriptor.addressTypes.filter((type) => WIF_IMPORT_ADDRESS_TYPES.includes(type))
+        : [];
+    const effectiveWifAddressType = wifDescriptor
+        ? (wifAddressTypes.includes(wifAddressType)
+            ? wifAddressType
+            : defaultWifImportAddressType(wifDescriptor, wif))
+        : '';
+    const wifAddress = wifDescriptor && effectiveWifAddressType
+        ? wifImportPreview({
+            wif,
+            descriptor: wifDescriptor,
+            addressType: effectiveWifAddressType,
+        }) || ''
+        : '';
     // ChainPicker resolves ids through a registry; the supported list is the only one this lane needs.
     const wifChainRegistry = {
         get: (id) => wifChains.find((descriptor) => descriptor.id === id),
@@ -255,6 +289,8 @@ export function ImportWallet({
         setMnemonic('');
         setMnemonicCursor(0);
         setWif('');
+        setWifChainId('');
+        setWifAddressType('');
         setWifWarningAck(false);
         setPassword('');
         setConfirm('');
@@ -738,7 +774,7 @@ export function ImportWallet({
             setError('WIF private key is required.');
             return;
         }
-        if (!wifChainId) {
+        if (!effectiveWifChainId) {
             setError('Pick the network this private key belongs to.');
             return;
         }
@@ -768,7 +804,8 @@ export function ImportWallet({
             const result = await messaging.importMnemonic({
                 password,
                 wif: trimmedWif,
-                chainId: wifChainId,
+                chainId: effectiveWifChainId,
+                addressType: effectiveWifAddressType,
                 name: walletName,
             });
             finishWalletImport(result);
@@ -1032,6 +1069,7 @@ export function ImportWallet({
                         </div>
                     ) : (
                         <>
+                    <div className={styles.fieldWithDescription}>
                     {/* The hidden native picker remains raw because the kit has no file-input primitive. */}
                     <input
                         {...backupDrop.pickerProps}
@@ -1049,9 +1087,11 @@ export function ImportWallet({
                     >
                         {t('importWallet.backup.chooseFile')}
                     </Button>
-                    <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
+                    <p id="xc-backup-source-status" className={styles.fieldDescription} aria-live="polite">
                         {backupSourceMessage}
                     </p>
+                    </div>
+                    <div className={styles.fieldWithDescription}>
                     <Textarea
                         id="xc-backup-content"
                         {...backupDrop.rootProps}
@@ -1071,8 +1111,12 @@ export function ImportWallet({
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
-                        aria-describedby="xc-backup-source-status"
+                        aria-describedby="xc-backup-content-description"
                     />
+                    <p id="xc-backup-content-description" className={styles.fieldDescription}>
+                        {t('importWallet.backup.contentsDescription')}
+                    </p>
+                    </div>
                         </>
                     )}
                     {/*. The copy has to earn each of these:
@@ -1310,7 +1354,16 @@ export function ImportWallet({
                         hint={t('importWallet.wif.subtitle')}
                         value={wif}
                         onChange={(e) => {
-                            setWif(e.target.value);
+                            const nextWif = e.target.value;
+                            setWif(nextWif);
+                            const versionByte = wifImportVersionByte(nextWif);
+                            const matchedChain = wifChains.find(
+                                (descriptor) => descriptor.wifVersionByte === versionByte,
+                            );
+                            if (matchedChain && matchedChain.id !== effectiveWifChainId) {
+                                setWifChainId(matchedChain.id);
+                                setWifAddressType('');
+                            }
                             if (error) setError(null);
                         }}
                         autoComplete="off"
@@ -1319,14 +1372,36 @@ export function ImportWallet({
                     />
                     <ChainPicker
                         label={t('importWallet.wif.chain')}
-                        value={wifChainId}
+                        value={effectiveWifChainId}
                         onChange={(chainId) => {
                             setWifChainId(chainId);
+                            setWifAddressType('');
                             if (error) setError(null);
                         }}
                         chainIds={wifChains.map((descriptor) => descriptor.id)}
                         chainRegistry={wifChainRegistry}
                         disabled={busy}
+                    />
+                    {wifDescriptor ? (
+                        <Select
+                            label={t('importWallet.wif.addressType')}
+                            value={effectiveWifAddressType}
+                            onChange={(e) => {
+                                setWifAddressType(e.target.value);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            {wifAddressTypes.map((type) => (
+                                <option key={type} value={type}>{addressTypeLabel(type)}</option>
+                            ))}
+                        </Select>
+                    ) : null}
+                    <Input
+                        label={t('verifySignature.address')}
+                        value={wifAddress}
+                        readOnly
+                        autoComplete="off"
                     />
                     <Input
                         id="import-name"

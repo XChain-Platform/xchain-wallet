@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -20,6 +20,8 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { GatedPublishForm } from './GatedPublishForm.jsx';
 import {
     estimateNativeSendFeeTiers,
@@ -28,6 +30,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import publishStyles from './PublishFileForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -114,7 +117,6 @@ export function PublishFileForm({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileReadIdRef = useRef(0);
 
     // Gated mode: ticks this wallet owns (issuer-only protocol rule).
@@ -123,6 +125,10 @@ export function PublishFileForm({ walletId, onBack }) {
     const [gatePick, setGatePick] = useState(
         /** @type {{ chainId: string, tick: string, ownerAddress: string } | null} */ (null),
     );
+    const [fromOverrideId, setFromOverrideId] = useState(/** @type {string | null} */ (null));
+    const [fromPickerOpen, setFromPickerOpen] = useState(false);
+    const [gateTokenPickerOpen, setGateTokenPickerOpen] = useState(false);
+    const [gatedComposerOpen, setGatedComposerOpen] = useState(false);
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -220,10 +226,12 @@ export function PublishFileForm({ walletId, onBack }) {
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !chainId) return null;
         const all = addressesByChain[chainId] || [];
+        const override = fromOverrideId ? all.find((a) => a.id === fromOverrideId) : null;
+        if (override) return override;
         const funding = all.filter((a) => a.role !== 'dispenser');
         const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
         return all.find((a) => a.id === picked) || null;
-    }, [addressesByChain, activeByChain, chainId]);
+    }, [addressesByChain, activeByChain, chainId, fromOverrideId]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
@@ -515,16 +523,16 @@ export function PublishFileForm({ walletId, onBack }) {
         }
     }
 
-    // Encrypted mode with a gate tick picked: hand the whole screen to
-    // the PC-25 composition core (its own header, review, PSBT path).
-    if (mode === 'gated' && gatePick) {
+    // Continue from the token choice into the PC-25 composition core, which
+    // owns the encrypted file, review and PSBT stages.
+    if (gatedComposerOpen && gatePick) {
         return (
             <GatedPublishForm
                 walletId={walletId}
                 chainId={gatePick.chainId}
                 tick={gatePick.tick}
                 issuerAddress={gatePick.ownerAddress}
-                onBack={() => setGatePick(null)}
+                onBack={() => setGatedComposerOpen(false)}
             />
         );
     }
@@ -676,7 +684,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         height={160}
                         loading="lazy"
                         decoding="async"
-                        style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                        className={publishStyles.reviewPreview}
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
@@ -741,6 +749,68 @@ export function PublishFileForm({ walletId, onBack }) {
     const capHint = publicCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream');
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
 
+    if (gateTokenPickerOpen) {
+        const rows = ownedTokens || [];
+        return (
+            <Screen
+                variant={variant}
+                header={<PageHeader onBack={() => setGateTokenPickerOpen(false)} title="Choose a token" />}
+            >
+                <ListPage>
+                    {rows.length === 0 ? (
+                        <EmptyState
+                            title="No owned tokens"
+                            titleAs="h3"
+                            body="Only tokens you own can publish gated files for their holders."
+                        />
+                    ) : (
+                        <div className={publishStyles.tokenPickerCard} role="list">
+                            {rows.map((token) => {
+                                const tokenDescriptor = chainRegistry.get(token.chainId);
+                                return (
+                                    <ListRow
+                                        role="listitem"
+                                        key={`${token.chainId}:${token.tick}`}
+                                        leading={<TickerIcon tick={token.tick} chainId={token.chainId} size={28} />}
+                                        title={token.tick}
+                                        subtitle={tokenDescriptor?.displayName || token.chainId}
+                                        chevron
+                                        onClick={() => {
+                                            setChainId(token.chainId);
+                                            setFromOverrideId(null);
+                                            setGatePick({
+                                                chainId: token.chainId,
+                                                tick: token.tick,
+                                                ownerAddress: token.ownerAddress,
+                                            });
+                                            setGateTokenPickerOpen(false);
+                                        }}
+                                    />
+                                );
+                            })}
+                        </div>
+                    )}
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    if (fromPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(address) => {
+                    setFromOverrideId(address.id);
+                    setFromPickerOpen(false);
+                }}
+                onBack={() => setFromPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <FormPage
             demoGuard={demoGuard}
@@ -760,8 +830,35 @@ export function PublishFileForm({ walletId, onBack }) {
                         ? 'Preparing review…'
                         : singleEncode ? 'Publish file' : 'Review publish'}
                 </Button>
+            ) : gatePick ? (
+                <Button type="button" variant="primary" onClick={() => setGatedComposerOpen(true)}>
+                    Continue to file
+                </Button>
             ) : null}
         >
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    setFromOverrideId(null);
+                    if (gatePick?.chainId !== nextChainId) setGatePick(null);
+                }}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+                hideNetworkKind
+            />
+
+            <AddressField
+                label="From"
+                icon="addresses"
+                value={fromAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setFromPickerOpen(true)}
+                iconLabel="Choose source address"
+            />
+
             <div role="radiogroup" aria-label="Publish mode">
                 <label className={styles.checkRow}>
                     {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
@@ -794,7 +891,13 @@ export function PublishFileForm({ walletId, onBack }) {
             </div>
 
             {mode === 'gated' ? (
-                <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                <div className={publishStyles.gatedTokenField}>
+                    <TokenField
+                        label="Token"
+                        value={gatePick}
+                        onOpenPicker={() => setGateTokenPickerOpen(true)}
+                        disabled={ownedTokens === null}
+                    />
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
                     ) : ownedTokensError && ownedTokens.length === 0 ? (
@@ -810,63 +913,16 @@ export function PublishFileForm({ walletId, onBack }) {
                             {ownedTokensError ? (
                                 <FieldNote variant="error">{ownedTokensError}</FieldNote>
                             ) : null}
-                            <p className={styles.hint}>
-                                Pick the token whose holders can unlock the file:
-                            </p>
-                            <div role="list">
-                                {ownedTokens.map((t) => {
-                                    const d = chainRegistry.get(t.chainId);
-                                    return (
-                                        <Button
-                                            key={`${t.chainId}:${t.tick}`}
-                                            type="button"
-                                            role="listitem"
-                                            variant="secondary"
-                                            block
-                                            onClick={() => setGatePick({
-                                                chainId: t.chainId,
-                                                tick: t.tick,
-                                                ownerAddress: t.ownerAddress,
-                                            })}
-                                        >
-                                            <TickerIcon tick={t.tick} chainId={t.chainId} size={20} />
-                                            <code>{t.tick}</code>
-                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
-                                        </Button>
-                                    );
-                                })}
-                            </div>
                         </>
                     )}
                 </div>
             ) : (
                 <>
-                    <ChainPicker
-                        label="Network"
-                        value={chainId}
-                        onChange={setChainId}
-                        chainIds={chainIds}
-                        chainRegistry={chainRegistry}
-                        hideNetworkKind
+                    <Input
+                        type="file"
+                        label={`File (up to ${capHint.toLocaleString()} bytes)`}
+                        onChange={handlePickFile}
                     />
-
-                    <div style={{ margin: 'var(--xc-space-3) 0' }}>
-                        <Input
-                            ref={fileInputRef}
-                            type="file"
-                            onChange={handlePickFile}
-                            style={{ display: 'none' }}
-                            aria-label="Choose file to publish"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            {fileMeta ? 'Choose a different file' : 'Choose a file'}
-                        </Button>
-                    </div>
                     {fileMeta ? (
                         <>
                             {previewUrl ? (
@@ -877,7 +933,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                     height={160}
                                     loading="lazy"
                                     decoding="async"
-                                    style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                                    className={publishStyles.composePreview}
                                 />
                             ) : null}
                             <dl className={styles.detailsList}>

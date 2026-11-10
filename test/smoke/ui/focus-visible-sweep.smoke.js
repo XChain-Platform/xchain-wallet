@@ -97,7 +97,6 @@ const clippedTargets = [
     [join(routes, 'ContactsList.module.css'), 'row'],
     [join(routes, 'DispensersList.module.css'), 'row'],
     [join(routes, 'MyLists.module.css'), 'row'],
-    [join(routes, 'MyTokens.module.css'), 'chip'],
     [join(routes, 'StakingList.module.css'), 'row'],
     [join(styleGuide, 'AddressListSection.module.css'), 'abRow'],
     [join(styleGuide, 'BalanceListSection.module.css'), 'row'],

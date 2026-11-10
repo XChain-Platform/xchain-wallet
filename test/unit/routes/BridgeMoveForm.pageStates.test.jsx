@@ -113,6 +113,24 @@ afterEach(() => {
 });
 
 describe('BridgeMoveForm lays out every page state through FormPage', () => {
+    it('keeps the editable receiving address and route notice inside the form page', async () => {
+        const container = mountBridge();
+        await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)
+            .toBe(DOGE_ADDRESS.address), WAIT);
+        const receive = inputByLabel(container, /^Receive at/);
+        expect(receive.readOnly).toBe(false);
+
+        fireEvent.change(inputByLabel(container, /^Amount/i), { target: { value: '10' } });
+        await waitFor(() => expect(container.textContent).toContain(
+            'Locks 10 XCHAIN on Bitcoin and credits it on Dogecoin after 6 confirmations (~60 min).'
+            + ' The credit cannot be undone or redirected.',
+        ), WAIT);
+        expect(byText(container, 'dt', 'Source network')).toBeNull();
+        expect(byText(container, 'dt', 'Destination network')).toBeNull();
+        expect(byText(container, 'dt', 'Expected arrival')).toBeNull();
+        expect(receive.closest('form')).not.toBeNull();
+    });
+
     it('shows the address-load error as the FormPage status', async () => {
         const container = mountBridge({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
         await waitFor(() => expect(container.querySelector('[data-form-status]')).not.toBeNull(), WAIT);

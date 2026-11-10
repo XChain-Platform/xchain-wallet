@@ -135,7 +135,7 @@ describe('ScanRoute Send recovery', () => {
         screen.getByRole('button', { name: 'Try again' }).click();
 
         expect(await screen.findByDisplayValue(DESTINATION)).toBeInTheDocument();
-        expect(screen.getByDisplayValue('0.25')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('0.25000000')).toBeInTheDocument();
         expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2);
     });
 });

@@ -202,20 +202,16 @@ describe('Home honours the host active wallet', () => {
         });
     });
 
-    it.each([
-        ['bitcoin-mainnet', true],
-        ['bitcoin-testnet', false],
-    ])('offers an unfinished %s confirm on mainnet Home: %s', async (chainId, offered) => {
-        const address = 'bc1qresumeresumeresumeresumeresumeresume0';
+    it('does not load or offer stored confirmation sessions', async () => {
         const session = {
-            id: `resume-${chainId}`,
+            id: 'resume-bitcoin-mainnet',
             createdAt: Date.now() - 1000,
-            request: { walletId: WALLET_A.id, chainId },
-            composed: { chainId, psbt: 'cHNidP8=', actionString: 'SEND|BTC|1' },
+            request: { walletId: WALLET_A.id, chainId: 'bitcoin-mainnet' },
+            composed: { chainId: 'bitcoin-mainnet', psbt: 'cHNidP8=', actionString: 'SEND|BTC|1' },
             dispatch: {
                 software: 'sendToken',
                 label: 'Send BTC',
-                base: { walletId: WALLET_A.id, chainId, from: { address } },
+                base: { walletId: WALLET_A.id, chainId: 'bitcoin-mainnet' },
             },
         };
         const messaging = {
@@ -229,68 +225,12 @@ describe('Home honours the host active wallet', () => {
         };
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <Home activeWalletId={WALLET_A.id} onResumeConfirm={vi.fn()} />
+                <Home activeWalletId={WALLET_A.id} />
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(messaging.listConfirmSessions).toHaveBeenCalled());
-        if (offered) {
-            expect(await screen.findByRole('group', { name: 'Unfinished transactions' })).toBeTruthy();
-        } else {
-            await act(async () => {});
-            expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
-        }
-    });
-
-    describe('an unfinished confirm does not wait on the network', () => {
-        const address = 'bc1qresumeresumeresumeresumeresumeresume0';
-        const session = {
-            id: 'resume-local',
-            createdAt: Date.now() - 1000,
-            request: { walletId: WALLET_A.id, chainId: 'bitcoin-mainnet' },
-            composed: { chainId: 'bitcoin-mainnet', psbt: 'cHNidP8=', actionString: 'SEND|BTC|1' },
-            dispatch: {
-                software: 'sendToken',
-                label: 'Send BTC',
-                base: { walletId: WALLET_A.id, chainId: 'bitcoin-mainnet', from: { address } },
-            },
-        };
-        const mountWithSession = (getWalletBalances) => {
-            const messaging = {
-                listWallets: vi.fn().mockResolvedValue([WALLET_A]),
-                listAccounts: vi.fn().mockResolvedValue([]),
-                getWalletBalances,
-                getAddressesByChain: vi.fn().mockResolvedValue({}),
-                getActiveAddresses: vi.fn().mockResolvedValue({}),
-                getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
-                listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [session] }),
-            };
-            render(
-                <MessagingProvider shell="web" messaging={messaging}>
-                    <Home activeWalletId={WALLET_A.id} onResumeConfirm={vi.fn()} />
-                </MessagingProvider>,
-            );
-            return messaging;
-        };
-
-        it('offers the confirm while the balance read is still pending', async () => {
-            const messaging = mountWithSession(vi.fn(() => new Promise(() => {})));
-
-            expect(await screen.findByRole('group', { name: 'Unfinished transactions' })).toBeTruthy();
-            expect(messaging.getWalletBalances).toHaveBeenCalled();
-        });
-
-        it('offers the confirm when the device is offline', async () => {
-            const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'onLine');
-            Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
-            try {
-                const messaging = mountWithSession(vi.fn().mockResolvedValue({}));
-
-                expect(await screen.findByRole('group', { name: 'Unfinished transactions' })).toBeTruthy();
-                expect(messaging.getWalletBalances).not.toHaveBeenCalled();
-            } finally {
-                if (descriptor) Object.defineProperty(Navigator.prototype, 'onLine', descriptor);
-            }
-        });
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
+        expect(messaging.listConfirmSessions).not.toHaveBeenCalled();
+        expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
     });
 });

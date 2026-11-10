@@ -35,10 +35,4 @@ describe('shared control overrides', () => {
         expect(rule(css, '.rowWrap .rowMenuBtn')).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
     });
 
-    it('the resume card actions are kit Buttons', () => {
-        const source = read('packages/core/src/shared/components/ResumeConfirmCard.jsx');
-
-        expect(source).toMatch(/<Button\b/);
-        expect(source).not.toMatch(/<button\b/);
-    });
 });

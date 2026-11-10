@@ -200,16 +200,13 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
                 .toHaveValue(source);
             await expectAddressStateLine(page, 'This address is currently active (not paused).');
 
-            // Lock relative to the height the form's future-block check uses.
-            const heightLine = main.getByText(/^Duration starts from current block /);
-            await expect(heightLine, 'the lock form never read the chain height').toBeVisible({ timeout: 30_000 });
-            const height = Number((await heightLine.innerText()).match(/block ([\d,]+)\./)?.[1]?.replace(/,/g, ''));
-            expect(Number.isFinite(height) && height > 0, 'unreadable chain height on the lock form').toBe(true);
-            const resumeBlock = height + LOCK_AHEAD_BLOCKS;
-
-            await main.getByRole('radio', { name: /Lock for a duration/ }).check();
-            await main.getByLabel('Duration (blocks)').fill(String(LOCK_AHEAD_BLOCKS));
-            await main.getByRole('button', { name: 'Preview', exact: true }).click();
+            await main.getByRole('slider', { name: 'Duration' }).fill('4');
+            await main.getByLabel('Blocks').fill(String(LOCK_AHEAD_BLOCKS));
+            const endLine = main.getByText(/^Ends at block /);
+            await expect(endLine, 'the lock form never calculated its end block').toBeVisible({ timeout: 30_000 });
+            const resumeBlock = Number((await endLine.innerText()).match(/block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
+            expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'unreadable end block on the lock form').toBe(true);
+            await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
             // Legacy review stage: irreversibility warning, typed confirm, sign.
             await expect(page.getByText('This pauses XChain actions from your address.', { exact: false }))

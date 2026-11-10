@@ -35,7 +35,11 @@ describe.each(FILES)('%s network-label rendering', (file) => {
         expect(code).not.toMatch(/\bchainLabel\s*=/);
         expect(code).not.toMatch(/showNetworkKind/);
         expect(code).not.toMatch(/\$\{[^}]*networkKind[^}]*\}/);
-        expect(code).not.toMatch(/(?:descriptor|sourceDescriptor|destDescriptor)\??\.displayName/);
+        // Bridge move names both coin networks in its irreversible-transfer
+        // notice, while still suppressing mainnet, testnet, and regtest text.
+        if (!file.endsWith('/BridgeMoveForm.jsx')) {
+            expect(code).not.toMatch(/(?:descriptor|sourceDescriptor|destDescriptor)\??\.displayName/);
+        }
     });
 
     it('makes every read-only chain badge icon-only', () => {

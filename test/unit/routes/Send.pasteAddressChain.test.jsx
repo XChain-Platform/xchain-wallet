@@ -92,7 +92,7 @@ describe('xchain: address link pasted on another chain', () => {
         await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCES['litecoin-mainnet']));
         expect(to).toHaveValue(LTC_DEST);
         expect(screen.getByLabelText('Token')).toHaveValue('LTC');
-        expect(screen.getByLabelText(/^Amount \(LTC\)/)).toHaveValue('2');
+        expect(screen.getByLabelText(/^Amount \(LTC\)/)).toHaveValue('2.00000000');
     });
 
     it('stays on the open chain when the wallet has no address on the link chain', async () => {

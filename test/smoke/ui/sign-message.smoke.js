@@ -54,23 +54,26 @@ assert.match(formSrc, /export function SignMessageForm/, 'exports SignMessageFor
 assert.match(formSrc, /messaging\.signMessageRequest/, 'calls messaging.signMessageRequest');
 assert.match(formSrc, /messaging\.getAddressesByChain/, 'loads chain/address map');
 assert.match(formSrc, /<ChainPicker/, 'uses ChainPicker for chain selection');
-assert.match(formSrc, /<Select[\s\S]*aria-label="Address"/, 'uses the kit address select');
+assert.match(formSrc, /<AddressField[\s\S]*icon="addresses"/, 'uses the own-address field');
+assert.match(formSrc, /<OwnAddressPickerScreen/, 'opens the own-address picker');
 assert.match(formSrc, /<Textarea/, 'uses the kit message textarea');
-// slice 5: the password moved ONTO the confirm page (§5.5 message
-// variant) and the form's inline copy is deleted, so the form must NOT ask
-// for it - collecting it twice would be the drift this slice removes.
-assert.doesNotMatch(
+assert.match(
     formSrc,
-    /label="Wallet password"/,
-    'the form does not ask for the password; the confirm page collects it',
+    /!signerReady[\s\S]*type="password"[\s\S]*label="Password"/,
+    'the form asks for a password only when the signer is not ready',
 );
 assert.match(formSrc, /CopyButton/, 'has copy-signature affordance');
+assert.match(
+    formSrc,
+    /The signature appears here after you sign\./,
+    'shows the empty signature box before signing',
+);
 assert.match(
     formSrc,
     /InvalidPasswordError[\s\S]*Incorrect password/,
     'maps InvalidPasswordError to user-friendly copy',
 );
-assert.match(formSrc, /Sign another message/, 'post-sign reset path');
+assert.doesNotMatch(formSrc, /MessageConfirmScreen|isConfirmOpenPhase/, 'does not open an approval page');
 
 // --- host handler -----------------------------------------------------
 

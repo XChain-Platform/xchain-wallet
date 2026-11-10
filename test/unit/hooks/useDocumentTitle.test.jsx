@@ -38,7 +38,8 @@ it('titles a route with its heading in sentence case', () => {
     expect(titleOf('mint-settings')).toBe('XChain Wallet - Mint settings');
     expect(titleOf('pause-token')).toBe('XChain Wallet - Pause token');
     expect(titleOf('send-picker')).toBe('XChain Wallet - Send');
-    expect(titleOf('actions')).toBe('XChain Wallet - Token actions');
+    expect(titleOf('actions')).toBe('XChain Wallet - All actions');
+    expect(titleOf('parallel-compose')).toBe('XChain Wallet - Action queue');
     expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent accounts');
     expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance');
     expect(titleOf('bet-markets')).toBe('XChain Wallet - Betting');

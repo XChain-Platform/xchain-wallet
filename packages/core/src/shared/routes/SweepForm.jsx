@@ -33,7 +33,6 @@ import { gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { formatAmount } from '../components/BalanceList.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -98,17 +97,14 @@ const CATEGORY_META = [
     { key: 'dispensers', label: 'Open dispensers (force-close)', defaultOn: false, hint: 'Closes every open dispenser (1-hour close window); remaining escrow goes to the destination.' },
 ];
 
-const PREVIEW_ROW_CAP = 8;
-
 /**
  * Dedicated SWEEP form (PC-34).
  *
  * Moves token balances, token ownerships, and (by flag) force-closes
  * open orders / swaps / dispensers from one address, routing everything
- * (escrow included) to a single destination. The preview is API-derived
- * and indicative: SWEEP moves whatever the chain says at confirmation
- * time, so the typed confirm covers "everything in the selected
- * categories, including anything not listed here".
+ * (escrow included) to a single destination. The API-derived counts are
+ * a snapshot: SWEEP moves whatever the chain says at confirmation time,
+ * so the typed confirm covers everything in the selected categories.
  *
  * Migrate lane (`migrateTo` set, from MigrateToBip39): destination is
  * locked to the new wallet's matching address and the gated-content
@@ -228,7 +224,7 @@ export function SweepForm({
         setFormError((prev) => (prev === null ? prev : null));
     }, []);
 
-    // ---- Indicative preview (sweep.preview host route) ----
+    // Load snapshot counts from the sweep preview host route.
     const [preview, setPreview] = useState(/** @type {any | null} */ (null));
     const [previewError, setPreviewError] = useState(/** @type {string | null} */ (null));
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -255,10 +251,10 @@ export function SweepForm({
                 }
             })
             .catch(() => {
-                // Preview failure NEVER blocks the sweep; the typed
-                // confirm already covers unlisted holdings.
+                // A count failure never blocks the sweep; the typed confirm
+                // already covers all holdings in the selected categories.
                 if (previewRequestRef.current === requestId) {
-                    setPreviewError('Preview unavailable.');
+                    setPreviewError('Counts unavailable.');
                 }
             })
             .finally(() => {
@@ -977,8 +973,8 @@ export function SweepForm({
                 <StatusMessage variant="warning" role="alert">
                     <p>
                         <strong>Sweep moves everything selected at once.</strong>{' '}
-                        The preview below is indicative; the chain settles whatever
-                        the address holds when the sweep confirms.
+                        The counts are a snapshot; the sweep moves whatever the
+                        address holds when it confirms.
                     </p>
                 </StatusMessage>
             ))}
@@ -993,20 +989,7 @@ export function SweepForm({
                 </Button>
             )}
         >
-            <FormSection title="Addresses">
-            {migrateLane ? (
-                <p className={styles.hint}>
-                    Migration sweep: moves this legacy address's tokens to{' '}
-                    {migrateTo.name || 'your new BIP39 wallet'}.{' '}
-                    {/* A migrating user is the one person who must not read
-                        this as "everything moved" - SWEEP never touches the
-                        coin, so say where it stays and what is left to do. */}
-                    Your {coinTicker || 'coin'} balance stays on the legacy
-                    address; send it across separately, and keep the legacy
-                    recovery phrase until you have.
-                </p>
-            ) : null}
-
+            <FormSection title="Addresses" className={styles.untitledSection}>
             {migrateLane ? (
                 <dl className={styles.detailsList}>
                     {descriptor ? (
@@ -1026,6 +1009,19 @@ export function SweepForm({
                     hideNetworkKind
                 />
             )}
+
+            {migrateLane ? (
+                <p className={styles.hint}>
+                    Migration sweep: moves this legacy address's tokens to{' '}
+                    {migrateTo.name || 'your new BIP39 wallet'}.{' '}
+                    {/* A migrating user is the one person who must not read
+                        this as "everything moved" - SWEEP never touches the
+                        coin, so say where it stays and what is left to do. */}
+                    Your {coinTicker || 'coin'} balance stays on the legacy
+                    address; send it across separately, and keep the legacy
+                    recovery phrase until you have.
+                </p>
+            ) : null}
 
             {fromAddress ? (
                 <AddressField
@@ -1089,24 +1085,23 @@ export function SweepForm({
                             clearFormError();
                         }}
                     />
-                    {flags[c.key] ? <CategoryPreview preview={preview} categoryKey={c.key} /> : null}
                 </div>
             ))}
             {selectedPreviewUnavailable ? (
-                <p className={styles.hint}>Preview unavailable for this category; the sweep still moves it.</p>
+                <p className={styles.hint}>Count unavailable for this category; the sweep still moves it.</p>
             ) : null}
-            {previewLoading ? <p className={styles.hint}>Loading preview…</p> : null}
+            {previewLoading ? <p className={styles.hint}>Loading counts…</p> : null}
             {previewError ? (
                 <p className={styles.hint}>
-                    {previewError} The sweep still moves
-                    everything in the selected categories.
+                    {previewError} The counts are a snapshot; the sweep moves
+                    whatever the address holds when it confirms.
                 </p>
             ) : null}
             {selectedPreviewEmpty ? (
                 <p className={styles.hint}>
-                    Nothing is currently shown in the selected categories. The
-                    preview is indicative, so holdings that arrive before
-                    confirmation are still included.
+                    Nothing is in the selected categories right now. The counts
+                    are a snapshot; the sweep moves whatever the address holds
+                    when it confirms.
                 </p>
             ) : null}
             </FormSection>
@@ -1237,58 +1232,9 @@ export function SweepForm({
 function categoryCount(preview, key) {
     const cat = preview?.[key];
     if (!cat) return '…';
-    if (cat.error) return 'preview unavailable';
+    if (cat.error) return 'count unavailable';
     const n = Array.isArray(cat.rows) ? cat.rows.length : 0;
     return String(n);
-}
-
-/**
- * Compact per-category preview rows. Indicative only: capped at
- * PREVIEW_ROW_CAP with an explicit "+N more", and a category whose
- * endpoint failed says so instead of pretending emptiness.
- */
-function CategoryPreview({ preview, categoryKey }) {
-    const cat = preview?.[categoryKey];
-    if (!cat) return null;
-    if (cat.error) return null;
-    const rows = Array.isArray(cat.rows) ? cat.rows : [];
-    if (rows.length === 0) return null;
-    const shown = rows.slice(0, PREVIEW_ROW_CAP);
-    return (
-        <ul className={styles.hint}>
-            {shown.map((r, i) => (
-                <li key={i}>{describePreviewRow(categoryKey, r)}</li>
-            ))}
-            {rows.length > shown.length ? (
-                <li>+{rows.length - shown.length} more</li>
-            ) : null}
-        </ul>
-    );
-}
-
-function describePreviewRow(categoryKey, r) {
-    switch (categoryKey) {
-        case 'balances':
-            // quantity is atomic units at r.divisibility scale (issue #4);
-            // formatAmount divides it back to human scale for display.
-            return `${formatAmount(r.quantity, r.divisibility)} ${r.tick}`;
-        case 'ownerships':
-            return `${r.tick} (ownership)`;
-        case 'orders':
-            return `Order #${r.actionIndex}${r.giveOwnership
-                ? ` - escrowed ${r.giveTick || ''} ownership`.trimEnd()
-                : (r.giveAmount ? ` - escrow ${r.giveAmount} ${r.giveTick || r.giveCoin || ''}`.trimEnd() : '')}`;
-        case 'swaps':
-            return `Swap #${r.actionIndex}${r.giveOwnership
-                ? ` - escrowed ${r.giveTick || ''} ownership`.trimEnd()
-                : (r.giveAmount ? ` - escrow ${r.giveAmount} ${r.giveTick || ''}`.trimEnd() : '')}`;
-        case 'dispensers':
-            return `Dispenser #${r.actionIndex}${r.giveOwnership
-                ? ` - escrowed ${r.tick || ''} ownership`.trimEnd()
-                : (r.escrowRemaining ? ` - escrow ${r.escrowRemaining} ${r.tick || ''}`.trimEnd() : '')}`;
-        default:
-            return '';
-    }
 }
 
 function DetailRow({ label, value }) {

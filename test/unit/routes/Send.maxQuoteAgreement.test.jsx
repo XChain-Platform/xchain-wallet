@@ -141,7 +141,7 @@ describe('Send Max quote agreement', () => {
         });
 
         await useMax();
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
 
@@ -181,7 +181,7 @@ describe('Send Max quote agreement', () => {
         await useMax();
 
         const amount = screen.getByLabelText(/^Amount \(/);
-        await waitFor(() => expect(amount).toHaveValue('0.999985'));
+        await waitFor(() => expect(amount).toHaveValue('0.99998500'));
         expect(amount).toBeEnabled();
         expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
     });
@@ -205,13 +205,13 @@ describe('Send Max quote agreement', () => {
             fast.resolve(quoteFor('99998000'));
             await fast.promise;
         });
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998000'));
 
         await act(async () => {
             slow.resolve(quoteFor('99999000'));
             await slow.promise;
         });
-        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998');
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998000');
         expect(quote.mock.calls[0][0].feePerKb).toBe(6000);
         expect(quote.mock.calls[1][0].feePerKb).toBe(12000);
     });

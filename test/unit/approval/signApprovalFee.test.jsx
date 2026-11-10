@@ -13,7 +13,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 const feeFiat = vi.hoisted(() => ({
-    formatNativeFee: vi.fn((amount) => (amount === '0.000015' ? '≈ $1.50 USD' : null)),
+    formatNativeFee: vi.fn((amount) => (amount === '0.000015' ? '~$1.50' : null)),
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
@@ -85,7 +85,7 @@ describe('SignApproval network fee summary', () => {
         await screen.findByText('Send 1 BTC.');
         expect(screen.getByTestId('sign-approval-fee')).toHaveTextContent('Network fee');
         expect(screen.getByTestId('sign-approval-fee'))
-            .toHaveTextContent('0.000015 BTC (≈ $1.50 USD)');
+            .toHaveTextContent('0.000015 BTC (~$1.50)');
         expect(feeFiat.formatNativeFee).toHaveBeenCalledWith('0.000015');
     });
 

@@ -31,7 +31,7 @@ import { useSourceTickBalance } from '../hooks/useSourceTickBalance.js';
 import { recheckSourceTickBalance } from '../../flows/sourceTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
-import { exceedsBalance } from '../utils/dividendPerUnit.js';
+import { compareDecimal, exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -71,8 +71,8 @@ const PROTOCOL_COIN_TICKER = {
  * Burns `AMOUNT` of the caller's balance of `TICK`. Irreversible at
  * the protocol level: once broadcast and mined, the destroyed balance
  * is gone. The review screen leads with the decoder's "Destroy is
- * irreversible" warning (see action-decoder.smoke.js case 2h) and the
- * form prefaces the ticker field with the same prose.
+ * irreversible" warning, and signing requires an exact typed DESTROY
+ * confirmation.
  *
  * Until the Token detail page (§40.5 context) ships, the ticker is
  * user-entered. From Token detail, callers will pass in a prefilled
@@ -744,10 +744,6 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </Button>
             )}
         >
-            <FormNotice variant="warning" role="alert" lead="Destroy is irreversible.">
-                The burned amount cannot be recovered.
-            </FormNotice>
-
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
@@ -790,7 +786,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     setAmount(stripped);
                     setAmountError(null);
                 }}
-                onMax={tickAmtBalance && Number(tickAmtBalance) > 0
+                onMax={compareDecimal(tickAmtBalance, '0') === 1
                     ? () => { setAmount(tickAmtBalance); setAmountError(null); }
                     : undefined}
                 maxDisabled={!tickAmtBalance}

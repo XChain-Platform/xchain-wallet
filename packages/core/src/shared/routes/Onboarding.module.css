@@ -49,6 +49,18 @@
     line-height: 1.5;
 }
 
+.freeWalletButton {
+    --xc-accent-primary: #a05c38;
+    --xc-accent-primary-hover: #7c4328;
+}
+
+.entryIcon {
+    display: block;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+    object-fit: contain;
+}
+
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {
@@ -114,8 +126,8 @@
 .licenseGate {
     display: flex;
     flex-direction: column;
-    /* The gate is as tall as the terms and acknowledgement, never taller, so
-       the actions row follows it; it shrinks only when the screen is short. */
+    /* The gate is as tall as the terms and controls, never taller; it shrinks
+       only when the screen is short. */
     flex: 0 1 auto;
     min-height: 0;
     gap: var(--xc-space-2);
@@ -149,30 +161,6 @@
 .licenseScroll:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) / 2);
-}
-
-/* From 834px the terms read as a centred card two-thirds of the available
-   width that wraps only the text: the card grows with its text up to the
-   height left and scrolls past it, and the checkbox follows it directly. */
-@media (min-width: 834px) {
-    .licenseGate {
-        width: calc(100% * 2 / 3);
-        max-width: calc(100% * 2 / 3);
-    }
-
-    .licenseScroll {
-        flex: 0 1 auto;
-        max-height: 100%;
-    }
-
-    /* The filled form body stops at its content instead of taking the free
-       height, so Accept and continue follows the terms directly; the body
-       still shrinks and scrolls when the terms are taller than the window.
-       The element prefix outranks FormPage's own fill rule whatever order
-       the bundle loads the two modules in. */
-    form.licenseForm > [data-form-stack] {
-        flex: 0 1 auto;
-    }
 }
 
 .licenseParagraph {
@@ -213,6 +201,17 @@
     white-space: nowrap;
 }
 
+/* The controls follow the terms as one group. Narrow layouts keep the
+   acknowledgement above Accept and continue. */
+.licenseControls {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    width: 100%;
+    min-width: 0;
+}
+
 /* Sized rules target the button: the visually hidden disabled reason beside
    it must keep its one-pixel box, or it widens the page sideways. */
 .licenseActions {
@@ -234,15 +233,45 @@
     }
 }
 
-/* From 834px the action row sits outside the gate (FormPage renders actions
-   after the body), so it takes the same centred two-thirds column as the
-   terms card and Accept and continue ends on the card's end edge. A max-width
-   with auto inline margins outranks the stacked row's full width in any
-   bundle order. */
+/* From 834px the terms read as a centred card two-thirds of the available
+   width that wraps only the text, and both controls share the row directly
+   below it aligned to opposite card edges. */
 @media (min-width: 834px) {
-    .licenseActions {
+    .licenseGate {
+        width: calc(100% * 2 / 3);
         max-width: calc(100% * 2 / 3);
-        margin-inline: auto;
+    }
+
+    .licenseScroll {
+        flex: 0 1 auto;
+        max-height: 100%;
+    }
+
+    /* The filled form body stops at its content instead of taking the free
+       height, so the controls follow the terms directly; the body still
+       shrinks and scrolls when the terms are taller than the window. The
+       element prefix outranks FormPage's fill rule in either bundle order. */
+    form.licenseForm > [data-form-stack] {
+        flex: 0 1 auto;
+    }
+
+    .licenseControls {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--xc-space-3);
+    }
+
+    .licenseAck {
+        flex: 0 1 auto;
+        width: auto;
+        min-width: 0;
+    }
+
+    .licenseActions {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
     }
 }
 

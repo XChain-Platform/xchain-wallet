@@ -119,7 +119,6 @@ describe('primary routes at 768x1024', () => {
             getAddressesByChain: vi.fn().mockResolvedValue({}),
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             listPendingAirdropsForWallet: vi.fn().mockResolvedValue([]),
-            listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [] }),
             getNativePricesRequest: vi.fn().mockResolvedValue({ prices: {} }),
         });
         const view = renderTablet(
@@ -135,9 +134,8 @@ describe('primary routes at 768x1024', () => {
         const actions = await screen.findByRole('group', { name: 'Quick actions' });
         expectRailNavigation(view.container);
         expectListPage(view.container);
-        // A demo wallet keeps Send (it explains the demo) beside Exchange, so the row holds two actions.
-        expect(actions.className).not.toMatch(/quickActionsSingle/);
-        expect(within(actions).getAllByRole('button')).toHaveLength(2);
+        // A demo wallet shows the same quick actions as a real one; this shell wires Exchange and no actions menu.
+        expect(within(actions).getAllByRole('button')).toHaveLength(3);
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
     });
 
@@ -218,7 +216,7 @@ describe('primary routes at 768x1024', () => {
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
         expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
         expect(navCss).toMatch(/\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px/s);
-        expect(homeCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.quickActionsSingle\s*\{[^}]*grid-template-columns:\s*minmax\(76px, 10rem\)/s);
+        expect(homeCss).toMatch(/\.quickActions\s*\{[^}]*grid-auto-columns:\s*minmax\(0, 7\.5rem\)/s);
         expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(10rem, 12rem\)/s);
     });
 });

@@ -44,7 +44,7 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 // --- 1. Onboarding 3rd entry ----------------------------------------
 
-const onboarding = readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8');
+const onboarding = withEnglishCopy(readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8'));
 assert.ok(/onImportFromFreeWallet/.test(onboarding), 'Onboarding declares onImportFromFreeWallet prop');
 assert.ok(/From FreeWallet/.test(onboarding), 'Onboarding renders "From FreeWallet" label');
 

@@ -33,8 +33,6 @@ import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
-import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
-import { filterConfirmSessionsForAccount } from '../utils/activeAccountScope.js';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
@@ -54,8 +52,8 @@ import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerError
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
+import { QuickActionTile } from '../../ui/QuickActionTile.jsx';
 import cardStyles from '../../ui/Card.module.css';
-import { useBackHandler } from '../../ui/backStack.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import {
     hasAvailableChain,
@@ -67,17 +65,6 @@ import '../../i18n/locales/en/actionsMenu.js';
 import '../../i18n/locales/en/alerts.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-// Confirm sessions outlive a network switch in the host, so Home offers only
-// the ones whose chain belongs to the active network.
-function confirmSessionsForNetwork(sessions, activeNetwork) {
-    return sessions.filter((session) => {
-        const chainId = session?.dispatch?.base?.chainId
-            || session?.composed?.chainId
-            || session?.request?.chainId;
-        return chainRegistry.get(chainId)?.networkKind === activeNetwork;
-    });
-}
 
 // The verb the balance banner is written in, in one place: the humanized
 // message minted in the catch and the countdown re-rendered once a second have
@@ -180,12 +167,11 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * @param {() => void} [props.onLocked]        refresh upstream state machine
  * @param {() => void} [props.onSend]          navigate to Send sub-route
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
- * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route (quick action #3)
+ * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route; a quick action only when the shell wires no `onActions`
  * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected (quick action #4)
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+); full mode only, see the §40 note below
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
- * @param {(session: object) => void} [props.onResumeConfirm] §5.4: finish a confirm the popup closed on
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
@@ -207,20 +193,21 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * array "for the small-mode drawer" and never rendered it, so the web
  * shell built 24 entries per render that no user could ever reach from
  * this component. Both variants route to the same dedicated
- * ActionsMenu screen instead: full mode via the "More actions" button (`onActions`)
- * in the quick actions from 834px up, or in the action grid below on narrower windows, small mode via the pancake menu's
+ * ActionsMenu screen instead: the "More actions" quick action (`onActions`)
+ * at every width, the pancake menu's
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
     useNativeExitRoot();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // From 834px up, More actions replaces Swap in the quick actions and the
-    // supplementary row below the balances is gone; Swap lives in that menu.
+    // The quick actions are Send, Receive, Exchange and More actions at every
+    // width; Swap lives in the More actions menu. From 834px up the
+    // supplementary row below the balances is gone when that menu is wired.
     const isWide = useWideLayout();
-    const wideMoreActions = isWide && typeof onActions === 'function';
+    const hasActionsMenu = typeof onActions === 'function';
     const {
         overall: reachabilityOverall,
         refresh: recheckReachability,
@@ -267,7 +254,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
+    // A demo wallet's fixtures are not live data and cannot spend.
     const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
+    const sourceLive = !isDemoActive;
+    const canSpend = !isDemoActive;
     const quickActionsReason = isWatcherMode
         ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
         : null;
@@ -356,7 +346,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     );
     const recentActivityRequestRef = useRef(/** @type {string | null} */ (null));
     const loadRecentActivity = useCallback(() => {
-        if (!activeWalletId || !activeNetwork || isDemoActive) return;
+        if (!activeWalletId || !activeNetwork || !sourceLive) return;
         if (recentActivityRequestRef.current === recentActivityScope) return;
         recentActivityRequestRef.current = recentActivityScope;
         const scope = recentActivityScope;
@@ -397,7 +387,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 land(recentActivityEntries(read.flatMap((r) => r.value)), false);
             })
             .catch(() => land(cachedEntries, !cachedEntries));
-    }, [activeWalletId, activeAccountId, activeNetwork, isDemoActive, messaging, recentActivityScope]);
+    }, [activeWalletId, activeAccountId, activeNetwork, sourceLive, messaging, recentActivityScope]);
     const recentActivity = recentActivityState?.scope === recentActivityScope ? recentActivityState : null;
     const backupReminderHasFunds = useMemo(() => hasBackupReminderFunds(
         buildBalanceRows(balancesView, chainRegistry, activeByChain),
@@ -414,12 +404,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // popup mounts no provider, so this call runs the only instance there.
     const { obligations: pendingCoinpays } = useSharedCoinpayObligations(
         activeWalletId, activeAccountId,
-    );
-    // Unfinished confirms (an UNSIGNED composed PSBT the popup
-    // closed on). Same slot as the two cards above; nothing here has moved
-    // money, which is why the card says so in as many words.
-    const [confirmSessions, setConfirmSessions] = useState(
-        /** @type {any[]} */ ([]),
     );
     const [multisig, setMultisig] = useState(
         /** @type {{ threshold: number, cosignerCount: number, scheme: string } | null} */ (null),
@@ -458,29 +442,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const setTokenQuery = onTokenQueryChangeProp ?? walletFilters.setTokenQuery;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
-    const [homeMoreOpen, setHomeMoreOpen] = useState(false);
-    // The system Back gesture closes this before it leaves the screen.
-    useBackHandler(homeMoreOpen ? () => setHomeMoreOpen(false) : undefined);
-    const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    useEffect(() => {
-        if (!homeMoreOpen) return undefined;
-        const onClick = (e) => {
-            if (homeMoreWrapRef.current?.contains(e.target)) return;
-            setHomeMoreOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setHomeMoreOpen(false); };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [homeMoreOpen]);
-    // The overflow menu's entries as data, so an empty list can
-    // drop the "More" button itself. Every entry it holds today is
-    // DEX-gated, so a build that hides the DEX wires none and used to open
-    // the menu onto a dead "No additional actions" row. A future non-DEX
-    // entry appends here and keeps More alive on its own.
     const runNetworkAction = useCallback((label, action) => {
         if (typeof action !== 'function') return;
         if (!networkActionsAvailable) {
@@ -493,21 +454,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         action();
     }, [networkActionsAvailable, showToast]);
 
-    const homeMoreActions = useMemo(() => {
-        const out = [];
-        if (onSwap && !isDemoActive) {
-            out.push({
-                id: 'swap',
-                label: 'Swap',
-                icon: <Icon.SwapIcon />,
-                onSelect: () => runNetworkAction('Swapping', onSwap),
-            });
-        }
-        return out;
-    }, [isDemoActive, onSwap, runNetworkAction]);
-    const quickActionCount = (isDemoActive ? 1 : 2)
+    // A shell that wires no actions menu keeps Swap as the fourth tile so the
+    // row still ends on a way into the token actions. Demo wallets get the same
+    // tiles as real ones; only their data differs.
+    const swapFallback = !hasActionsMenu && typeof onSwap === 'function';
+    const quickActionCount = 2
         + (onExchange ? 1 : 0)
-        + (wideMoreActions || homeMoreActions.length > 0 ? 1 : 0);
+        + (hasActionsMenu || swapFallback ? 1 : 0);
     useEffect(() => {
         setDemoSendNoticeOpen(false);
         setDemoExitConfirmOpen(false);
@@ -755,9 +708,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWalletId, messaging]);
 
-    // Per-wallet load: balances, multisig indicator, pending airdrops and
-    // unfinished confirms. Scope changes clear data that belongs to another
-    // wallet or account. Same-scope reloads, polls and focus refreshes keep
+    // Per-wallet load: balances, multisig indicator and pending airdrops.
+    // Scope changes clear data that belongs to another wallet or account.
+    // Same-scope reloads, polls and focus refreshes keep
     // cached data visible until fresh data lands.
     // Start (or restart) a rate-limit wait: the banner counts down from here
     // and the effect below re-loads when it reaches zero.
@@ -778,22 +731,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         reportError = false,
     }) => {
         if (!activeNetwork) return;
-        // Confirms the popup closed on. Extension-only in practice (the store
-        // is chrome.storage.session), and the route answers with an empty list
-        // on the shells that have none, so no shell check is needed here. The
-        // read is local, so it starts before the offline gate and before the
-        // balance reads: a slow or unreachable explorer must not hide the card
-        // that finishes or discards a stored transaction. Not awaited, so the
-        // balance load does not wait on it either.
-        if (typeof messaging.listConfirmSessions === 'function') {
-            messaging.listConfirmSessions().then((resp) => {
-                if (isCancelled()) return;
-                setConfirmSessions(confirmSessionsForNetwork(
-                    filterConfirmSessionsForAccount(resp?.sessions, walletId, accountId),
-                    activeNetwork,
-                ));
-            }).catch(() => { /* non-fatal */ });
-        }
         // The saved copy of this pair's balances; only a clean fresh read
         // replaces it. activeForCache starts from the saved active addresses.
         let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
@@ -827,7 +764,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setCachedBalancesUpdating(false);
                 setMultisig(null);
                 setPendingAirdrops([]);
-                setConfirmSessions([]);
             } else {
                 setCachedBalancesUpdating(isNavigatorOnline());
             }
@@ -1173,11 +1109,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // the auto-lock hook, and left with it. Do not re-add a
     // `useAutoLock` call to any route.
     const hasChains = hasAvailableChain(settings, chainRegistry);
-    // §7/§8: SPV proof verification. Off for demo wallets (synthetic
+    // §7/§8: SPV proof verification. Off for a fixture source (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
     // fills in progressively after the user opens the Tokens tab.
-    const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
+    const verifyProofsEnabled = settings.settings?.verifyProofs !== false && sourceLive;
 
     // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
@@ -1225,102 +1161,48 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 </p>
             ) : null}
             <div
-                className={`${styles.quickActions} ${quickActionCount === 1 ? styles.quickActionsSingle : ''}`}
+                className={styles.quickActions}
                 role="group"
                 aria-label={t('home.quickActions')}
                 aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
             >
                 <SendQuickAction
-                    onSend={isDemoActive ? () => setDemoSendNoticeOpen(true) : onSend}
-                    networkActionsAvailable={isDemoActive || networkActionsAvailable}
+                    onSend={canSpend ? onSend : () => setDemoSendNoticeOpen(true)}
+                    networkActionsAvailable={!canSpend || networkActionsAvailable}
                     onOffline={() => runNetworkAction('Sending', onSend)}
                 />
-                {!isDemoActive ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className={styles.quickAction}
-                        onClick={onReceive}
-                        disabled={!onReceive}
-                        icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
-                    >
-                        {t('home.receive')}
-                    </Button>
-                ) : null}
+                <QuickActionTile
+                    onClick={onReceive}
+                    disabled={!onReceive}
+                    icon={<Icon.ReceiveIcon />}
+                >
+                    {t('home.receive')}
+                </QuickActionTile>
                 {onExchange ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className={styles.quickAction}
+                    <QuickActionTile
                         onClick={() => runNetworkAction('Exchange', onExchange)}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
                         title={!networkActionsAvailable ? t('home.exchangeOffline') : undefined}
-                        icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
+                        icon={<Icon.MarketIcon />}
                     >
                         {t('home.exchange')}
-                    </Button>
+                    </QuickActionTile>
                 ) : null}
-                {wideMoreActions ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        className={styles.quickAction}
+                {hasActionsMenu ? (
+                    <QuickActionTile
                         onClick={onActions}
-                        icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
+                        icon={<Icon.MoreIcon />}
                     >
                         {t('actionsMenu.more')}
-                    </Button>
+                    </QuickActionTile>
                 ) : null}
-                {!wideMoreActions && homeMoreActions.length === 1 ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className={styles.quickAction}
-                        onClick={homeMoreActions[0].onSelect}
-                        aria-label={homeMoreActions[0].label}
-                        icon={<span className={styles.quickActionIcon}>{homeMoreActions[0].icon}</span>}
+                {swapFallback ? (
+                    <QuickActionTile
+                        onClick={() => runNetworkAction('Swapping', onSwap)}
+                        icon={<Icon.SwapIcon />}
                     >
-                        {homeMoreActions[0].label}
-                    </Button>
-                ) : null}
-                {!wideMoreActions && homeMoreActions.length > 1 ? (
-                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className={styles.quickAction}
-                            aria-haspopup="menu"
-                            aria-expanded={homeMoreOpen}
-                            onClick={() => setHomeMoreOpen((o) => !o)}
-                            icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
-                        >
-                            {t('history.detail.more')}
-                        </Button>
-                        {homeMoreOpen ? (
-                            <div className={styles.quickActionMoreMenu} role="menu">
-                                {homeMoreActions.map((action) => (
-                                    <Button
-                                        key={action.id}
-                                        type="button"
-                                        role="menuitem"
-                                        className={styles.quickActionMoreItem}
-                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                        icon={action.icon ? (
-                                            <span className={styles.quickActionMoreItemIcon}>
-                                                {action.icon}
-                                            </span>
-                                        ) : null}
-                                    >
-                                        {action.label}
-                                    </Button>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
+                        {SWAP_LABEL}
+                    </QuickActionTile>
                 ) : null}
             </div>
             {demoExitConfirmOpen ? (
@@ -1334,8 +1216,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         </div>
     ), [
         demoExitBusy, demoExitConfirmOpen, demoExitError, handleExitDemo,
-        homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onActions, onExchange,
-        onReceive, onSend, wideMoreActions, quickActionCount, quickActionsReason, runNetworkAction,
+        hasActionsMenu, canSpend, networkActionsAvailable, onActions, onExchange,
+        onReceive, onSend, onSwap, swapFallback, quickActionsReason, runNetworkAction,
     ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
@@ -1448,7 +1330,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     dismissOnLeave
                     onFinished={(job) => { if (job?.found > 0) void refreshPortfolio(); }}
                 />
-                {isDemoActive && demoSendNoticeOpen ? (
+                {!canSpend && demoSendNoticeOpen ? (
                     <StatusMessage
                         recovery={{
                             label: t('walletDetails.exitDemo'),
@@ -1492,18 +1374,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {/* Inline notice removed; now surfaces in the Alerts panel
                     of the pancake menu instead so the main view stays
                     focused on balances + work, not status banners. */}
-
-                {walletModeReady && onResumeConfirm && !isWatcherMode ? (
-                    <ResumeConfirmCard
-                        sessions={confirmSessions}
-                        className={styles.pendingAirdropCard}
-                        onResume={(id) => onResumeConfirm(confirmSessions.find((s) => s.id === id))}
-                        onDiscard={async (id) => {
-                            setConfirmSessions((prev) => prev.filter((s) => s.id !== id));
-                            try { await messaging.clearConfirmSession({ id }); } catch { /* non-fatal */ }
-                        }}
-                    />
-                ) : null}
 
                 {walletModeReady && !isWatcherMode && pendingAirdrops.length > 0 && onResumeAirdrop ? (
                     <div role="group" aria-label={t('home.pendingAirdrops')}>
@@ -1642,11 +1512,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <HomeLoadingSkeleton actionCount={quickActionCount} />
                 )}
 
-                {activeWalletId ? (
+                {/* A wallet that cannot spend (the demo fixtures) holds nothing to back up. */}
+                {activeWalletId && canSpend ? (
                     <BackupReminderCard
                         walletId={activeWalletId}
                         hasFunds={backupReminderHasFunds}
-                        isDemo={isDemoActive}
                         walletMode={settings.settings ? walletMode : null}
                         onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
@@ -1655,41 +1525,32 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {/* Supplementary action grid is full-mode only. In small mode
                     the actions live in the pancake menu, freeing the body for
                     the balance list. */}
-                {isFull && !wideMoreActions ? (
+                {isFull && !(isWide && hasActionsMenu) ? (
                 <div className={styles.actionsFullWrap}>
                 <div className={styles.actionsFull}>
-                    <Button
-                        variant="secondary"
-                        className={styles.quickAction}
-                        block={!isFull}
+                    <QuickActionTile
                         onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
                         title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
-                        icon={<span className={styles.quickActionIcon}><Icon.TokenIcon /></span>}
+                        icon={<Icon.TokenIcon />}
                     >
                         {t('home.createToken')}
-                    </Button>
+                    </QuickActionTile>
                     {/* Same rule as Exchange above: absent, not greyed, when
                         this build has no markets to open. */}
                     {onMarkets ? (
-                        <Button
-                            variant="secondary"
-                            className={styles.quickAction}
-                            block={!isFull}
+                        <QuickActionTile
                             onClick={onMarkets}
-                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
+                            icon={<Icon.MarketIcon />}
                         >
                             {t('home.markets')}
-                        </Button>
+                        </QuickActionTile>
                     ) : null}
-                    <Button
-                        variant="secondary"
-                        className={styles.quickAction}
-                        block={!isFull}
+                    <QuickActionTile
                         onClick={onMessaging}
                         disabled={!onMessaging}
-                        icon={<span className={styles.quickActionIcon}><Icon.MessageIcon /></span>}
+                        icon={<Icon.MessageIcon />}
                     >
                         {t('home.messaging')}
                         {messagingUnread > 0 ? (
@@ -1708,59 +1569,37 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                 {messagingUnread > 99 ? '99+' : messagingUnread}
                             </span>
                         ) : null}
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className={styles.quickAction}
-                        block={!isFull}
+                    </QuickActionTile>
+                    <QuickActionTile
                         onClick={onHistory}
                         disabled={!onHistory}
-                        icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
+                        icon={<Icon.HistoryIcon />}
                     >
                         {t('history.title')}
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className={styles.quickAction}
-                        block={!isFull}
+                    </QuickActionTile>
+                    <QuickActionTile
                         onClick={onAddresses}
                         disabled={!onAddresses}
-                        icon={<span className={styles.quickActionIcon}><Icon.AddressIcon /></span>}
+                        icon={<Icon.AddressIcon />}
                     >
                         {t('home.addresses')}
-                    </Button>
+                    </QuickActionTile>
                     {onContracts ? (
-                        <Button
-                            variant="secondary"
-                            className={styles.quickAction}
-                            block={!isFull}
+                        <QuickActionTile
                             onClick={onContracts}
-                            icon={<span className={styles.quickActionIcon}><Icon.ContractIcon /></span>}
+                            icon={<Icon.ContractIcon />}
                         >
                             {t('home.contracts')}
-                        </Button>
+                        </QuickActionTile>
                     ) : null}
                     {onStaking ? (
-                        <Button
-                            variant="secondary"
-                            className={styles.quickAction}
-                            block={!isFull}
+                        <QuickActionTile
                             onClick={onStaking}
-                            icon={<span className={styles.quickActionIcon}><Icon.StakeIcon /></span>}
+                            icon={<Icon.StakeIcon />}
                         >
                             {t('home.staking')}
-                        </Button>
+                        </QuickActionTile>
                     ) : null}
-                    <Button
-                        variant="secondary"
-                        className={styles.quickAction}
-                        block={!isFull}
-                        onClick={onActions}
-                        disabled={!onActions}
-                        icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
-                    >
-                        {t('actionsMenu.more')}
-                    </Button>
                 </div>
                 </div>
                 ) : null}
@@ -1787,7 +1626,7 @@ function HomeLoadingSkeleton({ actionCount }) {
             <Skeleton shape="card" height={96} />
             <div className={styles.quickActions} aria-hidden="true">
                 {Array.from({ length: actionCount }, (_, index) => (
-                    <Skeleton key={index} shape="card" height={28} />
+                    <Skeleton key={index} shape="tile" />
                 ))}
             </div>
             <Skeleton shape="text" height={45} />
@@ -1797,36 +1636,30 @@ function HomeLoadingSkeleton({ actionCount }) {
     );
 }
 
+const SWAP_LABEL = 'Swap';
+
 function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
-    const icon = <span className={styles.quickActionIcon}><Icon.SendIcon /></span>;
+    const icon = <Icon.SendIcon />;
     if (!networkActionsAvailable && onSend) {
         return (
-            <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className={styles.quickAction}
+            <QuickActionTile
                 onClick={onOffline}
                 aria-disabled="true"
                 title={t('home.sendOffline')}
                 icon={icon}
             >
                 {t('send.title')}
-            </Button>
+            </QuickActionTile>
         );
     }
     return (
-        <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className={styles.quickAction}
+        <QuickActionTile
             onClick={onSend}
             disabled={!onSend}
             icon={icon}
         >
             {t('send.title')}
-        </Button>
+        </QuickActionTile>
     );
 }
 

@@ -25,8 +25,16 @@ const SHEETS = [
 ];
 
 const RENDERERS = [
-    'packages/core/src/shared/components/HomeTabs.jsx',
     'packages/core/src/shared/routes/StakingList.jsx',
+];
+
+// Home rows draw their icon through ActivityRow and AssetMark, whose letter
+// takes its colours from AssetMark.module.css (audited in SHEETS), so these
+// files carry no inline ticker fill or letter colour at all.
+const SHEET_ONLY_RENDERERS = [
+    'packages/core/src/shared/components/HomeTabs.jsx',
+    'packages/core/src/shared/components/ActivityRow.jsx',
+    'packages/core/src/ui/AssetMark.jsx',
 ];
 const BALANCE_CSS = read('packages/core/src/shared/components/BalanceList.module.css');
 
@@ -46,6 +54,12 @@ describe('ticker icon letters stay visible in forced-colors mode', () => {
         const inline = read(file).match(/style=\{\{[^}]*tickerColor\([^}]*\}\}/g) || [];
         expect(inline.length).toBeGreaterThan(0);
         for (const style of inline) expect(style).not.toMatch(/\bcolor:/);
+    });
+
+    it.each(SHEET_ONLY_RENDERERS)('%s sets no inline ticker fill or letter colour', (file) => {
+        const src = read(file);
+        expect(src).not.toMatch(/style=\{\{[^}]*tickerColor\(/);
+        expect(src).not.toMatch(/style=\{\{[^}]*\bcolor:/);
     });
 
     it('uses a round neutral balance fallback', () => {

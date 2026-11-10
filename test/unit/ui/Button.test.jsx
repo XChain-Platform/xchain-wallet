@@ -296,4 +296,14 @@ describe('<Button>', () => {
         expect(button.querySelector(`.${styles.label}`)).toBeNull();
         expect(css).toMatch(/\.iconOnly\s*\{[^}]*gap:\s*0[^}]*justify-content:\s*center/s);
     });
+
+    it('the success variant keeps its fill and its icon when disabled', () => {
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+        expect(css).toMatch(/\.btn:disabled:not\(\.link\):not\(\.success\)\s*\{/);
+        render(<Button variant="success" disabled>Unlock wallet</Button>);
+        const btn = screen.getByRole('button');
+        expect(btn).toBeDisabled();
+        expect(btn.className).toContain(styles.success);
+        expect(btn.querySelector('svg')).not.toBeNull();
+    });
 });

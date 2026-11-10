@@ -121,7 +121,8 @@ for (const stage of ['role', 'seed', 'exchange']) {
 
 const onboarding = read('packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx');
 assert.ok(
-    /onPairPartner/.test(onboarding) && /Pair a watcher or signer/.test(onboarding),
+    // The smoke runner swaps t('key') for its English text; a direct run reads the key.
+    /onPairPartner/.test(onboarding) && /Pair an offline signer|pairAnOfflineSigner/.test(onboarding),
     'Onboarding exposes the pairing lane behind an onPairPartner prop',
 );
 

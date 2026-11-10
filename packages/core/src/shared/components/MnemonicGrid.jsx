@@ -13,7 +13,6 @@ import { Button } from '../../ui/Button.jsx';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import styles from './MnemonicGrid.module.css';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/settings.js';
 
@@ -43,39 +42,40 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
     const revealed = revealedKey === mnemonicKey;
 
     return (
-        <div className={styles.container}>
-            <div className={styles.revealAction}>
-                <Button
-                    variant={revealed ? 'ghost' : 'secondary'}
-                    size="sm"
-                    aria-controls={contentId}
-                    aria-expanded={revealed}
-                    onClick={() => setRevealedKey(revealed ? null : mnemonicKey)}
+        <div className={styles.card} data-mnemonic-card="">
+            {revealed ? (
+                <ol
+                    id={contentId}
+                    className={gridClass}
+                    aria-label={t('importWallet.recoveryPhrase')}
+                    data-secret=""
+                    onCopy={(event) => event.preventDefault()}
                 >
-                    {revealed ? t('settings.backup.hideRecoveryPhrase') : t('settings.backup.revealRecoveryPhrase')}
-                </Button>
-            </div>
-            <div id={contentId}>
-                {revealed ? (
-                    <ol
-                        className={gridClass}
-                        aria-label={t('importWallet.recoveryPhrase')}
-                        data-secret=""
-                        onCopy={(event) => event.preventDefault()}
-                    >
-                        {words.map((word, i) => (
-                            <li key={i} className={styles.cell} aria-label={`${i + 1}. ${word}`}>
-                                <span className={styles.index} aria-hidden="true">{i + 1}.</span>
-                                <span className={styles.word} aria-hidden="true">{word}</span>
-                            </li>
-                        ))}
+                    {words.map((word, i) => (
+                        <li key={i} className={styles.cell} aria-label={`${i + 1}. ${word}`}>
+                            <span className={styles.index} aria-hidden="true">{i + 1}.</span>
+                            <span className={styles.word} aria-hidden="true">{word}</span>
+                        </li>
+                    ))}
+                </ol>
+            ) : (
+                <>
+                    <ol id={contentId} className={`${gridClass} ${styles.concealedGrid}`} aria-hidden="true">
+                        {words.map((_, i) => <li key={i} className={styles.concealedCell} />)}
                     </ol>
-                ) : (
-                    <p className={styles.concealedMessage}>
-                        {t('components.mnemonicGrid.recoveryPhraseHiddenMakeSure')}
-                    </p>
-                )}
-            </div>
+                    <div className={styles.revealAction}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            aria-controls={contentId}
+                            aria-expanded="false"
+                            onClick={() => setRevealedKey(mnemonicKey)}
+                        >
+                            {t('settings.backup.revealRecoveryPhrase')}
+                        </Button>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

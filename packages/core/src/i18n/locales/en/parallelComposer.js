@@ -15,6 +15,7 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'parallelComposer.title': 'Action queue',
     'parallelComposer.summary':
         '{actions, plural, one {# action} other {# actions}} across {networks, plural, one {# network} other {# networks}}',
     'parallelComposer.noRollback':

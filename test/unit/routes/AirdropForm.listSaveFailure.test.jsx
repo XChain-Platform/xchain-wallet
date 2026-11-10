@@ -68,8 +68,6 @@ function mountAirdrop(overrides = {}) {
         requoteNativeFee: vi.fn().mockResolvedValue(null),
         reserve: vi.fn().mockResolvedValue({}),
         releaseReservation: vi.fn().mockResolvedValue({}),
-        putConfirmSession: vi.fn().mockResolvedValue({ id: 'cs' }),
-        clearConfirmSession: vi.fn().mockResolvedValue({}),
         createList: vi.fn().mockResolvedValue({ txid: 'listtxid' }),
         savePendingAirdrop: vi.fn().mockRejectedValue(new Error('storage full')),
         getActionByTxid: vi.fn().mockResolvedValue(null),

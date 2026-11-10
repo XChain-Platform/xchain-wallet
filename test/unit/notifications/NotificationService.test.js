@@ -94,6 +94,21 @@ function makeService(deps, extra = {}) {
 }
 
 describe('NotificationService', () => {
+    it('records an activity inbox entry even when OS delivery is denied', async () => {
+        const deps = makeDeps({ notifyAdapter: vi.fn(async () => false) });
+        const recordAlert = vi.fn(async () => {});
+        const service = makeService(deps, { recordAlert });
+        await service.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'MEMPOOL_ACTION',
+            data: { tx_hash: 'tx-inbox', source: 'other', destinations: ['addrBTC'] },
+        });
+        await flush();
+
+        expect(recordAlert).toHaveBeenCalledWith(expect.objectContaining({ type: 'activity', read: false }));
+    });
+
     it('keeps persisted portfolio snapshots isolated by active network', () => {
         localStorage.clear();
         const mainBalances = { 'bitcoin-mainnet': [{ address: 'main-address' }] };

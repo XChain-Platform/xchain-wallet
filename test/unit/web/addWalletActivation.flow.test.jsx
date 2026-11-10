@@ -52,7 +52,6 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
     getWalletBalances: vi.fn(async () => ({})),
     getAddressesByChain: vi.fn(async () => ({})),
     getActiveAddresses: vi.fn(async () => ({})),
-    listConfirmSessions: vi.fn(async () => []),
     listQueuedBroadcasts: vi.fn(async () => []),
     listContacts: vi.fn(async () => []),
     listConnectedSites: vi.fn(async () => []),

@@ -247,9 +247,9 @@ describe('popup reacts to account changes made in another surface', () => {
 });
 
 describe('an open review survives record changes made in another surface', () => {
-    // Home reads the stored confirms each time it mounts, so the count of that
-    // read tells a remount of the open screen apart from a re-render.
-    const mounts = (sent) => count(sent, 'action.confirmSession.list');
+    // Home reads balances each time it mounts, so the count tells a remount of
+    // the open screen apart from a re-render.
+    const mounts = (sent) => count(sent, 'balances.wallet');
 
     async function shown() {
         const env = boot({ wallets: [{ id: 'w1', name: 'Alpha' }] });

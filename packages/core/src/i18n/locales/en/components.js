@@ -360,11 +360,6 @@ const messages = {
     'components.preflightPanel.partialCheck': 'Partial check',
     'components.preflightPanel.couldNotVerify': "Couldn't verify (",
     'components.preflightPanel.checkedAtBlock': 'Checked at block',
-    'components.resumeConfirmCard.unfinishedTransactions': 'Unfinished transactions',
-    'components.resumeConfirmCard.finish': 'Finish',
-    'components.resumeConfirmCard.notSentYetApproveTo': 'Not sent yet. Approve to sign and send it.',
-    'components.resumeConfirmCard.actionToSubmit': 'Action to submit:',
-    'components.resumeConfirmCard.discardUnfinished': 'Discard unfinished {label}',
     'components.actionIntentSummary.balanceUnknown': 'balance unknown',
     'components.actionIntentSummary.unknown': '→ unknown',
     'components.networkStatusIndicator.networkStatus': 'Network status',
@@ -394,8 +389,6 @@ const messages = {
     'components.psbtConfirmScreen.signTransaction': 'Sign transaction',
     'components.diagnosticDetails.showingTheFirst': 'Showing the first',
     'components.diagnosticDetails.findings': 'findings.',
-    'components.mnemonicGrid.recoveryPhraseHiddenMakeSure':
-        'Recovery phrase hidden. Make sure no one can see your screen before revealing it.',
     'components.queuedResultPanel.currentStageWaitingToBroadcast': 'Current stage: Waiting to broadcast',
     'components.queuedResultPanel.isSignedButCouldnT':
         "is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there; the wallet reminds you when the network is back. Don't submit this again.",
@@ -429,6 +422,23 @@ const messages = {
     'components.totalBalanceHero.hideBalance': 'Hide balance',
     'components.stalenessLabel.updated': 'Updated {when}',
     'components.stalenessLabel.offline': 'Offline, showing saved data',
+    'components.durationSlider.oneDay': '1 day',
+    'components.durationSlider.oneWeek': '1 week',
+    'components.durationSlider.oneMonth': '1 month',
+    'components.durationSlider.minutes': '{value} min',
+    'components.durationSlider.hours': '{value} {count, plural, one {hour} other {hours}}',
+    'components.durationSlider.days': '{value} {count, plural, one {day} other {days}}',
+    'components.durationSlider.duration': 'Duration',
+    'components.durationSlider.howDurationIsCounted': 'How the duration is counted',
+    'components.durationSlider.durationInfo':
+        'The duration is counted in blocks. One block is about {perBlock} on this network.',
+    'components.durationSlider.presetValue': '{label}, {blocks} blocks',
+    'components.durationSlider.blocks':
+        '{value} {count, plural, one {block} other {blocks}}',
+    'components.durationSlider.blocksLabel': 'Blocks',
+    'components.durationSlider.customHint':
+        '{blocks} blocks is ~{span} (1 block is ~{perBlock}).',
+    'components.durationSlider.emptyCustomHint': '1 block is ~{perBlock} on this network.',
     'components.placeOrderPanel.weMonitorForMatchesOn':
         'We monitor for matches on your orders and send payment for them automatically.',
 };

@@ -123,6 +123,23 @@ async function openPartnerScanner() {
 }
 
 describe('PairPartnerWallet: role stage', () => {
+    it('opens with the overview and keeps each role description with its button', () => {
+        mount(mkMessaging());
+        const step = screen.getByText('Step 1 of 4');
+        const overview = screen.getByText('You are pairing an online wallet with an offline one.');
+        expect(step.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        const watcher = screen.getByRole('button', { name: /This device watches\. Pair a signer/i });
+        expect(watcher.nextElementSibling).toHaveTextContent(
+            'This device stays online. It holds no keys that can sign, builds transactions, and shows balances.',
+        );
+        const signer = screen.getByRole('button', { name: /This device signs\. Pair a watcher/i });
+        expect(signer.nextElementSibling).toHaveTextContent(
+            'This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.',
+        );
+        expect(screen.getByText(/Write the recovery phrase down once/)).toBeInTheDocument();
+    });
+
     it('offers both halves of the pair', () => {
         mount(mkMessaging());
         expect(screen.getByRole('button', { name: /This device watches\. Pair a signer/i })).toBeInTheDocument();
@@ -582,13 +599,13 @@ describe('Onboarding: pairing lane entry point', () => {
     it('offers the pairing lane when the shell wires it', () => {
         const onPairPartner = vi.fn();
         mountOnboarding({ onPairPartner });
-        const btn = screen.getByRole('button', { name: /Pair a watcher or signer/i });
+        const btn = screen.getByRole('button', { name: /Pair an offline signer/i });
         fireEvent.click(btn);
         expect(onPairPartner).toHaveBeenCalled();
     });
 
     it('hides the lane in a shell that does not wire it', () => {
         mountOnboarding();
-        expect(screen.queryByRole('button', { name: /Pair a watcher or signer/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Pair an offline signer/i })).not.toBeInTheDocument();
     });
 });

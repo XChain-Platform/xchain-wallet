@@ -64,6 +64,7 @@ import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import { normalizeActiveNetwork } from '../../utils/activeNetworkSwitch.js';
 import {
+    SettingsActionRow,
     SettingsFieldRow,
     SettingsInlineForm,
     SettingsLoadError,
@@ -96,7 +97,14 @@ const autoSignLabels = () => ({
     [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: t('settings.developer.1Hour'),
 });
 
-export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateToMint, reload = reloadPage } = {}) {
+export function DeveloperModeSection({
+    activeWallet,
+    activeAccount,
+    onNavigateToMint,
+    onNavigateToAdvanced,
+    onNavigateToActionQueue,
+    reload = reloadPage,
+} = {}) {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
@@ -157,6 +165,42 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
                         onChange={(v) => onToggle('showVariantBadge', v)}
                     />
                 ) : null}
+            </FormSection>
+            <FormSection title={t('settings.developer.tools')}>
+                <SettingsActionRow
+                    headingLevel="h3"
+                    label={t('settings.developer.advancedAction')}
+                    hint={t('settings.developer.advancedActionHint')}
+                >
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
+                        onClick={onNavigateToAdvanced}
+                        disabled={typeof onNavigateToAdvanced !== 'function'}
+                        aria-label={`${t('settings.developer.open')} ${t('settings.developer.advancedAction')}`}
+                    >
+                        {t('settings.developer.open')}
+                    </Button>
+                </SettingsActionRow>
+                <SettingsActionRow
+                    headingLevel="h3"
+                    label={t('settings.developer.actionQueue')}
+                    hint={t('settings.developer.actionQueueHint')}
+                >
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
+                        onClick={onNavigateToActionQueue}
+                        disabled={typeof onNavigateToActionQueue !== 'function'}
+                        aria-label={`${t('settings.developer.open')} ${t('settings.developer.actionQueue')}`}
+                    >
+                        {t('settings.developer.open')}
+                    </Button>
+                </SettingsActionRow>
             </FormSection>
             {developerMode ? (
                 <>

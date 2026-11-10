@@ -36,7 +36,7 @@ const styleGuideRoutes = {
     ListForkForm: ['Button', 'Checkbox', 'Input', 'Textarea'],
     MarketActivity: ['Button'],
     MarketView: ['Button'],
-    MultisigCreate: ['Button', 'Input', 'RadioGroup', 'Select'],
+    MultisigCreate: ['Button', 'Input', 'Select'],
     PairSignerForm: ['Button', 'Input'],
     PollDetail: ['Button', 'Checkbox', 'Input'],
     UnionListForm: ['Button', 'Checkbox', 'Input'],
@@ -44,7 +44,6 @@ const styleGuideRoutes = {
 };
 const choiceControlRoutes = {
     History: ['Checkbox', 'RadioGroup'],
-    MultisigCreate: ['RadioGroup'],
     Send: ['Checkbox', 'Switch'],
 };
 const styleGuideRowRoutes = [
@@ -69,7 +68,6 @@ const listRowRoutes = [
 
 const choicePrimitiveRoutes = {
     AttachContentForm: ['Checkbox'],
-    BroadcastForm: ['RadioGroup', 'Switch'],
     GatedPublishForm: ['Checkbox', 'RadioGroup'],
     LinkForm: ['RadioGroup'],
     SleepForm: ['RadioGroup'],
@@ -170,7 +168,7 @@ describe('shared route button usage', () => {
     it.each([
         ['SellOwnershipForm', ['Button', 'Input'], 0],
         ['Settings', ['Button', 'Input'], 1],
-        ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
+        ['SignMessageForm', ['AddressField', 'Button', 'CopyButton', 'Input', 'Textarea'], 0],
         ['TokenPicker', ['Button', 'Input', 'Tabs'], 0],
         ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
         ['WalletPicker', ['Button', 'ListRow'], 0],
@@ -495,10 +493,10 @@ describe('trade form style guide primitives', () => {
         expect(preferences.match(/<input\b/g)).toHaveLength(1);
         expect(preferences.match(/type="checkbox"/g)).toHaveLength(1);
 
-        expect(tokens).toMatch(/<Input\b/);
+        expect(tokens).toMatch(/<ListToolbar\b/);
+        expect(tokens).toMatch(/<Select\b/);
         expect(tokens).toMatch(/<Button\b/);
         expect(tokens).toMatch(/<EmptyState\b/);
-        expect(tokens.match(/<button\b/g)).toHaveLength(2);
-        expect(tokens.match(/role="radio"/g)).toHaveLength(2);
+        expect(tokens).not.toMatch(/<(?:button|input|select)\b/);
     });
 });

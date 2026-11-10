@@ -94,10 +94,17 @@ function boot() {
 const count = (sent, type) => sent.filter((entry) => entry === type).length;
 
 describe('popup onboarding lanes keep the window through their own first-wallet write', () => {
+    it('does not offer hardware setup among the fresh-wallet choices yet', async () => {
+        boot();
+        render(<App />);
+        expect(await screen.findByRole('button', { name: 'Pair an offline signer' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Connect a hardware wallet' })).toBeNull();
+    });
+
     it('reaches the pairing code exchange after the lane imports the shared phrase', async () => {
         const { sent } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Pair a watcher or signer' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pair an offline signer' }));
         fireEvent.click(screen.getByRole('button', { name: 'This device watches. Pair a signer' }));
         fireEvent.change(screen.getByLabelText('Shared recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password for this device'), { target: { value: PASSWORD } });

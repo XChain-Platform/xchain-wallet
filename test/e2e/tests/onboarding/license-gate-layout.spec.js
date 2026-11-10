@@ -9,9 +9,9 @@ test.use({ acceptLicense: false });
 
 const VIEWPORTS = [
     { width: 390, height: 844 },
-    { width: 412, height: 869 },
-    { width: 360, height: 600 },
+    { width: 834, height: 1194 },
     { width: 1280, height: 800 },
+    { width: 1920, height: 1080 },
 ];
 
 const PIXEL_TOLERANCE = 1;
@@ -32,8 +32,9 @@ async function measureGate(form) {
         const terms = element.querySelector('[aria-label="License terms"]');
         const checkbox = element.querySelector('input[type="checkbox"]');
         const acknowledgement = checkbox.closest('label');
-        // FormPage owns the brand and title in its header; the gate (terms plus
-        // acknowledgement) is the page body below it.
+        const controls = acknowledgement.parentElement;
+        // FormPage owns the brand and title in its header; the gate is the
+        // terms followed by the shared controls wrapper.
         const gate = terms.parentElement;
         const hero = element.querySelector('header');
         const button = element.querySelector('button');
@@ -53,6 +54,7 @@ async function measureGate(form) {
             form: rect(element),
             hero: rect(hero),
             terms: rect(terms),
+            controls: rect(controls),
             acknowledgement: rect(acknowledgement),
             button: rect(button),
             gap: Number.parseFloat(getComputedStyle(gate).rowGap),
@@ -107,27 +109,33 @@ for (const viewport of VIEWPORTS) {
         const layout = await measureGate(form);
         const bottomGap = viewport.height - layout.button.bottom;
         expect(bottomGap).toBeGreaterThanOrEqual(-PIXEL_TOLERANCE);
-        // U48: at every width, phones included, Accept and continue sits
-        // directly under the acknowledgement, one form gap below it; it is
-        // never pinned to the bottom of a tall screen with a gap above it.
-        expect(layout.button.top).toBeGreaterThan(layout.acknowledgement.bottom);
-        expect(layout.button.top - layout.acknowledgement.bottom)
-            .toBeLessThanOrEqual(layout.formGap + PIXEL_TOLERANCE);
-
         expect(layout.terms.top - layout.hero.bottom)
             .toBeCloseTo(layout.formGap + layout.heroMarginBottom, 0);
-        // The checkbox sits directly under the terms card at every width.
-        expect(layout.acknowledgement.top - layout.terms.bottom)
+        // The shared controls wrapper sits directly under the card.
+        expect(layout.controls.top - layout.terms.bottom)
             .toBeCloseTo(layout.gap, 0);
         expect(layout.terms.height).toBeGreaterThan(0);
 
         if (viewport.width >= TWO_THIRDS_MIN_WIDTH) {
-            // U32: from 834px the terms card takes two-thirds of the form
-            // width, centred, and the actions follow it down the page.
+            // The card takes two-thirds of the form. The controls share the
+            // next row, aligned to the card edges and vertically overlapping.
             expect(Math.abs(layout.terms.width - (layout.form.width * 2) / 3))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
             expect(Math.abs((layout.terms.left - layout.form.left) - (layout.form.right - layout.terms.right)))
                 .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.acknowledgement.top).toBeLessThan(layout.button.bottom);
+            expect(layout.button.top).toBeLessThan(layout.acknowledgement.bottom);
+            expect(Math.abs(layout.acknowledgement.left - layout.terms.left))
+                .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(Math.abs(layout.button.right - layout.terms.right))
+                .toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(layout.controls.top - layout.terms.bottom)
+                .toBeLessThanOrEqual(24);
+        } else {
+            // Below 834px the existing stacked order remains unchanged.
+            expect(layout.button.top).toBeGreaterThan(layout.acknowledgement.bottom);
+            expect(layout.button.top - layout.acknowledgement.bottom)
+                .toBeLessThanOrEqual(layout.formGap + PIXEL_TOLERANCE);
         }
 
         await expectScrollGate(terms, acknowledgement);

@@ -314,8 +314,8 @@ describe('offline route behavior from reachability', () => {
         const actions = within(screen.getByRole('group', { name: 'Quick actions' }));
         expect(actions.getByRole('button', { name: 'Send' })).toBeDisabled();
         expect(actions.getByText('Send needs a network connection.')).toBeInTheDocument();
-        expect(actions.getByRole('button', { name: 'Trade' })).toBeDisabled();
-        expect(actions.getByText('Trade needs a network connection.')).toBeInTheDocument();
+        expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
+        expect(actions.getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
     it('keeps cached Markets rows and disables opening a market with a reason', async () => {

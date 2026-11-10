@@ -32,6 +32,21 @@ function mount(entries, walletMode = 'full') {
 }
 
 describe('ActionsMenu navigation semantics', () => {
+    it('titles the catalogue All actions and gives every entry a non-destructive icon row', () => {
+        const handlers = Object.fromEntries(
+            ACTION_ENTRY_DEFS.map((entry) => [entry.handler, vi.fn()]),
+        );
+        mount(buildActionEntries(handlers, { pairsTrezor: true }));
+
+        expect(screen.getByRole('heading', { level: 1, name: 'All actions' })).toBeTruthy();
+        const buttons = [...document.querySelectorAll('button[data-xc-menu-item]')];
+        expect(buttons).toHaveLength(ACTION_ENTRY_DEFS.length);
+        for (const button of buttons) {
+            expect(button.querySelector('svg'), button.textContent).toBeTruthy();
+            expect(button.hasAttribute('data-destructive'), button.textContent).toBe(false);
+        }
+    });
+
     it('assigns every catalogue entry to exactly one stable section', () => {
         const groupedIds = ACTION_GROUPS.flatMap((group) => group.entryIds);
         expect(groupedIds).toHaveLength(ACTION_ENTRY_DEFS.length);
@@ -105,5 +120,10 @@ describe('ActionsMenu navigation semantics', () => {
         expect(screen.getByText('Sign message')).toBeTruthy();
         expect(screen.getByText('Verify signature')).toBeTruthy();
         expect(screen.getByText('Sign transaction')).toBeTruthy();
+    });
+
+    it('keeps developer tools and multisig signing out of the catalogue', () => {
+        const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
+        expect(ids).not.toEqual(expect.arrayContaining(['parallel', 'advanced', 'multisig-sign']));
     });
 });

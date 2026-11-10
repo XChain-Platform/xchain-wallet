@@ -72,6 +72,7 @@ const WAIT = { timeout: 4000 };
  * @param {Function} [opts.requoteNativeFee]
  * @param {Function} [opts.buildActionPsbtRequest]
  * @param {Function} [opts.getTokenInfo]
+ * @param {Function} [opts.getNewestAddress]
  * @param {Function} [opts.composeForConfirm]
  */
 function mount(opts = {}) {
@@ -93,7 +94,7 @@ function mount(opts = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(byChain),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getNewestAddress: vi.fn().mockImplementation((_w, chainId) => Promise.resolve(
+        getNewestAddress: opts.getNewestAddress || vi.fn().mockImplementation((_w, chainId) => Promise.resolve(
             (byChain[chainId] || [])[0] || null,
         )),
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
@@ -215,10 +216,13 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         await act(async () => { resolveBuild({ psbtHex: 'aa00' }); });
     });
 
-    it('never offers a free-text destination: the field is read-only and changed only by picking another OWN address', async () => {
+    it('keeps the own-address picker while allowing a receiving address to be typed', async () => {
         mount();
         const field = await waitFor(() => screen.getByLabelText('Receive at'), WAIT);
-        expect(field).toHaveAttribute('readonly');
+        expect(field).not.toHaveAttribute('readonly');
+
+        fireEvent.change(field, { target: { value: 'typed destination' } });
+        expect(field).toHaveValue('typed destination');
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose receiving address' }));
         expect(await screen.findByText('Receive at')).toBeInTheDocument();
@@ -233,20 +237,66 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         );
     });
 
-    it('states the direction and that the credit cannot be undone or redirected', async () => {
+    it('does not overwrite a typed address when the asynchronous own-address prefill arrives', async () => {
+        let resolveNewest;
+        mount({
+            getNewestAddress: vi.fn(() => new Promise((resolve) => { resolveNewest = resolve; })),
+        });
+        const field = await waitFor(() => screen.getByLabelText('Receive at'), WAIT);
+        fireEvent.change(field, { target: { value: 'typed destination' } });
+        await act(async () => { resolveNewest(DOGE_ADDRESS); });
+        expect(field).toHaveValue('typed destination');
+    });
+
+    it('validates the receiving address for the destination chain and trims pasted text', async () => {
+        const validDogecoin = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
+        const bitcoinOnly = '1FWDonkMbC6hL64JiysuggHnUAw2CKWszs';
         mount();
-        await waitFor(
-            () => expect(screen.getByText(/This locks XCHAIN on the source network and credits it on the destination network/i))
-                .toBeInTheDocument(),
+        const field = await waitFor(() => screen.getByLabelText('Receive at'), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '10' } });
+
+        fireEvent.change(field, { target: { value: 'not an address' } });
+        expect(await screen.findAllByText('This is not a valid address.', {}, WAIT)).not.toHaveLength(0);
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(moveButton()).toBeDisabled();
+
+        fireEvent.change(field, { target: { value: bitcoinOnly } });
+        expect(await screen.findAllByText(/Bitcoin mainnet address, not a Dogecoin mainnet address/i, {}, WAIT))
+            .not.toHaveLength(0);
+        expect(moveButton()).toBeDisabled();
+
+        fireEvent.change(field, { target: { value: '' } });
+        fireEvent.paste(field, { clipboardData: { getData: () => `  ${validDogecoin}  ` } });
+        expect(field).toHaveValue(validDogecoin);
+        await waitFor(() => expect(moveButton()).not.toBeDisabled(), WAIT);
+    });
+
+    it('shows one exact route notice and removes the duplicate network and arrival rows', async () => {
+        mount();
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '10' } });
+        expect(screen.getByText(
+            'Locks 10 XCHAIN on Bitcoin and credits it on Dogecoin after 6 confirmations (~60 min).'
+            + ' The credit cannot be undone or redirected.',
+        )).toBeInTheDocument();
+        expect(screen.queryByText('Source network')).toBeNull();
+        expect(screen.queryByText('Destination network')).toBeNull();
+        expect(screen.queryByText('Expected arrival')).toBeNull();
+        expect(screen.queryByLabelText('Bridge route')).toBeNull();
+    });
+
+    it('raises the platform depth to the token minimum in the wait estimate', async () => {
+        mount({
+            initialTick: 'FUFU',
+            balances: { FUFU: '10' },
+            tokenInfo: { bridgeChains: 'DOGE', minDepth: '8' },
+        });
+        expect(await screen.findByText(
+            'Locks the amount on Bitcoin and credits it on Dogecoin after 8 confirmations (~80 min).'
+            + ' The credit cannot be undone or redirected.',
+            {},
             WAIT,
-        );
-        expect(screen.getByText(/cannot be undone or redirected/i)).toBeInTheDocument();
-        const route = screen.getByLabelText('Bridge route');
-        expect(route.querySelectorAll('img')).toHaveLength(2);
-        expect(route.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
-        expect(route.textContent).toContain(
-            'Expected arrivalAfter the source transaction reaches its required confirmation depth and validators sign the transfer.',
-        );
+        )).toBeInTheDocument();
     });
 
     it('opens review with the exact bridge parameters instead of implying the button signs immediately', async () => {
@@ -301,7 +351,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(screen.getByText('keep me')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        await waitFor(() => expect(amountInput()).toHaveValue('1.25'), WAIT);
+        await waitFor(() => expect(amountInput()).toHaveValue('1.25000000'), WAIT);
         expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
         expect(composeForConfirm).toHaveBeenCalledTimes(1);
     });
@@ -576,8 +626,8 @@ describe('BridgeMoveForm: invalid action fields', () => {
         cleanup();
         const badDestination = { ...DOGE_ADDRESS, address: 'not-a-dogecoin-address' };
         const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
-        expect(await screen.findByText('This is not a valid address.', {}, WAIT))
-            .toBeInTheDocument();
+        expect(await screen.findAllByText('This is not a valid address.', {}, WAIT))
+            .not.toHaveLength(0);
         expect(moveButton()).toBeDisabled();
         expect(second.composeForConfirm).not.toHaveBeenCalled();
 
@@ -595,8 +645,11 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const messaging = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [emptyDestination] } });
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        fireEvent.click(moveButton());
-        expect(await screen.findByText(/Pick one of your own destination addresses/i, {}, WAIT))
+        expect(moveButton()).toBeDisabled();
+        await act(async () => {
+            moveButton().closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+        expect(await screen.findByText(/Enter a destination address/i, {}, WAIT))
             .toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -634,7 +687,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
             balances: { FUFU: '10' },
             getTokenInfo,
         });
-        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        await waitFor(() => expect(screen.getByText(/after 6 confirmations/i)).toBeInTheDocument(), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.click(moveButton());
 
@@ -682,7 +735,7 @@ describe('BridgeMoveForm: one message for the current state', () => {
             .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
             .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
         mount({ initialTick: 'FUFU', balances: { FUFU: '10' }, getTokenInfo });
-        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        await waitFor(() => expect(screen.getByText(/after 6 confirmations/i)).toBeInTheDocument(), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.click(moveButton());
 

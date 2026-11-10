@@ -126,6 +126,64 @@ async function enablePseudoRtl(page) {
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 }
 
+/**
+ * Runs in the page: the chart range toggle against the chart panel its tabs
+ * control. Returns the panel and toggle centres and each range button's box.
+ */
+function measureRanges(list) {
+    const tabs = [...list.querySelectorAll('[role="tab"]')];
+    const panel = document.getElementById(tabs[0]?.getAttribute('aria-controls') || '');
+    const centre = (r) => r.left + r.width / 2;
+    const own = list.getBoundingClientRect();
+    const boxes = tabs.map((tab) => tab.getBoundingClientRect());
+    const left = Math.min(...boxes.map((b) => b.left));
+    const right = Math.max(...boxes.map((b) => b.right));
+    return {
+        panel: panel ? centre(panel.getBoundingClientRect()) : null,
+        list: centre(own),
+        listWidth: own.width,
+        buttons: (left + right) / 2,
+        span: right - left,
+        outlines: tabs.map((tab) => parseFloat(getComputedStyle(tab).borderTopWidth) || 0),
+        heights: boxes.map((b) => Number(b.height.toFixed(2))),
+        tops: boxes.map((b) => Math.round(b.top)),
+    };
+}
+
+async function expectCompactCentredRanges(page, where) {
+    const list = page.getByRole('main').getByRole('tablist', { name: /Chart range/ }).first();
+    await expect(list, `${where}: the chart range toggle shows`).toBeVisible({ timeout: 30_000 });
+    const m = await list.evaluate(measureRanges);
+    expect(m.panel, `${where}: the range tabs control a chart panel`).not.toBeNull();
+    expect(Math.abs(m.list - m.panel), `${where}: the range row is centred under the chart`).toBeLessThanOrEqual(1);
+    expect(Math.abs(m.buttons - m.panel), `${where}: the range buttons are centred under the chart`).toBeLessThanOrEqual(1);
+    expect(new Set(m.tops).size, `${where}: the range buttons sit on one line`).toBe(1);
+    expect(Math.abs(m.listWidth - m.span), `${where}: the range row hugs its options`).toBeLessThanOrEqual(1);
+    for (const w of m.outlines) expect(w, `${where}: a range option draws no outline`).toBe(0);
+    for (const h of m.heights) expect(h, `${where}: a range button is compact`).toBeLessThanOrEqual(28);
+}
+
+// The price chart's range control is a minimal small toggle centred along the
+// bottom of the chart, on Home and on token detail, in both directions.
+test('chart range toggle is centred and compact', async ({ page }, testInfo) => {
+    const { mode } = testInfo.project.metadata;
+    test.skip(mode !== 'dark' && mode !== 'rtl');
+    test.setTimeout(10 * 60 * 1000);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    const home = mode === 'rtl' ? pseudo('Home') : /^Home$/;
+    if (mode === 'rtl') {
+        await enablePseudoRtl(page);
+        await nav(page).getByRole('button', { name: home }).first().click();
+    }
+    await expectCompactCentredRanges(page, `${mode} home`);
+
+    const balances = page.getByRole('main').getByRole('list', { name: /Balances/ }).first();
+    await balances.getByRole('listitem').first().getByRole('button').first().click();
+    await expect(balances, `${mode}: the balance row opens token detail`).toBeHidden();
+    await expectCompactCentredRanges(page, `${mode} token detail`);
+});
+
 test('dark sweep', async ({ page }, testInfo) => {
     test.skip(testInfo.project.metadata.mode !== 'dark');
     test.setTimeout(60 * 60 * 1000);

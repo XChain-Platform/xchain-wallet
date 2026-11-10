@@ -29,10 +29,10 @@ const rawPixelExceptions = {
 describe('route CSS token coverage', () => {
     it('uses semantic tokens for route dimensions and typography', () => {
         expect(styles['ActionsMenu.module.css']).toMatch(
-            /\.entryIcon\s*\{[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
+            /\.entryIcon\s*\{[^}]*width:\s*auto;[^}]*height:\s*auto/s,
         );
         expect(styles['ActionsMenu.module.css']).toMatch(
-            /\.entryIcon\s*>\s*svg\s*\{[^}]*width:\s*var\(--xc-icon-xl\);[^}]*height:\s*var\(--xc-icon-xl\)/s,
+            /\.entryIcon\s*>\s*svg\s*\{[^}]*width:\s*var\(--xc-icon-lg\);[^}]*height:\s*var\(--xc-icon-lg\)/s,
         );
         expect(styles['ActionsMenu.module.css']).toMatch(
             /\.statusPill\s*\{[^}]*border-radius:\s*var\(--xc-radius-pill\);[^}]*font-size:\s*var\(--xc-text-xs\)/s,
@@ -64,7 +64,6 @@ const routeCss = Object.fromEntries(
         'ParallelComposer',
         'PollDetail',
         'Receive',
-        'ResumeConfirm',
         'Send',
     ].map((route) => [
         route,

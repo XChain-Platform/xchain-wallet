@@ -71,7 +71,7 @@ describe('plain-language transaction and share labels', () => {
             'scan.error.backupPointer':
                 'This is an encrypted-backup code. Open Import wallet, choose Encrypted backup, and scan it there.',
             'scan.error.pairingCode':
-                'This is a wallet pairing code. Open Pair a watcher or signer and scan it there.',
+                'This is a wallet pairing code. Open Pair an offline signer and scan it there.',
         },
     };
     const ENCODING_WORD = /\b(hex|payload|psbt)\b/i;

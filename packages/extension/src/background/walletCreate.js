@@ -152,6 +152,7 @@ async function importWallet(request, deps) {
         origin,
         format,
         chainId,
+        addressType,
         activeNetwork,
     } = /** @type {any} */ (request);
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
@@ -178,6 +179,7 @@ async function importWallet(request, deps) {
                     password,
                     wif: wif.trim(),
                     chainId,
+                    addressType,
                     vault,
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,

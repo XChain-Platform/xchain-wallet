@@ -81,11 +81,15 @@ assert.ok(
     'transfer composer sets VERSION=0 + TRANSFER',
 );
 
-// --- 4. Lock-only permanence warning ----------------------------------
+// --- 4. Lock permanence lives in the typed LOCK confirmation (U84) ------
 
 assert.ok(
-    /mode === 'lock'[\s\S]{0,400}Locking is permanent/.test(src),
-    'TokenAdminForm renders the "Locking is permanent" warning only on lock mode',
+    !/Locking is permanent/.test(src),
+    'TokenAdminForm shows no top "Locking is permanent" notice on lock mode',
+);
+assert.ok(
+    /isExactTypedConfirmation\(typedConfirm, 'LOCK'\)/.test(src),
+    'TokenAdminForm keeps the typed LOCK confirmation',
 );
 
 // --- 5. Review runs through decoder.decodeAction ----------------------

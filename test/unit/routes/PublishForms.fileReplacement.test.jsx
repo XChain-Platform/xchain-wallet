@@ -133,7 +133,7 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), /^File \(up to [\d,]+ bytes\)$/],
         ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
         ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
     ])('clears the previous file when a replacement read fails in %s', async (_name, mountRoute, inputLabel) => {
@@ -175,7 +175,7 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), /^File \(up to [\d,]+ bytes\)$/],
         ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
         ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
     ])('refuses a hostile file name before reading or rendering it in %s', async (_name, mountRoute, inputLabel) => {
@@ -191,7 +191,7 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), /^File \(up to [\d,]+ bytes\)$/],
         ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
         ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
     ])('rejects malformed MIME metadata before reading in %s', async (_name, mountRoute, inputLabel) => {
@@ -218,7 +218,7 @@ describe('publish forms replace file state safely', () => {
 
     it('ignores a stale public-file read that finishes after its replacement', async () => {
         mount(<PublishFileForm walletId="w" onBack={() => {}} />);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
         fireEvent.change(input, {
             target: { files: [new File(['old'], 'old.txt', { type: 'text/plain' })] },
         });
@@ -333,7 +333,7 @@ describe('publish forms replace file state safely', () => {
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
 
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
         fireEvent.change(input, {
             target: { files: [new File(['abc'], ' report.txt ', { type: 'text/plain' })] },
         });
@@ -405,7 +405,7 @@ describe('publish forms replace file state safely', () => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });
@@ -427,7 +427,7 @@ describe('publish forms replace file state safely', () => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
         mount(<PublishFileForm walletId="w" onBack={() => {}} />, client);
-        const input = await screen.findByLabelText('Choose file to publish');
+        const input = await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
         fireEvent.change(input, {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });

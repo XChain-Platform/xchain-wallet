@@ -32,7 +32,8 @@ const messages = {
         'Import one WIF private key as a wallet. Pick the matching network so the correct address is derived.',
     'importWallet.wif.tab': 'Private key',
     'importWallet.wif.key': 'WIF private key',
-    'importWallet.wif.chain': 'Private key network',
+    'importWallet.wif.chain': 'Coin network',
+    'importWallet.wif.addressType': 'Private key type',
     'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
     'importWallet.freeWallet.fullSubtitle':
         'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect a standard recovery phrase or the legacy Counterwallet/FreeWallet format automatically.',
@@ -51,6 +52,7 @@ const messages = {
     'importWallet.backup.useFile': 'Use a file instead',
     'importWallet.backup.chooseFile': 'Choose backup file',
     'importWallet.backup.contents': 'Backup file contents',
+    'importWallet.backup.contentsDescription': 'Paste backup file contents here, or drop a backup file onto the box.',
     'importWallet.backup.placeholder.version': '"version":1,"kdf":',
     'importWallet.backup.placeholder.kdf': '"name":"argon2id"…',
     'importWallet.backup.overwrite': 'Overwrite if any record collides (advanced)',

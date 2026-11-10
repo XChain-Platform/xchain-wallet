@@ -28,7 +28,6 @@ const NS = 'xc:lastView:';
 
 const INTERRUPTED_VIEW_KIND = Object.freeze({
     send: 'send',
-    'resume-confirm': 'send',
     swap: 'swap',
     'cross-chain-swap': 'swap',
 });

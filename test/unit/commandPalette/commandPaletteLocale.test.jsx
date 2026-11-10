@@ -84,6 +84,7 @@ describe('command palette titles follow the active locale', () => {
     it('keeps English output in the English locale', () => {
         const commands = buildCommands({ navigate() {} });
         expect(byId(commands, 'nav-send').title).toBe('Send');
+        expect(byId(commands, 'create-action-queue').title).toBe('Action queue');
         expect(byId(commands, 'nav-send').keywords).toEqual(['pay', 'transfer', 'spend']);
         render(<CommandPalette open onClose={() => {}} commands={commands} />);
         fireEvent.change(screen.getByRole('combobox'), { target: { value: 'sen' } });

@@ -19,7 +19,7 @@ const SOURCE = {
     source: 'hd',
 };
 
-function mountDestroy({ balance = '2', divisibility = 0, initialTick = 'ART' } = {}) {
+function mountDestroy({ balance = '2', divisibility = 0, initialTick = 'ART', otherBalance = null } = {}) {
     const composeForConfirm = vi.fn(() => new Promise(() => {}));
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
@@ -34,13 +34,22 @@ function mountDestroy({ balance = '2', divisibility = 0, initialTick = 'ART' } =
             locks: {},
         }),
         getWalletBalances: vi.fn().mockResolvedValue({
-            [CHAIN]: [{
-                address: SOURCE.address,
-                balances: {
-                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
-                    tokens: [{ tick: initialTick, quantity: balance, divisibility }],
+            [CHAIN]: [
+                ...(otherBalance === null ? [] : [{
+                    address: 'bc1qotherotherotherotherotherotherother',
+                    balances: {
+                        native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                        tokens: [{ tick: initialTick, quantity: otherBalance, divisibility }],
+                    },
+                }]),
+                {
+                    address: SOURCE.address,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                        tokens: [{ tick: initialTick, quantity: balance, divisibility }],
+                    },
                 },
-            }],
+            ],
         }),
         composeForConfirm,
         preflight: vi.fn(),
@@ -105,5 +114,27 @@ describe('DestroyForm amount validation', () => {
             'This address holds only 2 ART. Enter an amount at or below that balance.',
         )).toBeInTheDocument();
         expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['divisible', '1234567891', 8, '12.34567891', '12.34567891'],
+        ['indivisible', '1234567891', 0, '1234567891', '1,234,567,891'],
+    ])('Max fills the selected address full %s-token balance exactly', async (
+        _kind, balance, divisibility, expected, displayed,
+    ) => {
+        const composeForConfirm = mountDestroy({
+            balance,
+            divisibility,
+            otherBalance: '999999999999999999',
+        });
+        expect(await screen.findByText(`${displayed} ART available`))
+            .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Use max available amount' }));
+        expect(screen.getByLabelText(/^Amount/)).toHaveValue(displayed);
+        fireEvent.click(screen.getByRole('button', { name: /^Destroy$/ }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.AMOUNT).toBe(expected);
     });
 });

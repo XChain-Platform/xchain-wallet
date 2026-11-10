@@ -30,7 +30,7 @@ const flows = (f) => read('packages', 'core', 'src', 'flows', f);
 // present in every payload it builds ----
 const SWEEP_FORMS = [
     'CreateOrderForm.jsx', 'DividendForm.jsx', 'AirdropForm.jsx',
-    'BroadcastForm.jsx', 'ListCreateForm.jsx', 'ListForkForm.jsx',
+    'ListCreateForm.jsx', 'ListForkForm.jsx',
     'DestroyForm.jsx', 'LinkForm.jsx', 'SleepForm.jsx',
     'PublishFileForm.jsx', 'AttachContentForm.jsx', 'OracleForm.jsx',
     'CallbackForm.jsx', 'SweepForm.jsx', 'TokenAdminForm.jsx',
@@ -54,13 +54,22 @@ for (const f of SWEEP_FORMS) {
     assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
 }
 
+// BROADCAST has no protocol-fee control in its message-only form, but still
+// carries the mandatory native fee mode on chains where the protocol requires it.
+const broadcastForm = routes('BroadcastForm.jsx');
+assert.match(broadcastForm, /import \{ useNativeFee \}/, 'BroadcastForm uses the useNativeFee hook');
+assert.doesNotMatch(broadcastForm, /<NativeFeeToggle/, 'BroadcastForm shows only the network fee selector');
+assert.match(broadcastForm, /payFeeInNativeCoin: nativeFee\.flag/, 'BroadcastForm threads nativeFee.flag into its payloads');
+
 // ---- pre-PC-51 toggle forms migrated onto the shared hook ----
 const MIGRATED = [
     ['routes', 'IssueTokenForm.jsx'], ['routes', 'SwapForm.jsx'],
     ['routes', 'DispenserForm.jsx'], ['routes', 'TokenWizard.jsx'],
-    ['routes', 'AdvancedActionsForm.jsx'], ['routes', 'MintForm.jsx'],
+    ['routes', 'AdvancedActionsForm.jsx'],
     ['components', 'PlaceOrderPanel.jsx'],
 ];
+// MintForm left this list under U81: MINT is free, so it mounts no hook.
+assert.doesNotMatch(routes('MintForm.jsx'), /useNativeFee/, 'MintForm mounts no native-fee hook (MINT is free)');
 for (const [dir, f] of MIGRATED) {
     const src = read('packages', 'core', 'src', 'shared', dir, f);
     assert.match(src, /useNativeFee\(/, `${f} state comes from useNativeFee`);
@@ -80,6 +89,7 @@ for (const [dir, f] of MIGRATED) {
 // coin output required)` after paying a real miner fee.
 const HOOK_CALLERS = [
     ...SWEEP_FORMS.map((f) => ['routes', f]),
+    ['routes', 'BroadcastForm.jsx'],
     ...MIGRATED,
 ];
 for (const [dir, f] of HOOK_CALLERS) {

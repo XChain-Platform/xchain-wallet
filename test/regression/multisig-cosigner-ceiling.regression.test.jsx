@@ -115,13 +115,13 @@ describe('regression/multisig-cosigner-ceiling', () => {
 
         // Taproot allows more rows; switching back to SegWit names the limit.
         await act(async () => {
-            fireEvent.click(screen.getByRole('radio', { name: /^Taproot multi-signature/i }));
+            fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'taproot-musig2' } });
         });
         await act(async () => { fireEvent.click(add); });
         await act(async () => {
-            fireEvent.click(screen.getByRole('radio', { name: /^SegWit multi-signature/i }));
+            fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'p2wsh-multisig' } });
         });
         expect(screen.getByText(/supports at most 16 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Review multisig' }).disabled).toBe(true);
     });
 });

@@ -76,7 +76,7 @@ describe('PortfolioChart fixed-height slot', () => {
         const panel = screen.getByRole('tabpanel');
         const slot = slotOf(panel);
         expect(slot).toContainElement(screen.getByRole('img'));
-        expect(changeRowOf(panel)).toHaveTextContent('· 7d');
+        expect(changeRowOf(panel)).toHaveTextContent('· 1W');
     });
 
     it('keeps the no-history line in the same slot and keeps the change row', async () => {

@@ -117,8 +117,11 @@
     --xc-tip-center: -50%;
     z-index: var(--xc-z-dropdown);
     box-sizing: border-box;
+    /* The wrap is only as wide as the trigger, so a shrink-to-fit bubble
+       stops at its min-width; max-content lets the text size it up to the cap. */
+    width: max-content;
     min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));
-    max-width: min(260px, calc(100vw - 2 * var(--xc-space-2)));
+    max-width: min(360px, calc(100vw - 2 * var(--xc-space-2)));
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-text);
     color: var(--xc-bg);
@@ -126,6 +129,9 @@
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     font-weight: 400;
+    /* Sentence case with normal spacing even inside an uppercase label. */
+    text-transform: none;
+    letter-spacing: normal;
     line-height: 1.35;
     text-align: start;
     white-space: normal;

@@ -485,7 +485,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     const header = (
         <PageHeader
             onBack={stage === 'review' ? () => setStage('compose') : leaveGuard.guardedOnBack}
-            title="Parallel cross-chain actions"
+            title={t('parallelComposer.title')}
         />
     );
     const wrap = (children) => (

@@ -67,6 +67,7 @@ import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationSt
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 const NOTIFIED_CAP = 500;
@@ -109,6 +110,7 @@ export class CoinpayAutopayWatcher {
         getSettings,
         reservationLedger,
         notify,
+        recordAlert,
         shellKind,
         intervalMs,
         now,
@@ -134,7 +136,7 @@ export class CoinpayAutopayWatcher {
         this._getSigner = getSigner;
         this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert, now });
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();

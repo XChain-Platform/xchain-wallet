@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -49,6 +49,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
+import { contactsPickerStyles as pickerStyles } from '../components/ContactsPickerScreen.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -66,9 +67,8 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
-import { listLabel } from '../utils/listLabel.js';
-import { listStatusText } from '../utils/listItemStatusText.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { existingListRowText } from '../utils/existingListRowText.js';
 import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import {
     classifyRecipientEntries,
@@ -81,6 +81,7 @@ import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 const OWNED_LIST_REVALIDATE_MS = 16_000;
+const LIST_DETAIL_CONCURRENCY = 4;
 const UNION_LIST_UNSUPPORTED = 'This list combines other lists, so this wallet cannot count its recipients. '
     + 'Pick a plain address or token list.';
 
@@ -212,6 +213,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'existing' mode: pick an already-published list (either type) via
     // the PC-10 listsForSource picker; no new LIST gets created.
     const [listPickerOpen, setListPickerOpen] = useState(false);
+    const [selectedListRow, setSelectedListRow] = useState(/** @type {any | null} */ (null));
     // Best-effort detail (type + current members) for the list picked in
     // 'existing' mode, fetched once its ACTION_INDEX is known. Backs the
     // "address list" (deterministic count) vs "token list" (holder-
@@ -1139,45 +1141,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
-                // §5.4. This leg is the reason the resume descriptor
-                // carries an `after` at all: the pending-airdrop record below
-                // is written AFTER Approve, and a resume that broadcast the
-                // LIST without it would leave the user with a published
-                // recipient list, a spent fee, and no airdrop to finish. The
-                // record travels with the session and the resume screen writes
-                // it with the txid it could not know until the broadcast
-                // returned.
-                resume: {
-                    software: 'createList',
-                    hardware: 'createListHw',
-                    base: {
-                        walletId,
-                        chainId,
-                        from,
-                        params: listParams,
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                    },
-                    label: `airdrop recipient list (${listItems.length})`,
-                    after: {
-                        method: 'savePendingAirdrop',
-                        base: {
-                            record: schemasLib.createPendingAirdrop({
-                                walletId,
-                                chainId,
-                                fromAddress: fromAddress.address,
-                                token: token.trim(),
-                                amountPer: String(amountPer).trim(),
-                                recipients: listItems,
-                                listTxid: '',
-                                listType,
-                                memo: memo.trim() || undefined,
-                                payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
-                            }),
-                        },
-                        txidPath: ['record', 'listTxid'],
-                    },
-                },
             });
             const txid = res?.txid || res?.broadcast?.txid;
             // A TRANSIENT post-sign broadcast failure RESOLVES as
@@ -1927,6 +1890,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 addresses={currentChainAddresses}
                 onSelect={(row) => {
                     setListActionIndex(String(row.action_index));
+                    setSelectedListRow(row);
                     setListPickerOpen(false);
                 }}
                 onBack={() => setListPickerOpen(false)}
@@ -1989,29 +1953,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 </FormNotice>
             )}
 
-            <Select
-                label="Airdrop to"
-                value={sourceMode}
-                onChange={(e) => {
-                    const next = /** @type {'paste' | 'existing' | 'holders'} */ (e.target.value);
-                    setSourceMode(next);
-                    // Compose is the only stage these can be set from, so
-                    // resetting on every mode change keeps a stale pick
-                    // from a previous mode out of the AIRDROP params.
-                    setListActionIndex(null);
-                    setExistingListDetail(null);
-                }}
-                hint={sourceMode === 'paste'
-                    ? 'Paste or upload addresses; publishes a new address list, then airdrops to it.'
-                    : sourceMode === 'existing'
-                        ? "Pick a list you've already published (address or token) and airdrop straight to it; no new list gets created."
-                        : 'Pick one or more tokens; publishes a new token list, then airdrops to every current holder of those tokens.'}
-            >
-                <option value="paste">Paste addresses</option>
-                <option value="existing">Existing list</option>
-                <option value="holders">Token holders</option>
-            </Select>
-
             {lockedToken ? null : (
                 <TokenField
                     label="Token to drop"
@@ -2041,6 +1982,30 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         maxPayable ? ` · up to ${formatWithThousands(maxPerRecipient)} each` : ''}`
                     : null}
             />
+
+            <Select
+                label="Airdrop to"
+                value={sourceMode}
+                onChange={(e) => {
+                    const next = /** @type {'paste' | 'existing' | 'holders'} */ (e.target.value);
+                    setSourceMode(next);
+                    // Compose is the only stage these can be set from, so
+                    // resetting on every mode change keeps a stale pick
+                    // from a previous mode out of the AIRDROP params.
+                    setListActionIndex(null);
+                    setExistingListDetail(null);
+                    setSelectedListRow(null);
+                }}
+                hint={sourceMode === 'paste'
+                    ? 'Enter or upload addresses; publishes a new address list, then airdrops to it.'
+                    : sourceMode === 'existing'
+                        ? "Pick a list you've already published (address or token) and airdrop straight to it; no new list gets created."
+                        : 'Pick one or more tokens; publishes a new token list, then airdrops to every current holder of those tokens.'}
+            >
+                <option value="paste">Addresses</option>
+                <option value="existing">Existing list</option>
+                <option value="holders">Token holders</option>
+            </Select>
             {roundingRemainder !== null ? (
                 <p className={styles.hint}>
                     Rounding remainder: {formatWithThousands(roundingRemainder)}
@@ -2065,7 +2030,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             }}
                             placeholder={recipientsDrop.isDragOver
                                 ? 'Drop the CSV / TXT file here'
-                                : 'Paste addresses, one per line or comma-separated.'}
+                                : 'Enter addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
                             autoCapitalize="off"
@@ -2256,11 +2221,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             {sourceMode === 'existing' ? (
                 <>
-                    <label className={styles.pickerLabel}>Existing list</label>
                     <div className={styles.fromLine}>
                         <span className={styles.hint}>
                             {listActionIndex
-                                ? `${listLabel(listActionIndex, existingListDetail?.name)}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
+                                ? existingListRowText(existingListDetail && !existingListDetail.loading && !existingListDetail.error
+                                    ? existingListDetail
+                                    : selectedListRow)
                                 : 'No list chosen yet.'}
                         </span>
                         <Button type="button" variant="ghost" onClick={() => setListPickerOpen(true)}>
@@ -2375,15 +2341,17 @@ function extractListRows(resp) {
 /**
  * PC-11 'existing' mode picker: fans `messaging.getListsForSource` out
  * over every address the wallet holds on `chainId` (same shape MyLists
- * uses across every chain), merges + de-dupes by action_index, and lets
- * the caller pick one to airdrop straight to. Deliberately narrower than
- * MyLists (no search/network filter): the form already knows the chain,
- * and the picker's only job here is "which list", not "browse all my
- * lists".
+ * uses across every chain), merges + de-dupes by action_index, and reads
+ * list details in a bounded queue so each row can name its current members.
+ * Deliberately narrower than MyLists (no search/network filter): the form
+ * already knows the chain, and the picker only answers "which list".
  *
  * @param {object} props
  * @param {'full' | 'compact'} props.variant
- * @param {{ getListsForSource: (req: { chainId: string, address: string }) => Promise<unknown> }} props.messaging
+ * @param {{
+ *   getListsForSource: (req: { chainId: string, address: string }) => Promise<unknown>,
+ *   getListByActionIndex?: (req: { chainId: string, actionIndex: string }) => Promise<unknown>,
+ * }} props.messaging
  * @param {string} props.chainId
  * @param {any[]} props.addresses   the wallet's own addresses on chainId
  * @param {(row: any) => void} props.onSelect
@@ -2407,22 +2375,61 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
             .then(() => messaging.getListsForSource({ chainId, address: addr }))
             .then((resp) => ({ rows: extractListRows(resp), error: null }))
             .catch((error) => ({ rows: [], error }))))
-            .then((results) => {
+            .then(async (results) => {
                 if (cancelled) return;
                 const merged = results.flatMap((result) => result.rows);
                 const seen = new Set();
-                const uniq = merged.filter((row) => {
+                let uniq = merged.filter((row) => {
                     const key = String(row.action_index ?? row.tx_hash ?? JSON.stringify(row));
                     if (seen.has(key)) return false;
                     seen.add(key);
                     return true;
                 });
+                // Rejected lists cannot receive an airdrop and must not be
+                // offered as a choice. Pending lists remain selectable.
+                uniq = uniq.filter((row) => !row.status
+                    || ['valid', 'pending'].includes(String(row.status).trim().toLowerCase()));
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
-                setRows(uniq);
                 const failed = results.find((result) => result.error);
                 if (failed && uniq.length === 0) {
                     setLoadError(readFailureMessage(failed.error, 'load your lists'));
+                    return;
                 }
+                if (typeof messaging.getListByActionIndex !== 'function') {
+                    setRows(uniq);
+                    return;
+                }
+
+                const detailed = new Array(uniq.length);
+                let cursor = 0;
+                const readNext = async () => {
+                    while (cursor < uniq.length && !cancelled) {
+                        const position = cursor;
+                        cursor += 1;
+                        const row = uniq[position];
+                        try {
+                            // Limit simultaneous explorer reads so a wallet with
+                            // many lists does not trip the service rate limit.
+                            // eslint-disable-next-line no-await-in-loop
+                            const detail = await messaging.getListByActionIndex({
+                                chainId,
+                                actionIndex: String(row.action_index),
+                            });
+                            detailed[position] = {
+                                ...row,
+                                ...(detail && typeof detail === 'object' ? detail : {}),
+                                action_index: row.action_index,
+                            };
+                        } catch {
+                            detailed[position] = row;
+                        }
+                    }
+                };
+                await Promise.all(Array.from(
+                    { length: Math.min(LIST_DETAIL_CONCURRENCY, uniq.length) },
+                    readNext,
+                ));
+                if (!cancelled) setRows(detailed);
             });
         return () => { cancelled = true; };
     }, [chainId, addresses, messaging, loadAttempt]);
@@ -2460,26 +2467,20 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         );
     }
     return wrap(
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        <ul className={pickerStyles.abList}>
             {rows.map((row) => {
                 const isTick = String(row.type) === '1';
-                const isUnion = String(row.type) === '3';
-                const typeLabel = isTick ? 'Token' : isUnion ? 'Union' : 'Address';
-                const statusWhy = row.status ? listStatusText(row.status) : 'status unknown';
+                const text = existingListRowText(row);
                 return (
-                    <li
-                        key={String(row.action_index)}
-                        style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}
-                    >
-                        <Button
+                    <li key={String(row.action_index)}>
+                        <ListRow
                             type="button"
-                            className={styles.back}
-                            style={{ width: '100%', textAlign: 'left' }}
+                            className={pickerStyles.abRow}
                             onClick={() => onSelect(row)}
-                        >
-                            {typeLabel} list #{row.action_index ?? '?'}
-                            {statusWhy ? ` (${statusWhy})` : ''}
-                        </Button>
+                            aria-label={text}
+                            leading={isTick ? <Icon.TokenListIcon /> : <Icon.UsersIcon />}
+                            title={text}
+                        />
                     </li>
                 );
             })}

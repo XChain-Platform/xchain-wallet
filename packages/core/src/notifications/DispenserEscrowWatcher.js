@@ -50,6 +50,7 @@ import {
 } from '../shared/utils/amountFormat.js';
 import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
@@ -76,6 +77,7 @@ export class DispenserEscrowWatcher {
         getSdkForChain,
         getSettings,
         notify,
+        recordAlert,
         loadSeen,
         saveSeen,
         intervalMs,
@@ -90,7 +92,7 @@ export class DispenserEscrowWatcher {
         this._getActiveAddresses = getActiveAddresses;
         this._getSdkForChain = getSdkForChain;
         this._getSettings = getSettings;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert });
         this._loadSeen = typeof loadSeen === 'function' ? loadSeen : null;
         this._saveSeen = typeof saveSeen === 'function' ? saveSeen : null;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;

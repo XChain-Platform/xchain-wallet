@@ -217,32 +217,26 @@ describe('LinkForm network default', () => {
     });
 });
 
-// SignMessageForm and PsbtSignForm both render a Chain picker whose props
-// (`chains` / `selectedChainId`) do not match ChainPicker's real API
-// (`chainIds` / `value`), so the picker never shows a selection - a
-// pre-existing, separate defect out of scope for this issue. The internal
-// `chainId` default is still verified through the chain-scoped address
-// select, which correctly reacts to it.
 describe('SignMessageForm network default', () => {
-    const addressSelect = async () => screen.findByRole('combobox', { name: 'Address' });
+    const addressField = async () => screen.findByRole('textbox', { name: 'Address' });
 
     it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(SignMessageForm, {}, messagingWith());
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_DOGE.address));
     });
 
     it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 
     it('still opens, on the first network, when the settings read fails', async () => {
         mount(SignMessageForm, {}, messagingWith({
             getSettings: vi.fn().mockRejectedValue(new Error('vault locked')),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 });
 

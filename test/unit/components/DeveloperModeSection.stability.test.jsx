@@ -53,6 +53,22 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('DeveloperModeSection unavailable actions', () => {
+    it('opens Advanced action and Action queue from developer tool rows', () => {
+        const onNavigateToAdvanced = vi.fn();
+        const onNavigateToActionQueue = vi.fn();
+        render(
+            <DeveloperModeSection
+                onNavigateToAdvanced={onNavigateToAdvanced}
+                onNavigateToActionQueue={onNavigateToActionQueue}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Advanced action' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open Action queue' }));
+        expect(onNavigateToAdvanced).toHaveBeenCalledOnce();
+        expect(onNavigateToActionQueue).toHaveBeenCalledOnce();
+    });
+
     it('does not render the unimplemented Raw PSBT control', () => {
         render(<DeveloperModeSection />);
         expect(screen.getByRole('group', { name: 'Developer mode settings' })).toBeTruthy();

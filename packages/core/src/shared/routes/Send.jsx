@@ -2902,23 +2902,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                // Send opts into confirm persistence. It is the
-                // form the popup-close hazard costs the most (most-used, and a
-                // hardware prompt closes the popup by taking focus), and its
-                // Approve is a bare dispatch - everything it does afterwards is
-                // this screen's own display state, so finishing it from Home
-                // loses nothing but the draft clear below.
-                session: {
-                    put: (payload) => messaging.putConfirmSession(payload),
-                    clear: (id) => messaging.clearConfirmSession({ id }),
-                },
-                resume: {
-                    software: 'sendToken',
-                    hardware: 'sendAssetHw',
-                    base: sendBase,
-                    label: `send ${String(amount).trim()} ${tick.trim().toUpperCase()}`,
-                },
-                resumeRequest: sendBase,
                 // The HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {

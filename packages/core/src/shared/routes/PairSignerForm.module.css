@@ -29,9 +29,10 @@
 .vendorCard {
     min-height: var(--xc-tap-min);
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-3);
     text-align: start;
     cursor: pointer;
     color: var(--xc-text);
@@ -43,6 +44,11 @@
     border: 0;
     border-radius: 0;
     background: transparent;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-3);
+    text-align: start;
 }
 
 .vendorCard:hover:not(:disabled) {
@@ -64,7 +70,25 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
+    min-width: 0;
     width: 100%;
+}
+
+.vendorLogo {
+    flex: none;
+    width: calc(var(--xc-space-6) + var(--xc-space-1));
+    height: calc(var(--xc-space-6) + var(--xc-space-1));
+    object-fit: contain;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-xc-theme="light"]) .vendorLogo {
+        filter: invert(1);
+    }
+}
+
+:root[data-xc-theme="dark"] .vendorLogo {
+    filter: invert(1);
 }
 
 .vendorName {

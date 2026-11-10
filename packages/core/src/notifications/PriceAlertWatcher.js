@@ -31,6 +31,7 @@
 
 import { isWithinQuietHours } from './quietHours.js';
 import { taggedLogger } from './taggedLogger.js';
+import { withAlertInbox } from './notificationInbox.js';
 
 // Align with priceOracle's SPOT_TTL_MS so a poll usually hits the oracle's
 // in-memory cache rather than issuing a fresh CoinGecko request.
@@ -71,6 +72,7 @@ export class PriceAlertWatcher {
         listArmedAlerts,
         getSettings,
         notify,
+        recordAlert,
         markTriggered,
         loadFired,
         saveFired,
@@ -87,7 +89,7 @@ export class PriceAlertWatcher {
         this._getNativePrices = getNativePrices;
         this._listArmedAlerts = listArmedAlerts;
         this._getSettings = getSettings;
-        this._notify = notify;
+        this._notify = withAlertInbox(notify, { recordAlert, now });
         this._markTriggered = markTriggered;
         this._loadFired = typeof loadFired === 'function' ? loadFired : null;
         this._saveFired = typeof saveFired === 'function' ? saveFired : null;

@@ -430,7 +430,7 @@ describe('AirdropForm existing-list preview counts the members the airdrop will 
         }));
         fireEvent.change(await screen.findByLabelText(/^Airdrop to/), { target: { value: 'existing' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
-        fireEvent.click(await screen.findByRole('button', { name: /Address list #2701/ }));
+        fireEvent.click(await screen.findByRole('button', { name: '5 addresses, address list, 5 addresses' }));
         expect(await screen.findByText('5 addresses on this list.')).toBeTruthy();
     });
 });

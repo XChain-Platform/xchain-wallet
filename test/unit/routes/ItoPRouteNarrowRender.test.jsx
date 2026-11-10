@@ -145,11 +145,13 @@ describe('I through P route rendering at 320px', () => {
             />,
             {
                 getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
-                getOwnedTokens: vi.fn().mockResolvedValue([]),
+                getOwnedTokens: vi.fn().mockResolvedValue([
+                    { tick: 'NARROW', locked: false },
+                ]),
             },
         );
 
-        expect(await screen.findByRole('button', { name: 'Issue new token' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create token' })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, myTokensCss);
     });
 

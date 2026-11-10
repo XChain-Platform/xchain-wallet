@@ -50,6 +50,11 @@ function mountDestroy({ balances }) {
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'DESTROY|0|ART|2', version: 1,
             releaseEncoderInputsToken: 'release-1',
+            decoded: {
+                summary: 'Destroy 2 ART',
+                details: [{ label: 'Amount', value: '2 ART' }],
+                warnings: ['Destroy is irreversible.'],
+            },
             simulation: { deltas: [{ tick: 'ART', before: '2', after: '0' }] },
         }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
@@ -96,9 +101,13 @@ describe('DestroyForm balance freshness', () => {
     it('enables approval only for exact uppercase DESTROY', async () => {
         mountDestroy({ balances: balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]) });
         expect(await screen.findByText('2 ART available')).toBeInTheDocument();
+        expect(screen.queryByText('Destroy is irreversible.')).toBeNull();
+        expect(screen.queryByText('The burned amount cannot be recovered.')).toBeNull();
         await reviewAmount('2');
         const field = await screen.findByLabelText('Type "DESTROY" to confirm');
         const approve = await screen.findByTestId('confirm-approve');
+        expect(screen.getByText('Destroy is irreversible.')).toBeInTheDocument();
+        expect(approve).toBeDisabled();
 
         for (const value of ['destroy', ' DESTROY', 'DESTROY ', 'Destroy']) {
             fireEvent.change(field, { target: { value } });

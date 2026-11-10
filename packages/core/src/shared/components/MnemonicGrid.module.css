@@ -1,22 +1,21 @@
-.container {
-    margin: 0 0 var(--xc-space-3);
+.card {
+    composes: card from '../../ui/Card.module.css';
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
 }
 
 .revealAction {
+    position: absolute;
+    inset: 0;
     display: flex;
+    align-items: center;
     justify-content: center;
-    margin: 0 0 var(--xc-space-2);
-}
-
-.concealedMessage {
-    composes: card from '../../ui/Card.module.css';
-    margin: 0;
-    color: var(--xc-text-muted);
-    text-align: center;
+    padding: var(--xc-card-pad);
 }
 
 .gridPopup {
-    composes: card from '../../ui/Card.module.css';
     list-style: none;
     box-sizing: border-box;
     width: 100%;
@@ -28,7 +27,6 @@
 }
 
 .gridFull {
-    composes: card from '../../ui/Card.module.css';
     list-style: none;
     box-sizing: border-box;
     width: 100%;
@@ -37,6 +35,17 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-2);
+}
+
+.concealedGrid {
+    opacity: 0.45;
+}
+
+.concealedCell {
+    min-width: 0;
+    min-height: calc(var(--xc-text-sm) * 1.4 + 2 * var(--xc-space-1));
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface);
 }
 
 @media (min-width: 480px) {

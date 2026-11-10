@@ -133,6 +133,12 @@ const messages = {
     'settings.backup.check2': 'Check',
     'settings.developer.developerModeSettings': 'Developer mode settings',
     'settings.developer.developerOptions': 'Developer options',
+    'settings.developer.tools': 'Developer tools',
+    'settings.developer.advancedAction': 'Advanced action',
+    'settings.developer.advancedActionHint': 'Submit any supported action using raw fields.',
+    'settings.developer.actionQueue': 'Action queue',
+    'settings.developer.actionQueueHint': 'Compose independent actions across networks.',
+    'settings.developer.open': 'Open',
     'settings.developer.unlocksTestNetworksEndpointOverrides':
         'Unlocks the Regtest network, endpoint overrides, custom networks, preview tools, local app controls, and diagnostics. Turning it off while on Regtest returns the wallet to Mainnet.',
     'settings.developer.learnMode': 'Learn Mode',

@@ -96,14 +96,14 @@ describe('Send Max', () => {
         mount({ quote });
         await prepareNativeMax();
 
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ feePerKb: 6000 }));
 
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });
 
-        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998'));
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99998000'));
         expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ feePerKb: 12000 }));
     });
 

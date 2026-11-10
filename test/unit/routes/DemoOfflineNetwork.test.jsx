@@ -92,11 +92,11 @@ describe('demo session offline boundary', () => {
         });
 
         render(provider(messaging, <MyOrdersView walletId={WALLET} onBack={() => {}} />));
-        expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(await screen.findByRole('list', { name: 'Open orders' })).toBeInTheDocument();
         cleanup();
 
         render(provider(messaging, <MySwapsView walletId={WALLET} onBack={() => {}} />));
-        expect(await screen.findByText('No swaps yet')).toBeInTheDocument();
+        expect(await screen.findByRole('list', { name: 'Open swaps' })).toBeInTheDocument();
         cleanup();
 
         render(provider(messaging, (

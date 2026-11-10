@@ -27,6 +27,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 
 const { MessagingProvider } = await import('../../../packages/core/src/shared/MessagingProvider.jsx');
 const { AirdropForm } = await import('../../../packages/core/src/shared/routes/AirdropForm.jsx');
+const { existingListRowText } = await import('../../../packages/core/src/shared/utils/existingListRowText.js');
 const { __clearTokenInfoCache } = await import('../../../packages/core/src/shared/hooks/useTokenInfo.js');
 
 const CHAIN = 'bitcoin-mainnet';
@@ -104,6 +105,37 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm page templates', () => {
+    it('orders the token, amount and destination fields and uses the approved destination names', async () => {
+        mountAirdrop();
+        await flushTimers();
+
+        const token = screen.getByText('Token to drop').parentElement;
+        const amount = screen.getByLabelText(/^Per-recipient amount/);
+        const destination = screen.getByLabelText(/^Airdrop to/);
+        expect(token.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(amount.compareDocumentPosition(destination) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(Array.from(destination.options).map((option) => option.textContent)).toEqual([
+            'Addresses',
+            'Existing list',
+            'Token holders',
+        ]);
+
+        fireEvent.change(destination, { target: { value: 'existing' } });
+        expect(screen.queryByText('Existing list', { selector: 'label' })).toBeNull();
+    });
+
+    it('builds one matching description for named and derived list rows', () => {
+        expect(existingListRowText({ type: '1', list: ['PEPE', 'DANKEST'] })).toBe(
+            'PEPE and DANKEST holders, token list, 2 tokens',
+        );
+        expect(existingListRowText({ type: '2', label: 'Team wallets', memberCount: 14 })).toBe(
+            'Team wallets, address list, 14 addresses',
+        );
+        expect(existingListRowText({ type: '2', label: 'Primary wallet', memberCount: 1 })).toBe(
+            'Primary wallet, address list, 1 address',
+        );
+    });
+
     it('lays out the load error, the loading line and the watcher-mode notice through a page template', async () => {
         mountAirdrop({ overrides: { getAddressesByChain: vi.fn().mockRejectedValue(new Error('vault read failed')) } });
         await flushTimers();
@@ -161,7 +193,13 @@ describe('AirdropForm page templates', () => {
 
         mountAirdrop({
             overrides: {
-                getListsForSource: vi.fn().mockResolvedValue([{ action_index: 42, type: '2', status: 'valid', block_index: 10 }]),
+                getListsForSource: vi.fn().mockResolvedValue([
+                    { action_index: 42, type: '2', status: 'valid', block_index: 10 },
+                    { action_index: 43, type: '1', status: 'valid', block_index: 9 },
+                ]),
+                getListByActionIndex: vi.fn(({ actionIndex }) => Promise.resolve(actionIndex === '42'
+                    ? { action_index: 42, type: '2', name: 'Team wallets', list: ['bc1qrecipient'] }
+                    : { action_index: 43, type: '1', list: ['PEPE', 'DANKEST'] })),
             },
         });
         await flushTimers();
@@ -169,7 +207,12 @@ describe('AirdropForm page templates', () => {
         await flushTimers();
         fireEvent.click(screen.getByRole('button', { name: 'Choose list' }));
         await flushTimers();
-        const row = screen.getByRole('button', { name: /Address list #42/ });
-        expect(row.closest('[data-test-template="list"]')).not.toBeNull();
+        const addressRow = screen.getByRole('button', { name: 'Team wallets, address list, 1 address' });
+        const tokenRow = screen.getByRole('button', {
+            name: 'PEPE and DANKEST holders, token list, 2 tokens',
+        });
+        expect(addressRow.closest('[data-test-template="list"]')).not.toBeNull();
+        expect(addressRow.querySelector('svg')).not.toBeNull();
+        expect(tokenRow.querySelector('svg')).not.toBeNull();
     });
 });

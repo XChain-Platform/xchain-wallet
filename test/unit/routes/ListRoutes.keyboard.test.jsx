@@ -144,14 +144,18 @@ describe('list route keyboard flows', () => {
         });
     });
 
-    it('reaches Issue token and leaves My tokens with Back', async () => {
+    it('reaches Create token and leaves My tokens with Back', async () => {
         await exerciseRoute({
             Component: MyTokens,
             messaging: {
-                getAddressesByChain: vi.fn().mockResolvedValue({}),
-                getOwnedTokens: vi.fn().mockResolvedValue([]),
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    [CHAIN]: [{ address: ADDRESS }],
+                }),
+                getOwnedTokens: vi.fn().mockResolvedValue([
+                    { tick: 'KEYBOARD', locked: false },
+                ]),
             },
-            primaryName: 'Issue token',
+            primaryName: 'Create token',
             props: (onPrimary) => ({ onIssue: onPrimary, onSelectTick: vi.fn() }),
         });
     });

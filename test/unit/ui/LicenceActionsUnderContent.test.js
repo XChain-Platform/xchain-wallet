@@ -7,8 +7,8 @@
 // the height of its text and shrinks with its own scroll only when the screen
 // is too short; neither the box, its gate nor the FormPage fill body grows into
 // spare height, so on a wide or tall shell no blank space opens inside the card
-// and Accept and continue follows the acknowledgement instead of the screen
-// bottom.
+// bottom. At the licence breakpoint the acknowledgement and button share the
+// row directly below the terms.
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
@@ -86,7 +86,7 @@ describe('Licence gate actions sit under the terms', () => {
         expect(fillBody).toMatch(/overflow-y\s*:\s*auto\s*;/);
     });
 
-    it('renders the actions row as the next sibling after the body holding the terms', () => {
+    it('renders the checkbox before the button in one controls wrapper', () => {
         render(React.createElement(
             MessagingProvider,
             { shell: 'web', messaging: {} },
@@ -94,12 +94,21 @@ describe('Licence gate actions sit under the terms', () => {
         ));
 
         const terms = screen.getByLabelText('License terms');
+        const checkbox = screen.getByRole('checkbox');
         const accept = screen.getByRole('button', { name: /Accept and continue/i });
-        const body = terms.closest('[data-form-stack]');
-        expect(body).not.toBeNull();
-        const actionsRow = body.nextElementSibling;
-        expect(actionsRow).not.toBeNull();
-        expect(actionsRow.contains(accept)).toBe(true);
-        expect(terms.compareDocumentPosition(accept) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const controls = checkbox.closest('label')?.parentElement;
+        expect(controls).not.toBeNull();
+        expect(controls.contains(accept)).toBe(true);
+        expect(terms.nextElementSibling).toBe(controls);
+        expect(checkbox.compareDocumentPosition(accept) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('switches the shared controls wrapper to a row at 834px', () => {
+        const wideControls = onboardingCss.match(
+            /@media \(min-width: 834px\) \{[\s\S]*?\.licenseControls\s*\{([^}]*)\}/,
+        )?.[1] ?? '';
+        expect(wideControls).toMatch(/flex-direction\s*:\s*row\s*;/);
+        expect(wideControls).toMatch(/align-items\s*:\s*center\s*;/);
+        expect(wideControls).toMatch(/justify-content\s*:\s*space-between\s*;/);
     });
 });

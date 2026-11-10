@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -45,6 +45,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DurationSlider } from '../components/DurationSlider.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
@@ -81,8 +82,8 @@ function resumeBlockFor(height, duration) {
  *
  *  - `'address'`: the holder self-locks their own address (SLEEP v0). While
  *    asleep the address cannot submit ANY action, INCLUDING a resume, so a
- *    large or indefinite block freezes it with no undo. Guarded with a typed
- *    confirm and an irreversibility warning; no "resume now" option (an
+ *    future block freezes it with no undo until that block. Guarded with a typed
+ *    confirm and a review warning; no "resume now" option (an
  *    address sleep auto-resumes at its block and cannot be lifted early).
  *
  * @param {object} props
@@ -132,6 +133,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [resumeMode, setResumeMode] = useState(
         /** @type {'until' | 'indefinite' | 'resume'} */ ('until'),
     );
+    const effectiveResumeMode = isTick ? resumeMode : 'until';
     const [durationBlocksInput, setDurationBlocksInput] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -247,8 +249,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const calculatedResumeBlock = resumeBlockFor(currentHeight, durationBlockCount);
 
     // The duration stays a display convenience; the protocol receives its absolute block height.
-    const resumeBlockValue = resumeMode === 'indefinite' ? '-1'
-        : resumeMode === 'resume' ? '0'
+    const resumeBlockValue = effectiveResumeMode === 'indefinite' ? '-1'
+        : effectiveResumeMode === 'resume' ? '0'
             : calculatedResumeBlock == null ? '' : String(calculatedResumeBlock);
     const resumeBlockEstimate = blockDateEstimateText({
         coin: descriptor?.coin,
@@ -260,10 +262,10 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         && Number.isSafeInteger(reviewedResumeBlock) && reviewedResumeBlock > 0
         ? reviewedResumeBlock
         : calculatedResumeBlock;
-    const wakeCondition = resumeMode === 'resume'
+    const wakeCondition = effectiveResumeMode === 'resume'
         ? 'Immediately.'
-        : resumeMode === 'indefinite'
-            ? (isTick ? 'Only when the token owner resumes it.' : 'Never. An indefinite address lock is permanent.')
+        : effectiveResumeMode === 'indefinite'
+            ? 'Only when the token owner resumes it.'
             : displayedResumeBlock == null
                 ? 'Enter a valid duration to calculate the wake block.'
                 : isTick
@@ -306,7 +308,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         )) return `The selected source address is not valid for ${descriptor.displayName || 'this network'}.`;
         if (!fromAddress.derivationPath && !fromAddress.id) return 'The selected source address is missing its wallet identifier.';
         if (isTick && sleepLocked) return `Pausing and resuming are permanently locked for ${ticker}.`;
-        if (resumeMode === 'until') {
+        if (effectiveResumeMode === 'until') {
             if (!durationBlocks) return 'Enter a duration in blocks.';
             if (!/^\d+$/.test(durationBlocks)) return 'Duration must be a whole number of blocks.';
             if (durationBlockCount === 0) return 'Duration must be at least 1 block.';
@@ -505,7 +507,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 return;
             }
             let height = currentHeight;
-            if (resumeMode === 'until') {
+            if (effectiveResumeMode === 'until') {
                 setRefreshingHeight(true);
                 try {
                     height = await refreshHeight();
@@ -519,7 +521,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             if (!mountedRef.current) return;
             const freshError = validationError(height);
             if (freshError) { setFormError(freshError); return; }
-            const params = resumeMode === 'until'
+            const params = effectiveResumeMode === 'until'
                 ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
                 : actionParams;
             setReviewedParams(params);
@@ -716,7 +718,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     <DetailRow label="Resume block" value={reviewedParams?.RESUME_BLOCK || resumeBlockValue} />
                     {reviewedParams?.MEMO ? <DetailRow label="Memo" value={reviewedParams.MEMO} /> : null}
                     <DetailRow label="Wake condition" value={wakeCondition} />
-                    {resumeMode === 'until' ? (
+                    {effectiveResumeMode === 'until' ? (
                         <DetailRow label="Duration" value={`${Number(durationBlocks).toLocaleString('en-US')} blocks`} />
                     ) : null}
                     <DetailRow
@@ -732,8 +734,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 ) : (
                     <FormNotice variant="warning" role="alert" lead="This pauses XChain actions from your address.">
                         {'While it is locked, it cannot create an XChain action, including one to wake itself. '
-                            + 'This does not lock its native coins or prevent ordinary network transactions. It wakes on its own only when the wake block is reached'
-                            + `${resumeMode === 'indefinite' ? ', which for an indefinite lock is NEVER' : ''}.`}
+                            + 'This does not lock its native coins or prevent ordinary network transactions. It wakes on its own only when the wake block is reached.'}
                     </FormNotice>
                 )}
                 {decoded && decoded.warnings.length > 0 ? (
@@ -836,13 +837,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={!isTick ? <Icon.LockIcon /> : resumeMode === 'resume' ? <Icon.PlayIcon /> : <Icon.ClockIcon />}
                     loading={refreshingHeight || confirmAction.composing}
                     disabled={!fromAddress || (isTick && (
                         sleepLocked || !!issuerEligibility.error
                     )) || !!addressLockError || refreshingHeight || confirmAction.composing}
                 >
-                    {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
+                    {isTick && isWatcherMode ? 'Preview' : titleNoun}
                 </Button>
             )}
         >
@@ -863,11 +865,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         </FormNotice>
                     ) : null}
                 </>
-            ) : (
-                <FormNotice variant="warning" role="alert" lead="Locking an address pauses its XChain actions.">
-                    It cannot create a new XChain action, including one to wake itself, but its native coins are not locked. It wakes only when the chosen block arrives; an indefinite lock is permanent.
-                </FormNotice>
-            )}
+            ) : null}
 
             {stateLine}
 
@@ -885,44 +883,37 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
-            <RadioGroup
-                legend={isTick ? 'Pause setting' : 'Lock duration'}
-                name="sleep-mode"
-                value={resumeMode}
-                onChange={(nextValue) => setResumeMode(nextValue)}
-                options={[
-                    ...(isTick ? [{
+            {isTick ? (
+                <RadioGroup
+                    legend="Pause setting"
+                    name="sleep-mode"
+                    value={resumeMode}
+                    onChange={(nextValue) => setResumeMode(nextValue)}
+                    options={[{
                         value: 'resume',
                         label: 'Resume now (unpause)',
                         disabled: sleepLocked,
-                    }] : []),
-                    {
+                    }, {
                         value: 'until',
-                        label: isTick ? 'Pause for a duration' : 'Lock for a duration',
-                        disabled: isTick && sleepLocked,
-                    },
-                    {
+                        label: 'Pause for a duration',
+                        disabled: sleepLocked,
+                    }, {
                         value: 'indefinite',
-                        label: isTick ? 'Pause indefinitely' : 'Lock indefinitely (permanent)',
-                        disabled: isTick && sleepLocked,
-                    },
-                ]}
-            />
-            {resumeMode === 'until' ? (
-                <Input
-                    label="Duration (blocks)"
-                    hint={calculatedResumeBlock != null
-                        ? `Wake block: ${calculatedResumeBlock.toLocaleString('en-US')}.${resumeBlockEstimate ? ` Est. ${resumeBlockEstimate}.` : ''}`
-                        : 'Enter how many blocks the pause or lock lasts. The wake block is calculated from the current network height.'}
-                    inputMode="numeric"
-                    value={durationBlocksInput}
-                    onChange={(e) => setDurationBlocksInput(e.target.value)}
-                    autoComplete="off"
-                    disabled={isTick && sleepLocked}
+                        label: 'Pause indefinitely',
+                        disabled: sleepLocked,
+                    }]}
                 />
             ) : null}
-            {currentHeight != null ? (
-                <p className={styles.hint}>Duration starts from current block {currentHeight.toLocaleString('en-US')}.</p>
+            {effectiveResumeMode === 'until' ? (
+                <DurationSlider
+                    coin={descriptor?.coin}
+                    value={durationBlocksInput}
+                    onChange={setDurationBlocksInput}
+                    wakeText={calculatedResumeBlock != null
+                        ? `Ends at block ${calculatedResumeBlock.toLocaleString('en-US')}${resumeBlockEstimate ? `, est. ${resumeBlockEstimate}` : ''}`
+                        : null}
+                    disabled={isTick && sleepLocked}
+                />
             ) : null}
 
             <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />

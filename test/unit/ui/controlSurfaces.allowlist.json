@@ -16,6 +16,10 @@
             "count": 7,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
+        "packages/core/src/shared/components/DurationSlider.jsx": {
+            "count": 1,
+            "reason": "A native range input provides the same accessible slider behavior as the network fee slider in the UI kit."
+        },
         "packages/core/src/shared/components/HeaderActionMenu.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
@@ -25,7 +29,7 @@
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/components/HomeTabs.jsx": {
-            "count": 2,
+            "count": 1,
             "reason": "A sort select laid over a hand-drawn label and chevron, plus the tab buttons; moving it needs a design call on the compact sort control."
         },
         "packages/core/src/shared/components/LayoutModeToggle.jsx": {
@@ -140,10 +144,6 @@
             "count": 3,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
-        "packages/core/src/shared/routes/MyTokens.jsx": {
-            "count": 2,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/routes/OnboardingCarousel.jsx": {
             "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
@@ -203,7 +203,7 @@
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/HomeTabs.module.css": {
-            "count": 6,
+            "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/LayoutModeToggle.module.css": {

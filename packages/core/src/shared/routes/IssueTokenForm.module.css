@@ -168,6 +168,18 @@ select.picker {
     border: 0;
 }
 
+/* Keep the section named for assistive technology while its first field leads visually. */
+.untitledSection > :global([data-xc-section-header]) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .fromLine {
     composes: card from '../../ui/Card.module.css';
     display: flex;

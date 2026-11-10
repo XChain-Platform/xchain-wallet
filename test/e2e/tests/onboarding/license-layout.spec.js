@@ -39,6 +39,7 @@ async function measure(page) {
         };
         const terms = document.querySelector('[aria-label="License terms"]');
         const ack = document.querySelector('input[type="checkbox"]').closest('label');
+        const controls = ack.parentElement;
         const accept = [...document.querySelectorAll('button')].find((b) => /accept and continue/i.test(b.innerText));
         const main = document.getElementById('xc-main');
         const mcs = getComputedStyle(main);
@@ -61,6 +62,7 @@ async function measure(page) {
             pageScrollY: se.scrollHeight - se.clientHeight,
             pageScrollX: se.scrollWidth - se.clientWidth,
             terms: box(terms),
+            controls: box(controls),
             ack: box(ack),
             accept: box(accept),
             gateGap: parseFloat(getComputedStyle(terms.parentElement).rowGap) || 0,
@@ -86,15 +88,12 @@ for (const viewport of VIEWPORTS) {
         await page.evaluate(() => document.fonts.ready);
         const m = await measure(page);
 
-        // Nothing scrolls the page, Accept stays on screen, and the checkbox
-        // sits directly under the terms card.
+        // Nothing scrolls the page, Accept stays on screen, and the controls
+        // sit directly under the terms card.
         expect(m.pageScrollY, 'the licence page scrolls').toBeLessThanOrEqual(1);
         expect(m.pageScrollX, 'the licence page scrolls sideways').toBeLessThanOrEqual(1);
         expect(m.accept.bottom).toBeLessThanOrEqual(m.vh + 1);
-        expect(Math.abs(m.ack.top - m.terms.bottom - m.gateGap), 'the checkbox sits directly under the terms').toBeLessThanOrEqual(1);
-        // U48: Accept and continue follows the checkbox by one form gap.
-        expect(m.accept.top, 'Accept sits below the checkbox').toBeGreaterThan(m.ack.bottom);
-        expect(m.accept.top - m.ack.bottom, 'Accept sits directly under the checkbox').toBeLessThanOrEqual(m.formGap + 1);
+        expect(Math.abs(m.controls.top - m.terms.bottom - m.gateGap), 'the controls sit directly under the terms').toBeLessThanOrEqual(1);
         expect(m.terms.height).toBeGreaterThanOrEqual(96);
 
         // U33: an outlined card in the card tokens with inner padding.
@@ -104,6 +103,8 @@ for (const viewport of VIEWPORTS) {
         expect(m.padRight, 'the terms card has inline-end padding').toBeGreaterThan(0);
 
         if (!viewport.twoThirds) {
+            expect(m.accept.top, 'Accept sits below the checkbox').toBeGreaterThan(m.ack.bottom);
+            expect(m.accept.top - m.ack.bottom, 'Accept sits directly under the checkbox').toBeLessThanOrEqual(m.formGap + 1);
             // Below 834px the terms span the content lane.
             expect(Math.abs(m.terms.left - m.lane.left), 'terms left edge on the content lane').toBeLessThanOrEqual(1);
             expect(Math.abs(m.lane.right - m.terms.right), 'terms right edge on the content lane').toBeLessThanOrEqual(1);
@@ -113,5 +114,9 @@ for (const viewport of VIEWPORTS) {
         const laneWidth = m.lane.right - m.lane.left;
         expect(Math.abs(m.terms.width - (laneWidth * 2) / 3), 'terms card takes two-thirds of the lane').toBeLessThanOrEqual(1);
         expect(Math.abs((m.terms.left - m.lane.left) - (m.lane.right - m.terms.right)), 'terms card centred on the lane').toBeLessThanOrEqual(1);
+        expect(m.ack.top, 'checkbox overlaps Accept vertically').toBeLessThan(m.accept.bottom);
+        expect(m.accept.top, 'Accept overlaps checkbox vertically').toBeLessThan(m.ack.bottom);
+        expect(Math.abs(m.ack.left - m.terms.left), 'checkbox starts on the card edge').toBeLessThanOrEqual(1);
+        expect(Math.abs(m.accept.right - m.terms.right), 'Accept ends on the card edge').toBeLessThanOrEqual(1);
     });
 }

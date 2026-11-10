@@ -17,6 +17,46 @@ import styles from './ActionsMenu.module.css';
 
 const SIGNER_ACTION_IDS = new Set(['sign-psbt', 'sign-message', 'verify-signature']);
 
+const ENTRY_ICON = {
+    issue: Icon.PlusIcon,
+    mint: Icon.MintIcon,
+    destroy: Icon.TrashIcon,
+    sweep: Icon.SweepIcon,
+    lock: Icon.LockIcon,
+    description: Icon.PencilIcon,
+    transfer: Icon.HandshakeIcon,
+    broadcast: Icon.BroadcastIcon,
+    oracle: Icon.ClockIcon,
+    dispenser: Icon.TokenIcon,
+    'dispensers-list': Icon.TokenListIcon,
+    'dispenser-explorer': Icon.SearchIcon,
+    dividend: Icon.DollarIcon,
+    airdrop: Icon.UsersIcon,
+    coinpay: Icon.SendIcon,
+    swap: Icon.SwapIcon,
+    'create-order': Icon.MarketIcon,
+    'my-orders': Icon.MarketIcon,
+    'my-swaps': Icon.SwapIcon,
+    'publish-file': Icon.FileTypeIcon,
+    link: Icon.LinkIcon,
+    batch: Icon.MenuIcon,
+    'cross-chain-swap': Icon.SwapIcon,
+    'cross-chain-order': Icon.MarketIcon,
+    'cross-chain-templates': Icon.DocumentIcon,
+    'bridge-move': Icon.MigrateIcon,
+    'bridge-settings': Icon.GearIcon,
+    'multisig-create': Icon.MultisigIcon,
+    'governance-polls': Icon.ThumbsUpIcon,
+    'bet-markets': Icon.LineChartIcon,
+    'cosigner-accounts': Icon.UserIcon,
+    contacts: Icon.BookIcon,
+    'sign-message': Icon.SignIcon,
+    'verify-signature': Icon.VerifyIcon,
+    'sign-psbt': Icon.KeyIcon,
+    'lock-address': Icon.LockIcon,
+    'pair-signer': Icon.UsbIcon,
+};
+
 /**
  * Actions menu: secondary authoring surface listed in §40.
  *
@@ -76,7 +116,9 @@ export function ActionsMenu({ entries, onBack }) {
                                 data-xc-menu-list="cards"
                             >
                                 {group.entries.map((entry) => {
-                                    const EntryIcon = Icon.iconForLabel(entry.label);
+                                    const EntryIcon = ENTRY_ICON[entry.id]
+                                        || Icon.iconForLabel(entry.label)
+                                        || Icon.MoreIcon;
                                     const descriptionId = entry.description
                                         ? `action-${entry.id}-description`
                                         : undefined;
@@ -89,18 +131,17 @@ export function ActionsMenu({ entries, onBack }) {
                                                 type="button"
                                                 className={styles.entry}
                                                 data-xc-menu-item
-                                                data-destructive={entry.id === 'destroy' ? 'true' : undefined}
                                                 onClick={entry.disabled ? undefined : entry.onSelect}
                                                 aria-disabled={entry.disabled ? 'true' : undefined}
                                                 aria-describedby={[descriptionId, reasonId].filter(Boolean).join(' ') || undefined}
                                             >
-                                                {EntryIcon ? (
-                                                    <span className={styles.entryIcon} aria-hidden="true">
-                                                        <EntryIcon />
-                                                    </span>
-                                                ) : null}
                                                 <span className={styles.entryText}>
-                                                    <span className={styles.entryLabel}>{entry.label}</span>
+                                                    <span className={styles.entryHead}>
+                                                        <span className={styles.entryIcon} aria-hidden="true">
+                                                            <EntryIcon />
+                                                        </span>
+                                                        <span className={styles.entryLabel}>{entry.label}</span>
+                                                    </span>
                                                     {entry.description ? (
                                                         <span id={descriptionId} className={styles.entryDescription}>
                                                             {entry.description}

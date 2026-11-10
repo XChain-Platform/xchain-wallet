@@ -6,10 +6,8 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// A private key decodes to a different address on each network of a coin, so
-// the network picker tells mainnet, testnet and regtest apart. The visible
-// rows keep the plain coin name and ticker; each option's accessible name
-// carries its network.
+// Onboarding accepts mainnet private keys. Testnet and regtest remain in the
+// in-wallet Add or import address dialog for advanced use.
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { computeAccessibleName } from 'dom-accessibility-api';
@@ -29,13 +27,14 @@ function renderPrivateKeyLane() {
 }
 
 function openNetworkPicker() {
-    fireEvent.click(screen.getByRole('button', { name: /^Private key network: / }));
-    return screen.getByRole('listbox', { name: 'Private key network' });
+    fireEvent.click(screen.getByRole('button', { name: /^Coin network: / }));
+    return screen.getByRole('listbox', { name: 'Coin network' });
 }
 
 function wifChains() {
     return defaultRegistry().supportedChains()
-        .filter((descriptor) => Number.isInteger(descriptor.wifVersionByte));
+        .filter((descriptor) => descriptor.networkKind === 'mainnet'
+            && Number.isInteger(descriptor.wifVersionByte));
 }
 
 function optionText(option) {
@@ -45,43 +44,22 @@ function optionText(option) {
 afterEach(cleanup);
 
 describe('ImportWallet private key network picker', () => {
-    it('gives every network of a coin its own option name', () => {
+    it('offers only mainnet coins with WIF support', () => {
         renderPrivateKeyLane();
         const options = within(openNetworkPicker()).getAllByRole('option');
         const chains = wifChains();
         expect(options).toHaveLength(chains.length);
-
-        const byCoin = new Map();
-        options.forEach((option, index) => {
-            const names = byCoin.get(chains[index].coin) ?? [];
-            names.push(computeAccessibleName(option));
-            byCoin.set(chains[index].coin, names);
-        });
-        for (const [coin, names] of byCoin) {
-            expect(names.length, `${coin} offers more than one network`).toBeGreaterThan(1);
-            expect(new Set(names).size, `${coin} offers ${names.join(' | ')}`).toBe(names.length);
-        }
-    });
-
-    it('keeps the plain coin name on mainnet and names testnet and regtest', () => {
-        renderPrivateKeyLane();
-        const options = within(openNetworkPicker()).getAllByRole('option');
-        const chains = wifChains();
-        expect(new Set(chains.map((descriptor) => descriptor.networkKind)))
-            .toEqual(new Set(['mainnet', 'testnet', 'regtest']));
-
         options.forEach((option, index) => {
             const descriptor = chains[index];
             const ticker = tickerForCoin(descriptor.coin);
-            const name = computeAccessibleName(option);
-            // Visible text stays the plain coin name over its ticker on every network.
+            expect(descriptor.networkKind).toBe('mainnet');
             expect(optionText(option)).toBe(`${descriptor.displayName}${ticker}`);
-            if (descriptor.networkKind === 'mainnet') {
-                expect(name).not.toMatch(/testnet|regtest/);
-                expect(name.startsWith(descriptor.displayName)).toBe(true);
-            } else {
-                expect(name).toBe(`${descriptor.displayName} ${descriptor.networkKind} ${ticker}`);
-            }
+            expect(computeAccessibleName(option)).not.toMatch(/testnet|regtest/);
         });
+        expect(chains.map((descriptor) => descriptor.id).sort()).toEqual([
+            'bitcoin-mainnet',
+            'dogecoin-mainnet',
+            'litecoin-mainnet',
+        ]);
     });
 });

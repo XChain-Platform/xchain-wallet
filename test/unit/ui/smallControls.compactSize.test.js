@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 const BUTTON_CSS = 'packages/core/src/ui/Button.module.css';
 const INPUT_CSS = 'packages/core/src/ui/Input.module.css';
 const TOKEN_CSS = 'packages/core/src/ui/tokens.css';
-const TOKEN_CHIPS_CSS = 'packages/core/src/shared/routes/MyTokens.module.css';
+const MY_TOKENS_CSS = 'packages/core/src/shared/routes/MyTokens.module.css';
 
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -22,7 +22,7 @@ describe('small controls keep compact paint and large touch targets', () => {
     const buttonCss = readFileSync(BUTTON_CSS, 'utf8');
     const inputCss = readFileSync(INPUT_CSS, 'utf8');
     const tokenCss = readFileSync(TOKEN_CSS, 'utf8');
-    const chipsCss = readFileSync(TOKEN_CHIPS_CSS, 'utf8');
+    const myTokensCss = readFileSync(MY_TOKENS_CSS, 'utf8');
 
     it('paints small buttons at 28px with an extra-small label', () => {
         const small = rule(buttonCss, '.sm');
@@ -43,11 +43,7 @@ describe('small controls keep compact paint and large touch targets', () => {
         expect(tokenCss).toMatch(/--xc-control-hit-min:\s*44px/);
     });
 
-    it('keeps the My tokens segmented choice compact with the same hit layer', () => {
-        const group = rule(chipsCss, '.chipGroup');
-        expect(group).toMatch(/height:\s*calc\(var\(--xc-space-6\) \+ var\(--xc-space-1\)\)/);
-        expect(group).toMatch(/overflow:\s*visible/);
-        expect(rule(chipsCss, '.chip')).toMatch(/font-size:\s*var\(--xc-text-xs\)/);
-        expect(chipsCss).toMatch(/\.chip::before\s*\{[^}]*height:\s*max\(100%,\s*var\(--xc-control-hit-min\)\)/s);
+    it('does not keep a route-specific segmented control for My tokens', () => {
+        expect(myTokensCss).not.toMatch(/\.chipGroup|\.chipActive|\.chip::before/);
     });
 });

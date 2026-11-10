@@ -123,6 +123,7 @@ function recordingMessaging(overrides = {}) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        getOwnedTokens: () => Promise.resolve([{ tick: 'JDOG' }]),
         // One spendable token so the TokenPicker has a row to select.
         getWalletBalances: () => Promise.resolve({
             [CHAIN]: [{
@@ -547,7 +548,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Bind',
+            actionLabel: 'Bind token',
             fill: (utils) => setValue(utils, 'Guard contract', '7'),
         });
         expectSingleEncode(calls, {
@@ -570,7 +571,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Unbind',
+            actionLabel: 'Unbind token',
             fill: (utils) => {
                 fireEvent.click(utils.getByLabelText(/^Unbind/));
             },
@@ -728,7 +729,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Save',
+            actionLabel: 'Update description',
             fill: (utils) => setValue(utils, 'Description', 'a better token'),
         });
         expectSingleEncode(calls, {
@@ -1135,7 +1136,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: BroadcastForm,
             props: {},
             actionLabel: 'Broadcast',
-            fill: (utils) => setValue(utils, 'Message (optional)', 'hello chain'),
+            fill: (utils) => setValue(utils, 'Message', 'hello chain'),
         });
         expectSingleEncode(calls, {
             action: 'BROADCAST',
@@ -1177,7 +1178,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            setValue(utils, 'Message (optional)', 'hello from hardware');
+            setValue(utils, 'Message', 'hello from hardware');
             await drainMicrotasks();
         });
         await domAct(async () => {
@@ -1302,7 +1303,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
             props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'Save',
+            actionLabel: 'Update description',
             fill: (utils) => setValue(utils, 'Description', 'a better token'),
             software: 'issueToken',
             hardware: 'issueTokenHw',

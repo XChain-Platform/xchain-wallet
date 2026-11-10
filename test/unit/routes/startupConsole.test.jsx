@@ -61,7 +61,6 @@ function startupMessaging() {
         getMultisigReceiveAddress: () => Promise.resolve(null),
         listMultisigReceiveAddresses: () => Promise.resolve([]),
         listPendingAirdropsForWallet: () => Promise.resolve([]),
-        listConfirmSessions: () => Promise.resolve({ sessions: [] }),
         listConnectedSites: () => Promise.resolve([]),
         listContacts: () => Promise.resolve([]),
         signerReady: () => Promise.resolve({ ready: true }),

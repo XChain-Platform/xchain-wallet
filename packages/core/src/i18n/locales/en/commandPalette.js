@@ -23,6 +23,8 @@ const messages = {
     'commandPalette.commandPalette.esc': 'Esc',
     'commandPalette.commandPalette.commands': 'Commands',
     'commandPalette.commandPalette.noMatchesFor': 'No matches for “',
+    'commandPalette.actionQueue.title': 'Action queue',
+    'commandPalette.actionQueue.subtitle': 'Compose actions across networks',
 };
 
 addEnglish(messages);

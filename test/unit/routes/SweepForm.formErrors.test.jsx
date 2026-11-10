@@ -347,12 +347,58 @@ describe('SweepForm gated key details', () => {
 });
 
 describe('SweepForm preview and navigation states', () => {
+    it('shows snapshot counts without item rows and starts with the visually untitled Network field', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => Promise.resolve({
+                ...EMPTY_PREVIEW,
+                balances: {
+                    rows: [
+                        { tick: 'HIDDEN_ONE', quantity: '1', divisibility: 0 },
+                        { tick: 'HIDDEN_TWO', quantity: '2', divisibility: 0 },
+                    ],
+                    error: null,
+                },
+            }),
+        });
+
+        await waitFor(() => expect(q.category('Token balances \\(2\\)')).toBeTruthy());
+
+        const notice = Array.from(q.container.querySelectorAll('[data-form-status] p'))
+            .find((paragraph) => paragraph.querySelector('strong'));
+        expect(notice.textContent.replace(/\s+/g, ' ').trim()).toBe(
+            'Sweep moves everything selected at once. The counts are a snapshot; '
+            + 'the sweep moves whatever the address holds when it confirms.',
+        );
+        expect(notice.querySelector('strong').textContent).toBe('Sweep moves everything selected at once.');
+        expect(q.container).not.toHaveTextContent(/indicative/i);
+
+        const categoriesHeading = Array.from(q.container.querySelectorAll('h2'))
+            .find((heading) => heading.textContent === 'What to sweep');
+        const categoriesSection = categoriesHeading.closest('section');
+        expect(categoriesSection).toHaveTextContent('Token balances (2)');
+        expect(categoriesSection).toHaveTextContent('Every token balance this address holds.');
+        expect(categoriesSection).not.toHaveTextContent('HIDDEN_ONE');
+        expect(categoriesSection).not.toHaveTextContent('HIDDEN_TWO');
+        expect(categoriesSection.querySelector('ul')).toBeNull();
+
+        const firstSection = q.container.querySelector('form section');
+        const addressesHeading = firstSection.querySelector('h2');
+        expect(addressesHeading.textContent).toBe('Addresses');
+        expect(firstSection.getAttribute('aria-labelledby')).toBe(addressesHeading.id);
+        expect(firstSection.className).toMatch(/untitledSection/);
+        expect(firstSection.querySelector('button, input, select, textarea').getAttribute('aria-label'))
+            .toMatch(/^Network:/);
+    });
+
     it('shows a clear empty state after every selected preview category resolves empty', async () => {
         const q = await mountSweep();
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain(
-                'Nothing is currently shown in the selected categories.',
+            const hint = Array.from(q.container.querySelectorAll('p'))
+                .find((node) => node.textContent.includes('Nothing is in the selected categories'));
+            expect(hint.textContent.replace(/\s+/g, ' ').trim()).toBe(
+                'Nothing is in the selected categories right now. The counts are a snapshot; '
+                + 'the sweep moves whatever the address holds when it confirms.',
             );
         });
     });
@@ -368,7 +414,7 @@ describe('SweepForm preview and navigation states', () => {
 
         await waitFor(() => {
             const copies = Array.from(q.container.querySelectorAll('p'))
-                .filter((node) => node.textContent === 'Preview unavailable for this category; the sweep still moves it.');
+                .filter((node) => node.textContent === 'Count unavailable for this category; the sweep still moves it.');
             expect(copies).toHaveLength(1);
         });
     });
@@ -379,7 +425,7 @@ describe('SweepForm preview and navigation states', () => {
         });
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).toContain('Counts unavailable.');
             expect(q.container.textContent).not.toContain('upstream host secret detail');
         });
     });
@@ -390,7 +436,7 @@ describe('SweepForm preview and navigation states', () => {
         });
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).toContain('Counts unavailable.');
             expect(q.container.textContent).not.toContain('transport disconnected');
         });
     });
@@ -429,11 +475,17 @@ describe('SweepForm preview and navigation states', () => {
         await act(async () => {
             second.resolve({
                 ...EMPTY_PREVIEW,
-                balances: { rows: [{ tick: 'CURRENT', quantity: '1', divisibility: 0 }], error: null },
+                balances: {
+                    rows: [
+                        { tick: 'CURRENT_ONE', quantity: '1', divisibility: 0 },
+                        { tick: 'CURRENT_TWO', quantity: '2', divisibility: 0 },
+                    ],
+                    error: null,
+                },
             });
             await second.promise;
         });
-        await waitFor(() => expect(q.container.textContent).toContain('1 CURRENT'));
+        await waitFor(() => expect(q.category('Token balances \\(2\\)')).toBeTruthy());
 
         await act(async () => {
             first.resolve({
@@ -442,8 +494,8 @@ describe('SweepForm preview and navigation states', () => {
             });
             await first.promise;
         });
-        expect(q.container.textContent).toContain('1 CURRENT');
-        expect(q.container.textContent).not.toContain('1 STALE');
+        expect(q.category('Token balances \\(2\\)')).toBeTruthy();
+        expect(q.container.textContent).not.toContain('Token balances (1)');
     });
 
     it('opens the wallet address picker for the destination', async () => {

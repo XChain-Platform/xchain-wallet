@@ -103,6 +103,7 @@ describe('Home Activity tab of a real wallet', () => {
         expect(times).toEqual(expected);
 
         const viewAll = screen.getByRole('button', { name: 'See all activity' });
+        expect(screen.getByRole('tabpanel').lastElementChild).toBe(viewAll);
         fireEvent.click(viewAll);
         expect(onHistory).toHaveBeenCalledTimes(1);
     });

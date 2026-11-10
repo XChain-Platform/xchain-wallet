@@ -1,0 +1,51 @@
+.networkField {
+    margin-block-end: var(--xc-space-3);
+}
+
+.signatureField {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.signatureLabel {
+    margin-block-end: var(--xc-label-gap);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+}
+
+.signatureBox {
+    position: relative;
+    min-height: 5rem;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
+}
+
+.signatureText,
+.signaturePlaceholder {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-control-font-md, 14px);
+    line-height: var(--xc-control-line, 1.25);
+}
+
+.signatureText {
+    padding-inline-end: 8rem;
+}
+
+.signaturePlaceholder {
+    color: var(--xc-text-muted);
+}
+
+.signatureCopy {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+}

@@ -88,14 +88,14 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ParallelComposer`);
     assert.ok(app.includes("'parallel-compose'"),
         `${shell} tracks 'parallel-compose' sub-route`);
-    assert.ok(/onParallel: \(\) => setUnlockedView\('parallel-compose'\)/.test(app),
-        `${shell} ActionsMenu wires onParallel → 'parallel-compose'`);
+    assert.ok(/onNavigateToActionQueue=\{\(\) => setUnlockedView\('parallel-compose'\)\}/.test(app),
+        `${shell} Settings wires Action queue to 'parallel-compose'`);
     assert.ok(/<ParallelComposer\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <ParallelComposer> with the active walletId`);
-    assert.ok(surfacesEntry(app, 'parallel', 'Parallel cross-chain actions'),
-        `${shell} ActionsMenu surfaces the "Parallel cross-chain actions" entry`);
+    assert.ok(!surfacesEntry(app, 'parallel', 'Action queue'),
+        `${shell} keeps Action queue out of All actions`);
 }
 
 console.log(
-    'OK: parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
+    'OK: parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + Settings entry)',
 );

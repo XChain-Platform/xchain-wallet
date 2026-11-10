@@ -616,7 +616,6 @@ describe('shell route parity', () => {
     });
 
     it.each([
-        ['Home', ['onResumeConfirm']],
         ['History', ['onReceive', 'onSelectEntry']],
         ['ManageToken', ['onViewActivity']],
         ['ContactsList', ['onOpenBackup']],

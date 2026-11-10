@@ -27,13 +27,15 @@ const form = read('packages', 'core', 'src', 'shared', 'routes', 'SleepForm.jsx'
 assert.match(form, /submitMethods: \{ hw: 'sleepActionHw', software: 'sleepAction' \}/, 'signer dispatch via useActionForm');
 assert.match(form, /VERSION: '1', RESUME_BLOCK: resumeBlockValue, TICK: ticker/, 'tick mode composes SLEEP v1');
 assert.match(form, /VERSION: '0', RESUME_BLOCK: resumeBlockValue \}/, 'address mode composes SLEEP v0');
-assert.match(form, /resumeMode === 'indefinite' \? '-1'/, 'indefinite maps to -1');
-assert.match(form, /resumeMode === 'resume' \? '0'/, 'resume-now maps to 0');
+assert.match(form, /effectiveResumeMode === 'indefinite' \? '-1'/, 'indefinite maps to -1');
+assert.match(form, /effectiveResumeMode === 'resume' \? '0'/, 'resume-now maps to 0');
 assert.match(form, /sleepLocked/, 'LOCK_SLEEP gate present (tick mode)');
 assert.match(form, /does not stop already-open orders, swaps, or dispensers/, 'settle caveat present');
 assert.match(form, /cannot wake itself early|cannot be undone before the wake block/, 'address irreversibility warning');
-assert.match(form, /label="Duration \(blocks\)"/, 'finite pause input names its block unit');
-assert.match(form, /native coins are not\s+locked/, 'address copy distinguishes protocol actions from native coins');
+assert.match(form, /<DurationSlider/, 'finite pause and lock duration use the shared slider');
+assert.match(form, /const effectiveResumeMode = isTick \? resumeMode : 'until'/,
+    'address locks always use a finite duration');
+assert.match(form, /does not lock its native coins/, 'address copy distinguishes protocol actions from native coins');
 assert.match(form, /label="Wake condition"/, 'legacy review repeats the exact wake rule');
 assert.match(
     form,

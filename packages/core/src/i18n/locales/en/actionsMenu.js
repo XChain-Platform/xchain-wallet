@@ -16,7 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'actionsMenu.more': 'More actions',
-    'actionsMenu.title': 'Token actions',
+    'actionsMenu.title': 'All actions',
     'actionsMenu.unavailable': 'Unavailable: {reason}',
 };
 

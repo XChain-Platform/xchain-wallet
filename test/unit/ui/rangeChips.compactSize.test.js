@@ -6,10 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// The chart range chips (24h, 7d) stay compact on every shell. A touch screen
-// grows only the transparent hit layer to 44px; the painted chip keeps its
-// 28px height and the extra-small label size, as the Send, Receive, Exchange
-// and Swap actions set the scale for the larger controls.
+// The chart range control is a minimal small toggle centred along the bottom
+// of the chart. The chips carry no outline of their own, sit on one line and
+// keep the 28px painted height and the extra-small label size on every shell;
+// a touch screen grows only the transparent hit layer to 44px.
 
 const CSS_PATH = 'packages/core/src/shared/components/PortfolioChart.module.css';
 const TOKENS_PATH = 'packages/core/src/ui/tokens.css';
@@ -61,6 +61,22 @@ describe('chart range chips use a compact size', () => {
         expect(tokens).toMatch(/--xc-space-6:\s*24px/);
         expect(tokens).toMatch(/--xc-space-1:\s*4px/);
         expect(coarseBlocks(tokens)).not.toMatch(/--xc-space-[16]:/);
+    });
+
+    it('draws no outline around each chip', () => {
+        // A border on every option makes the toggle a row of buttons; only
+        // the selected option is filled.
+        expect(chip).toMatch(/(?:^|[\s;])border:\s*0;/);
+        expect(rule(css, '.rangeActive')).not.toMatch(/border/);
+    });
+
+    it('keeps the options on one line, centred under the chart', () => {
+        const row = rule(css, '.ranges');
+        expect(row).toMatch(/flex-wrap:\s*nowrap;/);
+        expect(row).toMatch(/justify-content:\s*center;/);
+        expect(row).toMatch(/margin-inline:\s*auto;/);
+        expect(row).toMatch(/width:\s*fit-content;/);
+        expect(row).toMatch(/max-width:\s*100%;/);
     });
 
     it('keeps the 24px pointer floor', () => {

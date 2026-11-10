@@ -14,7 +14,6 @@ const GROUPED_ROUTES = {
         ['menu', 'MenuRoute'],
         ['alerts', 'AlertsRoute'],
         ['actions', 'ActionsMenu', { entries: [] }],
-        ['resume-confirm', 'ResumeConfirm'],
         ['token-detail', 'TokenDetail'],
         ['my-tokens', 'MyTokens'],
         ['manage-token', 'ManageToken'],

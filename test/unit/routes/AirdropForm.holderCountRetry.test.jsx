@@ -147,7 +147,7 @@ async function flushTimers() {
 /** Puts the form in 'Token holders' mode with one tick listed. */
 async function listOneTick() {
     await flushTimers();
-    const mode = screen.getByDisplayValue('Paste addresses');
+    const mode = screen.getByDisplayValue('Addresses');
     fireEvent.change(mode, { target: { value: 'holders' } });
     const ticks = screen.getByLabelText('Tokens (one per line)');
     fireEvent.change(ticks, { target: { value: LISTED } });
@@ -273,7 +273,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         });
 
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
+        const mode = screen.getByDisplayValue('Addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
             target: { value: `${LISTED}\n${OTHER}` },
@@ -308,7 +308,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
             { tick, total: 1, data: [{ address: 'a' }] }
         ));
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
+        const mode = screen.getByDisplayValue('Addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         const ticks = screen.getByLabelText('Tokens (one per line)');
         fireEvent.change(ticks, { target: { value: `${SYMBOL_TICK}\nmixed!\nA..B` } });
@@ -326,7 +326,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
     it('keeps a symbol ticker spelling selected for the holder list', async () => {
         mountAirdrop(async ({ tick }) => ({ tick, total: 1, data: [{ address: 'a' }] }));
         await flushTimers();
-        const mode = screen.getByDisplayValue('Paste addresses');
+        const mode = screen.getByDisplayValue('Addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         await flushTimers();

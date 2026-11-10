@@ -120,7 +120,7 @@ describe('UTF-8 transaction text measurement', () => {
 describe('BroadcastForm text limits', () => {
     it('passes a valid multibyte message to compose without changing it', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message (optional)');
+        const message = await screen.findByLabelText('Message');
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });
         fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
@@ -131,22 +131,24 @@ describe('BroadcastForm text limits', () => {
 
     it('shows a live counter and disables Broadcast past the message limit', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message (optional)');
+        const message = await screen.findByLabelText('Message');
         const submit = screen.getByRole('button', { name: 'Broadcast' });
+        const atLimit = '😀'.repeat(MAX_TEXT_LENGTH / 2);
+        const overLimit = `${atLimit}a`;
 
-        fireEvent.change(message, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
+        fireEvent.change(message, { target: { value: atLimit } });
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
-        fireEvent.change(message, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
+        fireEvent.change(message, { target: { value: overLimit } });
+        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a direction override before compose', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message (optional)');
+        const message = await screen.findByLabelText('Message');
 
         fireEvent.change(message, { target: { value: 'safe\u202eunsafe' } });
 

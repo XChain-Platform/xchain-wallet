@@ -22,6 +22,7 @@ import {
 import {
     signers as signersLib,
 } from '@xchain-wallet/core';
+import { signerVendorLogoUrl } from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import { isWebHidSupported, detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
@@ -52,7 +53,7 @@ const { checkFirmware } = signersLib;
  * lands later and the web shell has both but popup has only WebHID).
  *
  * @param {object} props
- * @param {string} props.walletId
+ * @param {string} [props.walletId] absent during first-wallet vendor selection
  * @param {null | (() => Promise<{ signer: any, pairingInfo: PairingInfo }>)} [props.pairTrezor]
  * @param {null | (() => Promise<{ signer: any, pairingInfo: PairingInfo }>)} [props.pairLedger]
  * @param {() => void} props.onBack
@@ -101,7 +102,7 @@ export function PairSignerForm({
         let cancelled = false;
         unpairedIds.current.clear();
         locallyPairedRecords.current.clear();
-        if (typeof messaging.listSigners !== 'function') return () => { cancelled = true; };
+        if (!walletId || typeof messaging.listSigners !== 'function') return () => { cancelled = true; };
         messaging.listSigners(walletId)
             .then((records) => {
                 if (!cancelled) {
@@ -179,6 +180,10 @@ export function PairSignerForm({
     async function handleSave(event) {
         event.preventDefault();
         if (!pairingInfo || !vendor) return;
+        if (!walletId) {
+            setError('A hardware-only first wallet is not supported by this wallet format yet. Go back and create or import a wallet first.');
+            return;
+        }
         setStage('saving');
         setError(null);
         try {
@@ -263,7 +268,6 @@ export function PairSignerForm({
         return wrap(
             <FormPage
                 label="Choose hardware signer"
-                actions={<Button variant="ghost" onClick={handleCancel}>Cancel</Button>}
                 status={error ? (
                     <StatusMessage
                         variant="error"
@@ -293,6 +297,14 @@ export function PairSignerForm({
                             onClick={() => handlePickVendor('trezor')}
                             disabled={!pairTrezor}
                         >
+                            <img
+                                src={signerVendorLogoUrl('trezor')}
+                                alt=""
+                                aria-hidden="true"
+                                className={styles.vendorLogo}
+                                width="28"
+                                height="28"
+                            />
                             <span className={styles.vendorCardContent}>
                                 <span className={styles.vendorName}>Trezor</span>
                                 <span className={styles.vendorTag}>
@@ -308,6 +320,14 @@ export function PairSignerForm({
                             onClick={() => handlePickVendor('ledger')}
                             disabled={!ledgerCanPair}
                         >
+                            <img
+                                src={signerVendorLogoUrl('ledger')}
+                                alt=""
+                                aria-hidden="true"
+                                className={styles.vendorLogo}
+                                width="28"
+                                height="28"
+                            />
                             <span className={styles.vendorCardContent}>
                                 <span className={styles.vendorName}>Ledger</span>
                                 <span className={styles.vendorTag}>
@@ -408,7 +428,8 @@ export function PairSignerForm({
                     </Button>
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.SaveIcon />}
                         loading={stage === 'saving'}
                         disabled={verdict?.status === 'unsupported'}
                     >

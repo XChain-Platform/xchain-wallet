@@ -50,6 +50,12 @@ describe('ACTION_ENTRY_DEFS', () => {
         }
     });
 
+    it('leaves developer tools and multisig signing out of All actions', () => {
+        expect(ACTION_ENTRY_DEFS.map((entry) => entry.id)).not.toEqual(
+            expect.arrayContaining(['parallel', 'advanced', 'multisig-sign']),
+        );
+    });
+
     it('is frozen, so a shell cannot mutate the menu for the others', () => {
         expect(Object.isFrozen(ACTION_ENTRY_DEFS)).toBe(true);
     });

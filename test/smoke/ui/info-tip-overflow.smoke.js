@@ -80,8 +80,14 @@ assert.ok(/translateX\(var\(--xc-tip-center/.test(tipSrc),
 assert.ok(/transform:\s*`translateX\(var\(--xc-tip-center, -50%\)\) translateX\(\$\{horizontalOffset\}px\)`/.test(tipSrc),
     'InfoTip applies the measured horizontal correction');
 
-assert.ok(/max-width:\s*min\(260px, calc\(100vw - 2 \* var\(--xc-space-2\)\)\)/.test(cssSrc),
+assert.ok(/max-width:\s*min\(360px, calc\(100vw - 2 \* var\(--xc-space-2\)\)\)/.test(cssSrc),
     'InfoTip bubble width stays within narrow viewports');
+assert.ok(/\.bubble\s*\{[^}]*width:\s*max-content/.test(cssSrc),
+    'InfoTip bubble sizes to its text instead of the trigger-wide wrap');
+assert.ok(/Math\.min\(360, availableWidth\)/.test(tipSrc),
+    'InfoTip bubble wraps at up to 360px');
+assert.ok(/\.bubble\s*\{[^}]*text-transform:\s*none[^}]*letter-spacing:\s*normal/.test(cssSrc),
+    'InfoTip bubble is sentence case with normal spacing');
 assert.ok(/overflow-wrap:\s*anywhere/.test(cssSrc),
     'InfoTip wraps unbroken content');
 

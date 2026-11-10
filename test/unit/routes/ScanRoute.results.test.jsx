@@ -184,7 +184,7 @@ const EXPLANATION_CASES = [
     {
         name: 'pairing code',
         input: 'XCW-PAIR:ZmFrZS1wYWlyaW5nLWNvZGU',
-        message: /wallet pairing code.*Pair a watcher or signer/i,
+        message: /wallet pairing code.*Pair an offline signer/i,
     },
     {
         name: 'multi-frame QR chunk',

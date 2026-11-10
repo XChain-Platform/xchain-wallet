@@ -46,7 +46,7 @@ describe('Sign message refusal wording', () => {
     });
 
     // Format controls and default-ignorable marks that draw nothing on the
-    // review page, so the signed bytes carry text the signer never saw.
+    // signing form, so the signed bytes carry text the signer never saw.
     it.each([
         ['a musical beam control', 'pay\u{1D173} 1 unit'],
         ['a musical phrase control', 'pay\u{1D17A} 1 unit'],

@@ -23,19 +23,18 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, FormPage, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainPicker, CopyButton, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
-import styles from './IssueTokenForm.module.css';
+import styles from './SignMessageForm.module.css';
 import {
     hasAnyAddress,
     preferredSourceId,
@@ -52,7 +51,7 @@ const chainRegistry = registryLib.defaultRegistry();
 /**
  * Why a message cannot be signed, worded for the person typing it, or null
  * when it can. The signing flow refuses the same texts; naming the reason here
- * keeps the refusal from reading as a generic failure after the review page.
+ * keeps the refusal from reading as a generic failure after submission.
  *
  * @param {string} message
  * @returns {string | null}
@@ -62,7 +61,7 @@ export function messageRefusalReason(message) {
         return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for site sign-in and cannot be signed here.`;
     }
     if (hasHiddenControls(message)) {
-        return "This message has control characters that the review page can't show. Remove them and try again.";
+        return "This message has control characters that the signing form can't show. Remove them and try again.";
     }
     try {
         assertNoDeceptiveCharacters({ message }, 'message');
@@ -106,9 +105,11 @@ export function SignMessageForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [signedResult, setSignedResult] = useState(
-        /** @type {null | { signature: string, message: string, address: string, chainId: string }} */ (null),
-    );
+    const [passwordError, setPasswordError] = useState(/** @type {string | null} */ (null));
+    const [signature, setSignature] = useState('');
+    const [signing, setSigning] = useState(false);
+    const [addressPickerOpen, setAddressPickerOpen] = useState(false);
+    const pendingRequestRef = useRef(null);
 
     // §37 / G125: form-draft persistence. Persists chain / address /
     // message; password stays in component state only.
@@ -127,13 +128,13 @@ export function SignMessageForm({ walletId, onBack }) {
         if (draftNetwork && !hasMessageDraft(draft.load())) setDraftPending(true);
     }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
-        if (signedResult || !draftPending) return;
+        if (signature || !draftPending) return;
         if (!hasMessageDraft({ message })) {
             draft.clear();
             return;
         }
         draft.save({ chainId, addressId, message });
-    }, [signedResult, draftPending, draft, chainId, addressId, message]);
+    }, [signature, draftPending, draft, chainId, addressId, message]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(true); return; }
@@ -235,62 +236,37 @@ export function SignMessageForm({ walletId, onBack }) {
         [addressOptions, addressId],
     );
 
-    // §5.6 slice 3 / §5.5 message variant: signing goes through the
-    // shared confirm page. Nothing is composed - the signed bytes ARE the
-    // message - so `compose` just carries the text into the state machine,
-    // which then supplies the same contract every other confirm surface has
-    // (sync Approve disable, exits locked once a signature exists, credential
-    // re-prompt on a bad password, terminal states).
-    const confirmAction = useConfirmAction();
-    const passwordValueRef = useRef('');
-    const pendingRequestRef = useRef(null);
-    passwordValueRef.current = password;
-
-    function applySigned(result, request) {
-        setSignedResult({
-            signature: result?.signature || '',
-            message: request.message,
-            address: request.address,
-            chainId: request.chainId,
-        });
+    function applySigned(result) {
+        setSignature(result?.signature || '');
         pendingRequestRef.current = null;
         setPassword('');
+        setPasswordError(null);
         draft.clear();
         setDraftPending(false);
     }
 
-    function openConfirmScreen(request) {
-        return confirmAction.confirm({
-            chainId: request.chainId,
-            source: request.address,
-            compose: async () => ({
-                message: request.message,
-                actionString: null,
-                encoding: 'message',
-            }),
-            onApprove: () => messaging.signMessageRequest({
-                walletId: request.walletId,
-                addressId: request.addressId,
-                password: passwordValueRef.current,
-                message: request.message,
-            }),
-        }).then((result) => applySigned(result, request));
+    function clearSignature() {
+        if (!signature) return;
+        setSignature('');
+        setDraftPending(true);
     }
 
     function handleSignFailure(err, request) {
         if (pendingRequestRef.current === request) pendingRequestRef.current = null;
         if (isUserRejection(err)) return;
-        setError(
-            err?.name === 'InvalidPasswordError'
-                ? 'Incorrect password.'
-                : readFailureMessage(err, 'sign this message'),
-        );
+        if (err?.name === 'InvalidPasswordError') {
+            setPassword('');
+            setPasswordError('Incorrect password.');
+            return;
+        }
+        setError(readFailureMessage(err, 'sign this message'));
     }
 
     function handleSubmit(event) {
         event.preventDefault();
-        if (confirmAction.composing || pendingRequestRef.current) return;
+        if (signing || pendingRequestRef.current) return;
         setError(null);
+        setPasswordError(null);
         if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
@@ -300,21 +276,26 @@ export function SignMessageForm({ walletId, onBack }) {
             setError('Message signing is not available in this app.');
             return;
         }
-        // The password is collected ON the confirm page (§5.5 message
-        // variant), so there is no credential guard here.
+        if (!signerReady && password.length === 0) {
+            setPasswordError('Enter your wallet password.');
+            return;
+        }
         const request = Object.freeze({
             walletId,
-            chainId,
             addressId,
-            address: selectedAddress.address,
+            password,
             message,
         });
         pendingRequestRef.current = request;
-        void openConfirmScreen(request).catch((err) => handleSignFailure(err, request));
+        setSigning(true);
+        void Promise.resolve(messaging.signMessageRequest(request))
+            .then(applySigned)
+            .catch((err) => handleSignFailure(err, request))
+            .finally(() => setSigning(false));
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
+        <PageHeader onBack={onBack} backDisabled={signing} title="Sign message" />
     );
 
     if (isWatcherMode) {
@@ -340,90 +321,7 @@ export function SignMessageForm({ walletId, onBack }) {
         );
     }
 
-    if (signedResult !== null) {
-        const body = (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}>
-                <div>
-                    <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginBottom: 4 }}>
-                        Signed by
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {/* ChainBadge takes a descriptor, not an id: passing an
-                            id crashed this screen on every successful signing. */}
-                        {chainRegistry.get(signedResult.chainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(signedResult.chainId)} size="sm" />
-                            : null}
-                        <AddressText address={signedResult.address} />
-                    </div>
-                </div>
-                <div>
-                    <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginBottom: 4 }}>
-                        Message
-                    </div>
-                    <pre dir="auto" style={{
-                        background: 'var(--xc-surface)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        padding: 'var(--xc-space-2)',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}>{signedResult.message}</pre>
-                </div>
-                <div>
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                    }}>
-                        <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                            Signature
-                        </span>
-                        <CopyButton value={signedResult.signature} label="Copy signature" />
-                    </div>
-                    <pre dir="ltr" style={{
-                        background: 'var(--xc-surface)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        padding: 'var(--xc-space-2)',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                    }}>{signedResult.signature}</pre>
-                </div>
-                <Button
-                    variant="ghost"
-                    block
-                    onClick={() => {
-                        setSignedResult(null);
-                    }}
-                >
-                    Sign another message
-                </Button>
-            </div>
-        );
-        return (
-            <Screen variant={variant} header={header}>
-                <ListPage>{body}</ListPage>
-            </Screen>
-        );
-    }
-
-    if (isWatcherMode) {
-        return (
-            <Screen variant={variant} header={header}>
-                <ListPage>
-                    <StatusMessage variant="status">
-                        Watcher mode does not sign messages or ask for a signing password. Switch to Normal mode to sign a message on this device.
-                    </StatusMessage>
-                </ListPage>
-            </Screen>
-        );
-    }
-
-    const draftBanner = draft.hasDraft() && !draftPending && !signedResult ? (
+    const draftBanner = draft.hasDraft() && !draftPending && !signature ? (
         <StatusMessage
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
@@ -447,77 +345,112 @@ export function SignMessageForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={confirmAction.composing}
-                    disabled={confirmAction.composing}
+                    loading={signing}
+                    disabled={signing}
                 >
-                    {confirmAction.composing ? 'Preparing signature…' : 'Sign message'}
+                    {signing ? 'Signing...' : 'Sign message'}
                 </Button>
             )}
         >
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+            <div className={styles.networkField}>
                 <ChainPicker
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     value={chainId || ''}
-                    disabled={confirmAction.composing}
+                    disabled={signing}
                     onChange={(nextChainId) => {
                         setAddressId(null);
                         setChainId(nextChainId);
+                        clearSignature();
                         if (error) setError(null);
                     }}
                     label="Network"
                     hideNetworkKind
                 />
             </div>
-            <Select
-                id="sign-message-address"
+            <AddressField
                 label="Address"
-                value={addressId || ''}
-                title={selectedAddress
-                    ? `${selectedAddress.label ? `${selectedAddress.label}: ` : ''}${selectedAddress.address}`
-                    : undefined}
-                disabled={confirmAction.composing}
-                onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
-                aria-label="Address"
-            >
-                <option value="" disabled>Pick an address</option>
-                {addressOptions.map((a) => (
-                    <option key={a.id} value={a.id}>
-                        {a.label ? `${a.label}: ` : ''}{a.address}
-                    </option>
-                ))}
-            </Select>
+                icon="addresses"
+                value={selectedAddress?.address || ''}
+                placeholder="Choose an address"
+                readOnly
+                disabled={signing}
+                onChange={() => {}}
+                onIconClick={() => setAddressPickerOpen(true)}
+                iconLabel="Choose address"
+            />
             <Textarea
                 id="sign-message-text"
                 label="Message"
                 value={message}
-                disabled={confirmAction.composing}
-                onChange={(e) => { setMessage(e.target.value); if (error) setError(null); }}
+                disabled={signing}
+                onChange={(e) => {
+                    setMessage(e.target.value);
+                    clearSignature();
+                    if (error) setError(null);
+                }}
                 placeholder="Type the message you want to sign…"
                 rows={5}
                 aria-label="Message"
             />
-            {/* The password lives on the confirm page, so the form does not ask
-                for it twice. Errors still surface here: the page is gone by the
-                time we render them. */}
+            <div className={styles.signatureField}>
+                <span className={styles.signatureLabel}>Signature</span>
+                <div
+                    className={styles.signatureBox}
+                    role="textbox"
+                    aria-label="Signature"
+                    aria-readonly="true"
+                >
+                    {signature ? (
+                        <span className={styles.signatureCopy}>
+                            <CopyButton
+                                value={signature}
+                                label="Copy signature"
+                                appearance="filled"
+                            />
+                        </span>
+                    ) : null}
+                    <pre
+                        className={signature ? styles.signatureText : styles.signaturePlaceholder}
+                        dir="ltr"
+                    >
+                        {signature || 'The signature appears here after you sign.'}
+                    </pre>
+                </div>
+            </div>
+            {!signerReady ? (
+                <Input
+                    id="sign-message-password"
+                    type="password"
+                    label="Password"
+                    value={password}
+                    error={passwordError}
+                    autoComplete="current-password"
+                    disabled={signing}
+                    onChange={(event) => {
+                        setPassword(event.target.value);
+                        if (passwordError) setPasswordError(null);
+                        if (error) setError(null);
+                    }}
+                />
+            ) : null}
         </FormPage>
     );
 
-    // §5.5 confirm page (message variant), rendered in place of the
-    // form; the draft stays intact behind it so Reject loses nothing.
-    if (isConfirmOpenPhase(confirmAction.phase)) {
-        const request = pendingRequestRef.current;
+    if (addressPickerOpen) {
         return (
-            <MessageConfirmScreen
-                confirmAction={confirmAction}
-                screenVariant={variant}
-                message={request?.message || ''}
-                chainLabel={chainRegistry.get(request?.chainId)?.displayName || request?.chainId}
-                signingAddress={request?.address}
-                signerReady={signerReady}
-                password={password}
-                onPasswordChange={setPassword}
-                hintClassName={styles.hint}
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Sign with address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(address) => {
+                    setAddressId(address.id);
+                    clearSignature();
+                    setAddressPickerOpen(false);
+                    if (error) setError(null);
+                }}
+                onBack={() => setAddressPickerOpen(false)}
             />
         );
     }

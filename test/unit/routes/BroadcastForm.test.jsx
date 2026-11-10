@@ -8,56 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// (wallet E2E session 20, D-89 + D-90). The BROADCAST form
-// packs two text fields into one protocol pair: with a feed name set, the
-// message body becomes the MEMO. The wire version was picked from VALUE and
-// FEE only, and MEMO exists in v1/v2/v3 but NOT in v0
-// (VERSION|MESSAGE|VALUE) - so a feed name plus a body and no feed fee
-// selected v0 and the body was dropped on the floor. Measured on-chain as a
-// controlled pair: action 1152 "BROADCAST|0|S20FEED" with memo null against
-// action 1153 "BROADCAST|2|S20FEED|1.5|MEMO-SURVIVES-TEST", identical input
-// except the fee. Both were valid, both paid the protocol fee, and the
-// confirm screen showed the body in neither. Its sibling lives in the
-// same branch: the memo parts were joined with ' | ', and '|' is the field
-// delimiter the SDK refuses, so the wallet's own timestamp checkbox made the
-// action unsendable.
-//
-// These drive the real form to the confirm page and read the params off the
-// host-side compose call, which is the exact payload that becomes the
-// broadcast action.
+// Drive the real form and inspect the exact format 0 params handed to the
+// host-side composer.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
-import {
-    clearQueuedResultHandoff,
-    setQueuedResultHandoff,
-} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
-
-// The protocol's BROADCAST format table, copied from xchain-sdk/src/formats.js
-// (and identical to the indexer's own copy in
-// xchain-indexer/src/actions/broadcast.js). Held here as data so the tests can
-// assert the LOSSLESSNESS rule directly - every param the form emits must have
-// a slot in the version it picked - rather than restating a version number.
-const BROADCAST_FORMATS = {
-    0: 'VERSION|MESSAGE|VALUE',
-    1: 'VERSION|MESSAGE|VALUE|FEE|MEMO',
-    2: 'VERSION|MESSAGE|FEE|MEMO',
-    3: 'VERSION|BROADCAST_ACTION_INDEX|VALUE|MEMO',
-};
-
-// Params with no slot in the chosen format: what the encoder silently discards.
-function droppedFields(params) {
-    const slots = (BROADCAST_FORMATS[Number(params.VERSION)] || '').split('|');
-    return Object.keys(params).filter((f) => !slots.includes(f));
-}
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const LTC_CHAIN = 'litecoin-regtest';
-const LEGACY_TX = '0200000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03000000474830450221001111111111111111111111111111111111111111111111111111111111110121023333333333333333333333333333333333333333333333333333333333333333fdffffff0240e20100000000001976a914444444444444444444444444444444444444444488ac00000000000000001c6a1a58434841494eabababababababababababababababababababab00000000';
-const SEGWIT_TX = '02000000000102aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb07000000171600145555555555555555555555555555555555555555feffffff0300f2052a01000000160014666666666666666666666666666666666666666622020000000000002251207777777777777777777777777777777777777777777777777777777777777777e70300000000000017a914888888888888888888888888888888888888888887022830450221222222222222222222222222222222222222222222222222222222222222222222222201210299999999999999999999999999999999999999999999999999999999999999990000350c00';
 const ADDRESSES = {
     'bitcoin-mainnet': [
         {
@@ -85,25 +46,21 @@ const LTC_ADDRESSES = {
 };
 
 let composeForConfirm;
-let broadcastSignedTxRequest;
 let broadcastAction;
 
 function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {}) {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
-    broadcastSignedTxRequest = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
     broadcastAction = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
-        getTokenInfo: vi.fn().mockResolvedValue(props.tokenInfo || {}),
         listContacts: vi.fn().mockResolvedValue([]),
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         broadcastAction,
-        broadcastSignedTxRequest,
     };
     // Anything else the form's hooks reach for (native-fee quotes, signer
     // status) answers empty rather than throwing: this suite is about the
@@ -121,7 +78,6 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
             React.createElement(BroadcastForm, {
                 walletId: 'w',
                 initialChainId: chainId,
-                initialTick: props.initialTick,
                 initialFromAddress: props.initialFromAddress,
                 onBack: props.onBack || (() => {}),
                 onDone: props.onDone,
@@ -130,21 +86,8 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
     );
 }
 
-async function fill({ feed, body, value, fee, timestamp }) {
-    const feedField = await screen.findByLabelText(/^Feed name/);
-    if (feed !== undefined) fireEvent.change(feedField, { target: { value: feed } });
-    if (body !== undefined) {
-        fireEvent.change(screen.getByLabelText(/^Message/), { target: { value: body } });
-    }
-    if (value !== undefined) {
-        fireEvent.change(screen.getByLabelText(/^Value/), { target: { value } });
-    }
-    if (fee !== undefined) {
-        fireEvent.change(screen.getByLabelText(/^Feed fee/), { target: { value: fee } });
-    }
-    if (timestamp) {
-        fireEvent.click(screen.getByRole('switch', { name: 'Prepend UTC timestamp to memo' }));
-    }
+async function fill(message) {
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: message } });
 }
 
 function submit() {
@@ -159,7 +102,6 @@ async function composedParams() {
 
 beforeEach(() => {
     composeForConfirm = undefined;
-    broadcastSignedTxRequest = undefined;
     broadcastAction = undefined;
 });
 afterEach(() => {
@@ -167,100 +109,62 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-describe('BroadcastForm keeps the typed body on the wire', () => {
-    it('refuses a token broadcast before review when the issuer is unknown', async () => {
-        mountForm('bitcoin-mainnet', ADDRESSES, {
-            initialTick: 'S20FEED',
-            initialFromAddress: ADDRESS,
-            tokenInfo: { tick: 'S20FEED', creator: null },
-        });
+describe('BroadcastForm plain message flow', () => {
+    it('renders only the format 0 authoring fields', async () => {
+        mountForm();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
-        );
+        const message = await screen.findByLabelText('Message');
+        expect(message.tagName).toBe('TEXTAREA');
+        expect(message).toHaveAttribute('required');
+        expect(message).toHaveAttribute('rows', '4');
+        expect(message).toHaveAttribute('maxlength', '250');
+        expect(screen.getByText('0 / 250')).toBeTruthy();
+        expect(screen.queryByText('What do you want to broadcast?')).toBeNull();
+        expect(screen.queryByLabelText('Signed transaction')).toBeNull();
+        expect(screen.queryByLabelText('Prepend UTC timestamp to memo')).toBeNull();
+        expect(screen.queryByLabelText(/Feed name/)).toBeNull();
+        expect(screen.queryByLabelText(/^Value/)).toBeNull();
+        expect(screen.queryByLabelText(/Feed fee/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Broadcast' })).toBeTruthy();
+    });
+
+    it('shows a field error when Message is empty', async () => {
+        mountForm();
+        await screen.findByLabelText('Message');
+        submit();
+
+        expect(await screen.findByText('Message is required.')).toBeTruthy();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts 250 UTF-16 units of emoji and composes MESSAGE only', async () => {
+        mountForm();
+        const message = '😀'.repeat(125);
+        expect(message.length).toBe(250);
+        await fill(message);
+        submit();
+
+        const params = await composedParams();
+        expect(params).toEqual({ VERSION: '0', MESSAGE: message });
+        expect(params).not.toHaveProperty('VALUE');
+        expect(params).not.toHaveProperty('FEE');
+        expect(params).not.toHaveProperty('MEMO');
+    });
+
+    it('refuses a message whose String.length is 251', async () => {
+        mountForm();
+        const message = `${'😀'.repeat(125)}a`;
+        expect(message.length).toBe(251);
+        await fill(message);
+
+        expect(screen.getByText('Message is 251 characters; the network accepts at most 250 characters.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Broadcast' })).toBeDisabled();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('picks a MEMO-carrying version for a feed broadcast with no feed fee', async () => {
+    it('rejects reserved action delimiters before compose', async () => {
         mountForm();
-        await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST' });
-        submit();
-
-        const params = await composedParams();
-        // The regression itself: this composed as v0 and the body vanished.
-        expect(params.VERSION).not.toBe('0');
-        expect(params.MESSAGE).toBe('S20FEED');
-        expect(params.MEMO).toBe('MEMO-SURVIVES-TEST');
-        expect(droppedFields(params)).toEqual([]);
-        // No fee was typed, so none may be invented to buy the memo slot.
-        expect(params.FEE).toBeUndefined();
-    });
-
-    it('still composes the v2 feed lane when a feed fee is typed', async () => {
-        mountForm();
-        await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST', fee: '1.5' });
-        submit();
-
-        const params = await composedParams();
-        expect(params).toMatchObject({
-            VERSION: '2', MESSAGE: 'S20FEED', FEE: '1.5', MEMO: 'MEMO-SURVIVES-TEST',
-        });
-        expect(droppedFields(params)).toEqual([]);
-    });
-
-    it('keeps the body alongside an oracle value with no fee', async () => {
-        mountForm();
-        await fill({ feed: 'S20FEED', body: 'context for the reading', value: '42' });
-        submit();
-
-        const params = await composedParams();
-        // v1 is the only format carrying VALUE and MEMO together.
-        expect(params).toMatchObject({
-            VERSION: '1', MESSAGE: 'S20FEED', VALUE: '42', MEMO: 'context for the reading',
-        });
-        expect(droppedFields(params)).toEqual([]);
-    });
-
-    it('leaves a plain message on v0, where it is the MESSAGE and nothing is lost', async () => {
-        mountForm();
-        await fill({ body: 'hello chain' });
-        submit();
-
-        const params = await composedParams();
-        expect(params).toEqual({ VERSION: '0', MESSAGE: 'hello chain' });
-        expect(droppedFields(params)).toEqual([]);
-    });
-
-    it('carries the timestamp of a plain broadcast instead of dropping it', async () => {
-        mountForm();
-        await fill({ body: 'hello chain', timestamp: true });
-        submit();
-
-        const params = await composedParams();
-        // The checkbox promises the time lands on-chain; v0 has no MEMO slot.
-        expect(params.MEMO).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-        expect(droppedFields(params)).toEqual([]);
-    });
-});
-
-describe('BroadcastForm builds a sendable MEMO', () => {
-    it('joins the timestamp and body without the field delimiter', async () => {
-        mountForm();
-        await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST', timestamp: true });
-        submit();
-
-        const params = await composedParams();
-        // ' | ' here is what the SDK rejects with "MEMO cannot contain pipe".
-        expect(params.MEMO).not.toMatch(/[|;]/);
-        expect(params.MEMO).toContain('MEMO-SURVIVES-TEST');
-        expect(params.MEMO).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-        expect(droppedFields(params)).toEqual([]);
-    });
-
-    it('says so in plain language when the user types a delimiter, before any fee is paid', async () => {
-        mountForm();
-        await fill({ feed: 'S20FEED', body: 'a | b' });
+        await fill('a | b');
         submit();
 
         await screen.findByText(/Remove any \| or ; characters/);
@@ -271,7 +175,7 @@ describe('BroadcastForm builds a sendable MEMO', () => {
 describe('BroadcastForm success screen', () => {
     it('shows the pending action identity, network explorer, and repeat path', async () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
-        await fill({ body: 'hello chain' });
+        await fill('hello chain');
         submit();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
@@ -300,220 +204,14 @@ describe('BroadcastForm success screen', () => {
     });
 });
 
-describe('BroadcastForm validates decimal fields before compose', () => {
-    it.each(['Infinity', '1e3', '0x10'])('rejects value %s', async (value) => {
-        mountForm();
-        await fill({ body: 'price update', value });
-        submit();
-
-        expect(await screen.findByText('Value must be a number.')).toBeTruthy();
-        expect(composeForConfirm).not.toHaveBeenCalled();
-    });
-
-    it.each(['Infinity', '1e3', '0x10', '-0.1'])('rejects feed fee %s', async (fee) => {
-        mountForm();
-        await fill({ body: 'price update', fee });
-        submit();
-
-        expect(await screen.findByText('Feed fee must be a non-negative number.')).toBeTruthy();
-        expect(composeForConfirm).not.toHaveBeenCalled();
-    });
-});
-
-describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
-    async function openRawTransaction(raw) {
-        fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
-        fireEvent.change(screen.getByLabelText('Signed transaction code'), { target: { value: raw } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
-    }
-
-    it('ignores whitespace, validates the transaction, and previews its outputs without inventing a fee', async () => {
-        const onBack = vi.fn();
-        const onDone = vi.fn();
-        mountForm('bitcoin-mainnet', ADDRESSES, { onBack, onDone });
-        const spaced = LEGACY_TX.match(/.{1,32}/g).join(' \n');
-        await openRawTransaction(spaced);
-
-        expect(await screen.findByText(/spends 1 input and creates 2 outputs/)).toBeTruthy();
-        expect(screen.getByText(/0\.00123456 BTC to P2PKH script/)).toBeTruthy();
-        expect(screen.getByText(/Cannot be calculated from raw transaction data/)).toBeTruthy();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-        expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeTruthy();
-        expect(broadcastSignedTxRequest).toHaveBeenCalledWith({
-            walletId: 'w',
-            chainId: 'bitcoin-mainnet',
-            txHex: LEGACY_TX,
-        });
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
-        expect(screen.getByRole('link', { name: 'View on explorer' }).getAttribute('href'))
-            .toBe('https://explorer.xchain.io/BTC/tx/deadbeef');
-        expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
-        expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByText(/broadcast but is not confirmed yet/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Broadcast another' })).toBeTruthy();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-        expect(onDone).toHaveBeenCalledTimes(1);
-        expect(onBack).not.toHaveBeenCalled();
-    });
-
-    it('returns from the preview to the form with the pasted hex kept, without submitting again', async () => {
-        mountForm();
-        await openRawTransaction(LEGACY_TX);
-        expect(await screen.findByText(/spends 1 input and creates 2 outputs/)).toBeTruthy();
-
-        // A real click activates whichever node holds the Back slot after React re-renders, so
-        // that node must not be the one that becomes the form's submit button.
-        const back = screen.getByRole('button', { name: 'Back' });
-        fireEvent.click(back);
-        expect(back.isConnected).toBe(false);
-
-        const field = await screen.findByLabelText('Signed transaction code');
-        expect(field).toHaveValue(LEGACY_TX);
-        expect(screen.queryByText(/spends 1 input and creates 2 outputs/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Preview transaction' })).toBeTruthy();
-    });
-
-    it.each([
-        ['non-hex data', '00zz', /must contain only the digits 0 to 9 and the letters a to f/],
-        ['an incomplete byte', 'abc', /complete bytes/],
-        ['a truncated transaction', LEGACY_TX.slice(0, -8), /not a complete signed transaction/],
-    ])('rejects %s before broadcast', async (_case, raw, message) => {
-        mountForm();
-        await openRawTransaction(raw);
-
-        expect(await screen.findByText(message)).toBeTruthy();
-        expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
-    });
-
-    it('sends once when the review form is submitted twice in one event turn', async () => {
-        mountForm();
-        broadcastSignedTxRequest.mockImplementationOnce(() => new Promise(() => {}));
-        await openRawTransaction(LEGACY_TX);
-        await screen.findByText(/spends 1 input/);
-        const form = screen.getByRole('button', { name: 'Broadcast transaction' }).closest('form');
-        act(() => {
-            fireEvent.submit(form);
-            fireEvent.submit(form);
-        });
-        expect(broadcastSignedTxRequest).toHaveBeenCalledTimes(1);
-    });
-
-    it('lists a bounded number of outputs for a transaction with thousands', async () => {
-        mountForm();
-        const output = `40e20100000000001976a914${'44'.repeat(20)}88ac`;
-        const count = 3000;
-        const varint = `fd${(count & 0xff).toString(16).padStart(2, '0')}${(count >> 8).toString(16).padStart(2, '0')}`;
-        const head = LEGACY_TX.slice(0, LEGACY_TX.indexOf('fdffffff') + 8);
-        await openRawTransaction(`${head}${varint}${output.repeat(count)}00000000`);
-
-        expect(await screen.findByText(/creates 3000 outputs/)).toBeTruthy();
-        expect(screen.getAllByText(/BTC to P2PKH script/)).toHaveLength(50);
-        expect(screen.getByText(/2950 further outputs are not listed/)).toBeTruthy();
-    });
-
-    it('blocks an output type that the selected coin does not support', async () => {
+describe('BroadcastForm fee fields', () => {
+    it('shows only the network fee selector', async () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
-        await openRawTransaction(SEGWIT_TX);
+        await screen.findByLabelText('Message');
 
-        expect(await screen.findByText(/Taproot output that the active network does not support/)).toBeTruthy();
-        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
-        expect(screen.getByRole('button', { name: 'Broadcast transaction' })).toBeDisabled();
-        expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
-    });
-
-    it('turns the node rejection into a useful reason', async () => {
-        mountForm();
-        broadcastSignedTxRequest.mockRejectedValueOnce(new Error(
-            'Transaction broadcast failed: bad-txns-inputs-missingorspent (code -25)',
-        ));
-        await openRawTransaction(LEGACY_TX);
-        await screen.findByText(/spends 1 input/);
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-
-        expect(await screen.findByText(
-            'The node rejected this transaction because an input is missing or already spent.',
-        )).toBeTruthy();
-    });
-
-    it('says the network already has the transaction instead of calling it queued', async () => {
-        mountForm();
-        broadcastSignedTxRequest.mockResolvedValueOnce({ txid: undefined, alreadyOnNetwork: true });
-        await openRawTransaction(LEGACY_TX);
-        await screen.findByText(/spends 1 input/);
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-
-        expect(await screen.findByRole('heading', { name: 'Already on the network' })).toBeTruthy();
-        expect(screen.queryByText(/broadcast queue/)).toBeNull();
-        expect(screen.queryByRole('heading', { name: 'Transaction queued' })).toBeNull();
-    });
-
-    // The host reports a refused queue save as `persisted: false` and never sets
-    // `unsaved`, so the screen must map it. Each case seeds the OPPOSITE stale
-    // handoff, proving the warning follows this route's reply and not a leftover.
-    it.each([
-        ['warns when the queue save was refused', false, true],
-        ['stays quiet when the queue save landed', true, false],
-    ])('%s', async (_case, persisted, warns) => {
-        setQueuedResultHandoff({ queued: true, unsaved: !warns });
-        try {
-            mountForm();
-            broadcastSignedTxRequest.mockResolvedValueOnce({
-                queued: true, broadcast: 'queued', queueId: 'q1', pendingTxId: 'p1', persisted,
-            });
-            await openRawTransaction(LEGACY_TX);
-            await screen.findByText(/spends 1 input/);
-            fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-
-            expect(await screen.findByText('Signed. Not broadcast yet.')).toBeTruthy();
-            expect(Boolean(screen.queryByText(/could not be saved to the queue/))).toBe(warns);
-        } finally {
-            clearQueuedResultHandoff();
-        }
-    });
-
-    it('locks unsafe navigation and gives a next step when the relay does not answer', async () => {
-        mountForm();
-        broadcastSignedTxRequest.mockImplementationOnce(() => new Promise(() => {}));
-        await openRawTransaction(LEGACY_TX);
-        await screen.findByText(/spends 1 input/);
-        vi.useFakeTimers();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
-        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
-        expect(screen.getByLabelText('Back to previous screen')).toBeDisabled();
-
-        act(() => vi.advanceTimersByTime(3_000));
-        expect(screen.getByTestId('raw-broadcast-elapsed')).toHaveTextContent('3 seconds');
-        act(() => vi.advanceTimersByTime(27_000));
-        expect(screen.getByText(/The relay has not responded/)).toHaveTextContent(/block explorer/i);
-        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
-        expect(screen.getByLabelText('Back to previous screen')).toBeDisabled();
-    });
-});
-
-// (wallet E2E session 25, D-114). BROADCAST has no gas-schedule entry:
-// `/RLTC/api/feequote?action=BROADCAST` answers `xchainFee 0.00000000`,
-// `requiredFeeSats 0`, and applyNativeFeePreflight builds no fee output for it.
-// The SCREEN said otherwise. On LTC, where a later change turns the fee row into a
-// statement rather than a choice, this form read "Protocol fee is paid in LTC ·
-// LTC is the only way to pay the protocol fee on this chain. The fee is sent
-// on-chain and is not refunded if the network rejects this transaction" for an
-// action that is never charged anything.
-describe('the fee row does not promise a fee BROADCAST never pays', () => {
-    it('states the chain rule conditionally on LTC instead of asserting a charge', async () => {
-        mountForm(LTC_CHAIN, LTC_ADDRESSES);
-        await screen.findByLabelText(/^Feed name/);
-
-        // The old sentences, both gone: no definite charge, no forfeiture claim
-        // about money that is never spent.
+        expect(screen.getByText('Network fee')).toBeTruthy();
         expect(screen.queryByText(/Protocol fee is paid in LTC/)).toBeNull();
         expect(screen.queryByText(/The fee is sent on-chain and isn't refunded/)).toBeNull();
-
-        // What replaces them is true whether or not this action is priced, so
-        // no per-action list has to be kept in the client for it to stay true.
-        expect(screen.getByText('Protocol fees are paid in LTC')).toBeTruthy();
-        expect(screen.getByText(/If this action charges one/)).toBeTruthy();
+        expect(screen.queryByText('Protocol fees are paid in LTC')).toBeNull();
     });
 });

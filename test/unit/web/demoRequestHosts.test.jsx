@@ -49,7 +49,6 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
     getAddressesByChain: vi.fn(async () => ({})),
     getActiveAddresses: vi.fn(async () => ({})),
     getMultisigReceiveAddress: vi.fn(async () => null),
-    listConfirmSessions: vi.fn(async () => ({ sessions: [] })),
     listQueuedBroadcasts: vi.fn(async () => []),
     listContacts: vi.fn(async () => []),
     listConnectedSites: vi.fn(async () => []),

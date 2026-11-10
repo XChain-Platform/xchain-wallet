@@ -60,10 +60,10 @@ function renderDetail({ onBuy = vi.fn() } = {}) {
     return onBuy;
 }
 
-describe('TokenDetail Market view action', () => {
+describe('TokenDetail Exchange action', () => {
     it('opens the selected asset market even when the balance is zero', () => {
         const onBuy = renderDetail();
-        const button = screen.getByText('Market view').closest('button');
+        const button = screen.getByRole('button', { name: 'Exchange' });
 
         expect(button).toBeTruthy();
         fireEvent.click(button);
@@ -74,6 +74,6 @@ describe('TokenDetail Market view action', () => {
     it('is absent when the shell has no market route', () => {
         renderDetail({ onBuy: null });
 
-        expect(screen.queryByText('Market view')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
     });
 });

@@ -84,14 +84,15 @@ describe('TokenDetail holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
     });
 
-    it('keeps History a compact quick action while details and holders share the row primitive', async () => {
+    it('keeps History in the More info menu while details and holders share the row primitive', async () => {
         const onViewActivity = vi.fn();
         mount({
             holders: { data: [{ address: HOLDER, amount: '7' }] },
             props: { onViewActivity },
         });
 
-        const activityAction = screen.getByRole('button', { name: 'History' });
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        const activityAction = screen.getByRole('menuitem', { name: 'History' });
         fireEvent.click(activityAction);
         expect(onViewActivity).toHaveBeenCalledOnce();
 
@@ -268,7 +269,7 @@ describe('TokenDetail holders', () => {
 });
 
 describe('TokenDetail actions', () => {
-    it('renders applicable actions in Send, Receive, Trade order and invokes them', async () => {
+    it('renders applicable actions in Send, Receive, Exchange order and invokes them', async () => {
         const onSend = vi.fn();
         const onReceive = vi.fn();
         const onBuy = vi.fn();
@@ -280,12 +281,12 @@ describe('TokenDetail actions', () => {
         expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
             'Send',
             'Receive',
-            'Trade',
+            'Exchange',
         ]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
         expect(onSend).toHaveBeenCalledTimes(1);
         expect(onReceive).toHaveBeenCalledTimes(1);
         expect(onBuy).toHaveBeenCalledTimes(1);
@@ -299,7 +300,7 @@ describe('TokenDetail actions', () => {
 
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
         expect(screen.getByRole('button', { name: 'Receive' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Trade' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Exchange' })).toBeTruthy();
     });
 
     it('keeps a zero-balance Send visible and shows why it is disabled', async () => {

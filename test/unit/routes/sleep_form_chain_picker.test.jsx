@@ -71,6 +71,13 @@ function mountSleepForm(overrides = {}, initialChainId = BITCOIN, props = {}) {
     return renderSleepForm(overrides, initialChainId, props).messaging;
 }
 
+async function setDurationBlocks(value) {
+    fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
+    const input = await screen.findByLabelText('Blocks');
+    fireEvent.change(input, { target: { value } });
+    return input;
+}
+
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
@@ -106,13 +113,12 @@ describe('SleepForm address lock chain selection', () => {
     it('turns a block duration into the exact wake block shown and signed at review', async () => {
         const messaging = mountSleepForm();
 
-        expect(await screen.findByText(/Duration starts from current block 10,000/)).toBeInTheDocument();
-        expect(screen.getByText(/native coins are not locked/i)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Duration (blocks)'), { target: { value: '12' } });
+        await setDurationBlocks('12');
+        expect(screen.queryByText(/Locking an address/)).toBeNull();
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'wake after audit' } });
-        expect(screen.getByText(/Wake block: 10,012/)).toBeInTheDocument();
+        expect(screen.getByText(/Ends at block 10,012/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findByText(/until block 10012/)).toBeInTheDocument();
         expect(screen.getByText('Automatically at block 10,012. The address cannot wake itself early.')).toBeInTheDocument();
@@ -131,7 +137,7 @@ describe('SleepForm address lock chain selection', () => {
     it('explains every invalid duration shape in user-facing terms', async () => {
         mountSleepForm();
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
+        const duration = await setDurationBlocks('1');
         for (const [value, message] of [
             ['', 'Enter a duration in blocks.'],
             ['0', 'Duration must be at least 1 block.'],
@@ -140,7 +146,7 @@ describe('SleepForm address lock chain selection', () => {
             ['9007199254740992', 'Duration is too large. Enter fewer blocks.'],
         ]) {
             fireEvent.change(duration, { target: { value } });
-            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
             expect(await screen.findByText(message)).toBeInTheDocument();
         }
     });
@@ -151,9 +157,8 @@ describe('SleepForm address lock chain selection', () => {
             .mockResolvedValueOnce({ watermark: null });
         mountSleepForm({ getIndexerWatermark: watermark });
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
-        fireEvent.change(duration, { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        await setDurationBlocks('12');
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         expect(await screen.findByText(/current block could not be refreshed/i)).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
     });
@@ -165,9 +170,8 @@ describe('SleepForm address lock chain selection', () => {
             .mockResolvedValueOnce({ watermark: 10_017 });
         const messaging = mountSleepForm({ getIndexerWatermark: watermark });
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
-        fireEvent.change(duration, { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        await setDurationBlocks('12');
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findByText(/until block 10017/)).toBeInTheDocument();
         expect(screen.getByText('10017')).toBeInTheDocument();
@@ -185,16 +189,14 @@ describe('SleepForm address lock chain selection', () => {
         });
 
         await screen.findByLabelText('Address to lock');
-        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         expect(await screen.findByText(/selected source address is not valid/i)).toBeInTheDocument();
 
         cleanup();
         mountSleepForm();
         await screen.findByLabelText('Address to lock');
-        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeInTheDocument();
     });
 
@@ -202,10 +204,9 @@ describe('SleepForm address lock chain selection', () => {
         mountSleepForm();
 
         await screen.findByLabelText('Address to lock');
-        fireEvent.click(screen.getByRole('radio', { name: 'Lock indefinitely (permanent)' }));
         fireEvent.keyDown(screen.getByRole('slider', { name: 'Network fee' }), { key: 'End' });
         fireEvent.change(await screen.findByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
@@ -214,16 +215,14 @@ describe('SleepForm address lock chain selection', () => {
     it('requires a fresh typed confirmation each time address-lock review opens', async () => {
         mountSleepForm();
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
-        await screen.findByText(/Duration starts from current block 10,000/);
-        fireEvent.change(duration, { target: { value: '1' } });
+        await setDurationBlocks('1');
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(screen.getByLabelText('Duration (blocks)')).toHaveValue('1');
+        expect(screen.getByLabelText('Blocks')).toHaveValue('1');
         expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
         expect(screen.getByRole('button', { name: 'Lock address' })).toBeDisabled();
@@ -236,10 +235,8 @@ describe('SleepForm address lock chain selection', () => {
             .mockImplementation(() => heldHeight.promise);
         mountSleepForm({ getIndexerWatermark: watermark });
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
-        await screen.findByText(/Duration starts from current block 10,000/);
-        fireEvent.change(duration, { target: { value: '12' } });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        await setDurationBlocks('12');
+        const preview = screen.getByRole('button', { name: 'Lock address' });
         act(() => {
             preview.click();
             preview.click();
@@ -255,9 +252,8 @@ describe('SleepForm address lock chain selection', () => {
         const sleepAction = vi.fn(() => heldSubmit.promise);
         mountSleepForm({ sleepAction });
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
-        fireEvent.change(duration, { target: { value: '12' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        await setDurationBlocks('12');
+        fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         const submit = screen.getByRole('button', { name: 'Lock address' });
         act(() => {
@@ -282,9 +278,8 @@ describe('SleepForm address lock chain selection', () => {
             composeForConfirm,
         }, BITCOIN, { mode: 'tick', initialTick: 'GATE' });
 
-        const duration = await screen.findByLabelText('Duration (blocks)');
+        await setDurationBlocks('12');
         await waitFor(() => expect(screen.getByRole('button', { name: 'Pause token' })).toBeEnabled());
-        fireEvent.change(duration, { target: { value: '12' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));
         unmount();
         await act(async () => { heldHeight.resolve({ watermark: 10_001 }); });

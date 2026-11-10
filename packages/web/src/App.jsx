@@ -150,7 +150,6 @@ const PairPartnerWallet = lazyRoute(() => import('@xchain-wallet/core/shared/rou
 const Home = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Home.jsx'), 'Home');
 const Settings = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Settings.jsx'), 'Settings');
 const TokenDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenDetail.jsx'), 'TokenDetail');
-const ResumeConfirm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ResumeConfirm.jsx'), 'ResumeConfirm');
 const Send = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Send.jsx'), 'Send');
 const SendPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/SendPicker.jsx'), 'SendPicker');
 const Receive = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Receive.jsx'), 'Receive');
@@ -377,12 +376,12 @@ function AppInner() {
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
+        /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner' | 'pair-signer'} */
         () => takePostDemoIntent() || 'welcome',
     );
     const preserveInitialOnboardingStep = useRef(onboardingStep !== 'welcome');
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     useDocumentTitle({
         statusState: status.state,
@@ -525,9 +524,6 @@ function AppInner() {
     }, [unlockedView]);
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
-    );
-    const [resumeConfirmSession, setResumeConfirmSession] = useState(
-        /** @type {any | null} */ (null),
     );
     // §17.7 / G027: staged address handed to <ViewPrivateKey> when the
     // user picks "Show key" from the addresses list.
@@ -842,7 +838,6 @@ function AppInner() {
         setTokenDetailRef(null);
         setSweepCtx(null);
         setResumeAirdropId(null);
-        setResumeConfirmSession(null);
         setPrivateKeyAddress(null);
         setAddressPrefsTarget(null);
         setResumeCoinpay(null);
@@ -1249,6 +1244,17 @@ function AppInner() {
                     </Suspense>
                 );
             }
+            if (onboardingStep === 'pair-signer') {
+                return (
+                    <Suspense fallback={<Loading />}>
+                        <PairSignerForm
+                            pairTrezor={pairTrezorSigner}
+                            pairLedger={pairLedgerSigner}
+                            onBack={() => setOnboardingStep('welcome')}
+                        />
+                    </Suspense>
+                );
+            }
             // §20.5: watcher/signer pairing lane. Fresh-install
             // only: it imports the shared recovery phrase itself, so the
             // add-wallet-to-an-open-vault path below doesn't offer it.
@@ -1267,6 +1273,7 @@ function AppInner() {
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                    onConnectHardware={() => setOnboardingStep('pair-signer')}
                     onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
                     onWalletFound={refresh}
@@ -1572,7 +1579,6 @@ function AppInner() {
                         onBack={formBack}
                         onDone={formDone}
                         initialChainId={prefillChainId}
-                        initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                     />
                 );
@@ -1789,21 +1795,6 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
-                    />
-                );
-            }
-            if (unlockedView === 'resume-confirm' && activeWalletId && resumeConfirmSession) {
-                return (
-                    <ResumeConfirm
-                        session={resumeConfirmSession}
-                        onDone={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
-                        onCancel={() => {
-                            setResumeConfirmSession(null);
-                            setUnlockedView('home');
-                        }}
                     />
                 );
             }
@@ -2772,7 +2763,6 @@ function AppInner() {
                                 setResumeAirdropId(null);
                                 setUnlockedView('airdrop');
                             },
-                            onAdvanced: () => setUnlockedView('advanced'),
                             onLockAddress: () => setUnlockedView('lock-address'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                             onPayCoinpay: () => {
@@ -2789,7 +2779,6 @@ function AppInner() {
                             onMySwaps: DEX_SURFACE_ENABLED ? () => setUnlockedView('my-swaps') : undefined,
                             onPublishFile: () => setUnlockedView('publish-file'),
                             onLink: () => setUnlockedView('link-form'),
-                            onParallel: () => setUnlockedView('parallel-compose'),
                             onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: DEX_SURFACE_ENABLED ? () => setUnlockedView('cross-chain-swap') : undefined,
                             onCrossChainOrder: DEX_SURFACE_ENABLED ? () => setUnlockedView('cross-chain-order') : undefined,
@@ -2801,7 +2790,6 @@ function AppInner() {
                             onBridgeMove: () => setUnlockedView('bridge-move'),
                             onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
-                            onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
@@ -2859,6 +2847,8 @@ function AppInner() {
                         }
                         initialSubpageId={settingsSubpage}
                         onNavigateToMint={handleFaucetMint}
+                        onNavigateToAdvanced={() => setUnlockedView('advanced')}
+                        onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}
                     />
                 );
             }
@@ -3029,11 +3019,6 @@ function AppInner() {
                             setUnlockedView('history');
                         } : undefined}
                         onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
-                        onResumeConfirm={activeWalletId ? (session) => {
-                            if (!session) return;
-                            setResumeConfirmSession(session);
-                            setUnlockedView('resume-confirm');
-                        } : undefined}
                         onResumeAirdrop={activeWalletId ? (id) => {
                             setResumeAirdropId(id);
                             setUnlockedView('airdrop');

@@ -155,7 +155,7 @@ describe('main screen rendering', () => {
         expectVisibleCopyResolved(view.container);
     });
 
-    it('explains empty Alerts and opens notification settings', () => {
+    it('explains an empty Alerts inbox without adding another header action', () => {
         const view = render(
             <MessagingProvider shell="web" messaging={{}}>
                 <AlertsRoute
@@ -167,8 +167,8 @@ describe('main screen rendering', () => {
         );
 
         expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Manage notifications' }));
-        expect(screen.getByRole('heading', { name: 'Notifications' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Manage notifications' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Mark all read' })).toBeDisabled();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);
     });

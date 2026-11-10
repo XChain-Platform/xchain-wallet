@@ -206,7 +206,13 @@ describe('PageHeader', () => {
                             (node) => node.type === 'JSXOpeningElement'
                                 && jsxName(node.name).startsWith('Icon.'),
                         );
+                        const localIconNode = findNode(
+                            iconAttribute?.value || action.children,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).endsWith('Icon'),
+                        );
                         const iconNode = propIconNode || childIconNode;
+                        if (hasLabel && !iconNode && localIconNode) continue;
                         if (!hasLabel || !iconNode) {
                             invalidTrailingActions.push(file);
                             continue;

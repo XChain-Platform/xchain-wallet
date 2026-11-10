@@ -60,7 +60,7 @@ describe('ManageToken price history', () => {
         renderManage('demo-wallet');
         expect(await screen.findByRole('img', { name: /^Price trend\b/ })).toBeTruthy();
         expect(screen.getByRole('tablist', { name: 'Chart range' })).toBeTruthy();
-        const selected = screen.getByRole('tab', { name: '30d' });
+        const selected = screen.getByRole('tab', { name: '1M' });
         const next = screen.getByRole('tab', { name: '24h' });
         const panel = document.getElementById(selected.getAttribute('aria-controls'));
         expect(selected).toHaveAttribute('tabindex', '0');

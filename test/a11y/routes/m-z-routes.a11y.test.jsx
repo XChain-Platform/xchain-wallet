@@ -50,7 +50,6 @@ const ROUTE_NAMES = [
     'ReceivePicker',
     'RenameAccountForm',
     'RenameWalletForm',
-    'ResumeConfirm',
     'RouteNotFound',
     'ScanRoute',
     'SellOwnershipForm',

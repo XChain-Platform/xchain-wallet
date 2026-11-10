@@ -101,7 +101,7 @@ describe('payment link scheme against the open chain', () => {
         });
         await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(record(registry.get('bitcoin-testnet')).address));
         expect(to).toHaveValue(SHARED_TESTNET_ADDRESS);
-        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('1');
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('1.00000000');
         expect(screen.getByLabelText("Token")).toHaveValue("BTC");
         expect(screen.getByLabelText(/^Amount \(BTC\)/)).toBeTruthy();
     });

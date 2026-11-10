@@ -44,9 +44,10 @@ const messages = {
         'Enter the requested words from the recovery phrase you wrote down.',
     'createWallet.enterTheRequestedWordsTo': 'Enter the requested words to confirm your recovery phrase.',
     'createWallet.theseWordsAreYourRecovery':
-        'These {words, select, twentyFour {twenty-four} other {twelve}} words are your recovery phrase. Write them on paper and store them in a safe place. {RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.',
+        'These {words, select, twentyFour {twenty-four} other {twelve}} words are your recovery phrase. You can use it to restore your wallet on a new device.',
     'createWallet.writeTheseWordsOnPaper':
-        'Write these {wordCount} words on paper and store your recovery phrase safely. {RECOVERY_PHRASE_WARNING}',
+        'Write these {wordCount} words on paper.',
+    'createWallet.storeYourRecoveryPhraseSafely': 'Store your recovery phrase safely.',
     'createWallet.yourPasswordEncryptsThisWallet':
         'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.',
     'createWallet.yourPasswordEncryptsThisWallet2': 'Your password encrypts this wallet on this device.',

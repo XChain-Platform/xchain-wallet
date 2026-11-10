@@ -1,88 +1,3 @@
-.search {
-    flex: 1 1 auto;
-    min-width: 160px;
-}
-
-/* `<Input>` wraps its native <input> in a column-flex `.field` that
-   adds `margin-bottom: --xc-space-3` to leave room for an inline error
-   slot. In this toolbar context there's no error/hint to render and
-   the margin throws the search box out of vertical alignment with the
-   adjacent segmented chips. Strip it inline. */
-.search > * {
-    margin-bottom: 0;
-}
-
-/* Outlined segmented control - adjacent chips share a stroke so the
-   pair reads as "pick one of these" instead of two independent toggles. */
-.chipGroup {
-    display: inline-flex;
-    flex-direction: row;
-    align-items: stretch;
-    flex: 0 0 auto;
-    box-sizing: border-box;
-    height: calc(var(--xc-space-6) + var(--xc-space-1));
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-pill, 999px);
-    overflow: visible;
-}
-
-.chip {
-    position: relative;
-    background: transparent;
-    color: var(--xc-text-muted);
-    padding: 0 var(--xc-space-4);
-    border: 0;
-    border-inline-start: 1px solid var(--xc-border);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    line-height: 1;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-@media (pointer: coarse), (hover: none) {
-    .chip::before {
-        content: '';
-        position: absolute;
-        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min) / 2));
-        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min) / 2));
-        width: max(100%, var(--xc-control-hit-min));
-        height: max(100%, var(--xc-control-hit-min));
-    }
-}
-
-.chip:first-child {
-    border-inline-start: 0;
-    border-start-start-radius: inherit;
-    border-end-start-radius: inherit;
-}
-
-.chip:last-child {
-    border-start-end-radius: inherit;
-    border-end-end-radius: inherit;
-}
-
-.chip:hover:not(.chipActive) {
-    color: var(--xc-text);
-    background: var(--xc-bg-muted);
-}
-
-.chipActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent, #FFFFFF);
-}
-
-.chip:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
 .list {
     composes: flush from '../../ui/Card.module.css';
     display: flex;
@@ -91,6 +6,12 @@
     list-style: none;
     padding: 0;
     margin: 0;
+}
+
+/* Neutralize ListPage's section gap only between this screen's toolbar and
+   token list so the filter row attaches directly to its results. */
+.page > div + .list {
+    margin-block-start: calc(-1 * var(--xc-section-gap));
 }
 
 .list > li + li {
@@ -126,7 +47,7 @@
     white-space: nowrap;
 }
 
-.lockedBadge {
+.supplyStatus {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -134,7 +55,7 @@
     color: var(--xc-text-muted);
 }
 
-.lockedBadge > svg {
+.supplyStatus > svg {
     width: 14px;
     height: 14px;
 }

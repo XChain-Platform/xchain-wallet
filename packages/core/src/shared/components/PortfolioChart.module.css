@@ -56,11 +56,18 @@
     font-size: var(--xc-text-sm);
 }
 
+/* A minimal toggle centred along the bottom of the chart: the row hugs its
+   options and sits centred in the Home card's column and in the token detail
+   chart slot alike, on one line. */
 .ranges {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
+    flex-wrap: nowrap;
+    gap: 0;
     justify-content: center;
+    align-self: center;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
     padding-top: 0;
 }
 
@@ -68,8 +75,8 @@
     position: relative;
     appearance: none;
     background: transparent;
-    /* A visible boundary so an unselected range is recognisably a button. */
-    border: 1px solid var(--xc-control-border);
+    /* The options carry no outline; only the selected one is filled. */
+    border: 0;
     padding-block: 0;
     padding-inline: var(--xc-control-pad-x-sm);
     display: inline-flex;
@@ -117,7 +124,6 @@
 
 .rangeActive {
     background: var(--xc-accent-primary);
-    border-color: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
 

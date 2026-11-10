@@ -141,6 +141,38 @@ describe('CreateWallet security options', () => {
         expect(main).toContainElement(within(main).getByRole('button', { name: 'Create wallet' }));
         expect(screen.getAllByLabelText(/^Word \d+$/)).toHaveLength(3);
     });
+
+    it('keeps the phrase warning and each action next to the content it governs', () => {
+        generateBip39Mnemonic.mockReturnValue(phrase24.split(' ').slice(0, 12).join(' '));
+        const { container } = draw();
+        fillPasswords();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+        const warning = screen.getByRole('alert');
+        expect(warning).toHaveAttribute('data-variant', 'error');
+        expect(warning).toHaveTextContent('Write these 12 words on paper.');
+        expect(warning).toHaveTextContent('Store your recovery phrase safely.');
+        expect(warning).toHaveTextContent(
+            'Never share your recovery phrase. Anyone with it can spend your funds.',
+        );
+
+        const card = container.querySelector('[data-mnemonic-card]');
+        const copyNote = screen.getByText(
+            'Copying is disabled to keep your recovery phrase out of shared clipboards.',
+        );
+        expect(card.nextElementSibling).toBe(copyNote);
+
+        const checkbox = screen.getByRole('checkbox', { name: /saved my recovery phrase/i });
+        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        expect(checkbox.closest('label').nextElementSibling).toBe(verify);
+
+        fireEvent.click(checkbox);
+        fireEvent.click(verify);
+
+        const lastWord = screen.getAllByLabelText(/^Word \d+$/).at(-1);
+        const create = screen.getByRole('button', { name: 'Create wallet' });
+        expect(lastWord.closest('ol').nextElementSibling).toBe(create);
+    });
 });
 
 describe('MnemonicGrid narrow layout', () => {
@@ -167,10 +199,12 @@ describe('MnemonicGrid narrow layout', () => {
         expect(gridCss).toMatch(/@media not all and \(min-width:\s*360px\)/);
     });
 
-    it('requires a reveal action and prevents copying the revealed phrase', () => {
-        render(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
+    it('reveals the phrase inside its card once and prevents copying it', () => {
+        const view = render(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
 
         const reveal = screen.getByRole('button', { name: 'Reveal recovery phrase' });
+        const card = view.container.querySelector('[data-mnemonic-card]');
+        expect(card).toContainElement(reveal);
         expect(reveal).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByText('abandon')).toBeNull();
         expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
@@ -178,13 +212,15 @@ describe('MnemonicGrid narrow layout', () => {
         fireEvent.click(reveal);
 
         const grid = screen.getByRole('list', { name: 'Recovery phrase' });
-        expect(screen.getByRole('button', { name: 'Hide recovery phrase' }))
-            .toHaveAttribute('aria-expanded', 'true');
+        expect(card).toContainElement(grid);
+        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Hide recovery phrase' })).toBeNull();
         expect(within(grid).getAllByRole('listitem')[0]).toHaveAccessibleName('1. abandon');
         expect(fireEvent.copy(grid)).toBe(false);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Hide recovery phrase' }));
-        expect(screen.queryByText('abandon')).toBeNull();
+        view.rerender(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
+        expect(screen.getByText('abandon')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
     });
 
     it('requires a fresh reveal when returning to an earlier phrase', () => {

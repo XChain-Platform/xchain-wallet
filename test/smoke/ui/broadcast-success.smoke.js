@@ -67,6 +67,8 @@ assert.ok(/explorerPageUrl\(\{[\s\S]*?kind: 'transaction',[\s\S]*?value: txid/.t
     'BROADCAST success builds a chain-scoped transaction explorer URL');
 assert.ok(/Broadcast another/.test(broadcast),
     'BROADCAST success offers a repeat path');
+assert.ok(!/Signed transaction code|Feed name|Prepend UTC timestamp/.test(broadcast),
+    'BROADCAST success belongs to the plain-message-only form');
 
 // --- 5. Shell completion callbacks return Home -------------------------
 

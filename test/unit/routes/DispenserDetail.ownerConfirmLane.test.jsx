@@ -216,7 +216,7 @@ describe('dispenser owner actions sign through the confirm page', () => {
         expect(calls.find((c) => c.method === 'composeForConfirm').args.actionData.params.GIVE_ESCROW).toBe('37.50');
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
-        expect(utils.getByLabelText(/^Refill amount/)).toHaveValue('37.50');
+        expect(utils.getByLabelText(/^Refill amount/)).toHaveValue('37.50000000');
     });
 
     it('rejects zero, excess precision, less than one fill, and amounts above balance before review', async () => {

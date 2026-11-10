@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PairSignerForm } from '../../../packages/core/src/shared/routes/PairSignerForm.jsx';
+import { signerVendorLogoUrl } from '../../../packages/core/src/branding/branding.js';
 
 function signerRecord(overrides = {}) {
     return {
@@ -193,6 +194,32 @@ function mountSimple({ pairTrezor, messaging = {}, onBack = vi.fn(), onPaired } 
 }
 
 describe('PairSignerForm pairing flow', () => {
+    it('shows official vendor logos before their names', () => {
+        mount();
+
+        for (const [name, vendor] of [
+            ['Trezor', 'trezor'],
+            ['Ledger', 'ledger'],
+        ]) {
+            const row = screen.getByRole('button', { name: new RegExp(name) });
+            const logo = row.querySelector('img');
+            const vendorName = screen.getByText(name);
+
+            expect(logo).toHaveAttribute('src', signerVendorLogoUrl(vendor));
+            expect(logo).toHaveAttribute('aria-hidden', 'true');
+            expect(logo.compareDocumentPosition(vendorName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        }
+    });
+
+    it('leaves vendor selection through the header back button without a Cancel action', () => {
+        const onBack = vi.fn();
+        mount({ onBack });
+
+        expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(onBack).toHaveBeenCalledOnce();
+    });
+
     it('shows each step and persists the edited label', async () => {
         const registerSigner = vi.fn(async () => ({
             ...PAIRING_INFO,

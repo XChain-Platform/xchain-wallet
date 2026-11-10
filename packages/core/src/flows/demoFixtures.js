@@ -1258,3 +1258,208 @@ export function synthesizeDemoDispenses(actionIndex, opts = {}) {
     const now = Math.floor(nowMs / 1000);
     return rows.map(({ ageSec, ...r }) => ({ ...r, timestamp: now - (ageSec || 0) }));
 }
+
+/**
+ * Fabricated ORDER rows per chain, shaped like the explorer's orders feed
+ * with the `state` block hydrated, so My orders reads them without a
+ * detail fetch. Ages and expiry offsets are seconds relative to the
+ * injected clock; an open order expires in the future, a closed one shows
+ * its terminal status.
+ */
+const DEMO_ORDERS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4201240', tx_hash: 'demo-order-btc-1', block_index: 960512,
+            give_tick: 'RAREPEPE', give_coin: '', give_amount: '2', give_ownership: 0,
+            get_tick: '', get_coin: 'BTC', get_amount: '0.012', get_ownership: 0,
+            ageSec: 3 * 3_600, expiresInSec: 4 * 86_400, state: 'open', giveRemaining: '2',
+        },
+        {
+            action_index: '4201118', tx_hash: 'demo-order-btc-2', block_index: 960431,
+            give_tick: 'PEPECASH', give_coin: '', give_amount: '1000', give_ownership: 0,
+            get_tick: 'XCP', get_coin: '', get_amount: '10', get_ownership: 0,
+            ageSec: 2 * 86_400, expiresInSec: 12 * 86_400, state: 'open', giveRemaining: '400',
+        },
+        {
+            action_index: '4200655', tx_hash: 'demo-order-btc-3', block_index: 959870,
+            give_tick: 'EXAMPLE', give_coin: '', give_amount: '50', give_ownership: 0,
+            get_tick: '', get_coin: 'BTC', get_amount: '0.001', get_ownership: 0,
+            ageSec: 9 * 86_400, expiresInSec: 21 * 86_400, state: 'filled', giveRemaining: '0',
+        },
+    ],
+    'litecoin-mainnet': [
+        {
+            action_index: '2107902', tx_hash: 'demo-order-ltc-1', block_index: 3159588,
+            give_tick: 'MWEB', give_coin: '', give_amount: '5', give_ownership: 0,
+            get_tick: '', get_coin: 'LTC', get_amount: '1.25', get_ownership: 0,
+            ageSec: 6 * 3_600, expiresInSec: 7 * 86_400, state: 'open', giveRemaining: '5',
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            action_index: '7301702', tx_hash: 'demo-order-doge-1', block_index: 6334251,
+            give_tick: 'DOGI', give_coin: '', give_amount: '1000', give_ownership: 0,
+            get_tick: '', get_coin: 'DOGE', get_amount: '400', get_ownership: 0,
+            ageSec: 40 * 60, expiresInSec: 3 * 86_400, state: 'open', giveRemaining: '1000',
+        },
+        {
+            action_index: '7299015', tx_hash: 'demo-order-doge-2', block_index: 6330760,
+            give_tick: 'WOW', give_coin: '', give_amount: '20', give_ownership: 0,
+            get_tick: 'DOGI', get_coin: '', get_amount: '100', get_ownership: 0,
+            ageSec: 16 * 86_400, expiresInSec: -2 * 86_400, state: 'expired', giveRemaining: '0',
+        },
+    ],
+});
+
+/**
+ * Fabricated SWAP rows per chain, shaped like the explorer's swaps feed
+ * with `swap_status` and the hydrated `state` block.
+ */
+const DEMO_SWAPS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4201260', tx_hash: 'demo-swap-btc-1', block_index: 960530,
+            give_tick: 'RAREPEPE', give_coin: '', give_amount: '1', give_ownership: 0,
+            get_tick: 'PEPECASH', get_coin: '', get_amount: '2500', get_ownership: 0,
+            ageSec: 90 * 60, expiresInSec: 2 * 86_400, state: 'open',
+        },
+        {
+            action_index: '4200702', tx_hash: 'demo-swap-btc-2', block_index: 959911,
+            give_tick: 'EXAMPLE', give_coin: '', give_amount: '25', give_ownership: 0,
+            get_tick: 'XCP', get_coin: '', get_amount: '3', get_ownership: 0,
+            ageSec: 6 * 86_400, expiresInSec: 8 * 86_400, state: 'settled',
+        },
+    ],
+    'litecoin-mainnet': [
+        {
+            action_index: '2107955', tx_hash: 'demo-swap-ltc-1', block_index: 3159640,
+            give_tick: 'MWEB', give_coin: '', give_amount: '1', give_ownership: 0,
+            get_tick: 'LITECRED', get_coin: '', get_amount: '200', get_ownership: 0,
+            ageSec: 5 * 3_600, expiresInSec: 5 * 86_400, state: 'open',
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            action_index: '7301730', tx_hash: 'demo-swap-doge-1', block_index: 6334280,
+            give_tick: 'DOGI', give_coin: '', give_amount: '500', give_ownership: 0,
+            get_tick: 'WOW', get_coin: '', get_amount: '40', get_ownership: 0,
+            ageSec: 25 * 60, expiresInSec: 86_400, state: 'open',
+        },
+    ],
+});
+
+/**
+ * The fixture rows in `table` for `chainId`. Regtest and testnet ids reuse
+ * their mainnet fixture, so every network the demo wallet can show
+ * resolves the same rows.
+ *
+ * @param {Record<string, any[]>} table
+ * @param {string} chainId
+ * @returns {any[]}
+ */
+function demoMarketRows(table, chainId) {
+    return table[chainId]
+        || table[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
+        || [];
+}
+
+/**
+ * Orders the demo wallet placed on `chainId`, sourced from its first
+ * address so My orders lists them as the wallet's own. Each row carries
+ * the hydrated `state` block (status, give_remaining, expiration) the
+ * list feed returns, so the view needs no detail read.
+ *
+ * @param {string} chainId
+ * @param {string} sourceAddress   the demo wallet's address on that chain
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture (flows/demoCapture.js)
+ * @returns {any[]}
+ */
+export function synthesizeDemoOrders(chainId, sourceAddress, opts = {}) {
+    if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
+    const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Math.floor(nowMs / 1000);
+    return demoMarketRows(DEMO_ORDERS, chainId).map(({
+        ageSec, expiresInSec, state, giveRemaining, ...row
+    }) => ({
+        ...row,
+        source: sourceAddress,
+        status: 'valid',
+        timestamp: now - ageSec,
+        expiration: now + expiresInSec,
+        state: { status: state, give_remaining: giveRemaining, expiration: now + expiresInSec },
+    }));
+}
+
+/**
+ * Swaps the demo wallet offered on `chainId`, sourced from its first
+ * address so My swaps lists them as the wallet's own. Each row carries
+ * `swap_status` and the hydrated `state` block the list feed returns.
+ *
+ * @param {string} chainId
+ * @param {string} sourceAddress   the demo wallet's address on that chain
+ * @param {object} [opts]
+ * @param {number} [opts.now]   clock injection for tests and for the
+ *                              store-listing capture (flows/demoCapture.js)
+ * @returns {any[]}
+ */
+export function synthesizeDemoSwaps(chainId, sourceAddress, opts = {}) {
+    if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
+    const nowMs = typeof opts.now === 'number' ? opts.now : Date.now();
+    const now = Math.floor(nowMs / 1000);
+    return demoMarketRows(DEMO_SWAPS, chainId).map(({
+        ageSec, expiresInSec, state, ...row
+    }) => ({
+        ...row,
+        source: sourceAddress,
+        status: 'valid',
+        swap_status: state,
+        timestamp: now - ageSec,
+        expiration: now + expiresInSec,
+        state: { status: state, expiration: now + expiresInSec },
+    }));
+}
+
+/**
+ * The messaging module a demo wallet's views read through. Each read a view
+ * makes for a wallet's addresses answers from the fixtures above, in the
+ * response envelope the explorer route returns, so a view calls the same
+ * methods for a demo wallet and a real one and never asks which it has. A
+ * demo wallet's addresses never reach an explorer (issue #82). Every other
+ * method passes through to `messaging`.
+ *
+ * @param {Record<string, any>} messaging
+ * @returns {Record<string, any>}
+ */
+export function demoMessaging(messaging) {
+    const rows = (data) => Promise.resolve({ data });
+    const none = () => rows([]);
+    return {
+        ...messaging,
+        getWalletBalances: async (walletId, ...rest) => synthesizeDemoBalances(
+            typeof messaging?.getAddressesByChain === 'function'
+                ? await messaging.getAddressesByChain(walletId, ...rest)
+                : {},
+        ),
+        getNativePricesRequest: async ({ chainIds } = {}) => ({
+            prices: synthesizeDemoNativePrices(Array.isArray(chainIds) ? chainIds : []),
+        }),
+        getAddressHistory: ({ chainId, address } = {}) => rows(synthesizeDemoHistory(chainId, address)),
+        getLinksForAddress: () => rows(synthesizeDemoLinks()),
+        getAddressMempool: none,
+        getPendingTxsForAddress: none,
+        getDispensersForSource: ({ chainId, address } = {}) => rows(synthesizeDemoDispensers(chainId, address)),
+        getDispenserLifecycle: none,
+        getContractsForSource: none,
+        getDepositsForAddress: none,
+        getWithdrawalsForAddress: none,
+        getContractsBrowseAll: none,
+        getStakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).stakes),
+        getDelegationsForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).delegations),
+        getRewardsForAddress: ({ chainId } = {}) => rows(synthesizeDemoStaking(chainId).rewards),
+        getRewardClaimsForAddress: none,
+        getContractStakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).stakes),
+        getContractUnstakesForAddress: ({ chainId } = {}) => rows(synthesizeDemoContractStakes(chainId).unstakes),
+    };
+}

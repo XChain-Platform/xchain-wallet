@@ -138,13 +138,13 @@ describe('TokenWizard native-coin fee toggle', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
 
         const reviewFee = screen.getByText('Network fee').nextElementSibling;
-        await waitFor(() => expect(reviewFee).toHaveTextContent(/BTC.*€.*EUR/));
+        await waitFor(() => expect(reviewFee).toHaveTextContent(/BTC.*~€/));
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
         await screen.findByTestId('confirm-modal');
         await waitFor(() => {
-            expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*€0\.50 EUR/);
-            expect(screen.getByTestId('confirm-protocol-fee')).toHaveTextContent(/0\.5 XCHAIN.*€0\.20 EUR/);
+            expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*~€0\.50/);
+            expect(screen.getByTestId('confirm-protocol-fee')).toHaveTextContent(/0\.5 XCHAIN.*~€0\.20/);
         });
     });
 

@@ -113,6 +113,9 @@ async function reachConfirm() {
     // The footer is the bare Approve; the header names the action it signs.
     const approve = await screen.findByRole('button', { name: /^Approve$/ });
     expect(screen.getByTestId('confirm-action-label')).toHaveTextContent(/^Mint 4,000 CAPTEST$/);
+    expect(screen.queryByTestId('confirm-protocol-fee')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('confirm-native-protocol-fee')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).not.toBeInTheDocument();
     return approve;
 }
 

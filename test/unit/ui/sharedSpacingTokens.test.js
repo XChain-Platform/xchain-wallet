@@ -241,7 +241,6 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
         file,
         readFileSync(join(routesRoot, file), 'utf8'),
     ]));
-    const home = routeCss.get('Home.module.css');
     const imported = routeCss.get('ImportWallet.module.css');
     const issue = routeCss.get('IssueTokenForm.module.css');
     const loading = routeCss.get('Loading.module.css');
@@ -250,11 +249,8 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
         expect(withoutComments(css), file)
             .not.toMatch(/(?:gap|font-size|border-radius)\s*:[^;}]*(?:\d*\.)?\d+px/);
     }
-    expect(home).toMatch(
-        /\.quickActionIcon\s*\{[^}]*width:\s*var\(--xc-icon-sm\)[^}]*height:\s*var\(--xc-icon-sm\)/s,
-    );
-    expect(home).toMatch(
-        /\.quickActionMoreItemIcon\s*\{[^}]*width:\s*var\(--xc-icon-sm\)[^}]*height:\s*var\(--xc-icon-sm\)/s,
+    expect(readFileSync(join(uiRoot, 'QuickActionTile.module.css'), 'utf8')).toMatch(
+        /\.icon\s*\{[^}]*width:\s*var\(--xc-icon-sm\)[^}]*height:\s*var\(--xc-icon-sm\)/s,
     );
     expect(imported).not.toMatch(/(?:margin|padding|outline-offset):[^;]*-?2px/);
     expect(issue).not.toMatch(/outline-offset:\s*-?2px/);

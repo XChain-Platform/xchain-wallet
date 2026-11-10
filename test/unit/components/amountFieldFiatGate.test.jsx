@@ -139,11 +139,12 @@ describe('AmountField input contract', () => {
         expect(max.textContent).not.toMatch(/\s/);
     });
 
-    it('uses normal input padding when Max is absent', () => {
+    it('keeps the Max end room when the form offers no max', () => {
         const u = mount();
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
-        expect(input.style.paddingInlineEnd).toBe('');
-        expect(input.style.getPropertyValue('--amount-end-room')).toBe('');
+        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
+        expect(input.style.getPropertyValue('--amount-end-room')).toContain('--amount-action-width');
+        expect(u.getByRole('button', { name: 'Use max available amount' })).toBeDisabled();
     });
 
     it('switches display modes without replacing the canonical coin value', () => {

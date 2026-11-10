@@ -484,7 +484,34 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     ]}
                     focusKey={validationAttempt}
                 />}
-                actions={(
+            >
+                <div className={styles.quizActions}>
+                    {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
+                    <ol className={styles.quizList}>
+                        {/* Native list items preserve the quiz order within the form. */}
+                        {quizPositions.map((p) => (
+                            <li key={p} className={styles.quizRow}>
+                                <Input
+                                    id={`create-quiz-word-${p}`}
+                                    ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
+                                    label={t('createWallet.word', { p })}
+                                    value={quizAnswers[p] || ''}
+                                    onChange={(e) => {
+                                        setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
+                                        if (quizError) {
+                                            setQuizError(null);
+                                            setQuizErrorPosition(null);
+                                        }
+                                    }}
+                                    autoComplete="off"
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    disabled={stage === 'persisting'}
+                                />
+                            </li>
+                        ))}
+                    </ol>
                     <Button
                         type="submit"
                         variant="primary"
@@ -493,34 +520,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     >
                         {t('createWallet.createWallet')}
                     </Button>
-                )}
-            >
-                {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
-                <ol className={styles.quizList}>
-                    {/* Native list items preserve the quiz order within the form. */}
-                    {quizPositions.map((p) => (
-                        <li key={p} className={styles.quizRow}>
-                            <Input
-                                id={`create-quiz-word-${p}`}
-                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
-                                label={t('createWallet.word', { p })}
-                                value={quizAnswers[p] || ''}
-                                onChange={(e) => {
-                                    setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
-                                    if (quizError) {
-                                        setQuizError(null);
-                                        setQuizErrorPosition(null);
-                                    }
-                                }}
-                                autoComplete="off"
-                                autoCapitalize="off"
-                                autoCorrect="off"
-                                spellCheck={false}
-                                disabled={stage === 'persisting'}
-                            />
-                        </li>
-                    ))}
-                </ol>
+                </div>
             </FormPage>
         );
         return (
@@ -536,13 +536,34 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 ref={stageFormRef}
                 label={t('importWallet.recoveryPhrase')}
                 description={isFull
-                    ? t('createWallet.theseWordsAreYourRecovery', { words: wordCount === 24 ? 'twentyFour' : 'twelve', RECOVERY_PHRASE_WARNING })
-                    : t('createWallet.writeTheseWordsOnPaper', { wordCount, RECOVERY_PHRASE_WARNING })}
+                    ? t('createWallet.theseWordsAreYourRecovery', { words: wordCount === 24 ? 'twentyFour' : 'twelve' })
+                    : null}
                 progress={<span aria-current="step">{t('createWallet.step2Of3')}</span>}
-                status={persistError ? (
-                    <StatusMessage variant="error">{persistError}</StatusMessage>
-                ) : null}
-                actions={(
+                status={[
+                    <StatusMessage key="recovery-warning" variant="error">
+                        <div className={styles.warningLines}>
+                            <p>{t('createWallet.writeTheseWordsOnPaper', { wordCount })}</p>
+                            <p>{t('createWallet.storeYourRecoveryPhraseSafely')}</p>
+                            <p>{RECOVERY_PHRASE_WARNING}</p>
+                        </div>
+                    </StatusMessage>,
+                    persistError ? <StatusMessage key="persist-error" variant="error">{persistError}</StatusMessage> : null,
+                ]}
+            >
+                <div className={styles.phraseStack}>
+                    <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
+                    <p className={styles.copyHint}>
+                        {t('createWallet.copyingIsDisabledToKeep')}
+                    </p>
+                </div>
+                <div className={styles.confirmActions}>
+                    <Checkbox
+                        className={styles.confirmRow}
+                        label={t('createWallet.iHaveSavedMyRecovery')}
+                        checked={saved}
+                        onChange={(e) => setSaved(e.target.checked)}
+                        disabled={stage === 'persisting'}
+                    />
                     <Button
                         variant="primary"
                         onClick={handleStartVerify}
@@ -551,27 +572,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     >
                         {t('createWallet.verifyRecoveryPhrase')}
                     </Button>
-                )}
-            >
-                <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
-                {/* SSC-4 /, decided 2026-08-01: the recovery phrase
-                    is NOT copyable, on any shell. A clipboard is readable by
-                    any foreground app, kept in history by clipboard managers,
-                    and on iOS synced to every nearby signed-in device by
-                    default; hygiene can narrow each of those but not remove
-                    the class. The phrase is on screen to be written down,
-                    which is what the wallet has always told users to do, and
-                    what MnemonicGrid already said this UI did. */}
-                <p className={styles.copyHint}>
-                    {t('createWallet.copyingIsDisabledToKeep')}
-                </p>
-                <Checkbox
-                    className={styles.confirmRow}
-                    label={t('createWallet.iHaveSavedMyRecovery')}
-                    checked={saved}
-                    onChange={(e) => setSaved(e.target.checked)}
-                    disabled={stage === 'persisting'}
-                />
+                </div>
             </FormPage>
         );
         return (

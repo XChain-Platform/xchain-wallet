@@ -1,0 +1,21 @@
+.summaryLabel {
+    composes: detailsLabel from './IssueTokenForm.module.css';
+}
+
+.summaryValue {
+    composes: detailsValue from './IssueTokenForm.module.css';
+}
+
+/* Stretch both cells to the grid row so each divider spans one level line. */
+@media (min-width: 834px) {
+    .summaryLabel,
+    .summaryValue {
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+    }
+
+    .summaryValue {
+        justify-content: flex-end;
+    }
+}

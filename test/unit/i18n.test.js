@@ -475,6 +475,10 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // The action catalogue heading and its command-palette destination.
+            ['actionsMenu.title', 'palette.navActions.title'],
+            // The queue route title, command title, and Settings row.
+            ['commandPalette.actionQueue.title', 'parallelComposer.title', 'settings.developer.actionQueue'],
             // A shared reachability retry label and the settings backup checker.
             ['common.checking', 'settings.backup.checking'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
@@ -488,6 +492,10 @@ describe('translations', () => {
             ['home.receive', 'uri.intent.receive'],
             // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
             ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
+            // The raw action tool in the palette and Settings.
+            ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
+            // Opening a managed token and opening a developer tool.
+            ['routes.manageToken.open', 'settings.developer.open'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],

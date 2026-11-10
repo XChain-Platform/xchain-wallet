@@ -37,20 +37,6 @@ afterEach(() => {
     localStorage.clear();
 });
 
-function resumableSession(walletId) {
-    return {
-        id: 'sign-me',
-        createdAt: Date.now() - 1000,
-        request: { walletId, chainId: CHAIN },
-        composed: { chainId: CHAIN, psbt: 'cHNidP8=', actionString: 'SEND|BTC|1' },
-        dispatch: {
-            software: 'sendToken',
-            label: 'Send BTC',
-            base: { walletId, chainId: CHAIN, from: { address: ADDRESS } },
-        },
-    };
-}
-
 function modeMessaging(walletMode, extra = {}) {
     const base = {
         getSettings: vi.fn().mockResolvedValue({
@@ -99,32 +85,31 @@ function homeMessaging(walletMode) {
         getActiveAddresses: vi.fn().mockResolvedValue({
             [CHAIN]: { id: 'address-1', address: ADDRESS },
         }),
-        listConfirmSessions: vi.fn().mockResolvedValue({
-            sessions: [resumableSession('wallet-1')],
-        }),
+        listConfirmSessions: vi.fn().mockResolvedValue({ sessions: [{ id: 'retired-session' }] }),
     });
 }
 
 describe('watch-only route boundaries', () => {
-    it('offers a full wallet its unfinished signing session on Home', async () => {
+    it('offers no stored signing session on Home', async () => {
         const messaging = homeMessaging('full');
         mount(messaging, (
-            <Home activeWalletId="wallet-1" onSend={vi.fn()} onResumeConfirm={vi.fn()} />
+            <Home activeWalletId="wallet-1" onSend={vi.fn()} />
         ));
 
-        expect(await screen.findByRole('group', { name: 'Unfinished transactions' }))
-            .toBeInTheDocument();
+        await screen.findByRole('group', { name: 'Quick actions' });
+        expect(messaging.listConfirmSessions).not.toHaveBeenCalled();
+        expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
     });
 
-    it('keeps Send on Home but offers a watch-only wallet no signing session', async () => {
+    it('keeps Send on Home for a watch-only wallet', async () => {
         const messaging = homeMessaging('watcher');
         mount(messaging, (
-            <Home activeWalletId="wallet-1" onSend={vi.fn()} onResumeConfirm={vi.fn()} />
+            <Home activeWalletId="wallet-1" onSend={vi.fn()} />
         ));
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getByRole('button', { name: 'Send' })).toBeInTheDocument();
-        await waitFor(() => expect(messaging.listConfirmSessions).toHaveBeenCalled());
+        expect(messaging.listConfirmSessions).not.toHaveBeenCalled();
         expect(screen.queryByRole('group', { name: 'Unfinished transactions' })).toBeNull();
     });
 

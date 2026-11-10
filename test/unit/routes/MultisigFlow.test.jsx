@@ -166,8 +166,8 @@ describe('multisig jsdom flow', () => {
         await waitFor(() => expect(screen.getAllByLabelText(/Master fingerprint/i)[0])
             .toHaveValue(LOCAL.fingerprint));
         await fillExternalRows();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByText(/2-of-3 SegWit multi-signature/i)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Review multisig' }));
+        expect(await screen.findByText(/2-of-3 SegWit/i)).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
         expect(await screen.findByText('Multisig configured')).toBeTruthy();
 

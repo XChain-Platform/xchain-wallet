@@ -99,7 +99,7 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
                 setHorizontalOffset(0);
             } else {
                 const availableWidth = Math.max(1, viewportWidth - 2 * VIEWPORT_MARGIN);
-                const widthLimit = Math.min(260, availableWidth);
+                const widthLimit = Math.min(360, availableWidth);
                 const bubbleWidth = Math.min(bubbleRect.width || widthLimit, widthLimit);
                 const centeredLeft = center - bubbleWidth / 2;
                 const minimumLeft = viewportLeft + VIEWPORT_MARGIN;

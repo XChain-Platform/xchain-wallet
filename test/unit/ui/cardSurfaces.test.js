@@ -262,7 +262,9 @@ describe('card surfaces', () => {
     it('flattens a card inside a card', () => {
         const source = readFileSync(join(packagesRoot, 'core/src/ui/Card.module.css'), 'utf8');
         expect(source).toMatch(/\.card \.card,\s*\.card \.flush,\s*\.flush \.card,\s*\.flush \.flush\s*\{[^}]*border:\s*0/);
-        expect(source).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.formCard:not\(\.cardless\) \.card,\s*\.formCard:not\(\.cardless\) \.flush\s*\{[^}]*border:\s*0/);
+        // A wide form card flattens nested cards, but a flush list keeps its own rounded card.
+        expect(source).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.formCard:not\(\.cardless\) \.card\s*\{[^}]*border:\s*0/);
+        expect(source).not.toMatch(/\.formCard:not\(\.cardless\) \.flush\s*[,{]/);
         // A full-width form draws no card, so it opts out of the flattening
         // and the cards inside it (Settings sections, the licence terms
         // panel) keep their outline.

@@ -14,7 +14,7 @@
 // the page already resolved.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -44,6 +44,12 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const NOTICE = /Token details could not be loaded from the explorer/;
+
+/** Opens the More info menu and returns its Manage entry. */
+async function findManage() {
+    fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
+    return screen.findByRole('menuitem', { name: 'Manage' });
+}
 
 function renderDetail(getTokenInfo) {
     const messaging = {
@@ -103,12 +109,12 @@ describe('TokenDetail on an explorer failure', () => {
             chainId: CHAIN, tick: 'LOADERR', creator: null, loadError: true,
         }));
         expect(await screen.findByText(NOTICE)).toBeTruthy();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy());
+        expect(await findManage()).toBeTruthy();
     });
 
     it('shows no notice when the read succeeds', async () => {
         renderDetail(vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'LOADERR', creator: MINE, divisibility: 8 }));
-        await screen.findByRole('button', { name: 'Manage' });
+        await findManage();
         expect(screen.queryByText(NOTICE)).toBeNull();
     });
 });

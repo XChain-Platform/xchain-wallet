@@ -704,20 +704,6 @@ export {
 } from './nativeFeeRequote.js';
 // Host routes run signature guards and retried pre-flights with fresh explorer reads.
 export { explorerFreshScope, retryRateLimitedPreflight } from '../sdk/explorerRateLimit.js';
-// Finishing a stored confirm away from the form that made it.
-export {
-    RESUMABLE_DISPATCH_METHODS,
-    RESUMABLE_AFTER_METHODS,
-    RESUME_TTL_MS,
-    RESUME_EXPIRED,
-    RESUME_UNAVAILABLE,
-    assertNoCredentials,
-    isResumable,
-    resumeDispatch,
-    resumeAfter,
-    describeResumeSession,
-    resumableSessions,
-} from './confirmResume.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
     markBackupVerified,
@@ -778,6 +764,8 @@ export {
     synthesizeDemoContacts,
     synthesizeDemoDispensers,
     synthesizeDemoDispenses,
+    synthesizeDemoOrders,
+    synthesizeDemoSwaps,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

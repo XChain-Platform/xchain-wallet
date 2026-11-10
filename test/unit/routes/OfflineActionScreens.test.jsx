@@ -212,18 +212,18 @@ describe('TokenDetail', () => {
         getSupplyHistory: vi.fn().mockResolvedValue([]),
     });
 
-    it('disables Send and Trade with reasons when only the probe is offline', async () => {
+    it('disables Send and Exchange with reasons when only the probe is offline', async () => {
         renderScreen(detailMessaging(), detail());
         const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
-        expect(actions.getByRole('button', { name: 'Trade' })).toBeDisabled();
-        expect(actions.getByText('Trade needs a network connection.')).toBeInTheDocument();
+        expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
+        expect(actions.getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
-    it('keeps Trade enabled when the probe is healthy', async () => {
+    it('keeps Exchange enabled when the probe is healthy', async () => {
         reachability.overall = 'normal';
         renderScreen(detailMessaging(), detail());
         const actions = within(await screen.findByRole('group', { name: 'Quick actions' }));
-        expect(actions.getByRole('button', { name: 'Trade' })).toBeEnabled();
-        expect(actions.queryByText('Trade needs a network connection.')).toBeNull();
+        expect(actions.getByRole('button', { name: 'Exchange' })).toBeEnabled();
+        expect(actions.queryByText('Exchange needs a network connection.')).toBeNull();
     });
 });

@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Home's overflow quick action: a menu holding one entry is a wasted tap,
-// so a lone action renders as its own button and "More" appears only once
-// a second entry exists.
+// Home's fourth quick action: More actions opens the actions menu, and a
+// shell that wires no actions menu gets Swap as its own button instead of a
+// one-item "More" menu.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -122,12 +122,14 @@ describe('Home desktop actions', () => {
             onActions: vi.fn(),
         }, 'desktop');
 
-        const more = await screen.findByRole('button', { name: 'More actions' });
-        const actionGrid = more.parentElement;
+        const createToken = await screen.findByRole('button', { name: 'Create token' });
+        const actionGrid = createToken.parentElement;
         const actions = within(actionGrid).getAllByRole('button');
 
         expect(actionGrid).toHaveClass(homeModuleStyles.actionsFull);
-        expect(actions).toHaveLength(8);
+        // More actions is a quick action above, so the grid holds the other seven.
+        expect(actions).toHaveLength(7);
+        expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1);
         actions.forEach((action) => {
             expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
         });
@@ -180,13 +182,14 @@ describe('Home wide-layout quick actions', () => {
         expect(onActions).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps Swap in the quick actions at 360px', async () => {
+    it('shows the same four quick actions at 360px above the action grid', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         mount(wideHandlers, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
     });
 
@@ -226,7 +229,7 @@ describe('Home quick-action policy', () => {
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Exchange']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'Swap']);
         expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send."))
             .toBeNull();
 

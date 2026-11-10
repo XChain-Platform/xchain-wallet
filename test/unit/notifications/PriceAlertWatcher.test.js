@@ -56,6 +56,7 @@ function makeWatcher(over = {}) {
         markTriggered,
         intervalMs: over.intervalMs,
         now: over.now,
+        recordAlert: over.recordAlert,
     });
     return { watcher, getNativePrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings, state };
 }
@@ -153,6 +154,15 @@ describe('PriceAlertWatcher', () => {
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(2);
         expect(markTriggered).toHaveBeenCalledTimes(1);
+    });
+
+    it('records a price inbox entry even when OS delivery is denied', async () => {
+        const recordAlert = vi.fn(async () => {});
+        const { watcher } = makeWatcher({ price: 71000, notify: vi.fn(async () => false), recordAlert, now: () => 123 });
+
+        await watcher.pollOnce();
+
+        expect(recordAlert).toHaveBeenCalledWith(expect.objectContaining({ type: 'price', at: 123, read: false }));
     });
 
     it('keeps an alert armed when delivery throws, then retries', async () => {

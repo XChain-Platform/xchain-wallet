@@ -201,50 +201,87 @@
 
 /* ───── Quick actions ───── */
 
-/* One row of equal compact buttons, as on Home. The tracks size to the
-   row instead of the labels, so four actions share one line at 320 px. */
+/* The quick actions group: the tile row, then any reason that blocks a tile. */
+.quickActionsGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* One centred row of square tiles, as on Home. Each track shrinks with the
+   row so four tiles share one line at 320 px, and stops at its fixed size on
+   wide screens instead of stretching to the row width. */
 .quickActions {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-columns: minmax(0, 88px);
+    justify-content: center;
     gap: var(--xc-space-2);
 }
 
-.quickActions > button {
-    flex-direction: column;
-    gap: var(--xc-space-1);
+/* Each quick action is the shared QuickActionTile, which owns its look; this
+   keeps the tile geometry the row lays out (square, icon over label) in step
+   with it. */
+.quickActions > button,
+.quickActionMoreWrap > button {
+    aspect-ratio: 1 / 1;
+    width: 100%;
     min-width: 0;
-    min-height: 72px;
-    padding: var(--xc-space-3) var(--xc-space-1);
+    min-height: auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-1);
     font-size: var(--xc-text-xs);
     text-align: center;
 }
 
-.quickActionContent {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-1);
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-}
-
 .quickActionReason {
+    margin: 0;
     color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
     font-weight: 500;
     line-height: 1.2;
+    text-align: center;
 }
 
-.quickActionIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
+/* The More info tile anchors its menu. */
+.quickActionMoreWrap {
+    position: relative;
+    display: flex;
+    min-width: 0;
+}
+
+.quickActionMoreMenu {
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + var(--xc-space-1));
+    z-index: var(--xc-z-dropdown);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    overflow: hidden;
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+    padding: 0;
+    background: var(--xc-card-bg);
+    box-shadow: var(--xc-shadow-md);
+}
+
+.quickActionMoreEntry {
+    width: 100%;
+    justify-content: flex-start;
+    padding-inline: var(--xc-space-3);
+    text-align: start;
+}
+
+.quickActionMoreEntryIcon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 .tabPanel {

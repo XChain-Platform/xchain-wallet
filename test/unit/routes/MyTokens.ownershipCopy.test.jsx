@@ -19,7 +19,7 @@
 // case the old wording got backwards, so the list test uses one.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, waitFor, cleanup, screen } from '@testing-library/react';
+import { render, waitFor, cleanup, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
@@ -28,7 +28,7 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt';
 
-function mountMyTokens({ tokens, error }) {
+function mountMyTokens({ tokens, error, onIssue = () => {} }) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'addr-1', address: ADDRESS }],
@@ -51,7 +51,7 @@ function mountMyTokens({ tokens, error }) {
             React.createElement(MyTokens, {
                 walletId: 'w',
                 onBack() {},
-                onIssue() {},
+                onIssue,
                 onSelectTick() {},
             }),
         ),
@@ -150,5 +150,70 @@ describe('My tokens long tickers', () => {
         // before it instead of the text running underneath.
         expect(name.parentElement).toBe(lock.parentElement);
         expect(name.contains(lock)).toBe(false);
+    });
+});
+
+describe('My tokens controls and supply status', () => {
+    it('creates from the header and filters owned tokens by type and search text', async () => {
+        const onIssue = vi.fn();
+        mountMyTokens({
+            onIssue,
+            tokens: [
+                {
+                    tick: 'LOCKED',
+                    description: 'No balance held',
+                    locked: true,
+                    youOwn: false,
+                },
+                {
+                    tick: 'OPEN',
+                    description: 'Searchable unlocked token',
+                    locked: false,
+                    youOwn: true,
+                },
+                {
+                    tick: 'HELDLOCK',
+                    description: 'Locked balance held',
+                    locked: true,
+                    youOwn: true,
+                },
+            ],
+        });
+
+        await screen.findByRole('button', { name: 'Open LOCKED token details' });
+        expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
+        const create = screen.getByRole('button', { name: 'Create token' });
+        expect(create).toHaveAttribute('title', 'Create token');
+        fireEvent.click(create);
+        expect(onIssue).toHaveBeenCalledOnce();
+
+        const type = screen.getByRole('combobox', { name: 'Filter tokens by type' });
+        expect(type).toHaveValue('all');
+        expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+            'All', 'Holding', 'Locked', 'Unlocked',
+        ]);
+        expect(screen.getAllByRole('img', { name: 'Supply locked' })).toHaveLength(2);
+        expect(screen.getByRole('img', { name: 'Supply unlocked' })).toBeInTheDocument();
+
+        fireEvent.change(type, { target: { value: 'locked' } });
+        expect(screen.getByRole('button', { name: 'Open LOCKED token details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Open HELDLOCK token details' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Open OPEN token details' })).toBeNull();
+
+        fireEvent.change(type, { target: { value: 'unlocked' } });
+        expect(screen.getByRole('button', { name: 'Open OPEN token details' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Open LOCKED token details' })).toBeNull();
+
+        fireEvent.change(type, { target: { value: 'holding' } });
+        expect(screen.queryByRole('button', { name: 'Open LOCKED token details' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Open OPEN token details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Open HELDLOCK token details' })).toBeInTheDocument();
+
+        fireEvent.change(type, { target: { value: 'all' } });
+        fireEvent.change(screen.getByRole('searchbox', {
+            name: 'Search your tokens by ticker or description',
+        }), { target: { value: 'open' } });
+        expect(screen.getByRole('button', { name: 'Open OPEN token details' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Open LOCKED token details' })).toBeNull();
     });
 });

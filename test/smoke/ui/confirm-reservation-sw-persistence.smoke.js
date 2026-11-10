@@ -8,21 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §5.4: the §4.7 reservation ledger survives an MV3 service-
+// Smoke for the §4.7 reservation ledger surviving an MV3 service-
 // worker kill.
 //
-// The mechanism (confirmActionSessionStorage) had been BUILT and left
-// unconsumed - nothing but its own unit test imported it - so the ledger was
-// in-memory only. On MV3 that is not a theoretical gap: Chrome may kill the
+// The ledger was once in-memory only. On MV3 that is not a theoretical gap:
+// Chrome may kill the
 // worker after ~30s of perceived idle, which is well inside the window where a
 // user is reading warnings, typing a password or waking a hardware device. A
 // kill dropped every reservation, so a second approval window would see the
 // full balance again and the two-window race the ledger exists to close would
 // silently be back.
 //
-// unit/flows/confirmActionSessionStorage.test.js already proves the storage and
-// the ledger work together. What this pins is the WIRING, which is what was
-// actually missing.
+// What this pins is the production wiring from the host to session storage.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -32,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const hostPath = join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
-const storagePath = join(wsRoot, 'packages', 'extension', 'src', 'background', 'confirmActionSessionStorage.js');
+const storagePath = join(wsRoot, 'packages', 'extension', 'src', 'background', 'actionSafetySessionStorage.js');
 const ledgerPath = join(wsRoot, 'packages', 'core', 'src', 'flows', 'reservationLedger.js');
 
 const hostSrc = readFileSync(hostPath, 'utf8');
@@ -43,7 +40,7 @@ const ledgerSrc = readFileSync(ledgerPath, 'utf8');
 
 assert.match(
     hostSrc,
-    /import \{[^}]*\bcreateConfirmActionSessionStorage,[^}]*\breservationStoreFrom,[^}]*\} from '\.\/confirmActionSessionStorage\.js'/,
+    /import \{[^}]*\bcreateActionSafetySessionStorage,[^}]*\breservationStoreFrom,[^}]*\} from '\.\/actionSafetySessionStorage\.js'/,
     'createBackgroundHost imports the session-storage adapter',
 );
 
@@ -51,7 +48,7 @@ assert.match(
 
 assert.match(
     hostSrc,
-    /createReservationLedger\(\s*\n?\s*confirmSessionStorage \? \{ store: reservationStoreFrom\(confirmSessionStorage\) \} : undefined/,
+    /createReservationLedger\(\s*\n?\s*actionSafetyStorage \? \{ store: reservationStoreFrom\(actionSafetyStorage\) \} : undefined/,
     'the reservation ledger is constructed WITH the session-backed store '
     + '(an in-memory ledger loses every reservation on an SW kill)',
 );
@@ -79,7 +76,7 @@ assert.match(
     storageSrc,
     /chrome\.storage\.session/,
     'persists to storage.session (clears on browser close, right for '
-    + 'approved-not-yet-broadcast state) rather than storage.local',
+    + 'approval safety state) rather than storage.local',
 );
 
 // --- 4. The ledger hydrates before answering, and is idempotent ---------
