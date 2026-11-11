@@ -125,14 +125,15 @@ describe('wallet menu accessibility', () => {
         expect(document.getElementById(input.getAttribute('aria-controls'))).toContainElement(active);
     });
 
-    it('renders every catalogue row as a button named by its label', async () => {
+    it('renders every catalogue row as a listbox option named by its label', async () => {
         await renderMenu();
         for (const row of catalogueRows()) {
             // Relies on data-wallet-menu-row="<id>".
             const el = rowEl(row.id);
             expect(el, `row ${row.id}`).not.toBeNull();
             expect(el.tagName).toBe('BUTTON');
-            expect(screen.getAllByRole('button', { name: row.label }), `name of ${row.id}`).toContain(el);
+            expect(el.getAttribute('role')).toBe('option');
+            expect(screen.getAllByRole('option', { name: row.label }), `name of ${row.id}`).toContain(el);
         }
     });
 

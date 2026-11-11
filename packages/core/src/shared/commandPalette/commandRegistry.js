@@ -263,7 +263,8 @@ export function buildCommands(ctx) {
                 ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
                 keywords: meta.keywords || [],
                 Icon: Icon[row.icon],
-                run: go(row.id),
+                // Scan opens the shell's scanner overlay where the shell has one.
+                run: row.id === 'scan' && typeof ctx.scan === 'function' ? () => ctx.scan() : go(row.id),
             });
         }
     }

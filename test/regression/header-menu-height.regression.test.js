@@ -33,7 +33,7 @@ function ruleBody(css, selector) {
 describe('wallet menu height', () => {
     it('is bounded by the viewport, not a fixed pixel cap', () => {
         const panel = ruleBody(paletteCss, '.panel.menuPanel');
-        expect(panel).toMatch(/max-block-size:\s*var\(--xc-viewport-h/);
+        expect(panel).toMatch(/max-block-size:\s*(?:calc\()?var\(--xc-viewport-h/);
         expect(panel).not.toMatch(/(?:max-)?block-size:\s*\d+px/);
 
         const dropdown = paletteCss.match(/@container wallet-menu \(min-width: 640px\) \{[\s\S]*?\.panel\.menuPanel \{([^}]*)\}/);

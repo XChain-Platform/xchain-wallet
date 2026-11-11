@@ -398,12 +398,16 @@ export function CommandPalette({
                                     role="group"
                                     aria-labelledby={`xc-wallet-menu-group-${group.id}`}
                                 >
-                                    <h3
+                                    {/* A listbox group holds only options, so the visible heading is
+                                        hidden from the accessibility tree and names the group through
+                                        aria-labelledby instead. */}
+                                    <div
                                         id={`xc-wallet-menu-group-${group.id}`}
                                         className={styles.walletGroupHead}
+                                        aria-hidden="true"
                                     >
                                         {group.label}
-                                    </h3>
+                                    </div>
                                     <ul className={styles.walletGroupList} role="presentation">
                                         {group.rows.map((row) => {
                                             const index = walletRows.findIndex((item) => item.id === row.id);
