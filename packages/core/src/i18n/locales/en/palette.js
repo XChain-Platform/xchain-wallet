@@ -91,8 +91,6 @@ const messages = {
     'palette.tradeXchainSwap.subtitle': 'Swap across chains',
     'palette.tradeXchainOrder.title': 'Cross-chain order',
     'palette.tradeXchainOrder.subtitle': 'Limit order across chains',
-    'palette.tradeXchainTemplates.title': 'Cross-chain templates',
-    'palette.tradeXchainTemplates.subtitle': 'Prebuilt cross-chain flows',
     'palette.signMessage.subtitle': 'Prove address ownership',
     'palette.signVerify.subtitle': 'Check a signed message',
     'palette.signPsbt.subtitle': 'Sign a partially-signed transaction',

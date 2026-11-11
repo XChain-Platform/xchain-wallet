@@ -476,7 +476,7 @@
    40px row floor keeps every destination comfortably touchable. */
 @supports (container-type: inline-size) and (width: 1cqw) {
     @media (max-height: 700px) {
-        @container wallet-menu (max-width: 639px) {
+        @container wallet-menu not (min-width: 640px) {
             .menuHeader {
                 gap: var(--xc-space-1);
                 padding: var(--xc-space-1);
