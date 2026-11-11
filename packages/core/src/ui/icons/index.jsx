@@ -36,6 +36,7 @@ import {
     ThumbsDown as LucideThumbsDown,
     ArrowUpToLine as LucideArrowUpToLine,
     Minus as LucideMinus,
+    LayoutGrid as LucideLayoutGrid,
 } from 'lucide-react';
 
 // The rendered size comes from the svg[data-xc-icon] rule in tokens.css
@@ -151,6 +152,11 @@ export function CheckIcon() {
             <path d="M5 12.5 10 17.5l9-11" />
         </svg>
     );
+}
+
+// Four tiles: the All actions page, every action the wallet can take.
+export function GridIcon() {
+    return <LucideLayoutGrid {...LUCIDE_PROPS} />;
 }
 
 // The paper plane points the way the payment travels, so it turns with the reading direction.

@@ -114,6 +114,7 @@ import ui from './ui.js';
 import undoSend from './undoSend.js';
 import verifySignature from './verifySignature.js';
 import walletDetails from './walletDetails.js';
+import walletMenu from './walletMenu.js';
 import walletPicker from './walletPicker.js';
 
 export const en = {
@@ -179,6 +180,7 @@ export const en = {
     ...undoSend,
     ...verifySignature,
     ...walletDetails,
+    ...walletMenu,
     ...walletPicker,
 };
 
