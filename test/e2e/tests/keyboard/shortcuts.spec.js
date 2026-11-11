@@ -53,7 +53,8 @@ test.describe('keyboard shortcut residuals', () => {
         // settings-section commands end-to-end).
         await page.keyboard.press('ControlOrMeta+k');
         await page.getByRole('dialog', { name: 'Wallet menu' })
-            .getByRole('combobox').fill('settings keyboard');
+            .getByRole('combobox').fill('keyboard');
+        await expect(page.getByRole('option', { name: /Settings › Keyboard/ })).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(page.getByText('Select Rebind, then press the new key combination.', { exact: false })).toBeVisible();
 

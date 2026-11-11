@@ -90,7 +90,7 @@ async function badgeFits(page) {
 function navTargets(page, nav) {
     if (nav === 'rail') {
         return page.getByRole('navigation', { name: 'Primary navigation' })
-            .getByRole('button', { name: 'Lock', exact: true });
+            .getByRole('button', { name: 'Lock wallet', exact: true });
     }
     return page.getByRole('navigation', { name: 'Bottom navigation' }).getByRole('button');
 }
