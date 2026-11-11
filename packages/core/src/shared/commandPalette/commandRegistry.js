@@ -31,7 +31,6 @@ import '../../i18n/locales/en/issue.js';
 import '../../i18n/locales/en/keyboard.js';
 import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/routes.js';
-import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
@@ -137,7 +136,7 @@ const CATALOGUE_COMMAND_META = {
     send: { subtitleKey: 'palette.navSend.subtitle', keywords: ['pay', 'transfer', 'spend'] },
     receive: { subtitleKey: 'palette.navReceive.subtitle', keywords: ['address', 'deposit', 'qr'] },
     history: { subtitleKey: 'palette.navHistory.subtitle', keywords: ['transactions', 'activity', 'timeline'] },
-    scan: { subtitleKey: 'palette.walletScan.subtitle', keywords: ['qr', 'camera'] },
+    scan: { subtitleKey: 'palette.walletScan.subtitle', keywords: ['qr', 'camera', 'scan'] },
     'my-tokens': { subtitleKey: 'palette.navMyTokens.subtitle', keywords: ['issued', 'owned', 'assets', 'manage'] },
     addresses: { subtitleKey: 'palette.navAddresses.subtitle', keywords: ['accounts', 'keys'] },
     markets: { subtitleKey: 'palette.navMarkets.subtitle', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'] },
@@ -223,7 +222,6 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {(view: string) => void} navigate  shell view setter (setUnlockedView)
  * @property {() => void} [lock]                 lock the wallet
  * @property {() => void} [refresh]              refresh balances / session
- * @property {() => void} [scan]                 open the QR scanner overlay
  * @property {() => void} [switchWallet]         open the wallet picker
  * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
  * @property {boolean} [hasVmAddress]            gates Contracts: an address on any chain whose descriptor advertises DEPLOY (BTC / LTC / DOGE today)
@@ -350,8 +348,7 @@ export function buildCommands(ctx) {
     // ---- Trade: DEX / cross-chain flows ---------------------------------
     // Ungated here: 'trade-coinpay' SETTLES an order that already matched, which
     // is a payment the user owes - one seed spans shells, so a match made on web
-    // can come due on a phone whose build has no DEX. Templates only prefill the
-    // Action queue, which every build has.
+    // can come due on a phone whose build has no DEX.
     list.push(
         ...(hasDex ? [
             { id: 'trade-swap', category: 'Trade', title: t('palette.tradeSwap.title'), subtitle: t('palette.tradeSwap.subtitle'), keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
@@ -361,8 +358,7 @@ export function buildCommands(ctx) {
         ...(hasDex ? [
             { id: 'trade-xchain-swap', category: 'Trade', title: t('palette.tradeXchainSwap.title'), subtitle: t('palette.tradeXchainSwap.subtitle'), keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
             { id: 'trade-xchain-order', category: 'Trade', title: t('palette.tradeXchainOrder.title'), subtitle: t('palette.tradeXchainOrder.subtitle'), keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
-        ] : []),
-        { id: 'trade-xchain-templates', category: 'Trade', title: t('palette.tradeXchainTemplates.title'), subtitle: t('palette.tradeXchainTemplates.subtitle'), keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
+        ] : [])
     );
 
     // ---- Sign: message / signature / PSBT -------------------------------
@@ -373,9 +369,6 @@ export function buildCommands(ctx) {
     );
 
     // ---- Wallet verbs (only when the shell wires the handler) -----------
-    if (typeof ctx.scan === 'function') {
-        list.push({ id: 'wallet-scan', category: 'Wallet', title: t('scan.scannerAlt'), subtitle: t('palette.walletScan.subtitle'), keywords: ['qr', 'camera', 'scan'], Icon: Icon.ScanIcon, run: () => ctx.scan() });
-    }
     if (typeof ctx.refresh === 'function') {
         list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => ctx.refresh() });
     }
@@ -501,8 +494,8 @@ export function sitesToCommands(sites, ctx) {
 
 // §33.2 "Settings pages". Static mirror of the Settings.jsx section list
 // (ids must match SectionDef.id there; the shell-wiring smoke pins this).
-// Sections whose visibility is conditional in Settings (accounts-addresses)
-// or that duplicate a dedicated palette entry (connected-sites) are omitted.
+// The desktop-only Updates section and sections that duplicate dedicated
+// palette entries (contacts and connected-sites) are omitted.
 const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'this-wallet', get title() { return t('settings.page.thisWallet'); }, keywords: ['wallet', 'rename', 'remove'] },
     { id: 'appearance', get title() { return t('settings.page.appearance'); }, keywords: ['theme', 'dark', 'light'] },

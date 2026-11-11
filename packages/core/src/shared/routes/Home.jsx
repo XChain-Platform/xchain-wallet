@@ -670,9 +670,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         });
     }, [balancesView, activeByChain, activeWalletId, hiddenTokens, messaging, showToast]);
 
-    // Load the wallets list once. The user picks the active one via
-    // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →
-    // the per-wallet effect below refetches everything.
+    // Load the wallets list once. The user picks the active one in Settings;
+    // setActiveWalletId makes the per-wallet effect below refetch everything.
     useEffect(() => {
         let cancelled = false;
         (async () => {

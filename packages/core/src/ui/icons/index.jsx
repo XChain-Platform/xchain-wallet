@@ -19,6 +19,7 @@
 // caps/joins (matches STROKE_PROPS exactly). The shared size variable
 // lets each control select a named icon size without overriding SVGs.
 import {
+    ArrowDownLeft as LucideArrowDownLeft,
     QrCode as LucideQrCode,
     ScanLine as LucideScanLine,
     Menu as LucideMenu,
@@ -167,6 +168,11 @@ export function SendIcon() {
 // Receive presents an address for another device to scan, so its icon is a QR code.
 export function ReceiveIcon() {
     return <LucideQrCode {...LUCIDE_PROPS} />;
+}
+
+// Incoming activity moves toward the wallet, so it uses a directional arrow.
+export function IncomingIcon() {
+    return <LucideArrowDownLeft {...LUCIDE_PROPS} data-xc-directional="" />;
 }
 
 export function CopyIcon() {
@@ -333,6 +339,7 @@ export function VerifyIcon() {
 
 const LABEL_MAP = [
     [/^send\b/, SendIcon],
+    [/^received\b|^incoming\b/, IncomingIcon],
     [/^receive\b/, ReceiveIcon],
     [/^sign\b/, SignIcon],
     [/^verify\b/, VerifyIcon],

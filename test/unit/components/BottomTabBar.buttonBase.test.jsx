@@ -14,10 +14,16 @@ import { cleanup, render } from '@testing-library/react';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import styles from '../../../packages/core/src/shared/components/BottomTabBar.module.css';
+import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
+import pseudoRtl from '../../../packages/core/src/i18n/locales/pseudo-rtl/index.js';
 
-afterEach(() => cleanup());
+afterEach(async () => {
+    cleanup();
+    await setLocale('en');
+});
 
 const BASE = [buttonStyles.btn, buttonStyles.ghost, buttonStyles.md];
+const wrap = (text) => `‏⟦${text}⟧`;
 
 describe('BottomTabBar shared button base', () => {
     it('gives all five catalogue tabs the shared Button classes', () => {
@@ -57,5 +63,23 @@ describe('BottomTabBar shared button base', () => {
         expect(jsx.indexOf("from '../../ui/Button.module.css'"))
             .toBeLessThan(jsx.indexOf("from './BottomTabBar.module.css'"));
         expect(jsx.indexOf("from '../../ui/Button.module.css'")).toBeGreaterThan(-1);
+    });
+
+    it('resolves all five labels again when the locale changes', async () => {
+        const props = {
+            currentView: 'home',
+            onSelect: () => {},
+            onOpenSettings: () => {},
+        };
+        const { container, rerender } = render(<BottomTabBar {...props} />);
+        expect(Array.from(container.querySelectorAll(`.${styles.tabLabel}`), (label) => label.textContent))
+            .toEqual(['Home', 'Send', 'Receive', 'History', 'Settings']);
+
+        registerLocale('pseudo-rtl', pseudoRtl);
+        await setLocale('pseudo-rtl');
+        rerender(<BottomTabBar {...props} />);
+
+        expect(Array.from(container.querySelectorAll(`.${styles.tabLabel}`), (label) => label.textContent))
+            .toEqual(['Home', 'Send', 'Receive', 'History', 'Settings'].map(wrap));
     });
 });

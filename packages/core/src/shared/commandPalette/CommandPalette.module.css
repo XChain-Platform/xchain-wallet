@@ -301,7 +301,7 @@
     container: wallet-menu / inline-size;
     align-items: stretch;
     justify-content: stretch;
-    max-block-size: var(--xc-viewport-h, 100vh);
+    max-block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
     padding: 0;
     background: transparent;
 }
@@ -309,8 +309,8 @@
 .panel.menuPanel {
     inline-size: 100%;
     max-inline-size: none;
-    block-size: var(--xc-viewport-h, 100vh);
-    max-block-size: var(--xc-viewport-h, 100vh);
+    block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
+    max-block-size: calc(var(--xc-viewport-h, 100vh) + env(safe-area-inset-top, 0px));
     border: 0;
     border-radius: 0;
     padding-block-end: env(safe-area-inset-bottom, 0);
@@ -426,6 +426,12 @@
     background: var(--xc-bg-muted);
     color: var(--xc-accent-text);
     font-weight: 600;
+}
+
+.walletGroupList .walletRow[data-wallet-menu-focused],
+.walletFooter .walletFooterRow[data-wallet-menu-focused] {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 .walletRowIcon {
@@ -572,5 +578,22 @@
                 display: inline-flex;
             }
         }
+    }
+}
+
+@media (forced-colors: active) {
+    .walletGroupList .walletRow,
+    .walletFooter .walletFooterRow {
+        border-color: Canvas;
+    }
+
+    .walletGroupList .walletRowActive,
+    .walletFooter .walletRowActive {
+        border-color: Highlight;
+    }
+
+    .walletGroupList .walletRow[data-wallet-menu-focused],
+    .walletFooter .walletFooterRow[data-wallet-menu-focused] {
+        outline: 2px solid Highlight;
     }
 }

@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     iconForLabel,
-    SendIcon, ReceiveIcon, SignIcon, BroadcastIcon, LockIcon, UnlockIcon,
+    SendIcon, ReceiveIcon, IncomingIcon, SignIcon, BroadcastIcon, LockIcon, UnlockIcon,
     CheckIcon, XIcon, TrashIcon, PencilIcon, PlusIcon, RefreshIcon,
     BackIcon, ForwardIcon, CopyIcon, ScanIcon, SearchIcon, FilterIcon,
     EyeIcon, UploadIcon, DownloadIcon, MigrateIcon, TokenIcon,
@@ -31,6 +31,8 @@ describe('ui/icons/iconForLabel', () => {
         ['Send', SendIcon],
         ['Send message', SendIcon],
         ['Receive', ReceiveIcon],
+        ['Received', IncomingIcon],
+        ['Incoming payment', IncomingIcon],
         ['Sign', SignIcon],
         ['Sign action', SignIcon],
         ['Broadcast', BroadcastIcon],

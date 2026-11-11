@@ -9,8 +9,11 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+    cleanup, fireEvent, render, screen, within,
+} from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
+import styles from '../../../packages/core/src/shared/commandPalette/CommandPalette.module.css';
 import {
     buildCommands,
     parseFreeformCommands,
@@ -81,8 +84,29 @@ describe('CommandPalette wallet menu surface', () => {
             'data-wallet-menu-row',
             'lock',
         );
-        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('option', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('combobox')).toHaveAttribute('placeholder', 'Search the wallet');
+    });
+
+    it('exposes catalogue groups and rows through the controlled listbox', () => {
+        renderMenu();
+        const input = screen.getByRole('combobox');
+        const listbox = screen.getByRole('listbox', { name: 'Commands' });
+        const groups = within(listbox).getAllByRole('group');
+        const home = within(listbox).getByRole('option', { name: 'Home' });
+        const settings = screen.getByRole('button', { name: 'Settings' });
+
+        expect(input).toHaveAttribute('aria-controls', listbox.id);
+        expect(groups.map((group) => group.getAttribute('aria-labelledby'))).toEqual([
+            'xc-wallet-menu-group-wallet',
+            'xc-wallet-menu-group-trade',
+            'xc-wallet-menu-group-manage',
+            'xc-wallet-menu-group-people',
+        ]);
+        expect(home).toHaveAttribute('aria-selected', 'true');
+        expect(input).toHaveAttribute('aria-activedescendant', home.id);
+        expect(listbox).not.toContainElement(settings);
+        expect(settings).not.toHaveAttribute('tabindex', '-1');
     });
 
     it('closes before catalogue and footer callbacks run', () => {
@@ -96,7 +120,7 @@ describe('CommandPalette wallet menu surface', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Send' }));
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
 
@@ -117,26 +141,87 @@ describe('CommandPalette wallet menu surface', () => {
 
     it('drops Send and Receive in signer mode', () => {
         renderMenu({ menu: { gates: { ...fullGates, isSignerMode: true } } });
-        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'History' })).toBeTruthy();
+        expect(screen.queryByRole('option', { name: 'Send' })).toBeNull();
+        expect(screen.queryByRole('option', { name: 'Receive' })).toBeNull();
+        expect(screen.getByRole('option', { name: 'History' })).toBeTruthy();
+    });
+
+    it('does not select or activate a row when the current view is outside the catalogue', () => {
+        const { menu, onClose } = renderMenu({ menu: { currentView: 'token-detail' } });
+        const input = screen.getByRole('combobox');
+
+        expect(screen.getAllByRole('option').every((row) => !row.hasAttribute('aria-current'))).toBe(true);
+        expect(input).not.toHaveAttribute('aria-activedescendant');
+        fireEvent.keyDown(input, { key: 'Enter' });
+
+        expect(onClose).not.toHaveBeenCalled();
+        expect(menu.onSelect).not.toHaveBeenCalled();
+        expect(menu.onOpenSettings).not.toHaveBeenCalled();
+        expect(menu.onLock).not.toHaveBeenCalled();
     });
 
     it('uses reading order for arrow keys and Enter', () => {
         const { menu } = renderMenu({ menu: { currentView: 'send' } });
         const input = screen.getByRole('combobox');
 
-        expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute(
+        const current = screen.getByRole('option', { name: 'Send' });
+        expect(current).toHaveAttribute(
             'data-wallet-menu-focused',
             '',
         );
+        expect(current).toHaveClass(styles.walletRowActive);
         fireEvent.keyDown(input, { key: 'ArrowDown' });
-        expect(screen.getByRole('button', { name: 'Receive' })).toHaveAttribute(
+        const focused = screen.getByRole('option', { name: 'Receive' });
+        expect(focused).toHaveAttribute(
             'data-wallet-menu-focused',
             '',
         );
+        expect(focused).not.toHaveClass(styles.walletRowActive);
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(menu.onSelect).toHaveBeenCalledWith('receive');
+    });
+
+    it('preserves the query and result selection when menu gates change', () => {
+        const commands = [
+            { id: 'first-command', category: 'Menu', title: 'First command', run: vi.fn() },
+            { id: 'second-command', category: 'Menu', title: 'Second command', run: vi.fn() },
+        ];
+        const menu = {
+            gates: fullGates,
+            currentView: 'lists',
+            onSelect: vi.fn(),
+            onOpenSettings: vi.fn(),
+        };
+        const { rerender } = render(
+            <CommandPalette open onClose={() => {}} commands={commands} menu={menu} />,
+        );
+        const input = screen.getByRole('combobox');
+
+        fireEvent.change(input, { target: { value: 'command' } });
+        fireEvent.keyDown(input, { key: 'ArrowDown' });
+        const selectedId = input.getAttribute('aria-activedescendant');
+
+        rerender(
+            <CommandPalette
+                open
+                onClose={() => {}}
+                commands={commands}
+                menu={{
+                    ...menu,
+                    gates: { ...fullGates, hasVmAddress: false, hasBtcAddress: false },
+                }}
+            />,
+        );
+
+        expect(input).toHaveValue('command');
+        expect(input).toHaveAttribute('aria-activedescendant', selectedId);
+        expect(document.getElementById(selectedId)).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('removes the hidden close button from the wide-menu tab order', () => {
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 640 });
+        renderMenu();
+        expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('tabindex', '-1');
     });
 
     it('swaps the catalogue for filtered commands and Enter runs the top hit', () => {

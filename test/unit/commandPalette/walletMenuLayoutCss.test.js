@@ -40,4 +40,37 @@ describe('wallet menu CSS layout contracts', () => {
         expect(source).toMatch(/\.input:focus\s*\{[^}]*box-shadow:\s*none;/s);
         expect(source).not.toMatch(/\.input:focus\s*\{[^}]*0 0 0 3px var\(--xc-focus-ring\)/s);
     });
+
+    it('adds the top safe-area inset back to the phone sheet height', () => {
+        const fullViewportBlockSize =
+            /calc\(var\(--xc-viewport-h, 100vh\) \+ env\(safe-area-inset-top, 0px\)\)/;
+
+        expect(source).toMatch(
+            new RegExp(`\\.overlay\\.menuOverlay\\s*\\{[^}]*max-block-size:\\s*${fullViewportBlockSize.source}`, 's'),
+        );
+        expect(source).toMatch(
+            new RegExp(
+                `\\.panel\\.menuPanel\\s*\\{[^}]*block-size:\\s*${fullViewportBlockSize.source};[^}]*max-block-size:\\s*${fullViewportBlockSize.source}`,
+                's',
+            ),
+        );
+    });
+
+    it('outlines the keyboard-focused row with the shared focus token', () => {
+        expect(source).toMatch(
+            /\.walletGroupList \.walletRow\[data-wallet-menu-focused\],[\s\S]*?\.walletFooter \.walletFooterRow\[data-wallet-menu-focused\]\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\);[^}]*outline-offset:\s*-2px;/,
+        );
+    });
+
+    it('preserves row, current-row, and keyboard-focus edges in forced colors', () => {
+        expect(source).toMatch(
+            /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRow,[\s\S]*?\.walletFooter \.walletFooterRow\s*\{[^}]*border-color:\s*Canvas;/,
+        );
+        expect(source).toMatch(
+            /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRowActive,[\s\S]*?\.walletFooter \.walletRowActive\s*\{[^}]*border-color:\s*Highlight;/,
+        );
+        expect(source).toMatch(
+            /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRow\[data-wallet-menu-focused\],[\s\S]*?\.walletFooter \.walletFooterRow\[data-wallet-menu-focused\]\s*\{[^}]*outline:\s*2px solid Highlight;/,
+        );
+    });
 });

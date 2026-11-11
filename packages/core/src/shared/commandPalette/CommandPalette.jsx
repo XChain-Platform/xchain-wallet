@@ -35,6 +35,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
 import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
+import { TIER_RAIL_MIN_PX } from '../styles/breakpoints.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/walletMenu.js';
 
@@ -108,6 +109,7 @@ export function CommandPalette({
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const [wideMenu, setWideMenu] = useState(false);
     useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
 
     const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
@@ -119,8 +121,10 @@ export function CommandPalette({
     const trimmedQuery = (query || '').trim();
     const showingWalletMenu = Boolean(menu) && !trimmedQuery;
     const currentWalletIndex = menu
-        ? Math.max(0, walletSelectableRows.findIndex((row) => row.id === menu.currentView))
+        ? walletSelectableRows.findIndex((row) => row.id === menu.currentView)
         : 0;
+    const currentWalletIndexRef = useRef(currentWalletIndex);
+    currentWalletIndexRef.current = currentWalletIndex;
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query, {
@@ -150,8 +154,32 @@ export function CommandPalette({
     useLayoutEffect(() => {
         if (!open) return;
         setQuery('');
-        setActiveIndex(currentWalletIndex);
-    }, [open, currentWalletIndex]);
+        setActiveIndex(currentWalletIndexRef.current);
+    }, [open]);
+
+    useLayoutEffect(() => {
+        if (!open || !menu) {
+            setWideMenu(false);
+            return undefined;
+        }
+        const element = dialogRef.current;
+        const measure = () => {
+            const containerWidth = element?.getBoundingClientRect?.().width || 0;
+            const viewportWidth = typeof window === 'undefined'
+                ? 0
+                : (window.innerWidth || document.documentElement?.clientWidth || 0);
+            setWideMenu((containerWidth || viewportWidth) >= TIER_RAIL_MIN_PX);
+        };
+        measure();
+        if (element && typeof ResizeObserver !== 'undefined') {
+            const observer = new ResizeObserver(measure);
+            observer.observe(element);
+            return () => observer.disconnect();
+        }
+        if (typeof window === 'undefined') return undefined;
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [open, menu]);
 
     useEffect(() => {
         if (!open) return;
@@ -227,7 +255,9 @@ export function CommandPalette({
                 break;
             case 'ArrowUp':
                 e.preventDefault();
-                setActiveIndex((i) => (selectionCount === 0 ? 0 : (i - 1 + selectionCount) % selectionCount));
+                setActiveIndex((i) => (selectionCount === 0
+                    ? 0
+                    : (i <= 0 ? selectionCount - 1 : i - 1)));
                 break;
             case 'Enter':
                 e.preventDefault();
@@ -310,7 +340,7 @@ export function CommandPalette({
                 aria-label={menu
                     ? t('walletMenu.closeMenu')
                     : t('commandPalette.commandPalette.closeCommandPalette')}
-                tabIndex={menu ? 0 : -1}
+                tabIndex={menu && !wideMenu ? 0 : -1}
             />
         </span>
     );
@@ -353,28 +383,35 @@ export function CommandPalette({
                     </>
                 )}
                 {showingWalletMenu ? (
-                    <div
-                        ref={listRef}
-                        id="xc-cmd-listbox"
-                        className={styles.walletSurface}
-                    >
-                        <div className={styles.walletGrid}>
+                    <div ref={listRef} className={styles.walletSurface}>
+                        <div
+                            id="xc-cmd-listbox"
+                            className={styles.walletGrid}
+                            role="listbox"
+                            aria-label={t('commandPalette.commandPalette.commands')}
+                        >
                             {walletGroups.map((group) => (
                                 <section
                                     key={group.id}
                                     className={styles.walletGroup}
                                     data-wallet-menu-group={group.id}
+                                    role="group"
+                                    aria-labelledby={`xc-wallet-menu-group-${group.id}`}
                                 >
-                                    <h3 className={styles.walletGroupHead}>{group.label}</h3>
-                                    {/* Safari needs an explicit list role because this class removes list styling. */}
-                                    <ul className={styles.walletGroupList} role="list">
+                                    <h3
+                                        id={`xc-wallet-menu-group-${group.id}`}
+                                        className={styles.walletGroupHead}
+                                    >
+                                        {group.label}
+                                    </h3>
+                                    <ul className={styles.walletGroupList} role="presentation">
                                         {group.rows.map((row) => {
                                             const index = walletRows.findIndex((item) => item.id === row.id);
                                             const selected = index === activeIndex;
                                             const current = row.id === menu.currentView;
                                             const RowIcon = Icon[row.icon];
                                             return (
-                                                <li key={row.id}>
+                                                <li key={row.id} role="presentation">
                                                     <button
                                                         id={`xc-wallet-menu-${row.id}`}
                                                         type="button"
@@ -382,7 +419,9 @@ export function CommandPalette({
                                                         data-index={index}
                                                         data-wallet-menu-row={row.id}
                                                         data-wallet-menu-focused={selected ? '' : undefined}
-                                                        className={`${walletButtonClass} ${styles.walletRow} ${(selected || current) ? styles.walletRowActive : ''}`}
+                                                        className={`${walletButtonClass} ${styles.walletRow} ${current ? styles.walletRowActive : ''}`}
+                                                        role="option"
+                                                        aria-selected={selected}
                                                         aria-current={current ? 'page' : undefined}
                                                         onMouseMove={() => setActiveIndex(index)}
                                                         onClick={() => selectWalletRow(row)}
@@ -414,7 +453,7 @@ export function CommandPalette({
                                         data-wallet-menu-row={row.id}
                                         data-wallet-menu-focused={selected ? '' : undefined}
                                         data-destructive={row.id === 'lock' ? 'true' : undefined}
-                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${(selected || current) ? styles.walletRowActive : ''}`}
+                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${current ? styles.walletRowActive : ''}`}
                                         aria-current={current ? 'page' : undefined}
                                         onMouseMove={() => setActiveIndex(index)}
                                         onClick={() => selectWalletRow(row)}

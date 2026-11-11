@@ -21,7 +21,9 @@ export function actionIconForAction(action) {
     const id = String(action || '').trim().toLowerCase().replaceAll('_', '-');
     switch (id) {
         case 'send':             return <Icon.SendIcon />;
-        case 'receive':          return <Icon.ReceiveIcon />;
+        case 'receive':
+        case 'received':
+        case 'incoming':         return <Icon.IncomingIcon />;
         case 'issue':
         case 'issuance':         return <Icon.PlusIcon />;
         case 'mint':             return <Icon.TokenIcon />;

@@ -72,7 +72,6 @@ describe('buildCommands', () => {
         const actions = {
             lock: vi.fn(),
             refresh: vi.fn(),
-            scan: vi.fn(),
             switchWallet: vi.fn(),
             openHelp: vi.fn(),
         };
@@ -151,6 +150,22 @@ describe('buildCommands', () => {
         ]) {
             expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
         }
+    });
+
+    it('returns exactly one Scan navigation destination row when searching for Scan', () => {
+        const commands = buildCommands({ navigate() {}, scan() {} });
+        const destinationRows = filterCommands(commands, 'scan')
+            .filter((command) => ['nav-scan', 'wallet-scan'].includes(command.id));
+
+        expect(destinationRows.map((command) => command.id)).toEqual(['nav-scan']);
+    });
+
+    it('returns exactly one Cross-chain navigation destination row when searching for Cross-chain', () => {
+        const commands = buildCommands({ navigate() {} });
+        const destinationRows = filterCommands(commands, 'cross')
+            .filter((command) => ['nav-cross-chain-templates', 'trade-xchain-templates'].includes(command.id));
+
+        expect(destinationRows.map((command) => command.id)).toEqual(['nav-cross-chain-templates']);
     });
 
     it('marks integrated menu search sources without changing base categories', () => {
@@ -300,23 +315,19 @@ describe('buildCommands', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();
         expect(findById(bare, 'wallet-refresh')).toBeUndefined();
-        expect(findById(bare, 'wallet-scan')).toBeUndefined();
         expect(findById(bare, 'wallet-switch')).toBeUndefined();
     });
 
     it('wires verb commands to the supplied handlers', () => {
         const lock = vi.fn();
         const refresh = vi.fn();
-        const scan = vi.fn();
         const switchWallet = vi.fn();
-        const commands = buildCommands({ navigate() {}, lock, refresh, scan, switchWallet });
+        const commands = buildCommands({ navigate() {}, lock, refresh, switchWallet });
         findById(commands, 'wallet-lock').run();
         findById(commands, 'wallet-refresh').run();
-        findById(commands, 'wallet-scan').run();
         findById(commands, 'wallet-switch').run();
         expect(lock).toHaveBeenCalledOnce();
         expect(refresh).toHaveBeenCalledOnce();
-        expect(scan).toHaveBeenCalledOnce();
         expect(switchWallet).toHaveBeenCalledOnce();
         expect(findById(commands, 'wallet-lock')).toMatchObject({
             title: 'Lock wallet',
@@ -378,7 +389,7 @@ describe('buildCommands', () => {
         expect(ids).toEqual(expect.arrayContaining([
             'nav-send',
             'nav-receive',
-            'wallet-scan',
+            'nav-scan',
             'nav-home',
             'nav-history',
             'nav-markets',

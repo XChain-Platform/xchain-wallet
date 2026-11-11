@@ -28,8 +28,6 @@ function tabRow(id) {
     };
 }
 
-const TABS = TAB_BAR_DESTINATIONS.map(tabRow);
-
 function activeTabFor(currentView, tabs) {
     const section = ROUTE_NAV_SECTIONS[currentView];
     return tabs.some((tab) => tab.id === section) ? section : null;
@@ -56,7 +54,9 @@ export function BottomTabBar({
     isSignerMode = false,
 }) {
     const [rovingTab, setRovingTab] = useState(null);
-    const tabs = TABS.filter((tab) => walletMenuRowVisible(tab, { isSignerMode }));
+    const tabs = TAB_BAR_DESTINATIONS
+        .map(tabRow)
+        .filter((tab) => walletMenuRowVisible(tab, { isSignerMode }));
     const activeTab = activeTabFor(currentView, tabs);
     const tabIds = tabs.map((tab) => tab.id);
     const tabStop = rovingTab && tabIds.includes(rovingTab)

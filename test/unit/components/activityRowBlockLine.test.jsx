@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { ActivityRow, actionIconForAction } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
 import rowStyles from '../../../packages/core/src/shared/components/ActivityRow.module.css';
+import { ReceiveIcon } from '../../../packages/core/src/ui/icons/index.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { EntryRow } from '../../../packages/core/src/shared/routes/HistoryEntryRow.jsx';
 
@@ -90,6 +91,29 @@ describe('ActivityRow block line', () => {
         expect(icon?.querySelector('svg[data-xc-icon]')).not.toBeNull();
         expect(css).toMatch(/\.actionIcon\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-sm\)/s);
         expect(css).toMatch(/\.labelLine\s*\{[^}]*gap:\s*var\(--xc-space-1\)/s);
+    });
+
+    it('uses an incoming arrow for received activity and a QR code for the Receive action', () => {
+        const { container } = render(
+            <>
+                <ActivityRow
+                    chainId="bitcoin-regtest"
+                    tick="BTC"
+                    isNative
+                    label="Received"
+                    actionIcon={actionIconForAction('receive')}
+                    amount="+0.01 BTC"
+                    status="confirmed"
+                    onClick={vi.fn()}
+                />
+                <span data-testid="receive-action"><ReceiveIcon /></span>
+            </>,
+        );
+
+        const activityIcon = container.querySelector(`.${rowStyles.actionIcon}`);
+        expect(activityIcon?.querySelector('.lucide-arrow-down-left')).not.toBeNull();
+        expect(activityIcon?.querySelector('.lucide-qr-code')).toBeNull();
+        expect(screen.getByTestId('receive-action').querySelector('.lucide-qr-code')).not.toBeNull();
     });
 
     it('formats one translated block for a confirmed History row and none for a pending row', () => {
