@@ -66,9 +66,9 @@ describe('top-level destination map', () => {
         expect(isNavSurfaceDestination(null, 'sidebar')).toBe(false);
     });
 
-    it('gives the tab bar its four thumb-row tabs and nothing from More', () => {
-        expect([...TAB_BAR_DESTINATIONS]).toEqual(['home', 'history', 'send', 'scan']);
-        for (const id of ['receive', 'settings', 'contacts', 'messaging']) {
+    it('gives the tab bar its five catalogue destinations', () => {
+        expect([...TAB_BAR_DESTINATIONS]).toEqual(['home', 'send', 'receive', 'history', 'settings']);
+        for (const id of ['scan', 'contacts', 'messaging']) {
             expect(isNavSurfaceDestination(id, 'tabBar'), id).toBe(false);
         }
     });
@@ -85,7 +85,7 @@ describe('PageHeader Back by layout', () => {
         expect(screen.queryByRole('button', BACK)).toBeNull();
     });
 
-    it.each(['token-detail', 'action-detail', 'connected-sites', 'wallet-details', 'menu', 'send-picker'])(
+    it.each(['token-detail', 'action-detail', 'connected-sites', 'wallet-details', 'send-picker'])(
         'shows Back on deeper screen %s with the sidebar',
         (id) => {
             renderAt('sidebar', id);
@@ -98,7 +98,7 @@ describe('PageHeader Back by layout', () => {
         expect(screen.queryByRole('button', BACK)).toBeNull();
     });
 
-    it.each(['settings', 'receive', 'contacts', 'messaging', 'markets', 'token-detail'])(
+    it.each(['contacts', 'messaging', 'markets', 'token-detail'])(
         'shows Back on %s with the tab bar',
         (id) => {
             renderAt('tabBar', id);
@@ -215,7 +215,7 @@ describe('nav surfaces render from the shared map', () => {
     it('BottomTabBar tabs follow the tab bar destination list', () => {
         const { container } = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
         const ids = [...container.querySelectorAll('[data-bottom-tab]')].map((el) => el.dataset.bottomTab);
-        expect(ids).toEqual([...TAB_BAR_DESTINATIONS, 'more']);
+        expect(ids).toEqual([...TAB_BAR_DESTINATIONS]);
     });
 });
 
@@ -262,7 +262,7 @@ describe('layout wiring', () => {
             expect(screen.getByRole('navigation', { name: 'Tab bar stub' })).toBeInTheDocument();
             expect(screen.queryByRole('button', BACK)).toBeNull();
             rerender(<Shell view="settings" />);
-            expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+            expect(screen.queryByRole('button', BACK)).toBeNull();
             rerender(<Shell view="contacts" />);
             expect(screen.getByRole('button', BACK)).toBeInTheDocument();
         } finally {

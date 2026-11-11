@@ -54,7 +54,7 @@ assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites'],
 // --- 3. Settings footer button gets aria-current ------------------------
 
 assert.ok(
-    /onOpenSettings\s*\?[\s\S]*?activeItem === 'settings'[\s\S]*?aria-current=\{activeItem === 'settings' \? 'page' : undefined\}/.test(navSrc),
+    /onOpenSettings\s*\?[\s\S]*?activeItem === settingsItem\.id[\s\S]*?aria-current=\{activeItem === settingsItem\.id \? 'page' : undefined\}/.test(navSrc),
     'LeftNav Settings button receives aria-current="page" when on the settings route',
 );
 

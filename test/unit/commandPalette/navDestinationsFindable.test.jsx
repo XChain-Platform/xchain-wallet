@@ -14,7 +14,6 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
 import { navItem } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { NAV_SURFACE_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
-import { t } from '../../../packages/core/src/i18n/index.js';
 
 const SYNONYMS = {
     home: ['overview', 'balances'],
@@ -34,7 +33,6 @@ const SYNONYMS = {
 };
 
 function labelFor(id) {
-    if (id === 'settings') return t('home.settings');
     return navItem(id).label;
 }
 

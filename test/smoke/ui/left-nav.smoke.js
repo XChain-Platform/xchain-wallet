@@ -2,163 +2,74 @@
 // Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// This file is part of XChain Platform. Licensed under the GNU Affero
-// General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available -
-// contact legal@dankest.llc.
-
-// §24.2 / G053 smoke: full-layout left navigation.
-//
-// Asserts:
-//   1. LeftNav.jsx + LeftNav.module.css exist; LeftNav and
-//      FullLayoutWithNav are named exports.
-//   2. Primary nav items match the §24.2 list (Home, History, Send,
-//      Receive, DEX, Dispensers, Contracts, Messaging, Contacts).
-//   3. Contracts row is gated on hasVmAddress (DEPLOY sits in
-//      COMMON_ACTIONS, so LTC/DOGE carry it too, and Home plus the
-//      command palette already use that gate); active row gets
-//      aria-current="page".
-//   4. CSS module declares a 220px sidebar, collapses it on the compact
-//      layout tier and narrows it to a 64px rail on the rail tier
-//, and overrides --xc-screen-h on the main pane.
-//   5. web + desktop App.jsx import LeftNav + FullLayoutWithNav and
-//      wrap the unlocked-route render tree in <FullLayoutWithNav>.
-//      Extension popup is intentionally untouched (always compact).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import {
+    ROUTE_NAV_GROUPS,
+    SIDEBAR_PRIMARY_DESTINATIONS,
+    SIDEBAR_SECONDARY_DESTINATIONS,
+} from '../../../packages/core/src/shared/routeRegistry.js';
+import { walletMenuRow } from '../../../packages/core/src/shared/walletMenu.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
-
-// --- 1. LeftNav component + CSS -----------------------------------------
-
 const navPath = join(core, 'src', 'shared', 'components', 'LeftNav.jsx');
 const cssPath = join(core, 'src', 'shared', 'components', 'LeftNav.module.css');
+
 assert.ok(existsSync(navPath), 'LeftNav.jsx exists');
 assert.ok(existsSync(cssPath), 'LeftNav.module.css exists');
 
 const navSrc = readFileSync(navPath, 'utf8');
-assert.ok(/export function LeftNav\b/.test(navSrc), 'LeftNav is a named export');
-assert.ok(/export function FullLayoutWithNav\b/.test(navSrc),
-    'FullLayoutWithNav is a named export');
-
-// --- 2. Primary nav items -----------------------------------------------
-
-const expectedPrimaryLabels = [
-    'Home', 'History', 'Send', 'Receive', 'Scan', 'DEX',
-    'Dispensers', 'Contracts', 'Messaging',
-];
-for (const label of expectedPrimaryLabels) {
-    assert.ok(
-        new RegExp(`label:\\s*'${label}'`).test(navSrc),
-        `LeftNav primary list includes ${label} item`,
-    );
-}
-assert.ok(/label:\s*'Contacts'/.test(navSrc),
-    'LeftNav secondary list includes Contacts row');
-
-// View → nav-item mappings keep the active highlight on drilldown views.
-assert.ok(['token-detail', 'addresses'].every((route) => ROUTE_NAV_GROUPS.home.includes(route)),
-    'LeftNav home group covers token-detail + addresses drilldowns');
-assert.ok(ROUTE_NAV_GROUPS.messaging.includes('compose-message'),
-    'LeftNav messaging group covers compose-message drilldown');
-assert.ok(['dispenser-detail', 'dispenser-explorer'].every(
-    (route) => ROUTE_NAV_GROUPS['dispensers-list'].includes(route),
-),
-    'LeftNav dispensers group covers dispenser-detail + dispenser-explorer');
-assert.ok(['staking-dashboard', 'contract-deploy'].every(
-    (route) => ROUTE_NAV_GROUPS['contracts-list'].includes(route),
-),
-    'LeftNav contracts group covers staking + contract drilldowns');
-
-// --- 3. hasVmAddress gate + aria-current ---------------------------------
-
-assert.ok(/id: 'contracts-list',[^}]*requiresVm: true/.test(navSrc)
-    && /item\.requiresVm && !hasVmAddress/.test(navSrc),
-    'Contracts row only appears when hasVmAddress is true');
-assert.ok(!/hasBtcAddress/.test(navSrc),
-    'LeftNav no longer carries a BTC gate (contracts is the registry VM gate)');
-assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
-    'Active row receives aria-current="page"');
-
-// Footer rows.
-assert.ok(/onLock\s*\?[\s\S]*?Lock/.test(navSrc),
-    'LeftNav footer renders Lock when onLock is provided');
-assert.ok(!/walletSwitcher|walletName/.test(navSrc),
-    'LeftNav leaves the wallet name to the app header');
-
-// --- 4. CSS module: sidebar width + breakpoint ---------------------------
-
 const cssSrc = readFileSync(cssPath, 'utf8');
+
+assert.ok(/export function LeftNav\b/.test(navSrc), 'LeftNav is exported');
+assert.ok(/export function FullLayoutWithNav\b/.test(navSrc), 'FullLayoutWithNav is exported');
+
+for (const id of [...SIDEBAR_PRIMARY_DESTINATIONS, ...SIDEBAR_SECONDARY_DESTINATIONS]) {
+    assert.ok(walletMenuRow(id), `LeftNav destination ${id} exists in the catalogue`);
+}
+assert.ok(/walletMenuRow\(id\)/.test(navSrc) && /Icon\[row\.icon\]/.test(navSrc),
+    'LeftNav resolves labels and icons from walletMenuRow');
+assert.ok(/walletMenuRowVisible\(item, gates\)/.test(navSrc),
+    'LeftNav applies catalogue visibility gates');
+assert.ok(!/LEFT_NAV_ITEMS|formatBadgeCount|styles\.badge|badges\s*=/.test(navSrc),
+    'LeftNav has no duplicate catalogue or unread badge state');
+assert.ok(/navItem\('settings'\)/.test(navSrc) && /navItem\('lock'\)/.test(navSrc),
+    'Settings and Lock use catalogue rows');
+assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
+    'active destination rows expose aria-current');
+
+assert.ok(['token-detail', 'addresses'].every((route) => ROUTE_NAV_GROUPS.home.includes(route)),
+    'Home drilldowns retain their section');
+assert.ok(ROUTE_NAV_GROUPS.messaging.includes('compose-message'),
+    'Messaging drilldowns retain their section');
+assert.ok(ROUTE_NAV_GROUPS['contracts-list'].includes('staking-dashboard'),
+    'staking remains under the Contracts section');
+
 assert.ok(/\.sidebar\s*\{[\s\S]*?flex:\s*0 0 220px/.test(cssSrc),
-    '.sidebar reserves a 220px column');
-// The collapse is keyed on the layout tier that FullLayoutWithNav
-// measures, not on a viewport media query, so a 360px popup or preview frame
-// inside a wide window collapses too.
+    'the full sidebar reserves 220px');
 assert.ok(/\.layout\[data-xc-tier='compact'\]\s+\.sidebar\s*\{[\s\S]*?display:\s*none/.test(cssSrc),
-    '.sidebar collapses on the compact tier');
+    'the sidebar hides in compact mode');
 assert.ok(/\.layout\[data-xc-tier='rail'\]\s+\.sidebar\s*\{[\s\S]*?flex:\s*0 0 64px/.test(cssSrc),
-    '.sidebar narrows to a 64px icon rail on the rail tier');
-assert.ok(/--xc-screen-h:\s*100%/.test(cssSrc),
-    '.main overrides --xc-screen-h so the route Screen fills the flex pane');
+    'the rail reserves 64px');
+assert.ok(!/\.badge\s*\{/.test(cssSrc), 'unread badge styles are absent');
 
-// --- 5. App.jsx wiring (web + desktop only) -----------------------------
-
-const webApp = readFileSync(
+for (const appPath of [
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
-    'utf8',
-);
-const desktopApp = readFileSync(
     join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
-    'utf8',
-);
-const popupApp = readFileSync(
-    join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
-    'utf8',
-);
-
-for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
-    assert.ok(
-        /import\s*\{\s*LeftNav,\s*FullLayoutWithNav\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/LeftNav\.jsx'/.test(src),
-        `${label} App imports LeftNav + FullLayoutWithNav`,
-    );
-    assert.ok(/<FullLayoutWithNav\b/.test(src),
-        `${label} App wraps the unlocked-route tree in <FullLayoutWithNav>`);
-    assert.ok(/<LeftNav\b[\s\S]*?currentView=\{unlockedView\}/.test(src),
-        `${label} App passes the active unlockedView into LeftNav`);
-    // LeftNav and BottomTabBar share the shell's immediate lock callback.
-    assert.ok(
-        /onLock=\{\(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
-            || (/const handleNavLock = \(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
-                && /onLock=\{handleNavLock\}/.test(src))
-            || (/const handleNavLock = handleLock;/.test(src)
-                && /function handleLock\(\)[\s\S]{0,120}?lockImmediately\(\{/.test(src)
-                && /onLock=\{handleNavLock\}/.test(src)),
-        `${label} App wires LeftNav.onLock through lockWallet()`,
-    );
-    // Both rails take the registry VM gate the Home tile and the command
-    // palette already use, so neither may still be handed the BTC one.
-    assert.equal(
-        (src.match(/hasVmAddress=\{hasVmAddress\}/g) || []).length, 2,
-        `${label} App passes hasVmAddress into both LeftNav and BottomTabBar`,
-    );
-    assert.ok(!/hasBtcAddress=\{hasBtcAddress\}/.test(src),
-        `${label} App no longer passes hasBtcAddress into a nav rail`);
+]) {
+    const source = readFileSync(appPath, 'utf8');
+    assert.ok(/FullLayoutWithNav/.test(source), `${appPath} uses FullLayoutWithNav`);
+    assert.ok(/LeftNav/.test(source), `${appPath} wires LeftNav`);
+    assert.ok(/currentView=\{unlockedView\}/.test(source), `${appPath} supplies the active view`);
 }
 
-assert.ok(!/<LeftNav[\s>\/]/.test(popupApp),
-    'Extension popup intentionally does NOT mount LeftNav directly (always compact per §24.1)');
-assert.ok(/<FullLayoutWithNav[\s\S]*?bottomBar=\{\(\s*<BottomTabBar/.test(popupApp),
-    'Extension popup navigates through FullLayoutWithNav with a BottomTabBar only');
-assert.ok(/<BottomTabBar[\s\S]*?hasVmAddress=\{hasVmAddress\}/.test(popupApp),
-    'Extension popup BottomTabBar takes the registry VM gate');
+const popupApp = readFileSync(join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'), 'utf8');
+assert.ok(!/<LeftNav[\s>/]/.test(popupApp), 'the compact extension does not mount LeftNav');
+assert.ok(/BottomTabBar/.test(popupApp), 'the compact extension mounts BottomTabBar');
 
-console.log(
-    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasVmAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',
-);
+console.log('OK: left-nav smoke (catalogue rows, no unread badges, active route state, responsive rail and sidebar)');

@@ -131,7 +131,7 @@ describe('shared components at a 320px viewport', () => {
     it('renders every BottomTabBar label without ellipsis', () => {
         renderNarrow(<BottomTabBar currentView="home" onSelect={() => {}} />);
 
-        for (const label of ['Home', 'History', 'Send', 'Scan', 'More']) {
+        for (const label of ['Home', 'Send', 'Receive', 'History', 'Settings']) {
             expect(screen.getByRole('button', { name: label })).toHaveTextContent(label);
         }
         const labelRule = ruleBody(css.bottomTabs, '.tabLabel');

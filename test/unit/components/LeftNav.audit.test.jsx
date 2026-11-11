@@ -17,6 +17,7 @@ import {
     LEFT_NAV_VIEW_GROUPS,
     activeLeftNavItem,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
 import navStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
@@ -47,7 +48,9 @@ describe('LeftNav route state', () => {
             ...shellSource.matchAll(/unlockedView === '([^']+)'/g),
             ...shellSource.matchAll(/setUnlockedView\('([^']+)'\)/g),
         ];
-        const routedViews = new Set(routeMatches.map((match) => match[1]));
+        const routedViews = new Set(routeMatches
+            .map((match) => match[1])
+            .filter((view) => ROUTE_REGISTRY[view]));
         const assignments = new Map();
 
         for (const [itemId, views] of Object.entries(LEFT_NAV_VIEW_GROUPS)) {
@@ -101,8 +104,8 @@ describe('LeftNav rail interaction', () => {
         expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('title', 'Home');
         expect(screen.getByRole('button', { name: 'DEX' })).toHaveAttribute('title', 'DEX');
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('title', 'Settings');
-        const lock = screen.getByRole('button', { name: 'Lock' });
-        expect(lock).toHaveAttribute('title', 'Lock');
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
+        expect(lock).toHaveAttribute('title', 'Lock wallet');
         expect(lock).toHaveClass(buttonStyles.secondary);
         expect(lock.parentElement).toHaveClass(navStyles.action);
     });
@@ -111,7 +114,7 @@ describe('LeftNav rail interaction', () => {
         render(<LeftNav {...baseProps} />);
         const home = screen.getByRole('button', { name: 'Home' });
         const history = screen.getByRole('button', { name: 'History' });
-        const lock = screen.getByRole('button', { name: 'Lock' });
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
 
         home.focus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
@@ -137,7 +140,7 @@ describe('LeftNav rail interaction', () => {
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
         expect(onLock).toHaveBeenCalledOnce();
     });

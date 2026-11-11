@@ -1,16 +1,6 @@
-/* §24.3 / G054: bottom-tab bar + bottom-sheet drawer. The bar is
-   thumb-reachable on mobile-portrait viewports; the sheet floats above
-   the route content with a dimmed scrim. */
+/* Compact wallet navigation. */
 
 .bar {
-    /* Anchored to the wallet's layout container (FullLayoutWithNav `.layout`,
-       which is `position: relative` and constrained to --xc-screen-h). On a
-       real narrow viewport the layout fills the viewport, so the bar still
-       sits at the bottom edge; in framed dev preview the bar pins to the
-       frame bottom instead of the surrounding viewport. Switching from
-       `position: fixed` avoids the dev-preview mismatch where the bar is
-       rendered outside the frame but its 56px slot still steals layout
-       space inside the frame. */
     position: absolute;
     inset-inline-start: calc(0px - env(safe-area-inset-left, 0px));
     inset-inline-end: calc(0px - env(safe-area-inset-right, 0px));
@@ -21,39 +11,29 @@
     background: var(--xc-surface-raised);
     border-top: 1px solid var(--xc-border);
     z-index: var(--xc-z-sticky);
-    /* Fill the cutout gutters while keeping tabs and the home indicator clear. */
     padding-inline-start: env(safe-area-inset-left, 0);
     padding-inline-end: env(safe-area-inset-right, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
 }
 
-/* Off while the on-screen keyboard is up (web/src/platform/keyboardViewport.js
-   sets the attribute on iOS, where the keyboard overlays the page): the
-   bar would sit on the keyboard and take the room the focused field needs. */
 :global(html[data-xc-keyboard='open']) .bar {
     display: none;
 }
 
-/* BottomTabBar.jsx puts Button's btn, ghost and md classes beside .tab and
-   .sheetItem. The base hover and press rules outrank a single class and paint
-   --xc-button-hover-bg, so each surface names the fill it keeps: none on a tab,
-   the surface tone on a sheet row. Both stay square-cornered. A build chunk
-   can also place the Button sheet after this one, where its single-class rules
-   would win on order (a slate fill, white bold labels, rounded corners), so the
-   tab rules are scoped under .bar and the row rules under .sheetList to
-   outrank the base in any sheet order. */
 .bar .tab {
     --xc-button-hover-bg: transparent;
-    /* The tab's zero-width edge keeps its currentColor on hover, as before the base. */
     --xc-button-hover-border: currentColor;
     flex: 1 1 0;
     min-width: 0;
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    overflow: hidden;
     background: transparent;
     border: 0;
     border-radius: 0;
@@ -61,20 +41,9 @@
     font: inherit;
     font-size: var(--xc-text-xs);
     cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    overflow: hidden;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
 }
 
-/* The base press rule dims and nudges a button; a tab and a sheet row keep
-   still under the finger, as they do without the base. The scoped pair
-   outranks the base press rule in any sheet order. */
-.bar .tab:active:not(:disabled),
-.sheetList .sheetItem:active:not(:disabled),
-.tab:active:not(:disabled),
-.sheetItem:active:not(:disabled) {
+.bar .tab:active:not(:disabled) {
     filter: none;
     transform: none;
 }
@@ -97,19 +66,6 @@
     width: var(--xc-icon-md);
     height: var(--xc-icon-md);
     flex: 0 0 auto;
-    position: relative;
-}
-
-/* Unread dot on the "More" tab: messaging lives in the sheet, so this is the
-   only at-a-glance unread cue while the sheet is collapsed. */
-.tabDot {
-    position: absolute;
-    top: -1px;
-    inset-inline-end: -1px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--xc-accent-primary, #0b84ff);
 }
 
 .tabLabel {
@@ -119,140 +75,16 @@
     line-height: 1.1;
     text-align: center;
     white-space: normal;
-    overflow-wrap: normal;
     word-break: normal;
 }
 
-.sheetTitle {
-    min-width: 0;
-    margin: 0;
-    font-size: var(--xc-text-lg);
-    line-height: 1.25;
-    overflow-wrap: anywhere;
-}
-
-.sheetList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.sheetList .sheetItem {
-    --xc-button-hover-bg: var(--xc-surface);
-    --xc-button-hover-border: var(--xc-control-border);
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    color: var(--xc-text);
-    font: inherit;
-    font-size: var(--xc-text-md);
-    text-align: start;
-    cursor: pointer;
-}
-
-.sheetList .sheetItem:hover,
-.sheetList .sheetItem:focus-visible {
-    background: var(--xc-surface);
-}
-
-.sheetList .sheetItem:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
-}
-
-/* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
-   specificity 0,3,0) zeroes the row border, so these rules name the list and
-   item attributes to outrank it. A row keeps a 1px transparent border at rest
-   (the row is border-box, so its size is unchanged) and draws it in the control
-   border colour on hover, so the near-white hover fill has a real edge. Keyboard
-   focus keeps its 2px accent ring. */
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item] {
-    border: 1px solid transparent;
-}
-
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
-    border-color: var(--xc-control-border);
-}
-
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
-}
-
-/* Forced colors uses the selection colour for both interactive outlines. */
-@media (forced-colors: active) {
-    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
-        border-color: Highlight;
-    }
-
-    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
-        outline-color: Highlight;
-    }
-}
-
-.sheetList .sheetItemActive {
-    color: var(--xc-accent-text, var(--xc-text));
-    font-weight: 600;
-}
-
-.sheetIcon {
-    --xc-icon-size: var(--xc-icon-md);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-icon-md);
-    height: var(--xc-icon-md);
-    flex: 0 0 auto;
-}
-
-/* Take the row's free width so the count badge sits flush right. */
-.sheetLabel {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-/* Unread count pill on a sheet row (e.g. Messaging). */
-.sheetBadge {
-    /* Centre the count in the pill; as a plain block its line box sat at
-       the top of the taller pill. */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    box-sizing: border-box;
-    min-width: var(--xc-badge-height-sm);
-    height: var(--xc-badge-height-sm);
-    padding: 0 var(--xc-badge-padding-inline-sm);
-    border-radius: var(--xc-badge-radius);
-    background: var(--xc-accent-primary, #0b84ff);
-    color: var(--xc-on-accent);
-    font-size: var(--xc-badge-font-size-sm);
-    font-weight: var(--xc-badge-font-weight);
-    line-height: 1;
-    text-align: center;
-}
-
-.sheetDivider {
-    border-top: 1px solid var(--xc-border);
-    margin: var(--xc-space-2) var(--xc-space-3);
-}
-
 @media (prefers-contrast: more) {
-    .bar .tabActive,
-    .sheetList .sheetItemActive {
+    .bar .tabActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
     }
 }
 
-/* A shorter row leaves room for route content on landscape phones without
-   reducing the tab buttons below the shared pointer-target floor. */
 @media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         min-height: 2.75rem;

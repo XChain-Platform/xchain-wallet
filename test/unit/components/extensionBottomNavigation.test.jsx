@@ -11,25 +11,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 const popupAppSource = readFileSync(
     join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
-// The More sheet is an OverlaySurface sheet, so its padding lives there.
-const overlayCss = readFileSync(
-    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'OverlaySurface.module.css'),
-    'utf8',
-);
-
-function NavigationHarness({ initialView = 'home', onLock = () => {} }) {
+function NavigationHarness({ initialView = 'home' }) {
     const [view, setView] = useState(initialView);
     return (
         <>
@@ -37,11 +27,7 @@ function NavigationHarness({ initialView = 'home', onLock = () => {} }) {
             <BottomTabBar
                 currentView={view}
                 onSelect={setView}
-                onLock={onLock}
-                onOpenWalletPicker={() => setView('wallet-picker')}
                 onOpenSettings={() => setView('settings')}
-                hasVmAddress
-                hasDexSurface
             />
         </>
     );
@@ -62,57 +48,32 @@ describe('extension bottom navigation', () => {
     });
 
     it.each([
+        ['Home', 'home'],
+        ['Send', 'send'],
         ['Receive', 'receive'],
-        ['DEX', 'markets'],
-        ['Dispensers', 'dispensers-list'],
-        ['Contracts', 'contracts-list'],
-        ['Messaging', 'messaging'],
-        ['Contacts', 'contacts'],
-        ['Lists', 'lists'],
-        ['Payments due', 'obligations'],
-        ['Switch wallet', 'wallet-picker'],
+        ['History', 'history'],
         ['Settings', 'settings'],
-    ])('routes the More entry %s to %s', (label, expectedView) => {
+    ])('routes the %s tab to %s', (label, expectedView) => {
         render(<NavigationHarness />);
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
         fireEvent.click(screen.getByRole('button', { name: label }));
         expect(screen.getByTestId('current-view')).toHaveTextContent(expectedView);
     });
 
-    it('labels and pads the More sheet consistently', () => {
-        const onLock = vi.fn();
-        render(<NavigationHarness onLock={onLock} />);
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-
-        const sheet = screen.getByRole('dialog', { name: 'More' });
-        expect(sheet).toContainElement(screen.getByRole('heading', { name: 'More', level: 2 }));
-        expect(overlayCss).toMatch(
-            /\.sheet \.body\s*\{[^}]*padding-bottom:\s*calc\(var\(--xc-space-4\) \+ env\(safe-area-inset-bottom, 0px\)\)/,
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
-        expect(onLock).toHaveBeenCalledOnce();
-    });
-
-    it('follows the current view in primary tabs and More destinations', () => {
+    it('follows the current view across all five tabs', () => {
         render(<NavigationHarness initialView="history" />);
         expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-current', 'page');
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-current', 'page');
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Messaging' }));
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        expect(screen.getByRole('button', { name: 'Messaging' })).toHaveAttribute('aria-current', 'page');
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
     });
 
     it.each(['contacts', 'account-picker'])(
-        'leaves the bar tabs unmarked for the %s destination, which has no primary tab',
+        'leaves the bar tabs unmarked for the %s destination',
         (initialView) => {
             render(<NavigationHarness initialView={initialView} />);
-            expect(screen.getByRole('button', { name: 'More' }))
-                .not.toHaveAttribute('aria-current');
             expect(screen.getByRole('button', { name: 'Home' }))
                 .not.toHaveAttribute('aria-current');
         },

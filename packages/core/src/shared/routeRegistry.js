@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { WALLET_TAB_BAR_IDS } from './walletMenu.js';
+
 const GROUPED_ROUTES = {
     home: [
         ['home', 'Home'],
-        ['menu', 'MenuRoute'],
         ['alerts', 'AlertsRoute'],
         ['actions', 'ActionsMenu', { entries: [] }],
         ['token-detail', 'TokenDetail'],
@@ -263,8 +264,7 @@ export const SIDEBAR_SECONDARY_DESTINATIONS = [
 
 export const SIDEBAR_FOOTER_DESTINATIONS = ['settings'];
 
-// The More tab opens a sheet rather than a route, so it has no entry here.
-export const TAB_BAR_DESTINATIONS = ['home', 'history', 'send', 'scan'];
+export const TAB_BAR_DESTINATIONS = WALLET_TAB_BAR_IDS;
 
 export const NAV_SURFACE_DESTINATIONS = {
     sidebar: [

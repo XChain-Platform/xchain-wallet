@@ -17,7 +17,9 @@ import {
     HIDDEN_ROUTE_IDS,
     ROUTE_NAV_GROUPS,
     ROUTE_REGISTRY,
+    TAB_BAR_DESTINATIONS,
 } from '../../packages/core/src/shared/routeRegistry.js';
+import { WALLET_TAB_BAR_IDS } from '../../packages/core/src/shared/walletMenu.js';
 
 afterEach(() => {
     cleanup();
@@ -95,6 +97,12 @@ describe('route registry consistency', () => {
             ...HIDDEN_ROUTE_IDS,
         ].sort();
         expect(classified).toEqual(Object.keys(ROUTE_REGISTRY).sort());
+    });
+
+    it('uses the catalogue tab ids and omits the retired menu route', () => {
+        expect(TAB_BAR_DESTINATIONS).toBe(WALLET_TAB_BAR_IDS);
+        expect(ROUTE_REGISTRY.menu).toBeUndefined();
+        expect(Object.values(ROUTE_NAV_GROUPS).flat()).not.toContain('menu');
     });
 });
 

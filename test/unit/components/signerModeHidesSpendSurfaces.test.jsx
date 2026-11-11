@@ -36,7 +36,7 @@
 // The positive cases matter as much as the negative ones: a gate that
 // removed Send from every wallet would also make this file green.
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 
@@ -46,10 +46,6 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -86,19 +82,15 @@ describe('LeftNav: the primary rail honours signer mode', () => {
 });
 
 describe('BottomTabBar: the thumb row honours signer mode', () => {
-    it('offers Send in the tab row and Receive in the More sheet by default', () => {
+    it('offers Send and Receive as tabs by default', () => {
         render(<BottomTabBar {...navProps} />);
         expect(screen.getByRole('button', { name: /Send/ })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /More/ }));
         expect(screen.getByRole('button', { name: /Receive/ })).toBeInTheDocument();
     });
 
     it('offers neither once the wallet is a signer', () => {
         render(<BottomTabBar {...navProps} isSignerMode />);
         expect(screen.queryByRole('button', { name: /Send/ })).toBeNull();
-        // Receive lives behind "More", so the sheet has to be opened before
-        // its absence means anything.
-        fireEvent.click(screen.getByRole('button', { name: /More/ }));
         expect(screen.queryByRole('button', { name: /Receive/ })).toBeNull();
         expect(screen.getByRole('button', { name: /Home/ })).toBeInTheDocument();
     });

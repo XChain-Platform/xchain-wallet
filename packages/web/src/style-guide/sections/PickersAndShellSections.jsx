@@ -17,7 +17,6 @@ import { EntryRow } from '@xchain-wallet/core/shared/routes/HistoryEntryRow.jsx'
 import { HomeTabs } from '@xchain-wallet/core/shared/components/HomeTabs.jsx';
 import { LeftNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
-import { HeaderActionMenu } from '@xchain-wallet/core/shared/components/HeaderActionMenu.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 import { RAW_BALANCES } from './sharedComponentExamples.jsx';
 import {
@@ -222,20 +221,19 @@ export function ShellNavigationSection() {
             id="shell-navigation"
             title="Navigation"
             tag="CANONICAL · shell"
-            kicker="The three ways the shell reaches every screen: the left rail on wide windows, the tab bar with its More sheet on phones, and the header menu that collects the actions a narrow header cannot hold."
+            kicker="The shell uses a catalogue-backed left rail on wide layouts, a five-tab bar on phones, and the wallet menu for the complete destination list."
         >
             <Guidance
-                what={<><code>LeftNav</code> and <code>BottomTabBar</code> take the same <code>currentView</code>, <code>onSelect</code> and capability flags (<code>hasDexSurface</code>, <code>hasVmAddress</code>, <code>isSignerMode</code>), so a destination is present in both or neither. <code>HeaderActionMenu</code> is the overflow menu in the app header.</>}
+                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The tab bar exposes Home, Send, Receive, History and Settings, while the rail keeps its wider shortcut list.</>}
                 when={<>Mounted once by the shell layout, never by a route.</>}
                 whenNot={<>In-page navigation: Tabs and SegmentedControl.</>}
                 doRule={<>✓ Remove a destination the build lacks instead of disabling it</>}
                 dontRule={<>✗ Add a destination to one component and not the other</>}
-                supersedes={<>Source: <code>LeftNav.jsx</code>, <code>BottomTabBar.jsx</code>, <code>HeaderActionMenu.jsx</code> in <code>shared/components</code>.</>}
+                supersedes={<>Source: <code>walletMenu.js</code>, <code>LeftNav.jsx</code> and <code>BottomTabBar.jsx</code> in <code>shared</code>.</>}
             />
             <Markup>
 {`<LeftNav currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} onCommandPalette={openPalette} />
-<BottomTabBar currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} />
-<HeaderActionMenu onScan={scan} onCommandPalette={openPalette} onMore={more} />`}
+<BottomTabBar currentView={view} onSelect={setView} onOpenSettings={openSettings} isSignerMode={isSignerMode} />`}
             </Markup>
             <LiveExample label="LeftNav" minHeight={420} padded={false}>
                 <PartsExampleProvider>
@@ -247,13 +245,8 @@ export function ShellNavigationSection() {
             <LiveExample label="BottomTabBar" padded={false}>
                 <PartsExampleProvider>
                     <div style={{ ...frame, height: 96 }}>
-                        <BottomTabBar currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} onOpenWalletPicker={noop} onCommandPalette={noop} />
+                        <BottomTabBar currentView={view} onSelect={setView} onOpenSettings={noop} />
                     </div>
-                </PartsExampleProvider>
-            </LiveExample>
-            <LiveExample label="HeaderActionMenu" minHeight={220}>
-                <PartsExampleProvider>
-                    <HeaderActionMenu onCommandPalette={noop} onScan={noop} onManageAddresses={noop} onViewAddress={noop} onMore={noop} />
                 </PartsExampleProvider>
             </LiveExample>
         </Section>

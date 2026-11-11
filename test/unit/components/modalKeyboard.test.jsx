@@ -243,45 +243,26 @@ describe('GatedFileViewer keyboard contract', () => {
     });
 });
 
-describe('BottomTabBar modal sheet keyboard contract', () => {
-    it('focuses the first choice, wraps Tab, and returns focus to More on Escape', async () => {
-        render(
-            <>
-                <button type="button">Outside sheet</button>
-                <BottomTabBar
-                    currentView="home"
-                    onSelect={() => {}}
-                    onLock={() => {}}
-                />
-            </>,
-        );
-        const more = screen.getByRole('button', { name: 'More' });
-        more.focus();
-        fireEvent.click(more);
-        await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
-        const first = screen.getByRole('button', { name: 'Close more navigation' });
-        const last = screen.getByRole('button', { name: 'Lock wallet' });
+describe('BottomTabBar keyboard contract', () => {
+    it('moves roving focus without opening a modal', () => {
+        render(<BottomTabBar currentView="home" onSelect={() => {}} />);
+        const home = screen.getByRole('button', { name: 'Home' });
+        const send = screen.getByRole('button', { name: 'Send' });
+        home.focus();
 
-        expect(screen.getByRole('button', { name: 'Outside sheet' })).toHaveAttribute('inert');
-        expect(first).toHaveFocus();
-        last.focus();
-        fireEvent.keyDown(last, { key: 'Tab' });
-        expect(first).toHaveFocus();
-        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
-        expect(last).toHaveFocus();
-        fireEvent.keyDown(window, { key: 'Escape' });
-        await act(async () => {});
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
+        fireEvent.keyDown(home, { key: 'ArrowRight' });
+
+        expect(send).toHaveFocus();
+        expect(screen.queryByRole('dialog')).toBeNull();
     });
 
     it('runs one navigation action for one Enter activation', () => {
         const onSelect = vi.fn();
         render(<BottomTabBar currentView="home" onSelect={onSelect} />);
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
         activateFromKeyboard(screen.getByRole('button', { name: 'Receive' }));
 
         expect(onSelect).toHaveBeenCalledOnce();
+        expect(onSelect).toHaveBeenCalledWith('receive');
     });
 });

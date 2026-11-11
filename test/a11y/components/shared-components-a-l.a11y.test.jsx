@@ -219,7 +219,7 @@ const fixtures = [
         <BalancesUncheckedState onRetry={noop} onReceive={noop} />
     )],
     ['BottomTabBar', () => (
-        <BottomTabBar currentView="home" onSelect={noop} onLock={noop} onOpenSettings={noop} />
+        <BottomTabBar currentView="home" onSelect={noop} onOpenSettings={noop} />
     )],
     ['CollectiblesView', () => withMessaging(
         <CollectiblesView rows={[{
@@ -385,8 +385,6 @@ const fixtures = [
             onSelect={noop}
             onLock={noop}
             onOpenSettings={noop}
-            walletName="Primary wallet"
-            onOpenWalletPicker={noop}
         />
     )],
     ['ListPickerScreen', () => (

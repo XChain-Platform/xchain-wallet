@@ -19,6 +19,7 @@ import {
     SIDEBAR_PRIMARY_DESTINATIONS,
     SIDEBAR_SECONDARY_DESTINATIONS,
 } from '../routeRegistry.js';
+import { walletMenuRow, walletMenuRowVisible } from '../walletMenu.js';
 import { NavSurfaceContext } from './navSurface.js';
 import {
     NoticesRouteContext,
@@ -63,43 +64,23 @@ const NAV_ROW_BUTTON = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
-// Labels and icons for the nav rows, shared with BottomTabBar's thumb row.
-// Which rows exist, and in what order, comes from the destination lists in
-// routeRegistry.js, which PageHeader also reads to decide where Back is
-// redundant.
-const LEFT_NAV_ITEMS = [
-    { id: 'home', get label() { return t('home.title'); }, Icon: Icon.HomeIcon },
-    { id: 'history', get label() { return t('history.title'); }, Icon: Icon.HistoryIcon },
-    { id: 'send', get label() { return t('send.title'); }, Icon: Icon.SendIcon, spendable: true },
-    { id: 'receive', get label() { return t('home.receive'); }, Icon: Icon.ReceiveIcon, spendable: true },
-    { id: 'scan', get label() { return t('scan.title'); }, Icon: Icon.ScanIcon },
-    { id: 'markets', get label() { return t('nav.dex'); }, Icon: Icon.MarketIcon, requiresDex: true },
-    { id: 'market-activity', get label() { return t('nav.marketplace'); }, Icon: Icon.LineChartIcon, requiresDex: true },
-    { id: 'dispensers-list', get label() { return t('routes.addressList.dispensers'); }, Icon: Icon.DollarIcon },
-    { id: 'contracts-list', get label() { return t('home.contracts'); }, Icon: Icon.ContractIcon, requiresVm: true },
-    { id: 'messaging', get label() { return t('home.messaging'); }, Icon: Icon.MessageIcon },
-    { id: 'contacts', get label() { return t('components.contactsPickerScreen.contacts'); }, Icon: Icon.UsersIcon },
-    { id: 'lists', get label() { return t('nav.lists'); }, Icon: Icon.TokenListIcon },
-    // PC-15: COINPAY obligations queue; badge = payable pending count.
-    { id: 'obligations', get label() { return t('nav.paymentsDue'); }, Icon: Icon.ClockIcon },
-];
-
 /** The label and icon row for a nav destination id. */
-export const navItem = (id) => LEFT_NAV_ITEMS.find((row) => row.id === id);
+export const navItem = (id) => {
+    const row = walletMenuRow(id);
+    if (!row) return undefined;
+    return {
+        ...row,
+        label: t(row.labelKey),
+        Icon: Icon[row.icon],
+    };
+};
 
 export function activeLeftNavItem(currentView) {
     return ROUTE_NAV_SECTIONS[currentView] || 'home';
 }
 
-// Sheet rows use the same section match as the desktop sidebar.
 export function isNavItemActive(itemId, currentView) {
     return itemId === activeLeftNavItem(currentView);
-}
-
-// Compact nav badge label: a count capped at "99+" so a large unread total
-// never blows out the pill width.
-export function formatBadgeCount(n) {
-    return n > 99 ? '99+' : String(n);
 }
 
 /**
@@ -112,7 +93,6 @@ export function formatBadgeCount(n) {
  * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
- * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
  */
 export function LeftNav({
     currentView,
@@ -123,7 +103,6 @@ export function LeftNav({
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
-    badges = {},
 }) {
     const activeItem = activeLeftNavItem(currentView);
     // Signer mode's own hint promises "Send / receive screens
@@ -137,16 +116,14 @@ export function LeftNav({
     // same question a working one does.
     // Contracts is gated on a VM address, matching Home and the command
     // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
-    const shown = (id) => {
-        const item = navItem(id);
-        if (item.spendable && isSignerMode) return false;
-        if (item.requiresDex && !hasDexSurface) return false;
-        if (item.requiresVm && !hasVmAddress) return false;
-        return true;
-    };
-    const toRows = (ids) => ids.filter(shown).map(navItem);
+    const gates = { isSignerMode, hasDexSurface, hasVmAddress };
+    const toRows = (ids) => ids
+        .map(navItem)
+        .filter((item) => item && walletMenuRowVisible(item, gates));
     const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
     const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
+    const settingsItem = navItem('settings');
+    const lockItem = navItem('lock');
 
     const handleKeyDown = (event) => {
         const direction = {
@@ -211,11 +188,6 @@ export function LeftNav({
                                     <item.Icon />
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
-                                {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={t('components.leftNav.unread', { value: badges[item.id] })}>
-                                        {formatBadgeCount(badges[item.id])}
-                                    </span>
-                                ) : null}
                             </button>
                         </li>
                     );
@@ -239,11 +211,6 @@ export function LeftNav({
                                     <item.Icon />
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
-                                {badges[item.id] > 0 ? (
-                                    <span className={styles.badge} aria-label={t('components.leftNav.pending', { value: badges[item.id] })}>
-                                        {formatBadgeCount(badges[item.id])}
-                                    </span>
-                                ) : null}
                             </button>
                         </li>
                     );
@@ -254,15 +221,15 @@ export function LeftNav({
                 {onOpenSettings ? (
                     <button
                         type="button"
-                        className={`${NAV_ROW_BUTTON} ${activeItem === 'settings' ? styles.itemActive : ''}`}
-                        aria-current={activeItem === 'settings' ? 'page' : undefined}
-                        title={t('home.settings')}
+                        className={`${NAV_ROW_BUTTON} ${activeItem === settingsItem.id ? styles.itemActive : ''}`}
+                        aria-current={activeItem === settingsItem.id ? 'page' : undefined}
+                        title={settingsItem.label}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
-                            <Icon.GearIcon />
+                            <settingsItem.Icon />
                         </span>
-                        <span className={styles.label}>{t('home.settings')}</span>
+                        <span className={styles.label}>{settingsItem.label}</span>
                     </button>
                 ) : null}
                 {onLock ? (
@@ -270,11 +237,11 @@ export function LeftNav({
                         <Button
                             variant="secondary"
                             block
-                            icon={<Icon.LockIcon />}
-                            title={t('components.leftNav.lock')}
+                            icon={<lockItem.Icon />}
+                            title={lockItem.label}
                             onClick={onLock}
                         >
-                            <span className={styles.label}>{t('components.leftNav.lock')}</span>
+                            <span className={styles.label}>{lockItem.label}</span>
                         </Button>
                     </div>
                 ) : null}
@@ -396,8 +363,8 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             heading.tabIndex = -1;
             heading.classList.add(styles.routeFocusTarget);
             heading.focus({ preventScroll: true });
-            // A heading under an inert background (the More sheet is still
-            // closing) refuses focus; the observer below tries again.
+            // A heading under an inert overlay refuses focus; the observer
+            // below tries again when the route becomes interactive.
             return document.activeElement === heading;
         };
         if (focusHeading()) return undefined;
@@ -405,8 +372,8 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             if (focusHeading()) observer.disconnect();
         });
         observer.observe(routeBody, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert'] });
-        // The page's own background loses inert on the same frame the sheet
-        // unmounts, which is outside routeBody: watch the shell root too.
+        // The page's own background can lose inert outside routeBody, so the
+        // shell root is observed too.
         const shell = routeBody.closest('[data-xc-tier]');
         if (shell) observer.observe(shell, { attributes: true, attributeFilter: ['inert'], subtree: true });
         const stop = setTimeout(() => observer.disconnect(), 3000);
