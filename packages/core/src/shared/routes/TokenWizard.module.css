@@ -6,12 +6,6 @@
     margin: 0;
 }
 
-.stageHint {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin: 0 0 var(--xc-space-3);
-}
-
 /* The step caption owns a full row above the step content, clear of the
    cards below it. */
 .progress {
@@ -66,6 +60,17 @@
    two-line one. */
 .templateGrid .templateCard {
     align-items: flex-start;
+}
+
+.templateTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.templateIcon {
+    display: inline-flex;
+    color: var(--xc-accent-text);
 }
 
 .summary {

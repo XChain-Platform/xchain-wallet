@@ -297,8 +297,8 @@ async function onboardAndCreateLocked(page) {
     await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Token name (ticker)').fill(TICK);
     await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByLabel('Description (optional)').fill(DESCRIPTION);
-    await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
+    await main.getByLabel('Description', { exact: true }).fill(DESCRIPTION);
+    await main.getByLabel('Max mint per transaction', { exact: true }).fill(String(MAX_MINT));
 
     // The PC-06 disclosure. Deliberately NOT the "Lock this token" shortcut on
     // the same form: that sets LOCK_MAX_SUPPLY and LOCK_MINT together, and this
@@ -351,7 +351,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('CONTROL: an UNLOCKED field still edits, so ISSUE edits work at all', async () => {
             await openTokenAdmin(page, 'Mint settings');
             const form = page.getByRole('main');
-            const field = form.getByLabel('Max mint per transaction (optional)');
+            const field = form.getByLabel('Max mint per transaction', { exact: true });
             await expect(field).toBeVisible({ timeout: 30_000 });
             await field.fill(String(MAX_MINT_EDITED));
             await form.getByRole('button', { name: /^(Save|Update|Sign)/ }).first().click();

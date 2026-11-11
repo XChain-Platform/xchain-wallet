@@ -88,7 +88,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(give, { target: { value: '1.234' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(await utils.findByText('Amount can have at most 2 decimal places.'))
             .toBeInTheDocument();
@@ -101,6 +101,10 @@ describe('DispenserForm numeric validation', () => {
         const give = utils.getByLabelText(/^Give amount/);
         give.focus();
 
+        // Escrow amount carries its help tip on the label line, so Tab
+        // reaches that tip first and the field next.
+        await user.tab();
+        expect(document.activeElement.tagName).toBe('BUTTON');
         await user.tab();
         const escrow = utils.getByLabelText(/^Escrow amount/);
         expect(document.activeElement).toBe(escrow);
@@ -132,7 +136,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: 'many' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Trigger price must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -146,7 +150,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1.' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Per-fill give amount must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -172,14 +176,14 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.000000001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
         expect(utils.getByRole('alert')).toHaveTextContent('Trigger price can have at most 8 decimal places for BTC.');
 
         fireEvent.click(utils.getByLabelText('A token'));
         fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'PAY' } });
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1.1' } });
-        await waitFor(() => expect(utils.getByRole('button', { name: 'Create' })).toBeEnabled());
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        await waitFor(() => expect(utils.getByRole('button', { name: 'Create dispenser' })).toBeEnabled());
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
         expect(utils.getByRole('alert')).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -198,7 +202,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '1' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '6' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('This address holds only 5 JDOG.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -214,7 +218,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
         expect(await utils.findByText(/Each time someone sends 0.001 BTC/)).toBeInTheDocument();
 
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
@@ -230,7 +234,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.click(utils.getByLabelText('A token'));
         fireEvent.change(utils.getByLabelText('Payment token'), { target: { value: 'BAD/NAME' } });
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent(/Payment token/i);
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -247,7 +251,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.click(utils.getByRole('button', { name: /Advanced options/ }));
         fireEvent.change(utils.getByLabelText(/^Fiat amount/), { target: { value: '12.34' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Fiat pricing needs a fiat currency.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -258,9 +262,9 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.click(utils.getByRole('button', { name: /Advanced options/ }));
-        fireEvent.change(utils.getByLabelText('Priced in fiat (optional)'), { target: { value: 'USD' } });
+        fireEvent.change(utils.getByLabelText('Priced in fiat'), { target: { value: 'USD' } });
         fireEvent.change(utils.getByLabelText(/^Oracle address/), { target: { value: 'not-an-address' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
 
         expect(utils.getByRole('alert')).toHaveTextContent('Oracle address: This is not a valid Bitcoin address.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
@@ -286,7 +290,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '2' } });
 
         await act(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
             await drainMicrotasks();
         });
         expect(utils.getByText(/Each time someone sends 2 PAY/)).toBeInTheDocument();

@@ -238,6 +238,8 @@ describe('Receive QR copy and share toasts', () => {
         token.focus();
 
         await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
+        await user.tab();
         expect(document.activeElement).toBe(amount);
         fireEvent.change(amount, { target: { value: '1.25' } });
         await user.keyboard('{Enter}');

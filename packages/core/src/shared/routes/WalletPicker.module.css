@@ -139,3 +139,24 @@
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
+
+/* Wallet and account pickers: one flush list card with divider lines, rows
+   never boxed apart (U41, U58). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.listRow {
+    min-height: var(--xc-tap-min);
+    border-radius: 0;
+}

@@ -244,7 +244,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // at settlement, which is exactly what makes the buyer-side model
             // below interesting.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat (optional)').selectOption(FIAT_CODE);
+            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(FIAT_CODE);
             await main.getByLabel(/^Fiat amount/).fill(String(FIAT_AMOUNT));
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();

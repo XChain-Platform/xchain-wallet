@@ -10,7 +10,7 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
-import { Button } from './Button.jsx';
+import { FieldIconButton } from './FieldIconButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
@@ -44,8 +44,8 @@ function capContactSuggestions(matches) {
  * This component owns dropdown visibility, filtering against the live
  * input, keyboard navigation, and selection.
  *
- * Like AddressField, it can render one icon action on the label row
- * (`icon` + `onIconClick`), outside the autocomplete text box.
+ * Like AddressField, it can render one icon action inside the trailing edge
+ * of the autocomplete text box (`icon` + `onIconClick`).
  *
  * Props
  *   - value, onChange       same shape as `<Input>`; onChange fires
@@ -58,9 +58,9 @@ function capContactSuggestions(matches) {
  *   - onPaste               called first for BIP21 / WIF handling; when the
  *                             host does not consume the event, surrounding
  *                             whitespace is trimmed before insertion.
- *   - icon                  'contacts' | 'addresses'; renders the label-row
+ *   - icon                  'contacts' | 'addresses'; renders an in-field
  *                             icon button when set.
- *   - onIconClick           handler for the label-row icon button.
+ *   - onIconClick           handler for the in-field icon button.
  *   - iconLabel             accessible label override for the icon button.
  *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
@@ -174,19 +174,15 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 label={label}
                 size={size}
                 disabled={disabled}
-                labelAction={IconComponent ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
+                fieldAction={IconComponent ? (
+                    <FieldIconButton
                         icon={<IconComponent />}
+                        label={iconLabel || defaultLabel}
                         onClick={() => {
                             close();
                             onIconClick?.();
                         }}
                         disabled={disabled}
-                        aria-label={iconLabel || defaultLabel}
-                        title={iconLabel || defaultLabel}
                     />
                 ) : null}
                 dir="ltr"

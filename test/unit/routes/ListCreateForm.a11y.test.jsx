@@ -67,7 +67,7 @@ describe('ListCreateForm accessibility', () => {
             getTokenInfo: vi.fn().mockResolvedValue({ canonicalTick: 'FOUND' }),
         });
 
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'FOUND\n^123' },
         });
 

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, ListRow, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -27,12 +27,18 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { CheckIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
 import styles from './IssueTokenForm.module.css';
+import publishStyles from './GatedPublishForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/gatedPublish.js';
+import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -64,7 +70,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
-    const descriptor = chainRegistry.get(chainId);
+    const [selectedChainId, setSelectedChainId] = useState(chainId);
+    const [gateTick, setGateTick] = useState(tick);
+    const [gateOwnerAddress, setGateOwnerAddress] = useState(issuerAddress);
+    const [fromOverrideId, setFromOverrideId] = useState(/** @type {string | null} */ (null));
+    const [fromPickerOpen, setFromPickerOpen] = useState(false);
+    const [gateTokenPickerOpen, setGateTokenPickerOpen] = useState(false);
+    const [ownedTokens, setOwnedTokens] = useState(/** @type {any[] | null} */ (null));
+    const [ownedTokensError, setOwnedTokensError] = useState(/** @type {string | null} */ (null));
+    const descriptor = chainRegistry.get(selectedChainId);
     const coinTicker = descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : '';
 
     // Metadata-free floor; the real encoding-aware ceiling is computed
@@ -93,14 +107,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [gateMinAmount, setGateMinAmount] = useState('');
     const [thresholdActive, setThresholdActive] = useState(false);
     const thresholdScheduledHeight = typeof flowsLib.gateMinAmountScheduledHeight === 'function'
-        ? flowsLib.gateMinAmountScheduledHeight(chainId)
+        ? flowsLib.gateMinAmountScheduledHeight(selectedChainId)
         : null;
     useEffect(() => {
         setThresholdActive(false);
         if (thresholdScheduledHeight === null) return undefined;
         if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
         let cancelled = false;
-        messaging.getIndexerWatermark({ chainId })
+        messaging.getIndexerWatermark({ chainId: selectedChainId })
             .then((r) => {
                 if (cancelled) return;
                 const h = Number(r?.watermark);
@@ -108,7 +122,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             })
             .catch(() => { /* stays inactive; the flow gate is authoritative */ });
         return () => { cancelled = true; };
-    }, [chainId, thresholdScheduledHeight, messaging]);
+    }, [selectedChainId, thresholdScheduledHeight, messaging]);
     const [ackForever, setAckForever] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -127,6 +141,81 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (demoGuard.blocked) {
+            setOwnedTokens([{ chainId, tick, ownerAddress: issuerAddress }]);
+            return undefined;
+        }
+        if (typeof messaging.getOwnedTokens !== 'function') {
+            setOwnedTokens([{ chainId, tick, ownerAddress: issuerAddress }]);
+            return undefined;
+        }
+        let cancelled = false;
+        const calls = [];
+        for (const [ownedChainId, addresses] of Object.entries(addressesByChain)) {
+            if (!Array.isArray(addresses)) continue;
+            for (const addressRecord of addresses) {
+                const ownerAddress = typeof addressRecord?.address === 'string'
+                    ? addressRecord.address
+                    : null;
+                if (!ownerAddress) continue;
+                calls.push(
+                    messaging.getOwnedTokens({ chainId: ownedChainId, address: ownerAddress })
+                        .then((rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
+                            ...row,
+                            chainId: ownedChainId,
+                            ownerAddress,
+                        })).filter((row) => typeof row.tick === 'string' && row.tick.length > 0))
+                        .then((rows) => ({ rows, failed: false }))
+                        .catch(() => ({ rows: [], failed: true })),
+                );
+            }
+        }
+        Promise.all(calls).then((results) => {
+            if (cancelled) return;
+            const initial = { chainId, tick, ownerAddress: issuerAddress };
+            const seen = new Set();
+            const merged = [];
+            for (const row of [...results.flatMap((result) => result.rows), initial]) {
+                const key = `${row.chainId}:${row.tick}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                merged.push(row);
+            }
+            merged.sort((a, b) => a.tick.localeCompare(b.tick));
+            setOwnedTokens(merged);
+            if (results.some((result) => result.failed)) {
+                setOwnedTokensError(
+                    results.every((result) => result.failed)
+                        ? t('gatedPublish.tokens.lookupFailed')
+                        : t('gatedPublish.tokens.lookupPartial'),
+                );
+            }
+        });
+        return () => { cancelled = true; };
+    }, [addressesByChain, chainId, demoGuard.blocked, issuerAddress, messaging, tick]);
+
+    const tokenChainIds = useMemo(() => {
+        const ids = [...new Set((ownedTokens || []).map((token) => token.chainId).filter(Boolean))];
+        return ids.length > 0 ? ids : [chainId];
+    }, [ownedTokens, chainId]);
+
+    function selectGateToken(token) {
+        setSelectedChainId(token.chainId);
+        setGateTick(token.tick);
+        setGateOwnerAddress(token.ownerAddress || null);
+        setFromOverrideId(null);
+        setPackChoice('new');
+        setGateMinAmount('');
+        setFormError(null);
+    }
+
+    function handleNetworkChange(nextChainId) {
+        const tokenOnChain = (ownedTokens || []).find((token) => token.chainId === nextChainId);
+        if (tokenOnChain) selectGateToken(tokenOnChain);
+    }
+
     // Reusable packs = pack keys this wallet's vault holds for this tick.
     // (Metadata only; the raw key never leaves the background context.)
     useEffect(() => {
@@ -134,7 +223,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         setPacksError(null);
         if (typeof messaging.listGatedKeys !== 'function') { setPacks([]); return undefined; }
         let cancelled = false;
-        messaging.listGatedKeys({ walletId, chainId, gateTicker: tick })
+        messaging.listGatedKeys({ walletId, chainId: selectedChainId, gateTicker: gateTick })
             .then((rows) => { if (!cancelled) setPacks(Array.isArray(rows) ? rows : []); })
             .catch(() => {
                 if (cancelled) return;
@@ -142,7 +231,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 setPacksError('Could not load reusable packs. You can still publish with a new pack.');
             });
         return () => { cancelled = true; };
-    }, [walletId, chainId, tick, messaging]);
+    }, [walletId, selectedChainId, gateTick, messaging]);
 
     // Signing address: the token owner's address on this chain. Publishing
     // from anything else is rejected by the indexer's owner rule, so if the
@@ -150,15 +239,17 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     // guaranteed-invalid transaction.
     const fromAddress = useMemo(() => {
         if (!addressesByChain) return null;
-        const onChain = addressesByChain[chainId] || [];
-        if (issuerAddress) return onChain.find((a) => a.address === issuerAddress) || null;
+        const onChain = addressesByChain[selectedChainId] || [];
+        const override = fromOverrideId ? onChain.find((a) => a.id === fromOverrideId) : null;
+        if (override) return override;
+        if (gateOwnerAddress) return onChain.find((a) => a.address === gateOwnerAddress) || null;
         return onChain[0] || null;
-    }, [addressesByChain, chainId, issuerAddress]);
+    }, [addressesByChain, selectedChainId, fromOverrideId, gateOwnerAddress]);
     const issuerEligibility = tokenIssuerEligibility({
-        tokenInfo: { creator: issuerAddress },
+        tokenInfo: { creator: gateOwnerAddress },
         addressesByChain,
-        chainId,
-        tick,
+        chainId: selectedChainId,
+        tick: gateTick,
         sourceAddress: fromAddress?.address,
     });
     const ownerMissing = !!issuerEligibility.error;
@@ -180,14 +271,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
     const feeTiers = useMemo(
-        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
-        [chainId],
+        () => estimateNativeSendFeeTiers({ chainId: selectedChainId, chainRegistry }),
+        [selectedChainId],
     );
     const feeCustomEstimate = useMemo(
         () => (feePick.mode === 'custom'
-            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            ? customFeeEstimate({ chainId: selectedChainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
             : null),
-        [chainId, feePick],
+        [selectedChainId, feePick],
     );
     const feeEstimate = feePick.mode === 'custom' ? feeCustomEstimate : (feeTiers ? feeTiers[feePick.mode] : null);
     const feePerKb = (feeEstimate && feeEstimate.unit
@@ -203,7 +294,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             type,
             title,
             memo: memo.trim(),
-            gateTicker: tick,
+            gateTicker: gateTick,
             coin: coinTicker,
             address: fromAddress.address,
             gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
@@ -258,7 +349,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     async function handleReview(event) {
         event.preventDefault();
         if (issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            setFormError(`Wait for the wallet to verify the current owner of ${gateTick}.`);
             return;
         }
         if (issuerEligibility.error) {
@@ -268,7 +359,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
         if (!fromAddress) {
             setFormError(ownerMissing
-                ? `This wallet does not hold the owner address for ${tick}; only the token owner can publish gated files.`
+                ? `This wallet does not hold the owner address for ${gateTick}; only the token owner can publish gated files.`
                 : 'No signing address available on this network.');
             return;
         }
@@ -309,17 +400,17 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         let tokenInfo = null;
         if (typeof messaging.getTokenInfo === 'function') {
             try {
-                tokenInfo = await messaging.getTokenInfo({ chainId, tick });
+                tokenInfo = await messaging.getTokenInfo({ chainId: selectedChainId, tick: gateTick });
             } catch {
                 setFormError('Could not refresh token ownership. Check your connection and try again.');
                 return;
             }
             if (!tokenInfo?.creator) {
-                setFormError(`Could not verify that ${tick} still exists. Reopen this screen and try again.`);
+                setFormError(`Could not verify that ${gateTick} still exists. Reopen this screen and try again.`);
                 return;
             }
             if (tokenInfo.creator !== fromAddress.address) {
-                setFormError(`This wallet no longer owns ${tick}. Reopen this screen to refresh your tokens.`);
+                setFormError(`This wallet no longer owns ${gateTick}. Reopen this screen to refresh your tokens.`);
                 return;
             }
         }
@@ -338,7 +429,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 return;
             }
             try {
-                const current = await messaging.getIndexerWatermark({ chainId });
+                const current = await messaging.getIndexerWatermark({ chainId: selectedChainId });
                 const height = Number(current?.watermark);
                 if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
                     setFormError('Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
@@ -362,7 +453,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         return {
             walletId,
-            chainId,
+            chainId: selectedChainId,
             from: {
                 address: fromAddress.address,
                 publicKey: fromAddress.publicKey,
@@ -371,7 +462,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 source: fromAddress.source,
                 signerId: fromAddress.signerId,
             },
-            gateTicker: tick,
+            gateTicker: gateTick,
             name: fileMeta.name,
             type: fileMeta.type,
             title: title.trim() || undefined,
@@ -400,7 +491,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 r = await messaging.buildGatedPublishPsbtRequest(base);
             } else {
                 r = await actionConfirm.run({
-                    chainId,
+                    chainId: selectedChainId,
                     from: base.from,
                     compose: () => messaging.composeGatedPublishForConfirm(base),
                     onApprove: (prebuiltPsbt, composed) => submitConfirmed({
@@ -419,7 +510,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             if (isUserRejection(err)) return;
             const bad = err?.name === 'InvalidPasswordError';
             setFormError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
-                chainId, coinTicker, fallback: err?.message || 'Publish failed.',
+                chainId: selectedChainId, coinTicker, fallback: err?.message || 'Publish failed.',
             }));
         } finally {
             setPassword('');
@@ -427,7 +518,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     }
 
     const header = (
-        <PageHeader onBack={onBack} title={t('gatedPublish.title', { tick })} />
+        <PageHeader onBack={onBack} title={t('gatedPublish.title', { tick: gateTick })} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
@@ -438,9 +529,77 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     if (loadError) {
         return wrap(
             <FormPage
-                label={t('gatedPublish.title', { tick })}
+                label={t('gatedPublish.title', { tick: gateTick })}
                 status={<StatusMessage variant="error">{loadError}</StatusMessage>}
             />,
+        );
+    }
+
+    if (gateTokenPickerOpen) {
+        const rows = ownedTokens || [];
+        return (
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        onBack={() => setGateTokenPickerOpen(false)}
+                        title={t('gatedPublish.tokens.choose')}
+                    />
+                )}
+            >
+                <ListPage>
+                    {rows.length === 0 ? (
+                        <EmptyState
+                            title={t('gatedPublish.tokens.noneTitle')}
+                            titleAs="h3"
+                            body={t('gatedPublish.tokens.noneBody')}
+                        />
+                    ) : (
+                        <div className={publishStyles.tokenPickerCard} role="list">
+                            {rows.map((token) => {
+                                const tokenDescriptor = chainRegistry.get(token.chainId);
+                                return (
+                                    <ListRow
+                                        role="listitem"
+                                        key={`${token.chainId}:${token.tick}`}
+                                        leading={(
+                                            <TickerIcon
+                                                tick={token.tick}
+                                                chainId={token.chainId}
+                                                size={28}
+                                            />
+                                        )}
+                                        title={token.tick}
+                                        subtitle={tokenDescriptor?.displayName || token.chainId}
+                                        chevron
+                                        onClick={() => {
+                                            selectGateToken(token);
+                                            setGateTokenPickerOpen(false);
+                                        }}
+                                    />
+                                );
+                            })}
+                        </div>
+                    )}
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    if (fromPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title={t('send.fromAddress')}
+                walletId={walletId}
+                chainId={selectedChainId}
+                onChainChange={handleNetworkChange}
+                onPick={(address) => {
+                    setFromOverrideId(address.id);
+                    setFromPickerOpen(false);
+                }}
+                onBack={() => setFromPickerOpen(false)}
+            />
         );
     }
 
@@ -463,7 +622,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 hwSource={hw ? fromAddress : null}
                 hwStatus={hwStatus}
                 onHwStatusChange={({ status }) => setHwStatus(status)}
-                chainId={chainId}
+                chainId={selectedChainId}
                 getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
             />
@@ -494,7 +653,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         return wrap(
             <FormPage
                 label={t('gatedPublish.success')}
-                actions={<Button variant="primary" onClick={onBack}>{t('common.done')}</Button>}
+                actions={(
+                    <Button variant="success" icon={<CheckIcon />} onClick={onBack}>
+                        {t('common.done')}
+                    </Button>
+                )}
             >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('gatedPublish.success')}</p>
                 {result?.txid ? (
@@ -506,7 +669,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     </p>
                 ) : null}
                 <p className={styles.hint}>
-                    {t('gatedPublish.successHint.beforeToken')} {tick}{' '}
+                    {t('gatedPublish.successHint.beforeToken')} {gateTick}{' '}
                     {t('gatedPublish.successHint.afterToken')}
                 </p>
             </FormPage>,
@@ -532,23 +695,54 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={isWatcherMode ? <PlusIcon /> : <UploadIcon />}
                     loading={stage === 'submitting'}
                     disabled={issuerEligibility.pending || !!issuerEligibility.error}
                 >
-                    {isWatcherMode ? t('send.review.createUnsigned') : t('common.review')}
+                    {isWatcherMode ? t('send.review.createUnsigned') : t('palette.createPublishFile.title')}
                 </Button>
             )}
         >
+            <NetworkField
+                label={t('send.fields.chain')}
+                value={selectedChainId}
+                onChange={handleNetworkChange}
+                chainIds={tokenChainIds}
+                chainRegistry={chainRegistry}
+            />
+
+            <AddressField
+                label={t('send.fields.from')}
+                icon="addresses"
+                help={t('gatedPublish.fromHelp')}
+                value={fromAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setFromPickerOpen(true)}
+                iconLabel={t('send.fromAddress')}
+            />
+
+            <TokenField
+                label={t('send.fields.token')}
+                value={{ chainId: selectedChainId, tick: gateTick }}
+                onOpenPicker={() => setGateTokenPickerOpen(true)}
+                disabled={ownedTokens === null}
+            />
+            {ownedTokensError ? (
+                <FieldNote variant="error">{ownedTokensError}</FieldNote>
+            ) : null}
+
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {
                     bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
                 })}
-                hint={(
+                help={(
                     <>
-                        {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
-                        {t('gatedPublish.formHint.afterToken')}
+                        {t('gatedPublish.formHint.beforeToken')} <strong>{gateTick}</strong>{' '}
+                        {t('gatedPublish.formHint.afterToken')}{' '}
+                        {t('gatedPublish.permanentHint')}
                     </>
                 )}
                 aria-label={t('gatedPublish.fileToPublish')}
@@ -580,7 +774,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
             <Input
                 type="text"
-                label={t('gatedPublish.titleOptional')}
+                label={t('gatedPublish.titleField')}
+                help={t('gatedPublish.titleHelp')}
+                optional
                 enterKeyHint="next"
                 aria-label={t('gatedPublish.titleField')}
                 value={title}
@@ -590,12 +786,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             />
             <Input
                 type="text"
-                label={t('gatedPublish.memoOptional')}
+                label={t('send.memo')}
+                help={t('gatedPublish.memoHelp')}
+                optional
                 enterKeyHint={thresholdActive ? 'next' : 'go'}
                 aria-label={t('send.memo')}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                maxLength={120}
+                maxLength={MAX_MEMO_LENGTH}
                 disabled={ownerMissing}
             />
 
@@ -603,7 +801,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <>
                     <Input
                         type="text"
-                        label={t('gatedPublish.unlockThresholdOptional')}
+                        label={t('gatedPublish.unlockThreshold')}
+                        help={t('gatedPublish.thresholdHint', { tick: gateTick })}
+                        optional
                         inputMode="decimal"
                         enterKeyHint="go"
                         aria-label={t('gatedPublish.unlockThreshold')}
@@ -611,16 +811,13 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         value={gateMinAmount}
                         onChange={(e) => setGateMinAmount(e.target.value)}
                         disabled={ownerMissing}
-                        aria-describedby="gated-publish-threshold-hint"
                     />
-                    <span id="gated-publish-threshold-hint" className={styles.hint}>
-                        {t('gatedPublish.thresholdHint', { tick })}
-                    </span>
                 </>
             ) : null}
 
             <RadioGroup
                 legend={t('gatedPublish.pack')}
+                help={t('gatedPublish.pack.empty')}
                 name="pack"
                 value={packChoice}
                 onChange={(nextValue) => setPackChoice(nextValue)}
@@ -642,12 +839,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
             ) : packsError ? (
                 <FieldNote variant="error">{packsError}</FieldNote>
-            ) : packs.length === 0 ? (
-                <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
             ) : null}
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -657,9 +853,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 />
             ) : null}
 
-            <p className={styles.hint} role="note">
-                {t('gatedPublish.permanentHint')}
-            </p>
             {isWatcherMode ? (
                 <p className={styles.hint}>
                     {t('gatedPublish.watcherHint')}

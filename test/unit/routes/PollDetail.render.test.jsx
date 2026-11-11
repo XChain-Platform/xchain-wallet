@@ -51,8 +51,18 @@ describe('PollDetail rendering', () => {
         expect(await screen.findByRole('heading', { name: 'Poll #7' })).toBeInTheDocument();
         expect(screen.getByText('Choose a release channel')).toBeInTheDocument();
         expect(screen.getByText('20 blocks remaining')).toBeInTheDocument();
-        const stable = screen.getByRole('checkbox', { name: '0: Stable' });
-        const preview = screen.getByRole('checkbox', { name: '1: Preview' });
+        const network = screen.getByRole('button', { name: 'Network: Bitcoin' });
+        const from = screen.getByLabelText('From');
+        const ballot = screen.getByRole('group', { name: 'Choose up to 1 option' });
+        const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+        expect(network).toBeDisabled();
+        expect(network.compareDocumentPosition(from) & follows).toBeTruthy();
+        expect(from.compareDocumentPosition(ballot) & follows).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About From' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About ballot choices' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Vote' }).querySelector('svg')).not.toBeNull();
+        const stable = await screen.findByRole('checkbox', { name: '0: Stable' });
+        const preview = await screen.findByRole('checkbox', { name: '1: Preview' });
 
         fireEvent.click(stable);
 

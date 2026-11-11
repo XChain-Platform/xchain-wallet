@@ -36,10 +36,8 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
-// A native select cannot middle-truncate, and a full address ran under the
-// chevron at phone width, so options carry the wallet's usual first6...last6 form.
-import { truncateAddress } from '../../ui/AddressText.jsx';
+import { AddressField, AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -65,6 +63,10 @@ import {
     AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild, isActionOfferedOnChain,
 } from '../../registry/actions.js';
 import { compareDecimalStrings, sumDecimalStrings } from '../utils/amountFormat.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenListIcon } from '../../ui/icons/index.jsx';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -191,10 +193,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [rows, setRows] = useState(/** @type {Array<{id:string,action:string,paramsJson:string}>} */ ([blankRow()]));
 
     const [stage, setStage] = useState(/** @type {'compose'|'review'|'submitting'|'done'} */ ('compose'));
     const [composed, setComposed] = useState(/** @type {{command:string,subStrings:string[]}|null} */ (null));
+    const [draftCommand, setDraftCommand] = useState(/** @type {{key:string,command:string}|null} */ (null));
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
@@ -331,6 +335,31 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const draftKeyRef = useRef(draftKey);
     draftKeyRef.current = draftKey;
 
+    // BATCH quotes need the canonical COMMAND. Build it from every locally
+    // valid draft so the compose-stage Fees card follows the current rows.
+    useEffect(() => {
+        let cancelled = false;
+        let timer = null;
+        setDraftCommand(null);
+        if (stage !== 'compose' || composeError || !chainId || !fromAddress?.address) {
+            return () => { cancelled = true; };
+        }
+        const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
+        timer = setTimeout(() => {
+            Promise.resolve(messaging.buildBatchCommand({ chainId, subActions }))
+                .then((res) => {
+                    if (!cancelled && typeof res?.command === 'string' && res.command) {
+                        setDraftCommand({ key: draftKey, command: res.command });
+                    }
+                })
+                .catch(() => {});
+        }, 250);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [chainId, composeError, draftKey, fromAddress?.address, messaging, parsedRows, stage]);
+
     const clearPreReviewErrors = (rowId = null) => {
         setPreReviewError(null);
         if (rowId) {
@@ -341,6 +370,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 return next;
             });
         }
+    };
+    const handleChainChange = (cid) => {
+        clearPreReviewErrors();
+        setRowValidationErrors({});
+        setChainId(cid);
+        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
     };
     const updateRow = (i, patch) => {
         clearPreReviewErrors(rows[i]?.id);
@@ -430,7 +465,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         setComposed(null);
         try {
             const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
-            const res = await messaging.buildBatchCommand({ chainId, subActions });
+            const res = draftCommand?.key === validatedDraftKey
+                ? { command: draftCommand.command }
+                : await messaging.buildBatchCommand({ chainId, subActions });
             if (typeof res?.command !== 'string' || !res.command) throw new Error('batch.buildCommand: empty command');
             setComposed({ command: res.command, subStrings: res.command.split(';') });
         } catch (err) {
@@ -453,6 +490,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // the other caller of this same host method, is already on it.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
+    const quoteCommand = composed?.command || (draftCommand?.key === draftKey ? draftCommand.command : null);
+    const quoteActionData = useMemo(() => (quoteCommand ? {
+        action: 'BATCH',
+        params: { VERSION: '0', COMMAND: quoteCommand },
+    } : null), [quoteCommand]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
     const submitConfirmed = useConfirmSubmit({
@@ -569,6 +617,21 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
+    const feeCard = (
+        // No pay-in-native switch: xchain-indexer refuses native-fee quotes for BATCH (its fee is
+        // the sum of state-dependent sub-action fees), so the wallet cannot size that output.
+        <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} nativeSwitch={false} feeSelector={feeTiers ? (
+            <FeeSelector
+                chainId={chainId}
+                label="Network fee"
+                coinTicker={coinTicker}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
+        ) : null} />
+    );
 
     // The load error, the loading line and every done-stage panel lay out
     // through ListPage inside the Screen, the same template rhythm the
@@ -581,6 +644,24 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         );
     }
     if (!addressesByChain || !chainId) return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={handleChainChange}
+                onPick={(address) => {
+                    clearPreReviewErrors();
+                    setFromAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
 
     // Confirm page, rendered in place of the review stage; the queued rows
     // stay intact behind it, so Reject lands back on the step list.
@@ -681,11 +762,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
                             loading={stage === 'submitting'}
                             disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
                         >
-                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
+                            {isWatcherMode ? 'Create batch' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
                         </Button>
                     </>
                 )}
@@ -726,16 +807,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     </>
                 ) : null}
 
-                {feeTiers ? (
-                    <FeeSelector
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
+                {isWatcherMode ? (
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : null}
+
+                {feeCard}
 
                 {!isWatcherMode ? (
                     <SignCredentials
@@ -765,48 +841,45 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 <StatusMessage variant="error">{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
-                    Review
+                <Button type="button" variant="success" icon={<TokenListIcon />} onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
+                    Batch
                 </Button>
             )}
         >
             <details>
                 <summary>Batch limits</summary>
                 <p className={styles.hint}>
-                    Queue up to 250 actions from one address. A batch can issue one new token plus its sub-tokens,
+                    Queue up to 250 actions from one address. A batch can issue one new token plus its subtokens,
                     mint different tokens once each, and deploy one contract. It cannot contain another batch.
                     Use the dedicated publisher for FILE-gated content.
                 </p>
             </details>
             <FormSection title="Source">
-                <ChainPicker
+                <NetworkField
                     label="Network"
+                    help="The chain the whole batch is sent on. Every action in it is signed by the From address and recorded on this network."
                     value={chainId || ''}
-                    onChange={(cid) => {
-                        clearPreReviewErrors();
-                        setRowValidationErrors({});
-                        setChainId(cid);
-                        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
-                    }}
+                    onChange={handleChainChange}
                     chainIds={chainsWithAddresses}
                     chainRegistry={chainRegistry}
-                    hideNetworkKind
                 />
-                <Select
-                    label="From address"
-                    value={fromAddressId || ''}
-                    onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
-                >
-                    {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
-                    ))}
-                </Select>
+                <AddressField
+                    label="From"
+                    help="The address that signs and pays for the whole batch."
+                    icon="addresses"
+                    value={fromAddress?.address || ''}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose from address"
+                />
             </FormSection>
 
             {rows.map((row, i) => (
                 <FormSection key={row.id} title={`Action ${i + 1}`} headingLevel="h3">
                     <Select
                         label="Action"
+                        help="One sub-action included in this single BATCH transaction."
                         value={row.action || ''}
                         onChange={(e) => updateRow(i, { action: e.target.value })}
                     >
@@ -818,6 +891,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     </Select>
                     <Textarea
                         label="Params (JSON object)"
+                        help="This action's fields, entered as a JSON object."
                         rows={4}
                         value={row.paramsJson}
                         onChange={(e) => updateRow(i, { paramsJson: e.target.value })}
@@ -843,7 +917,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     onClick={addRow}
                     disabled={rows.length >= flowsLib.BATCH_MAX_COMMANDS}
                 >
-                    + Add action
+                    Add action
                 </Button>
             </div>
             {rows.length >= flowsLib.BATCH_MAX_COMMANDS ? (
@@ -851,6 +925,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
                 </p>
             ) : null}
+            {feeCard}
         </FormPage>,
     );
 }

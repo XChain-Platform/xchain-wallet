@@ -10,12 +10,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressText,
+    AddressField,
     Button,
-    ChainBadge,
     FormNotice,
     FormPage,
+    Icon,
     Input,
+    NetworkField,
     PageHeader,
     Screen,
     StatusMessage,
@@ -24,9 +25,13 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -39,7 +44,7 @@ import {
     utf8ByteLength,
 } from '../../flows/listMetaInput.js';
 import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
@@ -103,6 +108,10 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
     const signerReady = useSignerReady(walletId);
     const nativeFee = useNativeFee(coinTicker);
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -119,6 +128,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [memo, setMemo] = useState('');
+    const [fromPickerOpen, setFromPickerOpen] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
@@ -216,6 +226,27 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const trimmedMemo = memo.trim();
     const nameError = metaFieldError('name', trimmedName);
     const descriptionError = metaFieldError('description', trimmedDescription);
+    const actionParams = useMemo(() => ({
+        VERSION: '5',
+        LIST_ACTION_INDEX: listActionIndex,
+        NAME: trimmedName,
+        DESCRIPTION: trimmedDescription,
+        MEMO: trimmedMemo,
+    }), [listActionIndex, trimmedDescription, trimmedMemo, trimmedName]);
+    const quoteActionData = useMemo(() => {
+        const hasChange = trimmedName !== '' || trimmedDescription !== '';
+        const memoValid = !/[|;]/.test(memo) && !memoLengthError(trimmedMemo);
+        if (!alreadyShared || !listActionIndexValid || sdkSupported !== true || !fromAddress
+            || nameError || descriptionError || !hasChange || !memoValid) return null;
+        return { action: 'LIST', params: actionParams };
+    }, [actionParams, alreadyShared, descriptionError, fromAddress, listActionIndexValid,
+        memo, nameError, sdkSupported, trimmedDescription, trimmedMemo, trimmedName]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
     const lane = useOwnerActionLane({
         messaging,
         walletId,
@@ -252,13 +283,6 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         if (!validate()) return;
         submitInFlightRef.current = true;
         setFormError(null);
-        const params = {
-            VERSION: '5',
-            LIST_ACTION_INDEX: listActionIndex,
-            NAME: trimmedName,
-            DESCRIPTION: trimmedDescription,
-            MEMO: trimmedMemo,
-        };
         try {
             if (typeof owner === 'string' && owner) {
                 const ownerCheck = await recheckListOwner({
@@ -273,9 +297,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 }
             }
             const next = await lane.run({
-                actionData: { action: 'LIST', params },
+                actionData: { action: 'LIST', params: actionParams },
                 encoderOpts: { payFeeInNativeCoin: nativeFee.flag || undefined },
-                submitExtra: { params, payFeeInNativeCoin: nativeFee.flag },
+                submitExtra: { params: actionParams, payFeeInNativeCoin: nativeFee.flag },
             });
             setResult(next || {});
         } catch (err) {
@@ -369,8 +393,28 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         );
     }
 
-    const missingOwner = owner && !ownerRecord;
+    // Judged only once the wallet addresses have loaded, and on a picked From
+    // address, so the warning never flashes while the owner lookup settles.
+    const missingOwner = Boolean(owner && addressesByChain
+        && (!ownerRecord || (fromAddress && fromAddress.address !== owner)));
     const formDisabled = sdkSupported !== true;
+    if (fromPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    setFromAddressId(address.id);
+                    setFromPickerOpen(false);
+                    setFormError(null);
+                }}
+                onBack={() => setFromPickerOpen(false)}
+            />
+        );
+    }
     return wrap(
         <FormPage
             demoGuard={demoGuard}
@@ -385,14 +429,34 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={lane.isWatcherMode ? <Icon.SignIcon /> : <Icon.PencilIcon />}
                     loading={lane.composing}
                     disabled={formDisabled || !fromAddress || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Rename list'}
                 </Button>
             )}
         >
+            <NetworkField
+                label="Network"
+                value={chainId}
+                onChange={() => {}}
+                chainIds={[chainId]}
+                chainRegistry={chainRegistry}
+            />
+
+            <AddressField
+                label="From"
+                icon="addresses"
+                value={fromAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setFromPickerOpen(true)}
+                iconLabel="Choose source address"
+                help="Only the address that owns this list can rename it. The network refuses a rename signed from any other address."
+            />
+
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -404,14 +468,6 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <dd className={styles.detailsValue}>
                     {detail.description ? neutralizeControlText(detail.description) : 'Not set'}
                 </dd>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
-                </dd>
-                <dt className={styles.detailsLabel}>From</dt>
-                <dd className={styles.detailsValue}>
-                    {fromAddress ? <AddressText address={fromAddress.address} /> : 'Unavailable'}
-                </dd>
             </dl>
 
             {missingOwner ? (
@@ -421,7 +477,8 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             ) : null}
 
             <Input
-                label="Name (empty means unchanged)"
+                label="Name"
+                help={`Leave this empty to keep the current name. Clear sets the name to nothing on the chain. The name is public and can be at most ${LIST_META_NAME_MAX_BYTES} bytes.`}
                 hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
                 error={nameError || undefined}
                 value={name}
@@ -439,7 +496,8 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 Clear
             </Button>
             <Input
-                label="Description (empty means unchanged)"
+                label="Description"
+                help={`Leave this empty to keep the current description. Clear sets the description to nothing on the chain. The description is public and can be at most ${LIST_META_DESCRIPTION_MAX_BYTES} bytes.`}
                 hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
                 error={descriptionError || undefined}
                 value={description}
@@ -457,8 +515,10 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 Clear
             </Button>
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A note stored with this rename transaction. It is public on the chain and cannot be changed afterwards."
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -471,11 +531,23 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 </p>
             ) : null}
 
-            <NativeFeeToggle
-                {...nativeFee.toggleProps}
-                coinTicker={coinTicker}
-                disabled={formDisabled}
-            />
+            {alreadyShared ? (
+                <FeesCard
+                    chainId={chainId}
+                    quote={protocolFeeQuote}
+                    pending={protocolFeePending}
+                    feeSelector={null}
+                    tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                    value={{ mode: 'normal' }}
+                    coinTicker={coinTicker}
+                >
+                    <NativeFeeToggle
+                        {...nativeFee.toggleProps}
+                        coinTicker={coinTicker}
+                        disabled={formDisabled}
+                    />
+                </FeesCard>
+            ) : null}
 
         </FormPage>,
     );

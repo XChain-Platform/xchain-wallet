@@ -69,7 +69,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'SAFE' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'safe\u0000unsafe' },
         });
 
@@ -95,7 +95,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
         expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
-        const continueButton = screen.getByRole('button', { name: 'Continue to confirmation' });
+        const continueButton = screen.getByRole('button', { name: 'Issue token' });
         expect(continueButton).toBeDisabled();
         fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -115,15 +115,15 @@ describe('TokenWizard guided flow', () => {
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'UTILITY' },
         });
-        fireEvent.change(screen.getByLabelText('Display name (optional)'), {
+        fireEvent.change(screen.getByLabelText('Display name'), {
             target: { value: 'Useful Token' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
         fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'Membership credits' },
         });
-        fireEvent.change(screen.getByLabelText('Max mint per transaction (optional)'), {
+        fireEvent.change(screen.getByLabelText('Max mint per transaction'), {
             target: { value: '25' },
         });
 
@@ -144,7 +144,7 @@ describe('TokenWizard guided flow', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
-        expect(screen.getByLabelText('Display name (optional)').value).toBe('Useful Token');
+        expect(screen.getByLabelText('Display name').value).toBe('Useful Token');
         expect(screen.getByLabelText('Supply').value).toBe('1000');
         expect(screen.getByLabelText('Divisible (8 decimal places)').checked).toBe(true);
 
@@ -186,7 +186,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'UTILITY' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-        fireEvent.change(screen.getByLabelText('Max mint per transaction (optional)'), {
+        fireEvent.change(screen.getByLabelText('Max mint per transaction'), {
             target: { value: 'zero' },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
@@ -254,7 +254,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'LONGDESC' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: '<b>markup</b>'.repeat(700) },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
@@ -271,7 +271,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'SAFETEXT' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'safe \u202eTXT' },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
@@ -289,7 +289,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'SAFETEXT' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: hostile },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
@@ -351,7 +351,7 @@ describe('TokenWizard guided flow', () => {
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
         fireEvent.click(screen.getByRole('button', { name: /Advanced settings/i }));
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), {
@@ -376,7 +376,7 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'SWITCHED' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-        fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), {
+        fireEvent.change(screen.getByLabelText('Transfer ownership to'), {
             target: { value: 'not-an-address' },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
@@ -415,6 +415,8 @@ describe('TokenWizard guided flow', () => {
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
         const review = screen.getByRole('form', { name: 'Review token issuance' });
+        expect(screen.getByRole('button', { name: 'Issue token' })).toBeInTheDocument();
+        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
 
         fireEvent.submit(review);
         fireEvent.submit(review);

@@ -30,10 +30,11 @@ import {
     FormPage,
     FormSection,
     Icon,
+    InfoTip,
     Input,
+    NetworkField,
     Select,
     StatusMessage,
-    Switch,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -51,10 +52,19 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_COPY,
+    ROW_HINT,
+    ROW_LABEL,
+    SettingsLoadError,
+    Status,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/issue.js';
 import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -336,82 +346,84 @@ export function DisplaySection() {
     return (
         <FormPage ref={tokenListsRef} as="div" sectioned fullWidth label={t('settings.display.displaySettings')}>
             <FormSection title={t('settings.display.balanceDisplay')}>
-            <div style={ROW}>
-                <Switch
+                <ToggleRow
                     label={t('settings.display.hideSmallBalances')}
-                    description={t('settings.display.collapseBalancesBelowTheSelected')}
+                    help={t('settings.display.collapseBalancesBelowTheSelected')}
                     checked={settings.privacy?.hideSmallBalances === true}
-                    onChange={(event) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: event.target.checked } })}
+                    onChange={(checked) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: checked } })}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div style={ROW}>
-                <Switch
+                <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
+                <ToggleRow
                     label={t('settings.display.hideUnknownTokens')}
-                    description={t('settings.display.collapseUnpricedTokensWithoutA')}
+                    help={t('settings.display.collapseUnpricedTokensWithoutA')}
                     checked={settings.hideUnknownTokens === true}
-                    onChange={(event) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: event.target.checked })}
+                    onChange={(checked) => updateDisplay('hideUnknownTokens', { hideUnknownTokens: checked })}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="hideUnknownTokens" />
-            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
-                <div style={ROW_COPY}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.smallBalanceThreshold')}</span>
-                    <span style={ROW_HINT}>{t('settings.display.useEachNetworkSRelay')}</span>
+                <DisplaySaveError error={saveError} controlKey="hideUnknownTokens" />
+                <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
+                    <div style={ROW_COPY}>
+                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                            {t('settings.display.smallBalanceThreshold')}{' '}
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('settings.display.smallBalanceThreshold') })}
+                                label={t('settings.display.useEachNetworkSRelay')}
+                            />
+                        </span>
+                    </div>
+                    <Select
+                        aria-label={t('settings.display.smallBalanceThreshold')}
+                        value={settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT}
+                        onChange={(e) => updateDisplay('smallBalanceThreshold', { smallBalanceThreshold: e.target.value })}
+                    >
+                        {/* Native options remain because Select owns the listbox control, not its choices. */}
+                        <option value="dust">{t('settings.display.networkDustRecommended')}</option>
+                        <option value="0.0001">{t('settings.display.lessThan00001')}</option>
+                        <option value="0.01">{t('settings.display.lessThan001')}</option>
+                        <option value="1">{t('settings.display.lessThan1')}</option>
+                    </Select>
                 </div>
-                <Select
-                    aria-label={t('settings.display.smallBalanceThreshold')}
-                    value={settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT}
-                    onChange={(e) => updateDisplay('smallBalanceThreshold', { smallBalanceThreshold: e.target.value })}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="dust">{t('settings.display.networkDustRecommended')}</option>
-                    <option value="0.0001">{t('settings.display.lessThan00001')}</option>
-                    <option value="0.01">{t('settings.display.lessThan001')}</option>
-                    <option value="1">{t('settings.display.lessThan1')}</option>
-                </Select>
-            </div>
-            <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
-            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
-                <div style={ROW_COPY}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.balanceNumberFormat')}</span>
-                    <span style={ROW_HINT}>{t('settings.display.changeDisplayedFormattingWithoutChanging')}</span>
+                <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
+                <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
+                    <div style={ROW_COPY}>
+                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                            {t('settings.display.balanceNumberFormat')}{' '}
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('settings.display.balanceNumberFormat') })}
+                                label={t('settings.display.changeDisplayedFormattingWithoutChanging')}
+                            />
+                        </span>
+                    </div>
+                    <Select
+                        aria-label={t('settings.display.balanceNumberFormat')}
+                        value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
+                        onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
+                    >
+                        {/* Native options remain because Select owns the listbox control, not its choices. */}
+                        <option value="full">1,234.50000000</option>
+                        <option value="trim">1,234.5</option>
+                        <option value="plain">1234.50000000</option>
+                    </Select>
                 </div>
-                <Select
-                    aria-label={t('settings.display.balanceNumberFormat')}
-                    value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
-                    onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
-                >
-                    {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="full">1,234.50000000</option>
-                    <option value="trim">1,234.5</option>
-                    <option value="plain">1234.50000000</option>
-                </Select>
-            </div>
-            <DisplaySaveError error={saveError} controlKey="numberFormat" />
+                <DisplaySaveError error={saveError} controlKey="numberFormat" />
             </FormSection>
 
             <FormSection
                 title={t('settings.display.rowAffordances')}
             >
-            <div style={ROW}>
-                <Switch
+                <ToggleRow
                     label={t('settings.display.showPinButtonOnRows')}
-                    description={t('settings.display.displayAStarOnEach')}
+                    help={t('settings.display.displayAStarOnEach')}
                     checked={showPinAffordance}
-                    onChange={(event) => setPinAffordance(event.target.checked)}
+                    onChange={setPinAffordance}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
-            <div style={ROW}>
-                <Switch
+                <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
+                <ToggleRow
                     label={t('settings.display.showHideButtonOnRows')}
-                    description={t('settings.display.displayAHideAffordanceOn')}
+                    help={t('settings.display.displayAHideAffordanceOn')}
                     checked={showHideAffordance}
-                    onChange={(event) => setHideAffordance(event.target.checked)}
+                    onChange={setHideAffordance}
                 />
-            </div>
-            <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
+                <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
             </FormSection>
 
             <FormSection
@@ -422,24 +434,21 @@ export function DisplaySection() {
                 {/* A plain label: ROW_COPY carries a 280px flex basis that is a width in a row and a height in the form's column. */}
                 <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.tokenToWatch')}</span>
                 <div className={layoutStyles.watchControls}>
-                    <Select
-                        aria-label={t('settings.display.tokenChain')}
+                    <NetworkField
+                        label={t('settings.network.label')}
                         value={watchChainId}
-                        onChange={(event) => {
+                        onChange={(chainId) => {
                             watchRequestRef.current += 1;
                             setWatching(false);
-                            setWatchChainId(event.target.value);
+                            setWatchChainId(chainId);
                         }}
-                    >
-                        {/* Native options remain because Select owns the listbox control, not its choices. */}
-                        {chains.map((chain) => (
-                            <option key={chain.id} value={chain.id}>
-                                {chain.displayName}
-                            </option>
-                        ))}
-                    </Select>
+                        chainIds={chains.map((chain) => chain.id)}
+                        chainRegistry={chainRegistry}
+                    />
                     <Input
                         size="md"
+                        label={t('issue.ticker')}
+                        help={t('settings.display.tokenHelp')}
                         aria-label={t('settings.display.tokenTicker')}
                         value={watchTicker}
                         onChange={(event) => {
@@ -447,10 +456,9 @@ export function DisplaySection() {
                             setWatching(false);
                             setWatchTicker(event.target.value);
                         }}
-                        placeholder={t('issue.ticker')}
                         autoComplete="off"
                     />
-                    <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
+                    <Button type="submit" size="md" variant="success" icon={<Icon.EyeIcon />} disabled={watching}>
                         {watching ? t('settings.backup.checking') : t('settings.display.watchToken')}
                     </Button>
                 </div>
@@ -464,7 +472,7 @@ export function DisplaySection() {
                         <Button
                             size="sm"
                             variant="ghost"
-                            icon={null}
+                            icon={<Icon.TrashIcon />}
                             onClick={() => removeWatchedToken(storedKey)}
                             aria-label={t('settings.display.removeWatchedToken', { key })}
                         >
@@ -497,9 +505,7 @@ export function DisplaySection() {
                         />
                     </div>
                     {tokenQuery ? (
-                        <Button size="md" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label={t('settings.display.clearSettingsTokenSearch')}>
-                            <Icon.XIcon />
-                        </Button>
+                        <Button size="md" variant="ghost" icon={<Icon.XIcon />} onClick={clearTokenSearch} aria-label={t('settings.display.clearSettingsTokenSearch')} />
                     ) : null}
                 </div>
             ) : null}
@@ -528,32 +534,26 @@ export function DisplaySection() {
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        icon={null}
+                                        icon={<Icon.ChevronDownIcon style={{ transform: 'rotate(180deg)' }} />}
                                         onClick={() => movePin(idx, -1)}
                                         disabled={idx === 0}
                                         aria-label={t('settings.display.moveUp', { key })}
-                                    >
-                                        ↑
-                                    </Button>
+                                    />
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        icon={null}
+                                        icon={<Icon.ChevronDownIcon />}
                                         onClick={() => movePin(idx, 1)}
                                         disabled={idx === pinned.length - 1}
                                         aria-label={t('settings.display.moveDown', { key })}
-                                    >
-                                        ↓
-                                    </Button>
+                                    />
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        icon={null}
+                                        icon={<Icon.XIcon />}
                                         onClick={() => unpin(storedKey)}
                                         aria-label={t('settings.display.unpin', { key })}
-                                    >
-                                        <Icon.XIcon />
-                                    </Button>
+                                    />
                                 </div>
                             </div>
                         );
@@ -589,7 +589,7 @@ export function DisplaySection() {
                                         <Button
                                             size="sm"
                                             variant="ghost"
-                                            icon={null}
+                                            icon={<Icon.EyeIcon />}
                                             onClick={() => unhide(storedKey)}
                                             aria-label={t('settings.display.unhide', { key })}
                                         >
@@ -601,7 +601,7 @@ export function DisplaySection() {
                         })}
                         <div style={ROW}>
                             <span style={ROW_LABEL}>{hidden.length} {t('settings.display.hidden')}</span>
-                            <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
+                            <Button size="sm" variant="secondary" icon={<Icon.EyeIcon />} onClick={unhideAll}>
                                 {t('settings.display.unhideAll')}
                             </Button>
                         </div>
@@ -617,7 +617,7 @@ export function DisplaySection() {
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>{t('settings.display.savedChainFilters')}</span>
                 </div>
-                <Button size="sm" variant="secondary" icon={null} onClick={resetChainFilters}>
+                <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={resetChainFilters}>
                     {t('settings.display.resetListPreferences')}
                 </Button>
             </div>
@@ -634,7 +634,7 @@ export function DisplaySection() {
                     <span style={ROW_LABEL}>{t('settings.display.resetDisplaySettings')}</span>
                     <span style={ROW_HINT}>{t('settings.display.restoresBalanceDisplayOptionsAnd')}</span>
                 </div>
-                <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>
+                <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={resetDisplay}>
                     {t('settings.display.resetToDefaults')}
                 </Button>
             </div>

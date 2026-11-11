@@ -55,6 +55,8 @@ it('titles an onboarding step with the heading the step shows', () => {
     })).toBe('XChain Wallet - Write down your recovery phrase');
     expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'welcome' }))
         .toBe('XChain Wallet - Welcome');
+    expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'pair-partner' }))
+        .toBe('XChain Wallet - Pair an Offline Signer');
 
     const title = renderHook(() => useDocumentTitle({
         statusState: 'no-wallet',

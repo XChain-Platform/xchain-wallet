@@ -17,7 +17,7 @@
 // reads on every shell, so a privacy control here always governs something.
 
 import { useState } from 'react';
-import { Button, Input, Select } from '@xchain-wallet/core/ui';
+import { Button, Icon, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
 import { isNativeShell } from '../../nativeShell.js';
@@ -174,7 +174,7 @@ export function PrivacySection() {
                     <span style={ROW_HINT}>{t('settings.privacy.restoreThePrivacyControlsAbove')}</span>
                     <PrivacySaveError visible={saveError === 'reset'} />
                 </div>
-                <Button size="sm" variant="secondary" icon={null} onClick={resetPrivacy}>
+                <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={resetPrivacy}>
                     {t('settings.display.resetToDefaults')}
                 </Button>
             </div>
@@ -222,10 +222,8 @@ function ClipboardAutoClearRow({ settings, update }) {
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={ROW_VALUE}>
-                    {t('settings.privacy.clipboardAutoClear')}
-                </span>
-                <span style={ROW_HINT}>
-                    {t('settings.privacy.setTo0ToKeep')}
+                    {t('settings.privacy.clipboardAutoClear')}{' '}
+                    <InfoTip aria={t('settings.help.privacy.clipboardAutoClearLabel')} label={t('settings.help.privacy.clipboardAutoClear')} />
                 </span>
             </div>
             <div data-settings-control="">
@@ -279,10 +277,8 @@ function FormDraftTtlRow({ settings, update }) {
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={ROW_VALUE}>
-                    {t('settings.privacy.formDraftRetention')}
-                </span>
-                <span style={ROW_HINT}>
-                    {t('settings.privacy.keepInProgressSendAnd')}
+                    {t('settings.privacy.formDraftRetention')}{' '}
+                    <InfoTip aria={t('settings.help.privacy.formDraftRetentionLabel')} label={t('settings.help.privacy.formDraftRetention')} />
                 </span>
             </div>
             <div data-settings-control="">

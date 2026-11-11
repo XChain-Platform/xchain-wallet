@@ -84,7 +84,7 @@ function expectInsideTemplate(element) {
 async function publishList() {
     await screen.findByText('No list published yet. This will be the first.');
     fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
     await screen.findByRole('form', { name: 'Review official token list' });
     fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
     fireEvent.click(await screen.findByTestId('confirm-approve'));

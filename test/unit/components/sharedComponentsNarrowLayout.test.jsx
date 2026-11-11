@@ -203,7 +203,7 @@ describe('shared components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByRole('button', { name: 'Filter by network' }))
+        expect(screen.getByRole('button', { name: /^Filter by network/ }))
             .toHaveTextContent(networkLabel);
         const narrow = mediaBlock(css.homeFilter, '(max-width: 360px)');
         expect(ruleBody(narrow, '.bar')).toMatch(/flex-wrap:\s*wrap/);

@@ -56,8 +56,6 @@ const messages = {
 
     // Copy moved out of JSX literals by the i18n sweep.
     'home.tabs.walletView': 'Wallet view',
-    'home.tabs.sortBalances': 'Sort balances',
-    'home.tabs.24hChange': '24h change',
     'home.tabs.value': 'Value',
     'home.tabs.fundYourWallet': 'Fund your wallet',
     'home.tabs.receiveCoinsFromAnotherWallet':
@@ -94,16 +92,17 @@ const messages = {
     'home.tabs.recentActivityUnavailable': 'Recent activity is unavailable',
     'home.tabs.recentActivityUnavailableBody': 'History reads every chain again and lists every action.',
     'home.tabs.openHistory': 'See all activity',
+    'home.tabs.loadingDefiPositions': 'Loading DeFi positions…',
+    'home.tabs.defiPositionsUnavailable': 'DeFi positions are unavailable',
+    'home.tabs.defiPositionsUnavailableBody': 'Try opening this tab again when the network is available.',
     'home.tabs.noDefiPositionsYet': 'No DeFi positions yet',
     'home.tabs.stakingDispensersContractBalancesAnd':
         'Staking, dispensers, contract balances and open orders will show here.',
-    'home.tabs.synthesizedDemoActivityWillAppear':
-        'Synthesized demo activity will appear here once the demo wallet has any networks active.',
-    'home.tabs.noDefiPositions': 'No DeFi positions',
-    'home.tabs.noDemoPositionsOnThe': 'No demo positions on the selected network.',
     'home.filter.searchTokens': 'Search tokens…',
     'home.filter.searchTokensByName': 'Search tokens by name',
     'home.filter.filterByNetwork': 'Filter by network',
+    'home.filter.filterAndSort': 'Filter and sort',
+    'home.filter.sort': 'Sort',
     'home.tabs.coins': 'Coins',
     'home.tabs.tokens': 'Tokens',
     'home.tabs.nfts': 'NFTs',

@@ -131,11 +131,11 @@ describe('protocol form review accessibility', () => {
         await eachReviewMode(async (walletMode) => {
             const mounted = mount(IssueTokenForm, walletMode);
             fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'TOKEN' } });
-            fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+            fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
             // Submit waits for the ticker availability lookup to settle.
             await waitFor(() => expect(mounted.messaging.getTokenInfo).toHaveBeenCalled(), { timeout: 3000 });
             await act(async () => { await mounted.messaging.getTokenInfo.mock.results.at(-1).value; });
-            fireEvent.click(screen.getByRole('button', { name: walletMode === 'watcher' ? 'Preview' : 'Issue token' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
             return { ...mounted, reviewName: 'Review token issue' };
         });
     });
@@ -149,7 +149,7 @@ describe('protocol form review accessibility', () => {
             fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
             fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create dispenser' }));
             return { ...mounted, reviewName: 'Review dispenser' };
         });
     });
@@ -162,7 +162,7 @@ describe('protocol form review accessibility', () => {
             const amounts = screen.getAllByLabelText(/^(Amount|Amount \(BTC\))$/);
             fireEvent.change(amounts[0], { target: { value: '10' } });
             fireEvent.change(amounts[1], { target: { value: '0.001' } });
-            fireEvent.click(screen.getByRole('button', { name: walletMode === 'watcher' ? 'Preview' : 'Place order' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
             return { ...mounted, reviewName: 'Review order' };
         });
     });
@@ -179,7 +179,7 @@ describe('protocol form review accessibility', () => {
         fireEvent.change(screen.getByLabelText('Outcome 1'), { target: { value: 'No' } });
         const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
         fireEvent.change(screen.getByLabelText('Betting closes'), { target: { value: tomorrow } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review market' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open market' }));
         await auditConfirm(mounted.container);
     });
 
@@ -193,7 +193,7 @@ describe('protocol form review accessibility', () => {
             fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
             fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '1100' } });
             fireEvent.click(screen.getByRole('button', {
-                name: walletMode === 'watcher' ? 'Preview' : 'Create poll',
+                name: 'Create poll',
             }));
             return { ...mounted, reviewName: 'Review poll' };
         });

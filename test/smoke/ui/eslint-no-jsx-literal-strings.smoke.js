@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last forty-four are component props: copy shipped through them
+// The last forty-five are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -63,7 +63,7 @@ assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial
 // the smoke green and the header's claim of coverage silently false.
 const DOCUMENTED_USER_FACING_ATTRS = [
     'aria-label', 'aria-description', 'aria-roledescription', 'aria-valuetext',
-    'alt', 'title', 'placeholder', 'label', 'hint', 'caption', 'tooltip',
+    'alt', 'title', 'placeholder', 'label', 'hint', 'help', 'caption', 'tooltip',
     'heading', 'emptyText', 'actionLabel', 'backLabel',
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',

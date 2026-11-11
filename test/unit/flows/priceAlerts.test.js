@@ -53,6 +53,29 @@ describe('flows/priceAlerts', () => {
         expect(await vault.priceAlerts.count()).toBe(1);
     });
 
+    it('normalizes and saves a token alert', async () => {
+        const saved = await saveAlert({ vault, ...ALERT, tick: '  pepe.usd-1  ' });
+
+        expect(saved.tick).toBe('PEPE.USD-1');
+        expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ tick: 'PEPE.USD-1' });
+    });
+
+    it('dedupes identical token alerts after ticker normalization', async () => {
+        const first = await saveAlert({ vault, ...ALERT, tick: 'pepe' });
+        const duplicate = await saveAlert({ vault, ...ALERT, tick: ' PEPE ' });
+
+        expect(duplicate.id).toBe(first.id);
+        expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('does not dedupe the same native coin and token alert terms', async () => {
+        const coin = await saveAlert({ vault, ...ALERT });
+        const token = await saveAlert({ vault, ...ALERT, tick: 'BTC' });
+
+        expect(token.id).not.toBe(coin.id);
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
     it('does not collide across direction/target', async () => {
         await saveAlert({ vault, ...ALERT });
         await saveAlert({ vault, ...ALERT, direction: 'below' });
@@ -102,6 +125,17 @@ describe('flows/priceAlerts', () => {
             triggeredAt: null,
         });
         expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('changes and clears the ticker while editing in place', async () => {
+        const original = await saveAlert({ vault, ...ALERT, tick: 'PEPE' });
+        const changed = await saveAlert({ vault, ...ALERT, id: original.id, tick: 'doge' });
+        const cleared = await saveAlert({ vault, ...ALERT, id: original.id, tick: '   ' });
+
+        expect(changed).toMatchObject({ id: original.id, tick: 'DOGE' });
+        expect(cleared.id).toBe(original.id);
+        expect(cleared).not.toHaveProperty('tick');
+        expect(await vault.priceAlerts.get(original.id)).not.toHaveProperty('tick');
     });
 
     it('rejects an edit that would duplicate another alert', async () => {
@@ -203,6 +237,7 @@ describe('flows/priceAlerts', () => {
         await expect(saveAlert({ vault, ...ALERT, direction: 'x' })).rejects.toThrow();
         await expect(saveAlert({ vault, ...ALERT, targetFiat: 0 })).rejects.toThrow();
         await expect(saveAlert({ vault, ...ALERT, walletId: '' })).rejects.toThrow();
+        await expect(saveAlert({ vault, ...ALERT, tick: 'NOT OK!' })).rejects.toThrow('tick may only contain');
     });
 
     it('leaves an alert edited since it fired armed when markAlertTriggered carries the fired terms', async () => {

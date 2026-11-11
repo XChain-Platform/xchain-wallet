@@ -101,7 +101,7 @@ describe('SleepForm address lock chain selection', () => {
 
         expect(await screen.findByLabelText('Address to lock')).toHaveValue(BITCOIN_ADDRESS);
         fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
-        fireEvent.click(await screen.findByRole('option', { name: /^Litecoin/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Litecoin/ }));
 
         await waitFor(() => {
             expect(screen.getByLabelText('Address to lock')).toHaveValue(LITECOIN_ADDRESS);
@@ -115,7 +115,7 @@ describe('SleepForm address lock chain selection', () => {
 
         await setDurationBlocks('12');
         expect(screen.queryByText(/Locking an address/)).toBeNull();
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'wake after audit' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'wake after audit' } });
         expect(screen.getByText(/Ends at block 10,012/)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
@@ -195,9 +195,9 @@ describe('SleepForm address lock chain selection', () => {
         cleanup();
         mountSleepForm();
         await screen.findByLabelText('Address to lock');
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: `${'😀'.repeat(125)}a` } });
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
-        expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeInTheDocument();
+        expect(await screen.findByText('Memo is 251 characters; the network accepts at most 250 characters.')).toBeInTheDocument();
     });
 
     it('does not review an empty custom network fee rate', async () => {
@@ -216,12 +216,12 @@ describe('SleepForm address lock chain selection', () => {
         mountSleepForm();
 
         await setDurationBlocks('1');
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'keep me' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Blocks')).toHaveValue('1');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
+        expect(screen.getByLabelText('Memo')).toHaveValue('keep me');
         fireEvent.click(screen.getByRole('button', { name: 'Lock address' }));
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');

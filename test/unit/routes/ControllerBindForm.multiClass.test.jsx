@@ -141,18 +141,26 @@ describe('ControllerBindForm multi-class binds', () => {
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
     });
 
-    it('lists only owned tokens, ignores an unowned preset, and switches to the token owner', async () => {
+    it('opens the Token picker, lists only owned tokens, and switches to the picked token owner', async () => {
         mount({ tick: 'NOTOWNED' });
-        const token = await screen.findByLabelText('Token');
+        const token = await screen.findByRole('button', { name: /^Token:/ });
 
-        expect(Array.from(token.options).map((option) => option.value)).toEqual(['ALPHA', 'BETA']);
-        expect(token.value).toBe('ALPHA');
+        expect(token).toHaveAccessibleName(/^Token: ALPHA/);
         expect(document.body.textContent).not.toContain('does not own');
-        fireEvent.change(token, { target: { value: 'BETA' } });
+        fireEvent.click(token);
+
+        expect(await screen.findByRole('heading', { name: 'Select token' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'ALPHA' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'BETA' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'NOTOWNED' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'BETA' }));
+
+        expect(await screen.findByRole('button', { name: /^Token: BETA/ })).toBeTruthy();
         expect(await screen.findByDisplayValue(SECOND.address)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Bind token' })).toBeTruthy();
     });
 
-    it('uses target-specific labels and the Controller lock icon', async () => {
+    it('uses target-specific labels and the Controller link icon', async () => {
         const tokenView = mount({ tick: 'ALPHA' });
         const tokenButton = await screen.findByRole('button', { name: 'Bind token' });
         expect(tokenButton.querySelector('svg')).toBeTruthy();
@@ -161,5 +169,20 @@ describe('ControllerBindForm multi-class binds', () => {
         mount();
         const addressButton = await screen.findByRole('button', { name: 'Bind address' });
         expect(addressButton.querySelector('svg')).toBeTruthy();
+    });
+
+    it('puts form-specific help on From, target, and Action class and marks cooldown optional', async () => {
+        mount();
+
+        expect(await screen.findByRole('button', { name: 'About From' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About What to protect' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About Action class' })).toBeTruthy();
+        expect(screen.queryByText('How controller bindings work')).toBeNull();
+        expect(document.querySelector('details')).toBeNull();
+
+        const cooldown = screen.getByLabelText('Cooldown blocks');
+        const describedBy = cooldown.getAttribute('aria-describedby').split(' ');
+        expect(describedBy.map((id) => document.getElementById(id)?.textContent)).toContain('Optional');
+        expect(screen.queryByText(/Cooldown blocks \(optional\)/i)).toBeNull();
     });
 });

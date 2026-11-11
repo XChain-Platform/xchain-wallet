@@ -77,13 +77,11 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
     'packages/core/src/shared/routes/AttachContentForm.jsx',
     'packages/core/src/shared/routes/BatchComposerForm.jsx',
-    'packages/core/src/shared/routes/ContractFundsForm.jsx',
     'packages/core/src/shared/routes/LinkForm.jsx',
     'packages/core/src/shared/routes/ListCreateForm.jsx',
     'packages/core/src/shared/routes/ListForkForm.jsx',
     'packages/core/src/shared/routes/MultisigSigningSession.jsx',
     'packages/core/src/shared/routes/ParallelComposer.jsx',
-    'packages/core/src/shared/routes/PollDetail.jsx',
     'packages/core/src/shared/routes/ProjectRosterForm.jsx',
     'packages/core/src/shared/routes/PublishFileForm.jsx',
 ];

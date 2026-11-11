@@ -161,6 +161,15 @@ function alertText(utils) {
 }
 
 describe('message validation is visible from the primary action', () => {
+    it('explains who can read each encryption choice', async () => {
+        const utils = await openEmptyPlaintextForm(stubMessaging());
+
+        fireEvent.click(utils.getByRole('button', { name: 'About Encryption' }));
+        expect(utils.getByRole('tooltip')).toHaveTextContent(
+            'Choose who can read this message: only the recipient, you and the recipient, or anyone.',
+        );
+    });
+
     it('asks for the recipient and message when Send message is pressed', async () => {
         const utils = await openEmptyPlaintextForm(stubMessaging());
         const action = sendButton(utils);
@@ -365,14 +374,14 @@ describe('the message is funded from the active address (issue #11)', () => {
         });
         const utils = await openFilledForm(messaging);
 
-        // IconSelect is a button + listbox popover, not a native select: open
-        // it by its accessible name, then pick the Litecoin row.
+        // Network is the standard field (U59): it opens the network picker
+        // screen, whose rows are buttons named "Select <network>".
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /^Delivery network:/ }));
+            fireEvent.click(utils.getByRole('button', { name: /^Network:/ }));
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('option', { name: /^Litecoin\b/ }));
+            fireEvent.click(utils.getByRole('button', { name: /^Select Litecoin\b/ }));
             await drainMicrotasks();
         });
         await pressSend(utils);
@@ -401,5 +410,35 @@ describe('a recipient key that does not belong to the address', () => {
         expect(alertText(utils)).toMatch(/doesn't belong to their address, so nothing was signed or sent/);
         expect(alertText(utils)).not.toMatch(/Something went wrong/);
         expect(utils.queryByTestId('confirm-modal')).toBeNull();
+    });
+});
+
+describe('the compose form starts with Network, then From (U59, U60)', () => {
+    it('shows the network field, then the funding address, then the recipient, each with a help tip', async () => {
+        const utils = await openFilledForm(stubMessaging());
+        const form = utils.container.querySelector('form');
+        const network = utils.getByRole('button', { name: /^Network:/ });
+        const from = utils.getByLabelText('From');
+        const recipient = utils.getByLabelText('Address');
+        expect(from).toHaveValue(ACTIVE_ADDRESS.address);
+        expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(from.compareDocumentPosition(recipient) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // No network dropdown is left in the form.
+        expect(utils.queryByRole('button', { name: /^Delivery network:/ })).toBeNull();
+        const tips = Array.from(form.querySelectorAll('[role="tooltip"]')).map((tip) => tip.textContent);
+        expect(tips.some((text) => /sends this message and pays its network fee/.test(text))).toBe(true);
+        expect(tips.some((text) => /receives the message/.test(text))).toBe(true);
+        expect(tips.some((text) => /The text to send/.test(text))).toBe(true);
+        expect(tips.some((text) => /PNG, JPEG, GIF, WebP, PDF or plain-text file/.test(text))).toBe(true);
+    });
+
+    it('opens the own-address picker from the From field', async () => {
+        const utils = await openFilledForm(stubMessaging());
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Choose source address' }));
+            await drainMicrotasks();
+        });
+        expect(utils.getByText('From address')).toBeTruthy();
+        expect(utils.queryByLabelText('Message')).toBeNull();
     });
 });

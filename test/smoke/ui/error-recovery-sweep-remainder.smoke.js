@@ -140,7 +140,7 @@ assert.ok(
 // --- 4. AboutSection --------------------------------------------------
 
 assert.ok(
-    /import \{ Button, StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(aboutSrc),
+    /import \{[^}]*StatusMessage[^}]*\} from '@xchain-wallet\/core\/ui'/.test(aboutSrc),
     'AboutSection imports StatusMessage',
 );
 assert.equal(

@@ -104,7 +104,7 @@ async function openPaletteDestination(page, title) {
     const palette = page.getByRole('dialog', { name: 'Command palette' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
-    await palette.getByRole('option', { name: new RegExp(`^${escapeRegExp(title)}\\b`) })
+    await palette.getByRole('option', { name: new RegExp(`^${escapeRegExp(title)}\\b(?! the )`) })
         .first().click();
 }
 
@@ -377,7 +377,7 @@ test.describe('LG K51 responsive route sweep', () => {
         for (const subpage of SETTINGS_SUBPAGES) {
             await test.step(`Settings / ${subpage}`, async () => {
                 const row = page.getByRole('main').getByRole('button', {
-                    name: new RegExp(`^${escapeRegExp(subpage)}\\b`, 'i'),
+                    name: new RegExp(`^${escapeRegExp(subpage)}\\b(?! the )`, 'i'),
                 });
                 await expect(row, `Settings has no ${JSON.stringify(subpage)} row`).toBeVisible();
                 await row.click();

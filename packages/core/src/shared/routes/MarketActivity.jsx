@@ -286,10 +286,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         />
     );
 
-    const offerNames = chainNamer(offers);
-    const orderNames = chainNamer(dexOrders);
-    const saleNames = chainNamer(sales);
-    const swapNames = chainNamer(dexSwaps);
     const iconChainId = selected.chainId || defaultChainId;
     const marketSelector = (
         <Button
@@ -304,7 +300,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     <span className={styles.marketSelectorName}>{selected.displayName || tick} market</span>
                     <span className={styles.marketSelectorSub}>{tick}</span>
                 </span>
-                <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
+                <span className={styles.marketSelectorChevron} aria-hidden="true"><Icon.ForwardIcon /></span>
             </span>
         </Button>
     );
@@ -368,8 +364,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={offerNames.title(chainId, title)}
-                                                subtitle={offerNames.subtitle(chainId, remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined)}
+                                                title={title}
+                                                subtitle={remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined}
                                                 chevron={onClick ? <Icon.ForwardIcon /> : false}
                                                 onClick={onClick}
                                             />
@@ -419,7 +415,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={orderNames.title(chainId, title)}
+                                                title={title}
                                             />
                                         </li>
                                     );
@@ -463,13 +459,13 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={saleNames.title(chainId, (
+                                                title={(
                                                     <>
                                                         {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                     </>
-                                                ))}
-                                                subtitle={saleNames.subtitle(chainId, timestamp ? <RelativeTime timestamp={timestamp} /> : undefined)}
+                                                )}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );
@@ -519,8 +515,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={swapNames.title(chainId, title)}
-                                                subtitle={swapNames.subtitle(chainId, timestamp ? <RelativeTime timestamp={timestamp} /> : undefined)}
+                                                title={title}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );
@@ -541,24 +537,13 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     );
 }
 
-// A row on a section that spans several chains names its chain in its own
-// text, so identical rows from two chains read differently to a user and a
-// screen reader. A section on one chain keeps its plain text.
-function chainNamer(entries) {
-    const multi = new Set((entries || []).map((entry) => entry.chainId)).size > 1;
-    const name = (chainId) => chainRegistry.get(chainId)?.displayName || String(chainId).split('-')[0];
-    return {
-        title: (chainId, text) => (multi ? <>{text} on {name(chainId)}</> : text),
-        subtitle: (chainId, content) => {
-            if (!multi) return content;
-            return content ? <>{name(chainId)} · {content}</> : undefined;
-        },
-    };
-}
+// Rows never name their network in text (the token icon's chain badge shows
+// it, and the icon's accessible name says it), so identical rows from two
+// chains still read differently to a screen reader.
 
 function LoadMoreActivity({ onClick, label }) {
     return (
-        <Button type="button" variant="secondary" onClick={onClick} aria-label={label}>
+        <Button type="button" variant="secondary" icon={<Icon.ChevronDownIcon />} onClick={onClick} aria-label={label}>
             {label}
         </Button>
     );

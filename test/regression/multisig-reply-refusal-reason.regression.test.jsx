@@ -70,7 +70,9 @@ function session(overrides = {}) {
 }
 
 function replyChunks(active, pubkey) {
+    // A cosigner fingerprints the request sessionRef, which names the session chain.
     const fingerprint = fingerprintSessionRef({
+        chainId: active.chainId,
         scheme: active.scheme,
         threshold: active.threshold,
         cosignerPubkeys: active.cosignerPubkeys,

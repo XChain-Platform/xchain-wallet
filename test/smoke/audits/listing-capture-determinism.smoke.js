@@ -171,7 +171,6 @@ assert.equal(demoPrices['bitcoin-mainnet'].sparkline, null,
     + 'second source for the same line is a second thing to keep stable');
 
 for (const [label, ...parts] of [
-    ['TotalBalanceHero', 'packages', 'core', 'src', 'shared', 'components', 'TotalBalanceHero.jsx'],
     ['PortfolioChart', 'packages', 'core', 'src', 'shared', 'components', 'PortfolioChart.jsx'],
 ]) {
     const src = read(...parts);
@@ -180,6 +179,17 @@ for (const [label, ...parts] of [
         + 'oracle. A demo wallet that asks a third party for a quote is both a network request '
         + 'the demo promises not to make and a coin flip in every capture.');
 }
+// The hero reads prices through its wallet source (U64), and the demo source
+// answers the price read from the fixtures, so a demo wallet still never asks
+// the live oracle for a quote.
+const heroSrc = read('packages', 'core', 'src', 'shared', 'components', 'TotalBalanceHero.jsx');
+assert.match(heroSrc, /const source = useWalletSource\(walletId\);/,
+    'TotalBalanceHero must read through the wallet source so a demo wallet gets the demo source');
+assert.match(heroSrc, /messaging\.getNativePricesRequest\(/,
+    'TotalBalanceHero must ask its source for prices');
+assert.match(read('packages', 'core', 'src', 'flows', 'demoFixtures.js'),
+    /getNativePricesRequest: async \(\{ chainIds \} = \{\}\) => \(\{\s*\n\s*prices: synthesizeDemoNativePrices\(/,
+    'the demo source must answer the price read from the demo fixtures, never the live oracle');
 assert.match(read('packages', 'core', 'src', 'shared', 'components', 'HomeTabs.jsx'),
     /<TotalBalanceHero\s*\n\s*rows=\{portfolioRows\}\s*\n\s*walletId=\{walletId\}/,
     'HomeTabs must pass walletId to the hero, or the hero cannot tell a demo wallet apart '

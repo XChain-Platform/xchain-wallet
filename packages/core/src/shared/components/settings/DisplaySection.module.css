@@ -18,7 +18,7 @@
 .watchControls {
     display: grid;
     grid-template-columns: minmax(6rem, 1fr) minmax(5rem, 0.6fr) auto;
-    align-items: center;
+    align-items: end;
     gap: var(--xc-space-2);
     min-width: 0;
 }

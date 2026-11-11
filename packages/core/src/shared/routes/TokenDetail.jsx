@@ -25,6 +25,7 @@ import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
+import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
@@ -97,7 +98,7 @@ function callAsync(callback) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
- * @param {() => void} [props.onBuy]                 navigate to the selected asset's market view
+ * @param {() => void} [props.onBuy]                 navigate to the selected asset's exchange flow
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
@@ -141,6 +142,7 @@ function TokenDetailContent({
     const networkActionsAvailable = !networkOffline;
     const variant = screenVariantFor(shell);
     const tabsId = useId();
+    const [revealedExtra, setRevealedExtra] = useState(null);
     const [resolvedQuantity, setResolvedQuantity] = useState(
         typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
     );
@@ -182,6 +184,14 @@ function TokenDetailContent({
     // A fiat value itself needs a mainnet holding, whatever the settings say.
     const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
     const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
+    const tokenAlertRate = useTickFiatRate({
+        chainCoin: descriptor?.coin,
+        tick,
+        nativeTicker: tickerForCoin(descriptor?.coin),
+        fiatCurrency,
+        allowCoingeckoFallback: Boolean(settings) && settings?.privacy?.priceDataEnabled !== false,
+        enabled: !isNative && fiatSupported && fiatAllowed,
+    });
     // A kept rate from before a failed refresh says how old it is, so it
     // never reads as a current price.
     const staleFiatRateAsOf = fiatRateStale === true && displayFiatRate != null
@@ -227,22 +237,13 @@ function TokenDetailContent({
         issuerAddress: isNative ? null : (assetInfo?.creator || null),
     });
 
-    // The More info tile opens the secondary per-asset actions; an empty
-    // list drops the tile so it never opens an empty menu.
-    const moreItems = [
-        typeof onViewActivity === 'function'
-            ? { id: 'history', label: 'History', icon: <Icon.HistoryIcon />, onSelect: onViewActivity }
-            : null,
-        !isNative && typeof onManageToken === 'function' && isTokenOwner
-            ? { id: 'manage', label: 'Manage', icon: <Icon.GearIcon />, onSelect: onManageToken }
-            : null,
-    ].filter(Boolean);
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const moreTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     const moreMenuRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const moreMenuId = useId();
     const sendReasonId = useId();
+    const receiveReasonId = useId();
     const tradeReasonId = useId();
     const closeMore = useCallback((restoreFocus = false) => {
         setMoreOpen(false);
@@ -252,7 +253,7 @@ function TokenDetailContent({
     useBackHandler(moreOpen ? () => closeMore(true) : undefined);
     useEffect(() => {
         if (!moreOpen) return undefined;
-        moreMenuRef.current?.querySelector('[role="menuitem"]')?.focus();
+        moreMenuRef.current?.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus();
         const onPointerDown = (event) => {
             if (moreWrapRef.current?.contains(event.target)) return;
             closeMore();
@@ -275,7 +276,7 @@ function TokenDetailContent({
             closeMore();
             return;
         }
-        const entries = Array.from(moreMenuRef.current?.querySelectorAll('[role="menuitem"]') || []);
+        const entries = Array.from(moreMenuRef.current?.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])') || []);
         if (entries.length === 0) return;
         const index = entries.indexOf(document.activeElement);
         let next = null;
@@ -320,6 +321,7 @@ function TokenDetailContent({
     }, [chainId, onBack, tick]);
 
     const [holdersOpen, setHoldersOpen] = useState(false);
+    const [gatedOpen, setGatedOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
     const [holdersMoreError, setHoldersMoreError] = useState(/** @type {string | null} */ (null));
@@ -336,8 +338,8 @@ function TokenDetailContent({
         /** @type {number | null} */ (null),
     );
 
-    // Token-gated content groups (per KEY_HASH). Populated when the Unlock
-    // tab is opened. See xchain-documentation/protocol/token-gated-content.md.
+    // Token-gated content groups (per KEY_HASH). Populated when its More info
+    // entry is chosen. See xchain-documentation/protocol/token-gated-content.md.
     const [gatedGroups, setGatedGroups] = useState(/** @type {any[] | null} */ (null));
     const [gatedError, setGatedError] = useState(/** @type {string | null} */ (null));
     const [gatedLoading, setGatedLoading] = useState(false);
@@ -417,7 +419,7 @@ function TokenDetailContent({
     }, [chainId, holders, holdersHasMore, holdersLoading, holdersLoadingMore, holdersPage, messaging, tick]);
 
     useEffect(() => {
-        if (!holdersOpen || isNative) return undefined;
+        if (!gatedOpen || isNative) return undefined;
         if (isDemo) {
             setGatedGroups(getDemoGatedGroupsForTick(tick));
             setGatedLoading(false);
@@ -445,7 +447,7 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
+    }, [gatedOpen, isNative, tick, chainId, messaging, isDemo]);
 
     // A native coin's holding is valued at the live price the stats strip
     // shows. The rate carried in from the balance row, or restored with the
@@ -500,40 +502,13 @@ function TokenDetailContent({
 
     const nativePriceValue = positiveFiniteNumber(nativePrice.entry?.priceFiat);
     const showNativeStats = isNative && !nativePrice.disabled && nativePriceValue !== null;
-    const hasDescription = !isNative && detailText(assetInfo?.description) !== '-';
+    const hasAbout = !isNative && hasSupplementalTokenInfo(assetInfo);
+    const hasMedia = !isNative && hasPublishedMedia(assetInfo);
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
-    // Tabs match the Home layout pattern (Coins / Tokens / NFTs / DeFi /
-    // Activity) with the same tab strip styling, different content. Info first
-    // (description / creator), then Market (price + chart), Metadata, and
-    // Holders for tokens.
-    // Native coins skip tabs entirely; the chart + info table live
-    // stacked in a single scrollable view since there are only two
-    // things to show. Tokens have tabs (Info / Market / Holders) since
-    // the Holders list can be long and the description can be too.
-    // Market section (stats strip + chart) is hoisted above the tabs
-    // for both natives and tokens, so the page leads with performance.
-    // Tokens keep tabs below for the longer-form Info + Holders content.
-    // Three tabs for non-natives:
-    //   - Details: stable on-chain metadata (name, ticker, supply, balance, creator, status)
-    //   - Info: TIS-sourced content (description, media gallery, links, files)
-    //   - Holders: distribution list
-    // Default lands on Info because the TIS content is the richest surface;
-    // when a token has no TIS payload the panel renders an empty-state hint.
-    const tabs = isNative
-        ? [
-            { id: 'details', label: 'Details' },
-        ]
-        : [
-            { id: 'about', label: 'About' },
-            { id: 'media', label: 'Media' },
-            { id: 'details', label: 'Details' },
-            { id: 'holders', label: 'Unlock' },
-        ];
-    const [activeTab, setActiveTab] = useState(isNative ? 'details' : 'about');
-    useEffect(() => {
-        if (activeTab === 'holders') setHoldersOpen(true);
-    }, [activeTab]);
+    // Coins and tokens keep the same single Details tab. Secondary token
+    // surfaces are selected from More info and revealed above this tab.
+    const tabs = [{ id: 'details', label: 'Details' }];
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
@@ -562,11 +537,89 @@ function TokenDetailContent({
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
     const atomicQuantity = parseAtomicQuantity(quantity);
-    const sendDisabledReason = atomicQuantity == null
-        ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
+    const sendDisabledReason = typeof onSend !== 'function'
+        ? 'Send is unavailable.'
+        : !walletModeReady ? 'Loading wallet…'
+        : atomicQuantity == null
+            ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
         : atomicQuantity <= 0n ? 'No balance to send.'
         : !networkActionsAvailable ? 'Send needs a network connection.' : null;
-    const tradeDisabledReason = !networkActionsAvailable ? 'Exchange needs a network connection.' : null;
+    const receiveDisabledReason = typeof onReceive !== 'function' ? 'Receive is unavailable.' : null;
+    const tradeDisabledReason = typeof onBuy !== 'function'
+        ? 'Exchange is unavailable.'
+        : !networkActionsAvailable ? 'Exchange needs a network connection.' : null;
+    const nativePriceLoading = nativePrice.loading
+        || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
+    const tokenPriceValue = !isNative ? positiveFiniteNumber(tokenAlertRate?.rate) : null;
+    const priceAlertsSupported = typeof messaging.listPriceAlertsForWallet === 'function'
+        && typeof messaging.savePriceAlert === 'function'
+        && typeof messaging.clearPriceAlert === 'function';
+    const showPriceAlertItem = fiatSupported
+        && fiatAllowed
+        && priceAlertsSupported
+        && Boolean(walletId)
+        && (isNative
+            ? !nativePrice.disabled && (nativePriceLoading || nativePriceValue !== null)
+            : tokenPriceValue !== null);
+    // More info holds the secondary per-asset entries; the tile stays in the
+    // row even when the list is empty.
+    const moreItems = [
+        typeof onViewActivity === 'function' ? {
+            id: 'history',
+            label: 'History',
+            Icon: Icon.HistoryIcon,
+            onSelect: onViewActivity,
+        } : null,
+        showPriceAlertItem ? {
+            id: 'price-alert',
+            label: 'Set price alert',
+            Icon: Icon.InfoIcon,
+            disabled: isNative && (nativePriceLoading || nativePriceValue === null),
+            onSelect: () => setRevealedExtra('price-alert'),
+        } : null,
+        !isNative && supplyHistory.available ? {
+            id: 'supply-history',
+            label: 'Supply over time',
+            Icon: Icon.LineChartIcon,
+            onSelect: () => setRevealedExtra('supply-history'),
+        } : null,
+        !isNative && (metadataLoading || hasAbout) ? {
+            id: 'about',
+            label: 'About',
+            Icon: Icon.InfoIcon,
+            onSelect: () => setRevealedExtra('about'),
+        } : null,
+        !isNative && (metadataLoading || hasMedia) ? {
+            id: 'media',
+            label: 'Media',
+            Icon: Icon.CameraIcon,
+            onSelect: () => setRevealedExtra('media'),
+        } : null,
+        !isNative && (gatedGroups === null || gatedLoading || gatedError || gatedGroups.length > 0) ? {
+            id: 'gated-content',
+            label: 'Gated content',
+            Icon: Icon.UnlockIcon,
+            onSelect: () => {
+                setGatedOpen(true);
+                setRevealedExtra('gated-content');
+            },
+        } : null,
+        !isNative ? {
+            id: 'holders',
+            label: 'Holders',
+            Icon: Icon.UsersIcon,
+            onSelect: () => {
+                setHoldersOpen(true);
+                setRevealedExtra('holders');
+            },
+        } : null,
+        !isNative && typeof onManageToken === 'function' && isTokenOwner ? {
+            id: 'manage',
+            label: 'Manage',
+            Icon: Icon.GearIcon,
+            onSelect: onManageToken,
+        } : null,
+    ].filter(Boolean);
 
     if (tokenMissing) {
         return (
@@ -677,30 +730,6 @@ function TokenDetailContent({
                     </div>
                 </section>
 
-                {/* "Official token" banner: the token is on a project
-                    registry's current roster (owner-attested on-chain;
-                    Project_Registry.md). Display policy is "just show
-                    it" (every attesting project is listed). The slot is
-                    held only while metadata loads or a banner shows, so a
-                    token on no roster leaves no blank band above the chart. */}
-                {!isNative && (metadataLoading || (Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0)) ? (
-                    <div className={styles.officialBannerSlot}>
-                        {metadataLoading ? (
-                            <Skeleton height={38} ariaLabel="Loading token verification" />
-                        ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                            <StatusMessage variant="success">
-                                This token is an official token in the{' '}
-                                {assetInfo.projects.map((p, i) => (
-                                    <span key={p} className={styles.officialBannerProject}>
-                                        {i > 0 ? ', ' : ''}{p}
-                                    </span>
-                                ))}
-                                {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                            </StatusMessage>
-                        ) : null}
-                    </div>
-                ) : null}
-
                 {/* Market section: stats strip + sparkline. Sits above
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
@@ -725,13 +754,121 @@ function TokenDetailContent({
                             fiatRateSource={fiatRateSource}
                             fiatCurrency={fiatCurrency}
                             loading={metadataLoading}
+                            loadFailed={loadFailed}
                         />
                     </RouteErrorBoundary>
                 ) : null}
 
-                {/* The empty state stands alone at full width rather than
-                    inside the chart card, so it never reads as a box in a box. */}
-                {!isNative && supplyHistory.available ? (
+                {!fiatSupported ? (
+                    <p className={styles.muted}>Test coins have no value.</p>
+                ) : null}
+
+                {/* Every shell keeps these four square tiles in the same order,
+                    as on Home: Send, Receive, Exchange and More info. An
+                    unavailable action stays in the row with its reason under
+                    the row, so the row keeps its shape between assets. */}
+                <div className={styles.quickActionsGroup} role="group" aria-label="Quick actions">
+                    <div className={styles.quickActions}>
+                        <QuickActionTile
+                            onClick={onSend}
+                            disabled={Boolean(sendDisabledReason)}
+                            title={sendDisabledReason || undefined}
+                            aria-describedby={sendDisabledReason ? sendReasonId : undefined}
+                            aria-busy="false"
+                            icon={<Icon.SendIcon />}
+                        >
+                            Send
+                        </QuickActionTile>
+                        <QuickActionTile
+                            onClick={onReceive}
+                            disabled={Boolean(receiveDisabledReason)}
+                            title={receiveDisabledReason || undefined}
+                            aria-describedby={receiveDisabledReason ? receiveReasonId : undefined}
+                            aria-busy="false"
+                            icon={<Icon.ReceiveIcon />}
+                        >
+                            Receive
+                        </QuickActionTile>
+                        <QuickActionTile
+                            onClick={onBuy}
+                            disabled={Boolean(tradeDisabledReason)}
+                            title={tradeDisabledReason || undefined}
+                            aria-describedby={tradeDisabledReason ? tradeReasonId : undefined}
+                            aria-busy="false"
+                            icon={<Icon.MarketIcon />}
+                        >
+                            Exchange
+                        </QuickActionTile>
+                        <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
+                            <QuickActionTile
+                                ref={moreTriggerRef}
+                                aria-haspopup="menu"
+                                aria-expanded={moreOpen ? 'true' : 'false'}
+                                aria-controls={moreOpen ? moreMenuId : undefined}
+                                aria-busy="false"
+                                onClick={() => setMoreOpen((open) => !open)}
+                                onKeyDown={(event) => {
+                                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                                    event.preventDefault();
+                                    setMoreOpen(true);
+                                }}
+                                icon={<Icon.MoreIcon />}
+                            >
+                                More info
+                            </QuickActionTile>
+                            {moreOpen ? (
+                                <div
+                                    id={moreMenuId}
+                                    ref={moreMenuRef}
+                                    className={styles.quickActionMoreMenu}
+                                    role="menu"
+                                    aria-label="More info"
+                                    onKeyDown={handleMoreMenuKey}
+                                >
+                                    {moreItems.length > 0 ? moreItems.map(({ id, label, Icon: RowIcon, onSelect, disabled }) => (
+                                        <Button
+                                            key={id}
+                                            variant="rowAction"
+                                            role="menuitem"
+                                            className={styles.quickActionMoreEntry}
+                                            disabled={disabled}
+                                            aria-disabled={disabled ? 'true' : undefined}
+                                            onClick={() => runMoreItem(onSelect)}
+                                            icon={<span className={styles.quickActionMoreEntryIcon}><RowIcon /></span>}
+                                        >
+                                            {label}
+                                        </Button>
+                                    )) : (
+                                        <p className={styles.moreInfoEmpty}>No more information is available.</p>
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
+                    {sendDisabledReason ? (
+                        <p id={sendReasonId} className={styles.quickActionReason}>{sendDisabledReason}</p>
+                    ) : null}
+                    {receiveDisabledReason ? (
+                        <p id={receiveReasonId} className={styles.quickActionReason}>{receiveDisabledReason}</p>
+                    ) : null}
+                    {tradeDisabledReason ? (
+                        <p id={tradeReasonId} className={styles.quickActionReason}>{tradeDisabledReason}</p>
+                    ) : null}
+                </div>
+
+                {revealedExtra === 'price-alert' ? (
+                    <NativePriceAlertEntry
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick={isNative ? undefined : tick}
+                        currentPrice={isNative ? nativePriceValue : tokenPriceValue}
+                        fiatCurrency={fiatCurrency}
+                        loading={isNative && nativePriceLoading}
+                        disabled={!fiatAllowed || (isNative && nativePrice.disabled)}
+                    />
+                ) : null}
+
+                {revealedExtra === 'supply-history' && !isNative && supplyHistory.available ? (
                     supplyHistory.loading || supplyHistory.points.length >= 2 ? (
                         <div className={`${styles.infoCard} ${styles.supplyCard}`}>
                             <RouteErrorBoundary
@@ -754,122 +891,63 @@ function TokenDetailContent({
                     )
                 ) : null}
 
-                {isNative && fiatSupported ? (
-                    <NativePriceAlertEntry
-                        walletId={walletId}
-                        chainId={chainId}
-                        currentPrice={nativePriceValue}
-                        fiatCurrency={fiatCurrency}
-                        loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
-                        disabled={!fiatAllowed || nativePrice.disabled}
+                {revealedExtra === 'about' && !isNative ? (
+                    <InfoPanel
+                        isNative={false}
+                        assetInfo={assetInfo}
+                        loading={metadataLoading}
+                        loadFailed={loadFailed}
                     />
                 ) : null}
 
-                {!fiatSupported ? (
-                    <p className={styles.muted}>Test coins have no value.</p>
+                {revealedExtra === 'media' && !isNative ? (
+                    <MediaPanel
+                        isNative={false}
+                        assetInfo={assetInfo}
+                        loading={metadataLoading}
+                    />
                 ) : null}
 
-                {/* Every shell shares these four square tiles, as on Home:
-                    Send, Receive, Exchange and More info. History and
-                    Manage live in the More info menu. Missing capabilities
-                    disappear, while temporary blocks stay visible with the
-                    reason under the row. */}
-                <div className={styles.quickActionsGroup} role="group" aria-label="Quick actions">
-                    <div className={styles.quickActions}>
-                        {typeof onSend === 'function' && walletModeReady ? (
-                            <QuickActionTile
-                                onClick={onSend}
-                                disabled={Boolean(sendDisabledReason)}
-                                title={sendDisabledReason || undefined}
-                                aria-describedby={sendDisabledReason ? sendReasonId : undefined}
-                                aria-busy="false"
-                                icon={<Icon.SendIcon />}
-                            >
-                                Send
-                            </QuickActionTile>
-                        ) : null}
-                        {typeof onReceive === 'function' ? (
-                            <QuickActionTile
-                                onClick={onReceive}
-                                aria-busy="false"
-                                icon={<Icon.ReceiveIcon />}
-                            >
-                                Receive
-                            </QuickActionTile>
-                        ) : null}
-                        {typeof onBuy === 'function' ? (
-                            <QuickActionTile
-                                onClick={onBuy}
-                                disabled={Boolean(tradeDisabledReason)}
-                                title={tradeDisabledReason || undefined}
-                                aria-describedby={tradeDisabledReason ? tradeReasonId : undefined}
-                                aria-busy="false"
-                                icon={<Icon.MarketIcon />}
-                            >
-                                Exchange
-                            </QuickActionTile>
-                        ) : null}
-                        {moreItems.length > 0 ? (
-                            <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
-                                <QuickActionTile
-                                    ref={moreTriggerRef}
-                                    aria-haspopup="menu"
-                                    aria-expanded={moreOpen ? 'true' : 'false'}
-                                    aria-controls={moreOpen ? moreMenuId : undefined}
-                                    aria-busy="false"
-                                    onClick={() => setMoreOpen((open) => !open)}
-                                    onKeyDown={(event) => {
-                                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                                        event.preventDefault();
-                                        setMoreOpen(true);
-                                    }}
-                                    icon={<Icon.MoreIcon />}
-                                >
-                                    More info
-                                </QuickActionTile>
-                                {moreOpen ? (
-                                    <div
-                                        id={moreMenuId}
-                                        ref={moreMenuRef}
-                                        className={styles.quickActionMoreMenu}
-                                        role="menu"
-                                        aria-label="More info"
-                                        onKeyDown={handleMoreMenuKey}
-                                    >
-                                        {moreItems.map((item) => (
-                                            <Button
-                                                key={item.id}
-                                                variant="rowAction"
-                                                role="menuitem"
-                                                className={styles.quickActionMoreEntry}
-                                                onClick={() => runMoreItem(item.onSelect)}
-                                                icon={<span className={styles.quickActionMoreEntryIcon}>{item.icon}</span>}
-                                            >
-                                                {item.label}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                ) : null}
-                            </div>
-                        ) : null}
-                    </div>
-                    {sendDisabledReason && typeof onSend === 'function' && walletModeReady ? (
-                        <p id={sendReasonId} className={styles.quickActionReason}>{sendDisabledReason}</p>
-                    ) : null}
-                    {tradeDisabledReason && typeof onBuy === 'function' ? (
-                        <p id={tradeReasonId} className={styles.quickActionReason}>{tradeDisabledReason}</p>
-                    ) : null}
-                </div>
+                {revealedExtra === 'gated-content' && !isNative ? (
+                    <GatedContentPanel
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick={tick}
+                        groups={gatedGroups}
+                        loading={gatedLoading}
+                        error={gatedError}
+                        packsMeta={assetInfo?.packs || {}}
+                        messaging={messaging}
+                        ownsToken={(() => {
+                            try { return BigInt(String(quantity || '0')) > 0n; }
+                            catch { return false; }
+                        })()}
+                        displayName={displayName || tick}
+                    />
+                ) : null}
 
-                {/* Tabs: matches HomeTabs visual rhythm. Native coins
-                    get a single Details tab; tokens add About / Media /
-                    Unlock so the per-asset content surfaces in tab form
-                    rather than stacking. */}
+                {revealedExtra === 'holders' && !isNative ? (
+                    <HoldersPanel
+                        holderListScope={`${chainId}:${tick}`}
+                        holders={holders}
+                        holdersLoading={holdersLoading}
+                        holdersError={holdersError}
+                        holdersFetchedAt={holdersFetchedAt}
+                        holdersHasMore={holdersHasMore}
+                        holdersLoadingMore={holdersLoadingMore}
+                        holdersMoreError={holdersMoreError}
+                        holdersTotal={holdersTotal}
+                        onLoadMore={loadMoreHolders}
+                        divisibility={resolvedDivisibility}
+                    />
+                ) : null}
+
+                {/* Coins and tokens use the same single Details tab. */}
                 <Tabs
                     id={tabsId}
                     items={tabs}
-                    value={activeTab}
-                    onChange={setActiveTab}
+                    value="details"
+                    onChange={() => {}}
                     panelId={`${tabsId}-panel`}
                     aria-label="Token detail view"
                 />
@@ -878,77 +956,24 @@ function TokenDetailContent({
                             id={`${tabsId}-panel`}
                             className={styles.tabPanel}
                             role="tabpanel"
-                            aria-labelledby={`${tabsId}-tab-${activeTab}`}
+                            aria-labelledby={`${tabsId}-tab-details`}
                         >
-                            {activeTab === 'details' ? (
-                                <div className={styles.infoCard}>
-                                    <DetailsPanel
-                                        tick={tick}
-                                        displayName={displayName}
-                                        descriptor={descriptor}
-                                        chainId={chainId}
-                                        kind={kind}
-                                        isNative={isNative}
-                                        assetInfo={assetInfo}
-                                        loading={metadataLoading}
-                                        quantity={quantity}
-                                        divisibility={resolvedDivisibility}
-                                        fiat={fiat}
-                                        fiatCurrency={fiatCurrency}
-                                    />
-                                </div>
-                            ) : null}
-
-                            {activeTab === 'about' ? (
-                                <InfoPanel
-                                    isNative={isNative}
-                                    assetInfo={assetInfo}
-                                    hasDescription={hasDescription}
-                                    loading={metadataLoading}
-                                    loadFailed={loadFailed}
-                                />
-                            ) : null}
-
-                            {activeTab === 'media' ? (
-                                <MediaPanel
+                            <div className={styles.infoCard}>
+                                <DetailsPanel
+                                    tick={tick}
+                                    displayName={displayName}
+                                    descriptor={descriptor}
+                                    chainId={chainId}
+                                    kind={kind}
                                     isNative={isNative}
                                     assetInfo={assetInfo}
                                     loading={metadataLoading}
+                                    quantity={quantity}
+                                    divisibility={resolvedDivisibility}
+                                    fiat={fiat}
+                                    fiatCurrency={fiatCurrency}
                                 />
-                            ) : null}
-
-                            {activeTab === 'holders' && !isNative ? (
-                                <>
-                                    <GatedContentPanel
-                                        walletId={walletId}
-                                        chainId={chainId}
-                                        tick={tick}
-                                        groups={gatedGroups}
-                                        loading={gatedLoading}
-                                        error={gatedError}
-                                        packsMeta={assetInfo?.packs || {}}
-                                        messaging={messaging}
-                                        ownsToken={(() => {
-                                            try { return BigInt(String(quantity || '0')) > 0n; }
-                                            catch { return false; }
-                                        })()}
-                                        displayName={displayName || tick}
-                                    />
-                                    <HoldersPanel
-                                        holderListScope={`${chainId}:${tick}`}
-                                        holders={holders}
-                                        holdersLoading={holdersLoading}
-                                        holdersError={holdersError}
-                                        holdersFetchedAt={holdersFetchedAt}
-                                        holdersHasMore={holdersHasMore}
-                                        holdersLoadingMore={holdersLoadingMore}
-                                        holdersMoreError={holdersMoreError}
-                                        holdersTotal={holdersTotal}
-                                        onLoadMore={loadMoreHolders}
-                                        divisibility={resolvedDivisibility}
-                                    />
-                                </>
-                            ) : null}
+                            </div>
                         </div>
 
             </ListPage>
@@ -1066,22 +1091,22 @@ function SupplyChart({ points, divisibility, tick }) {
 }
 
 /**
- * §46: context-first "Set price alert" entry on the native-coin detail
- * page. Collapsed to a single button; expands to the shared PriceAlertForm
- * pinned to this coin and prefilled with the live price. Renders nothing
- * when the shell doesn't expose the price-alert routes.
+ * Context-first price alert panel for a coin or token. More info reveals the
+ * shared PriceAlertForm pinned to this asset and prefilled with the live price.
+ * Renders nothing when the shell doesn't expose the price-alert routes.
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
+ * @param {string} [props.tick]
  * @param {number | null} props.currentPrice
  * @param {string} props.fiatCurrency
  * @param {boolean} props.loading
  * @param {boolean} props.disabled
  */
-function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, loading, disabled }) {
+function NativePriceAlertEntry({ walletId, chainId, tick, currentPrice, fiatCurrency, loading, disabled }) {
     const { supported, addAlert } = usePriceAlerts(walletId);
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(true);
     const [done, setDone] = useState(false);
 
     if (!supported || !walletId) return null;
@@ -1110,8 +1135,11 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, 
             {open ? (
                 <PriceAlertForm
                     onCreate={onCreate}
+                    walletId={walletId}
                     fiatCurrency={fiatCurrency}
                     lockedChainId={chainId}
+                    lockedTick={tick}
+                    allowCoingeckoFallback={false}
                     currentPrice={currentPrice}
                     onCancel={() => setOpen(false)}
                 />
@@ -1133,20 +1161,32 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, 
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
+function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false }) {
     const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
     // doesn't have data for this tick (e.g. testnet, regtest).
 
-    // Range picker: mirrors the PortfolioChart buttons on Home, one list
-    // for every wallet. Native coins have a one-week CoinGecko sparkline
-    // (168 hourly points) that fills 24h and 1W; a real wallet shows the
-    // no-history message for a longer range, and demo wallets synthesize.
+    // Range picker: mirrors the PortfolioChart buttons on Home. Every wallet
+    // opens on 1W; native coins use hourly history for 24h and 1W, then lazily
+    // request daily history for longer ranges. Demo wallets synthesize every
+    // range without requesting history.
     const availableRanges = CHART_RANGES;
-    const [rangeId, setRangeId] = useState(defaultRangeId(isDemo));
+    const [rangeId, setRangeId] = useState(defaultRangeId());
     const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
+    // Once a daily range has been picked the daily request stays armed, so
+    // moving back to 1W and out again does not reload the line.
+    const [dailyArmed, setDailyArmed] = useState(false);
+    useEffect(() => {
+        if (range.source === 'daily') setDailyArmed(true);
+    }, [range.source]);
+    const wantsDailyHistory = isNative && !isDemo && Boolean(nativePrice.entry) && !nativePrice.disabled
+        && (dailyArmed || range.source === 'daily');
+    const dailyNativePrice = useNativePrice(wantsDailyHistory ? chainId : null, {
+        includeHistory: true,
+        fiatCurrency,
+    });
 
     let priceCell = '-';
     let priceLabel = 'Price';
@@ -1159,6 +1199,8 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     let hint = null;
     const nativeLoading = nativePrice.loading
         || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
+    const dailyHistoryLoading = wantsDailyHistory && range.source === 'daily' && (dailyNativePrice.loading
+        || (!dailyNativePrice.entry && !dailyNativePrice.disabled && !dailyNativePrice.error));
 
     if (isNative) {
         // True when any range has a recorded series, so the tabs stay up even
@@ -1169,7 +1211,9 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         } else if (nativeLoading) {
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
-            const e = nativePrice.entry;
+            const e = dailyNativePrice.entry
+                ? { ...nativePrice.entry, historyDaily: dailyNativePrice.entry.historyDaily ?? null }
+                : nativePrice.entry;
             const priceFiat = positiveFiniteNumber(e.priceFiat);
             if (priceFiat !== null) priceCell = formatFiat(priceFiat, fiatCurrency);
             if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
@@ -1198,69 +1242,64 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         } else {
             hint = 'No market data available for this network.';
         }
-        // With no line to draw and no hint, the empty state stands below the
-        // card at full width, never inside it.
-        const nativeEmpty = !nativeLoading && !sparkline && !hint && !anyRecordedRange;
+        const nativeEmpty = !nativeLoading && !dailyHistoryLoading && !sparkline && !hint && !anyRecordedRange;
         const showRanges = Boolean(sparkline) || anyRecordedRange;
         return (
-            <>
-                <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                    <section className={styles.stats}>
-                        <StatCell label="Price" value={priceCell} />
-                        <StatCell label="Market cap" value={marketCapCell} />
-                        <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
-                    </section>
-                    {/* Range tabs show only when some range can carry a line: a real
-                        series exists, or the wallet is a demo wallet. */}
-                    {nativeEmpty ? null : (
-                        <div className={styles.marketHistorySlot}>
-                            {nativeLoading ? (
-                                <Skeleton height={64} ariaLabel="Loading price history" />
-                            ) : showRanges ? (
-                                <>
-                                    <div
-                                        id={`${tabsId}-panel`}
-                                        role="tabpanel"
-                                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
+            <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
+                <section className={styles.stats}>
+                    <StatCell label="Price" value={priceCell} />
+                    <StatCell label="Market cap" value={marketCapCell} />
+                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
+                </section>
+                <div className={styles.marketHistorySlot}>
+                    {nativeLoading ? (
+                        <Skeleton height={64} ariaLabel="Loading price history" />
+                    ) : showRanges ? (
+                        <>
+                            <div
+                                id={`${tabsId}-panel`}
+                                role="tabpanel"
+                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                                aria-busy={dailyHistoryLoading || undefined}
+                            >
+                                {/* A daily range loading its history keeps the tabs in place
+                                    (and the focused tab with them); only the line waits. */}
+                                {dailyHistoryLoading ? (
+                                    <Skeleton height={40} ariaLabel="Loading price history" />
+                                ) : sparkline ? (
+                                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                        <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                                    </div>
+                                ) : (
+                                    <p className={styles.marketHistoryMessage}>{NO_PRICE_HISTORY}</p>
+                                )}
+                            </div>
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                {availableRanges.map((r) => (
+                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                                    <button
+                                        key={r.id}
+                                        id={`${tabsId}-tab-${r.id}`}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                        aria-controls={`${tabsId}-panel`}
+                                        tabIndex={r.id === rangeId ? 0 : -1}
+                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                        onClick={() => setRangeId(r.id)}
                                     >
-                                        {sparkline ? (
-                                            <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                                <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
-                                            </div>
-                                        ) : (
-                                            <p className={styles.muted}>{NO_PRICE_HISTORY}</p>
-                                        )}
-                                    </div>
-                                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                                        {availableRanges.map((r) => (
-                                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                            <button
-                                                key={r.id}
-                                                id={`${tabsId}-tab-${r.id}`}
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                                aria-controls={`${tabsId}-panel`}
-                                                tabIndex={r.id === rangeId ? 0 : -1}
-                                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                                onClick={() => setRangeId(r.id)}
-                                            >
-                                                {r.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            ) : null}
-                            {hint && !nativeLoading ? <p className={styles.muted}>{hint}</p> : null}
-                        </div>
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <p className={styles.marketHistoryMessage}>
+                            {nativeEmpty ? 'No market data available for this network.' : hint}
+                        </p>
                     )}
                 </div>
-                {nativeEmpty ? (
-                    <div className={styles.marketHistorySlot}>
-                        <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                    </div>
-                ) : null}
-            </>
+            </div>
         );
     }
 
@@ -1317,64 +1356,54 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
         hint = 'Market data is unavailable.';
     }
 
-    // With no chart drawn, the history slot stands below the card at full
-    // width, so the empty state is never a box inside the market card.
     const tokenEmpty = !loading && !sparkline;
     return (
-        <>
-            <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                <section className={styles.stats}>
-                    <StatCell label={priceLabel} value={priceCell} />
-                    <StatCell label="Market cap" value={marketCapCell} />
-                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
-                </section>
-                {tokenEmpty ? null : (
-                    <div className={styles.marketHistorySlot}>
-                        {loading ? (
-                            <Skeleton height={64} ariaLabel="Loading price history" />
-                        ) : (
-                            <div
-                                id={`${tabsId}-panel`}
-                                role="tabpanel"
-                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
-                            >
-                                <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                    <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
-                                </div>
-                            </div>
-                        )}
-                        {sparkline && isDemo ? (
-                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                                {CHART_RANGES.map((r) => (
-                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                    <button
-                                        key={r.id}
-                                        id={`${tabsId}-tab-${r.id}`}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                        aria-controls={`${tabsId}-panel`}
-                                        tabIndex={r.id === rangeId ? 0 : -1}
-                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                        onClick={() => setRangeId(r.id)}
-                                    >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        ) : null}
+        <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
+            <section className={styles.stats}>
+                <StatCell label={priceLabel} value={priceCell} />
+                <StatCell label="Market cap" value={marketCapCell} />
+                <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
+            </section>
+            <div className={styles.marketHistorySlot}>
+                {loading ? (
+                    <Skeleton height={64} ariaLabel="Loading price history" />
+                ) : tokenEmpty ? (
+                    <p className={styles.marketHistoryMessage}>
+                        {loadFailed ? (hint || 'Market data is unavailable.') : NO_PRICE_HISTORY}
+                    </p>
+                ) : (
+                    <div
+                        id={`${tabsId}-panel`}
+                        role="tabpanel"
+                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                    >
+                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                        </div>
                     </div>
                 )}
+                {sparkline && isDemo ? (
+                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                        {CHART_RANGES.map((r) => (
+                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                            <button
+                                key={r.id}
+                                id={`${tabsId}-tab-${r.id}`}
+                                type="button"
+                                role="tab"
+                                aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                aria-controls={`${tabsId}-panel`}
+                                tabIndex={r.id === rangeId ? 0 : -1}
+                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                onClick={() => setRangeId(r.id)}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
             </div>
-            {tokenEmpty ? (
-                <div className={styles.marketHistorySlot}>
-                    {/* The placeholder holds the slot whenever no chart is drawn; an
-                        unavailable hint reads under it rather than standing in for it. */}
-                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                    {hint ? <p className={styles.muted}>{hint}</p> : null}
-                </div>
-            ) : null}
-        </>
+        </div>
     );
 }
 
@@ -1401,6 +1430,11 @@ function DetailsPanel({
             aria-busy={loading || undefined}
         >
             <ul className={styles.detailList} aria-label="Token detail fields">
+                {!isNative && detailText(assetInfo?.description) !== '-' ? (
+                    <DetailRow label="Description">
+                        <span className={styles.descriptionValue}>{detailText(assetInfo.description)}</span>
+                    </DetailRow>
+                ) : null}
                 <DetailRow label="Name">{displayName || tick}</DetailRow>
                 <DetailRow label="Ticker">
                     <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
@@ -1455,6 +1489,9 @@ function DetailsPanel({
                         ) : '-'}
                     </DetailRow>
                 ) : null}
+                {!isNative && Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                    <DetailRow label="Projects">{assetInfo.projects.join(', ')}</DetailRow>
+                ) : null}
                 {!isNative ? (
                     <DetailRow label={<span>Status</span>}>
                         {loading ? (
@@ -1481,13 +1518,23 @@ function DetailRow({ label, children }) {
     );
 }
 
-// Info tab: TIS-sourced content for non-native tokens. Mirrors the
-// per-section layout the explorer uses (artwork title, media gallery,
-// description, owner identity, contact rows, categories, links, files,
-// PGP signature) so a token's published metadata renders in one place.
-// When the token has no TIS document the panel renders an empty-state
-// hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription, loading, loadFailed = false }) {
+function hasSupplementalTokenInfo(assetInfo) {
+    if (!assetInfo) return false;
+    const linkTargets = tokenLinkTargets(assetInfo);
+    return Boolean(
+        (assetInfo.owner && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization))
+        || (Array.isArray(assetInfo.contacts) && assetInfo.contacts.length > 0)
+        || (Array.isArray(assetInfo.categories) && assetInfo.categories.length > 0)
+        || linkTargets.websites.length > 0
+        || linkTargets.socials.length > 0
+        || (Array.isArray(assetInfo.dns) && assetInfo.dns.length > 0)
+        || assetInfo.pgpsig
+    );
+}
+
+// Supplemental TIS metadata selected from More info. The description stays
+// in Details so the primary page remains useful without opening this panel.
+function InfoPanel({ isNative, assetInfo, loading, loadFailed = false }) {
     if (isNative) {
         return (
             <EmptyState
@@ -1524,8 +1571,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading, loadFailed = 
     const hasCategories = Array.isArray(assetInfo.categories) && assetInfo.categories.length > 0;
     const hasPgpsig = Boolean(assetInfo.pgpsig);
     const hasDns = Array.isArray(assetInfo.dns) && assetInfo.dns.length > 0;
-    const hasAbout = hasDescription
-        || hasOwner
+    const hasAbout = hasOwner
         || hasContacts
         || hasCategories
         || hasLinks
@@ -1542,11 +1588,6 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading, loadFailed = 
     }
     return (
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
-            {hasDescription ? (
-                <div className={styles.metaBlock}>
-                    <p className={styles.descriptionBody}>{assetInfo.description}</p>
-                </div>
-            ) : null}
             {hasOwner ? <OwnerBlock owner={assetInfo.owner} /> : null}
             {hasCategories ? <CategoriesBlock categories={assetInfo.categories} /> : null}
             {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
@@ -1586,22 +1627,12 @@ function DnsBlock({ dns }) {
     );
 }
 
-// Media tab: images, audio, video published with the token's TIS
-// document. Pure visual surface; everything textual lives in the
-// About tab so a user can browse the artwork without being asked to
-// also read prose.
-function MediaPanel({ isNative, assetInfo, loading }) {
-    const tabsId = useId();
-    // Only large + hires images count toward the Image surface (icon
-    // and standard buckets render in the page header instead). We
-    // derive the buckets unconditionally so the React hook below can
-    // observe them, then decide what to render below based on
-    // isNative / assetInfo state.
+function tokenMediaBuckets(assetInfo) {
     const images = Array.isArray(assetInfo?.images)
         ? assetInfo.images.filter((i) => {
-            const t = String(i?.type || '').toLowerCase();
+            const mediaType = String(i?.type || '').toLowerCase();
             return safeHttpUrl(i?.url)
-                && (t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres');
+                && (mediaType === 'large' || mediaType === 'hires' || mediaType === 'hi-res' || mediaType === 'highres');
         })
         : [];
     const audio = Array.isArray(assetInfo?.audio)
@@ -1613,6 +1644,24 @@ function MediaPanel({ isNative, assetInfo, loading }) {
     const files = Array.isArray(assetInfo?.files)
         ? assetInfo.files.filter((entry) => safeHttpUrl(entry?.url))
         : [];
+    return { images, audio, video, files };
+}
+
+function hasPublishedMedia(assetInfo) {
+    const media = tokenMediaBuckets(assetInfo);
+    return media.images.length > 0 || media.audio.length > 0 || media.video.length > 0 || media.files.length > 0;
+}
+
+// Images, audio, video, and files published with the token's TIS document,
+// selected from More info.
+function MediaPanel({ isNative, assetInfo, loading }) {
+    const tabsId = useId();
+    // Only large + hires images count toward the Image surface (icon
+    // and standard buckets render in the page header instead). We
+    // derive the buckets unconditionally so the React hook below can
+    // observe them, then decide what to render below based on
+    // isNative / assetInfo state.
+    const { images, audio, video, files } = tokenMediaBuckets(assetInfo);
     const subtabs = [
         images.length > 0 ? { id: 'image', label: images.length === 1 ? 'Image' : 'Images' } : null,
         audio.length > 0 ? { id: 'audio', label: 'Audio' } : null,
@@ -2027,7 +2076,7 @@ function SocialIcon({ platform }) {
 function tokenLinkTargets(assetInfo) {
     // Prefer the `websites` array (primary + alternates) but fall back to
     // the singular `website` field for older bundles that haven't been
-    // re-normalized. Files live in the Media tab's Files subtab now;
+    // re-normalized. Files live in the Media panel's Files subtab now;
     // they're not rendered here.
     const websiteCandidates = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
         ? assetInfo.websites
@@ -2796,7 +2845,7 @@ function positiveFiniteNumber(value) {
 
 function kindLabel(kind) {
     if (kind === 'native') return 'Native coin';
-    if (kind === 'subtoken') return 'Sub-token';
+    if (kind === 'subtoken') return 'Subtoken';
     return 'Token';
 }
 

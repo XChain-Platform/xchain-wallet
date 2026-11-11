@@ -119,10 +119,11 @@ describe('controller-bind value validation', () => {
         expect(controllerBindValidationError({ ...valid, ...input })).toMatch(message);
     });
 
-    it('refuses memo delimiters and the UTF-8 byte ceiling', () => {
+    it('refuses memo delimiters and the 250-character ceiling', () => {
         expect(controllerBindValidationError({ ...valid, memo: 'a|b' })).toMatch(/cannot contain/);
-        expect(controllerBindValidationError({ ...valid, memo: 'é'.repeat(126) }))
-            .toMatch(/252 bytes.*at most 250 bytes/);
+        expect(controllerBindValidationError({ ...valid, memo: 'é'.repeat(126) })).toBeNull();
+        expect(controllerBindValidationError({ ...valid, memo: 'é'.repeat(251) }))
+            .toMatch(/251 characters.*at most 250 characters/);
     });
 
     it.each([

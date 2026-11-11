@@ -98,7 +98,9 @@ describe('Chrome 102 CSS compatibility audit', () => {
             process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', 'Settings.module.css',
         ), 'utf8');
         expect(settingsCss).not.toContain(':has(');
-        expect(settingsCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.page div\s*\{[\s\S]*flex-wrap:\s*wrap !important;/);
+        expect(settingsCss).toMatch(
+            /@media \(max-width: 480px\)[\s\S]*\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{[\s\S]*flex-wrap:\s*wrap !important;/,
+        );
         expect(audit(settingsCss)).toEqual([]);
     });
 

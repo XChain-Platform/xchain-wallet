@@ -27,5 +27,5 @@ assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultS
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'SWAP'/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /Create unsigned transaction/);
+assert.match(formSrc, /Create unsigned cross-chain swap transaction/);
 console.log('cross-chain-swap-watcher-mode smoke OK');

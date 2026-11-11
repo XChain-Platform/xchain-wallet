@@ -73,7 +73,8 @@ export async function mintTestnetXchain(page, amount, opts) {
         .toBeVisible({ timeout: 30_000 });
     if (!((await network.getAttribute('aria-label')) || '').includes(TESTNET_CHAIN_LABEL)) {
         await network.click();
-        await page.getByRole('option', { name: new RegExp(`^${TESTNET_CHAIN_LABEL}\\b`) })
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: new RegExp(`^Select ${TESTNET_CHAIN_LABEL}\\b`) })
             .first().click();
     }
     await expect(network).toHaveAttribute('aria-label', new RegExp(TESTNET_CHAIN_LABEL), {

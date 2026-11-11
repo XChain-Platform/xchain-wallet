@@ -45,6 +45,7 @@ export const PRICE_ALERT_STATUSES = /** @type {const} */ (['armed', 'triggered']
  * @property {string} id
  * @property {string} walletId
  * @property {string} chainId
+ * @property {string} [tick]               token ticker; absent for the native coin
  * @property {'above' | 'below'} direction
  * @property {number} targetFiat            threshold price in fiatCurrency
  * @property {string} fiatCurrency          e.g. 'usd'
@@ -57,17 +58,20 @@ export const PRICE_ALERT_STATUSES = /** @type {const} */ (['armed', 'triggered']
  * @param {Object} input
  * @param {string} input.walletId
  * @param {string} input.chainId
+ * @param {string} [input.tick]
  * @param {'above' | 'below'} input.direction
  * @param {number} input.targetFiat
  * @param {string} input.fiatCurrency
  * @returns {PriceAlert}
  */
 export function createPriceAlert(input) {
+    const tick = String(input.tick ?? '').trim().toUpperCase();
     return {
         schemaVersion: CURRENT_VERSION,
         id: randomUUID(),
         walletId: input.walletId,
         chainId: input.chainId,
+        ...(tick ? { tick } : {}),
         direction: input.direction,
         targetFiat: input.targetFiat,
         fiatCurrency: String(input.fiatCurrency || 'usd').toLowerCase(),
@@ -86,6 +90,7 @@ export function validatePriceAlert(record) {
     check(errors, 'id', isNonEmptyString(r.id), 'must be a non-empty string');
     check(errors, 'walletId', isNonEmptyString(r.walletId), 'must be a non-empty string');
     check(errors, 'chainId', isNonEmptyString(r.chainId), 'must be a non-empty string');
+    check(errors, 'tick', r.tick == null || isNonEmptyString(r.tick), 'must be absent, null, or a non-empty string');
     check(errors, 'direction', isOneOf(r.direction, PRICE_ALERT_DIRECTIONS), `must be one of ${PRICE_ALERT_DIRECTIONS.join(', ')}`);
     check(errors, 'targetFiat', isNumber(r.targetFiat) && r.targetFiat > 0, 'must be a positive number');
     check(errors, 'fiatCurrency', isNonEmptyString(r.fiatCurrency), 'must be a non-empty string');
@@ -98,5 +103,9 @@ export function validatePriceAlert(record) {
 /** Canonical key so callers can dedupe without importing the comparator. */
 export function priceAlertKey(alert) {
     const fiatCurrency = String(alert.fiatCurrency || 'usd').toLowerCase();
-    return `${alert.chainId}::${alert.direction}::${alert.targetFiat}::${fiatCurrency}`;
+    const tick = String(alert.tick ?? '').trim().toUpperCase();
+    const terms = `${alert.direction}::${alert.targetFiat}::${fiatCurrency}`;
+    return tick
+        ? `${alert.chainId}::${tick}::${terms}`
+        : `${alert.chainId}::${terms}`;
 }

@@ -44,19 +44,57 @@ export function truncateAddress(address) {
  * @param {'sm' | 'md'} [props.size]
  * @param {string} [props.className]
  * @param {boolean} [props.focusable]   false when a focusable control already owns the value, such as a read-only field's preview
+ * @param {boolean} [props.fit] show the full address when it fits and trim only
+ *   as much of the middle as the containing box requires
  */
 // A control inside a button, link or menu row is not a second tab stop: the
 // enclosing control is the one stop and nesting focusable content in it is invalid.
 const INTERACTIVE_ANCESTOR = 'button, a[href], summary, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"]';
 
-export function AddressText({ address, truncate = true, highlight = false, size = 'md', className = '', focusable = true }) {
+export function AddressText({
+    address,
+    truncate = true,
+    highlight = false,
+    size = 'md',
+    className = '',
+    focusable = true,
+    fit = false,
+}) {
     const [focused, setFocused] = useState(false);
     const [nested, setNested] = useState(false);
+    const [fitted, setFitted] = useState(null);
     const ref = useRef(null);
+    const measureRef = useRef(null);
     useLayoutEffect(() => {
         const el = ref.current;
         setNested(Boolean(el?.parentElement?.closest(INTERACTIVE_ANCESTOR)));
     });
+    useLayoutEffect(() => {
+        if (!fit || !truncate || highlight || typeof address !== 'string' || address.length <= 14) {
+            setFitted(null);
+            return undefined;
+        }
+        const element = ref.current;
+        const box = element?.parentElement;
+        const measure = measureRef.current;
+        if (!box || !measure) return undefined;
+
+        const update = () => {
+            const width = box.clientWidth;
+            const value = width > 0 ? fitAddressToWidth(address, width, measure) : null;
+            setFitted((current) => (
+                current?.address === address && current.value === value
+                    ? current
+                    : { address, value }
+            ));
+        };
+        update();
+        const Observer = globalThis.ResizeObserver;
+        if (typeof Observer !== 'function') return undefined;
+        const observer = new Observer(update);
+        observer.observe(box);
+        return () => observer.disconnect();
+    }, [address, fit, highlight, truncate]);
     const cls = `${styles.addr} ${styles[size]} ${className}`.trim();
     if (typeof address !== 'string' || address.length === 0) {
         return <span className={cls} dir="ltr">…</span>;
@@ -101,7 +139,18 @@ export function AddressText({ address, truncate = true, highlight = false, size 
         },
     };
     if (!highlight) {
-        return <span {...commonProps}>{focused || !truncate ? address : truncateAddress(address)}</span>;
+        const fittedValue = fitted?.address === address ? fitted.value : null;
+        const displayed = focused || !truncate
+            ? address
+            : (fit && fittedValue) || truncateAddress(address);
+        return (
+            <span {...commonProps}>
+                {displayed}
+                {fit && truncate ? (
+                    <span ref={measureRef} className={styles.measure} aria-hidden="true" data-address-measure />
+                ) : null}
+            </span>
+        );
     }
     return (
         <span {...commonProps}>
@@ -110,4 +159,29 @@ export function AddressText({ address, truncate = true, highlight = false, size 
             <span className={styles.tail}>{tail}</span>
         </span>
     );
+}
+
+function fitAddressToWidth(address, width, measure) {
+    const measuredWidth = (value) => {
+        measure.textContent = value;
+        const rectWidth = measure.getBoundingClientRect().width;
+        return rectWidth || measure.scrollWidth;
+    };
+
+    try {
+        if (measuredWidth(address) <= width) return address;
+        let low = 0;
+        let high = Math.floor((address.length - 1) / 2);
+        while (low < high) {
+            const count = Math.ceil((low + high) / 2);
+            const candidate = `${address.slice(0, count)}…${address.slice(-count)}`;
+            if (measuredWidth(candidate) <= width) low = count;
+            else high = count - 1;
+        }
+        return low > 0
+            ? `${address.slice(0, low)}…${address.slice(-low)}`
+            : '…';
+    } finally {
+        measure.textContent = '';
+    }
 }

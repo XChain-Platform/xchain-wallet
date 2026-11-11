@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { formatUnixSecondsLocal } from '../utils/dateTime.js';
@@ -22,14 +22,16 @@ import '../../i18n/locales/en/crossChainSwap.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -143,6 +145,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [getPickerOpen, setGetPickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [receivePickerOpen, setReceivePickerOpen] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -406,6 +409,20 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
     }), [giveCoinTicker, giveTick, giveOwnership, giveAmount, getCoinTicker, getTick,
         getOwnership, getAmount, getAddress, expMode, expInput, memo]);
+    const swapQuoteActionData = useMemo(() => {
+        if (!fromAddress?.address || !giveChainId || !getChainId) return null;
+        if (!giveTick.trim() || !getTick.trim() || !getAddress.trim()) return null;
+        if ((!giveOwnership && !giveAmount) || (!getOwnership && !getAmount)) return null;
+        if (validationError) return null;
+        return { action: 'SWAP', params: swapParams };
+    }, [fromAddress?.address, giveChainId, getChainId, giveTick, getTick, getAddress,
+        giveOwnership, giveAmount, getOwnership, getAmount, validationError, swapParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId: giveChainId,
+        source: fromAddress?.address,
+        actionData: swapQuoteActionData,
+    });
 
     // §5.6: SwapForm already composes one PSBT host-side and approves it on
     // the shared confirm page; the cross-chain variant now does the same.
@@ -678,7 +695,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 ) : null}
                 <p className={styles.hint}>{t('crossChainSwap.success.hint')}</p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -714,6 +731,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         <Button
                             type="button"
                             variant="secondary"
+                            icon={<Icon.PencilIcon />}
                             onClick={() => { setStage('form'); setSubmitError(null); }}
                             disabled={stage === 'submitting'}
                         >
@@ -721,7 +739,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.SignIcon />}
                             loading={stage === 'submitting'}
                             disabled={
                                 isWatcherMode
@@ -732,7 +751,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             }
                         >
                             {isWatcherMode
-                                ? 'Create unsigned transaction'
+                                ? 'Create unsigned cross-chain swap transaction'
                                 : hw
                                     ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                     : 'Sign cross-chain swap'}
@@ -801,9 +820,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -862,11 +879,38 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 title="From address"
                 walletId={walletId}
                 chainId={giveChainId}
+                onChainChange={(cid) => {
+                    if (cid === giveChainId) return;
+                    setGiveChainId(cid);
+                    setGiveTick('');
+                    setGiveAmount('');
+                    setGiveOwnership(false);
+                    setFormError(null);
+                }}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
                 }}
                 onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (receivePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Receive at"
+                walletId={walletId}
+                chainId={getChainId}
+                lockNetwork
+                onPick={(address) => {
+                    setGetAddress(address.address);
+                    setGetAddressTouched(true);
+                    setReceivePickerOpen(false);
+                    setFormError(null);
+                }}
+                onBack={() => setReceivePickerOpen(false)}
             />
         );
     }
@@ -929,20 +973,22 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.SwapIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || !networkAvailable}
                     title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : 'Review'}
+                        ? 'Preparing cross-chain swap…'
+                        : 'Create cross-chain swap'}
                 </Button>
             )}
         >
             <FormSection title="You give">
-                    <ChainPicker
+                    <NetworkField
                         label="Give network"
+                        help="The chain you pay from. The token you give, your From address and the network fee are on this chain; changing it clears the give token."
                         value={giveChainId || ''}
                         onChange={(cid) => {
                             if (cid === giveChainId) return;
@@ -959,6 +1005,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         <AddressField
                             label="From"
                             icon="addresses"
+                            help="The wallet address on the give network whose tokens are escrowed and that pays this swap's network fee."
                             value={fromAddress.address}
                             readOnly
                             onChange={() => {}}
@@ -968,17 +1015,20 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     ) : null}
                     <TokenField
                         label="Give token"
+                        help="The token you put up on the give network. It is held in escrow until the swap is matched, cancelled or expires."
                         value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
                         onOpenPicker={() => setGivePickerOpen(true)}
                     />
                     <Checkbox
                         label="Give this token's ownership (not a balance)"
+                        help="Escrow the give token name's ownership record for this cross-chain swap instead of giving a token balance."
                         checked={giveOwnership}
                         onChange={(e) => setGiveOwnership(e.target.checked)}
                     />
                     {!giveOwnership ? (
                         <AmountField
                             label="Give amount"
+                            help="How many of the give token to escrow for this cross-chain swap. The give side stays escrowed until a match, cancellation, or expiration."
                             amount={giveAmount}
                             tick={giveTick}
                             onAmountFieldChange={(rawValue) => {
@@ -998,8 +1048,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             </FormSection>
 
             <FormSection title="You get">
-                    <ChainPicker
+                    <NetworkField
                         label="Get network"
+                        help="The chain you want to be paid on. The token you get and your Receive at address are on this chain; changing it clears the get token."
                         value={getChainId || ''}
                         onChange={(cid) => {
                             if (cid === getChainId) return;
@@ -1016,27 +1067,34 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                     <AddressField
                         label="Receive at"
+                        icon="addresses"
+                        help="The address on the get network that receives what the matcher gives. Type or paste any valid address, or choose one from this wallet."
                         value={getAddress}
                         onChange={(e) => {
                             setGetAddress(e.target.value);
                             setGetAddressTouched(true);
                         }}
+                        onIconClick={() => setReceivePickerOpen(true)}
+                        iconLabel="Choose receiving address"
                         placeholder="Automatically filled from your wallet on the get network"
                         autoComplete="off"
                     />
                     <TokenField
                         label="Get token"
+                        help="The token you want in return on the get network. It is paid to your Receive at address when someone matches the swap."
                         value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
                         onOpenPicker={() => setGetPickerOpen(true)}
                     />
                     <Checkbox
                         label="Require the matcher to give that token's ownership"
+                        help="Require the matcher to transfer the get token name's ownership record across chains instead of providing a token balance."
                         checked={getOwnership}
                         onChange={(e) => setGetOwnership(e.target.checked)}
                     />
                     {!getOwnership ? (
                         <AmountField
                             label="Get amount"
+                            help="How many of the get token the matcher must provide on the get network in exchange for your escrowed tokens."
                             amount={getAmount}
                             tick={getTick}
                             onAmountFieldChange={(rawValue) => {
@@ -1048,12 +1106,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     ) : null}
             </FormSection>
 
-            <FormSection
-                title="Timing and fees"
-                description="The give side stays escrowed until a match, cancellation, or expiration."
-            >
+            <FormSection title="Timing and fees">
                 <RadioGroup
                     legend="Expiration"
+                    help="How long this cross-chain swap stays open for matching. Cancel from My swaps or let the offer expire to return the escrow to the source address. Paid transaction fees are not refunded."
                     name="xswap-exp"
                     value={expMode}
                     onChange={setExpMode}
@@ -1065,6 +1121,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 {expMode === 'custom' ? (
                 <Input
                     label="Expires"
+                    help="The local date and time when this cross-chain swap stops accepting matches."
                     type="datetime-local"
                     value={expInput}
                     onChange={(e) => setExpInput(e.target.value)}
@@ -1076,34 +1133,31 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <DetailRow label="Rate" value={rateText} />
                 </dl>
 
-                <p className={styles.hintLeft}>
-                    Cancel from My swaps or let the offer expire to return the escrow to the
-                    source address. Paid transaction fees are not refunded.
-                </p>
-
                 <Input
-                    label="Memo (optional)"
+                    label="Memo"
+                    optional
+                    maxLength={MAX_MEMO_LENGTH}
+                    help="A public note stored with this cross-chain swap on chain."
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                 />
 
-                {feeTiers ? (
+                <FeesCard chainId={giveChainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
                     <FeeSelector
+                        chainId={giveChainId}
                         label="Network fee"
                         coinTicker={giveTicker || ''}
                         tiers={feeTiers}
                         value={feePick}
                         onChange={setFeePick}
                         customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                        // Offline already says swapping is blocked, so a fee-source
-                        // notice would be a second message for the same state.
-                        showEstimateNotice={networkAvailable}
                     />
-                ) : null}
+                ) : null}>
                 {/* Off Bitcoin this is mandatory, so it renders as a
                     disclosure rather than a choice - the same treatment every other
                     ORDER/SWAP authoring surface gives it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
+                    <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
+                </FeesCard>
             </FormSection>
         </FormPage>,
     );

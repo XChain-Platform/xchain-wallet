@@ -190,7 +190,7 @@ describe('dropdown chrome', () => {
                 ariaLabel="Filter by network"
             />,
         );
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
         expect(trigger.textContent).not.toMatch(/[▾▴]/);
         expect([...trigger.querySelectorAll('path')].map((p) => p.getAttribute('d'))).toContain(d);
     });

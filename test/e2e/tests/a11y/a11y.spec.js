@@ -71,7 +71,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
-        await page.getByLabel('Confirm password').fill('a11ypassword123');
+        await page.getByLabel('Confirm password', { exact: true }).fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
         // The stage opens concealed; scan it as the user first sees it, then
         // with the words showing.
@@ -86,7 +86,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
-        await page.getByLabel('Confirm password').fill('a11ypassword123');
+        await page.getByLabel('Confirm password', { exact: true }).fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
         await readRecoveryPhrase(page);
         await page.getByLabel(/saved my recovery phrase/i).check();
@@ -102,7 +102,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
-        await page.getByLabel('Confirm password').fill('a11ypassword123');
+        await page.getByLabel('Confirm password', { exact: true }).fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
 
         const words = await readRecoveryPhrase(page);

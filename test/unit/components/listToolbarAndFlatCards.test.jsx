@@ -20,7 +20,7 @@ const route = (name) => read(`packages/core/src/shared/routes/${name}.jsx`);
 afterEach(() => cleanup());
 
 describe('ListToolbar', () => {
-    it('renders the search box first and each filter in its own equal-share field', () => {
+    it('renders the search box first and each filter in its own field', () => {
         const onQueryChange = vi.fn();
         render(
             <ListToolbar query="" onQueryChange={onQueryChange} searchLabel="Search things">

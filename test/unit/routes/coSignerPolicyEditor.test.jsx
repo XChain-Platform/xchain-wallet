@@ -224,7 +224,7 @@ describe('CoSignerPolicyEditor allowed-actions vocabulary', () => {
     it('asks the owner to tick labelled actions instead of typing protocol codes', () => {
         const { container } = render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
         const fieldset = container.querySelector('fieldset');
-        expect(fieldset.querySelector('legend').textContent).toBe('Allowed actions');
+        expect(fieldset.querySelector('legend > span').textContent).toBe('Allowed actions');
         expect(fieldset.querySelector('textarea')).toBeNull();
         expect(fieldset.textContent).not.toContain('SEND for');
         expect(fieldset.textContent).not.toContain('SEND, ISSUE');
@@ -373,5 +373,72 @@ describe('CoSignerPolicyEditor allowed-actions picker', () => {
         expect(screen.getByRole('checkbox', { name: 'Send' }).checked).toBe(true);
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
         expect(onChange.mock.calls[0][0].allowedActionsText).toBe('');
+    });
+});
+
+describe('CoSignerPolicyEditor field guidance and actions', () => {
+    const completeDraft = {
+        ...emptyPolicyDraft(),
+        allowedActionsText: 'SEND',
+        maxPerAction: [{ action: 'SEND', tick: '*', cap: '10' }],
+        windowEnabled: true,
+        windowHours: '24',
+        windowMaxActions: '5',
+        windowPerTick: [{ tick: 'XCHAIN', cap: '100' }],
+        confirmAbove: [{ tick: 'XCHAIN', amount: '50' }],
+        allowedDestinations: [{ address: 'bc1qdest' }],
+        allowedOutputs: [{ address: 'bc1qout', maxValue: '' }],
+    };
+
+    it('puts policy explanations in tips on every group and field', () => {
+        const { container } = render(
+            <CoSignerPolicyEditor value={completeDraft} onChange={() => {}} />,
+        );
+
+        for (const name of [
+            'About allowed actions',
+            'About per-action amount limits',
+            'About the rolling limit',
+            'About extra-confirmation thresholds',
+            'About allowed recipients',
+            'About allowed transaction outputs',
+            'About Action',
+            'About Max actions per window',
+            'About Window length (hours)',
+            'About Max total per window',
+            'About Warn above',
+            'About Address 1',
+            'About Output address 1',
+            'About Max value',
+        ]) {
+            expect(screen.getByRole('button', { name })).toBeInTheDocument();
+        }
+        expect(screen.getAllByRole('button', { name: 'About Token' })).toHaveLength(3);
+        expect(screen.getByRole('button', { name: /About Max amount/ })).toBeInTheDocument();
+        expect(container.querySelectorAll('fieldset > p')).toHaveLength(1);
+        expect(screen.getByTestId('allowed-actions-preview')).toBeInTheDocument();
+    });
+
+    it('uses Optional state and icon-bearing add and remove actions', () => {
+        render(<CoSignerPolicyEditor value={completeDraft} onChange={() => {}} />);
+
+        expect(screen.getByLabelText('Max value')).toHaveAttribute('aria-required', 'false');
+        expect(screen.queryByLabelText('Max value (optional)')).toBeNull();
+        expect(screen.getAllByText('Optional', { selector: 'span' })).toHaveLength(2);
+
+        for (const name of [
+            'Add limit',
+            'Add per-token rolling limit',
+            'Add threshold',
+            'Add recipient',
+            'Add output',
+        ]) {
+            const button = screen.getByRole('button', { name });
+            expect(button.querySelector('svg')).not.toBeNull();
+            expect(button).not.toHaveTextContent('+');
+        }
+        for (const button of screen.getAllByRole('button', { name: 'Remove' })) {
+            expect(button.querySelector('svg')).not.toBeNull();
+        }
     });
 });

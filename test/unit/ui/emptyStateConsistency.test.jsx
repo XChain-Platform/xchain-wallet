@@ -75,7 +75,7 @@ describe('empty-state consistency', () => {
         const state = screen.getByTestId('route-empty-state');
         const actions = within(state).getAllByRole('button');
         expect(actions.map((button) => button.textContent)).toEqual(['Create item', 'Learn more']);
-        expect(actions[0].className).toMatch(/primary/);
+        expect(actions[0].className).toMatch(/success/);
         expect(actions[1].className).toMatch(/secondary/);
         fireEvent.click(actions[0]);
         fireEvent.click(actions[1]);

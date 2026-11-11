@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Icon, InfoTip, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -21,6 +21,9 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
+import { contactsPickerStyles as pickerStyles } from '../components/ContactsPickerScreen.jsx';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import {
@@ -43,6 +46,8 @@ import { controllerBindValidationError } from '../../flows/controllerBind.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { toggleActionClass, waitForTxOutputsVisible } from '../utils/controllerBindClasses.js';
+import { MAX_MEMO_LENGTH } from '../utils/memoLimit.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -350,6 +355,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -734,7 +740,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${verb.toLowerCase()} controller`
+                            ? `${verb} controller`
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()} controller`
                                 : `Sign: ${verb.toLowerCase()} controller`}
@@ -806,9 +812,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -864,14 +868,37 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => {
+                    if (cid === chainId) return;
+                    setChainId(cid);
+                    setFromAddressId(null);
+                    setSourceError(null);
+                }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
         );
     }
 
+    if (tokenPickerOpen) {
+        return (
+            <OwnedTokenPickerScreen
+                variant={variant}
+                chainId={chainId}
+                tokens={ownedTokens}
+                onPick={(token) => {
+                    setSelectedTick(token.tick);
+                    setFromAddressId(token.ownerAddressId);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
     const networkField = (
         <NetworkField
+            help="The chain the token and its controller binding are on. Your From address and the fee are on this network."
             value={chainId}
             onChange={(cid) => {
                 // Re-picking the network already shown keeps the chosen From
@@ -896,7 +923,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 label={`${verb} controller`}
                 onSubmit={(event) => event.preventDefault()}
                 actions={(
-                    <Button type="submit" variant="success" icon={<Icon.LockIcon />} disabled>
+                    <Button type="submit" variant="success" icon={<Icon.LinkIcon />} disabled>
                         {actionButtonLabel}
                     </Button>
                 )}
@@ -921,7 +948,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 <Button
                     type="submit"
                     variant="success"
-                    icon={<Icon.LockIcon />}
+                    icon={<Icon.LinkIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
                         || isBlockedWatchOnlySource
@@ -933,18 +960,11 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 </Button>
             )}
         >
-            <details>
-                <summary>How controller bindings work</summary>
-                <p className={styles.hintLeft}>
-                    A guard contract approves or blocks the selected actions for this token or address. Unbind
-                    removes the guard after any cooldown finishes.
-                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
-                </p>
-            </details>
             {networkField}
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The owner address that signs this bind. Binding a token needs the token owner; binding an address uses that address."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -964,6 +984,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
             <Select
                 label="What to protect"
+                help="Choose Token to let the guard contract approve or block actions for a token this wallet owns. Choose Address to protect actions from the selected address."
                 value={target}
                 onChange={(e) => {
                     const nextTarget = /** @type {'token' | 'address'} */ (e.target.value);
@@ -982,22 +1003,20 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             </Select>
 
             {target === 'token' ? (
-                <Select
+                <TokenField
                     label="Token"
-                    value={selectedTick}
+                    help="The token this wallet owns that the guard contract will approve or block actions for."
+                    value={ownedTokens !== null && selectedTick ? { chainId, tick: selectedTick } : null}
+                    placeholder={ownedTokens === null ? 'Loading tokens' : 'Select a token'}
                     disabled={ownedTokens === null}
-                    onChange={(event) => {
-                        const nextTick = event.target.value;
-                        const token = ownedTokens?.find((row) => row.tick === nextTick);
-                        setSelectedTick(nextTick);
-                        if (token) setFromAddressId(token.ownerAddressId);
-                    }}
-                >
-                    {ownedTokens === null ? <option value="">Loading tokens</option> : null}
-                    {(ownedTokens || []).map((token) => (
-                        <option value={token.tick} key={`${token.ownerAddressId}:${token.tick}`}>{token.tick}</option>
-                    ))}
-                </Select>
+                    onOpenPicker={() => setTokenPickerOpen(true)}
+                />
+            ) : null}
+
+            {isWatcherMode ? (
+                <p className={styles.hintLeft}>
+                    Watch-only mode creates an unsigned transaction and cannot sign it.
+                </p>
             ) : null}
 
             {/*
@@ -1011,7 +1030,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             {!unbind ? (
                 <Input
                     label="Guard contract"
-                    hint="The action number of the deployed contract that will gate the selected actions."
+                    help="The action number of the deployed contract that will gate the selected actions."
                     inputMode="numeric"
                     value={controller}
                     error={errorFor('controller')}
@@ -1024,7 +1043,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             ) : null}
 
             <fieldset aria-describedby={errorFor('actionClass') ? 'controller-bind-action-class-error' : undefined}>
-                <legend>Action class</legend>
+                <legend>
+                    <span>Action class</span>
+                    {' '}
+                    <InfoTip
+                        aria="About Action class"
+                        label="One binding is sent per ticked class. All covers every current and future class; a class-specific binding still wins."
+                    />
+                </legend>
                 {actionClasses.map((actionClass) => (
                     <Checkbox
                         className={styles.checkRow}
@@ -1056,15 +1082,15 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
               * gates the deed rather than the balances - which reads as a
               * synonym for `transfer` and is not one.
               */}
-            <p className={styles.hintLeft}>
-                {isWatcherMode
-                    ? 'Watch-only mode builds one bind at a time.'
-                    : selectedActionClasses.includes('all')
-                        ? 'Covers every current and future class. A class-specific binding still wins over this one.'
-                        : selectedActionClasses.includes('ownership')
-                        ? 'ownership: transfers of the token itself (including a sweep), not transfers of its balances.'
-                            : 'One binding is sent per ticked class.'}
-            </p>
+            {isWatcherMode || selectedActionClasses.includes('all') || selectedActionClasses.includes('ownership') ? (
+                <p className={styles.hintLeft}>
+                    {isWatcherMode
+                        ? 'Watch-only mode builds one bind at a time.'
+                        : selectedActionClasses.includes('all')
+                            ? 'Covers every current and future class. A class-specific binding still wins over this one.'
+                            : 'ownership: transfers of the token itself (including a sweep), not transfers of its balances.'}
+                </p>
+            ) : null}
 
             <Checkbox
                 className={styles.checkRow}
@@ -1075,8 +1101,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
             {!unbind ? (
                 <Input
-                    label="Cooldown blocks (optional)"
-                    hint="Blocks a later unbind must wait before it takes effect. Leave blank for none."
+                    label="Cooldown blocks"
+                    optional
+                    help="Blocks a later unbind must wait before it takes effect. Leave blank for none."
                     inputMode="numeric"
                     value={cooldownBlocks}
                     error={errorFor('cooldown')}
@@ -1086,8 +1113,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             ) : null}
 
             <Input
-                label="Memo (optional)"
-                hint="Free-text note recorded with the bind/unbind event."
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="Free-text note recorded with the bind/unbind event."
                 value={memo}
                 error={errorFor('memo')}
                 onChange={(e) => setMemo(e.target.value)}
@@ -1099,6 +1128,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -1109,5 +1139,40 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             ) : null}
 
         </FormPage>,
+    );
+}
+
+function OwnedTokenPickerScreen({ variant, chainId, tokens, onPick, onBack }) {
+    const header = <PageHeader onBack={onBack} title="Select token" />;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
+
+    if (tokens === null) return wrap(<p className={styles.hint}>Loading tokens…</p>);
+    if (tokens.length === 0) {
+        return wrap(
+            <EmptyState
+                title="No owned tokens"
+                body="Tokens owned by this wallet on this network appear here."
+            />,
+        );
+    }
+    return wrap(
+        <ul className={pickerStyles.abList}>
+            {tokens.map((token) => (
+                <li key={`${token.ownerAddressId}:${token.tick}`}>
+                    <ListRow
+                        type="button"
+                        className={pickerStyles.abRow}
+                        onClick={() => onPick(token)}
+                        aria-label={token.tick}
+                        leading={<TickerIcon chainId={chainId} tick={token.tick} size={32} />}
+                        title={token.tick}
+                    />
+                </li>
+            ))}
+        </ul>,
     );
 }

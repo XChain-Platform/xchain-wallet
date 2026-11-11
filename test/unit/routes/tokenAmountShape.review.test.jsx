@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe.each([
-    ['Mint', MintForm, /^(Mint|Preview)$/],
+    ['Mint', MintForm, /^Mint$/],
     ['Destroy', DestroyForm, /^Destroy$/],
 ])('%s amount shape', (_name, Form, buttonName) => {
     it.each(['.', '.5', '5.'])('refuses %j before composing', async (typed) => {

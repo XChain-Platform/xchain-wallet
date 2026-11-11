@@ -121,7 +121,7 @@ describe('D-64: the other Addresses failures', () => {
         });
         await openDetail(messaging);
         fireEvent.change(screen.getByLabelText(/Address label/i), { target: { value: 'Paper key' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Save label$/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).not.toMatch(/setAddressLabel|Cannot read propert/);

@@ -94,7 +94,7 @@ describe('ControllerBindForm source selection', () => {
         expect(screen.getByRole('button', { name: 'Bind address' })).toBeDisabled();
 
         fireEvent.click(network);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
 
         expect(await screen.findByRole('button', { name: 'Network: Litecoin' })).toBeTruthy();
         expect(await screen.findByDisplayValue(hdAddress.address)).toBeTruthy();
@@ -204,7 +204,8 @@ describe('ControllerBindForm page template', () => {
         const bind = screen.getByRole('button', { name: 'Bind address' });
         await waitFor(() => expect(bind).toBeEnabled());
         fireEvent.click(bind);
-        const sign = await screen.findByRole('button', { name: /Create unsigned transaction: bind controller/ });
+        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
+        const sign = await screen.findByRole('button', { name: 'Bind controller' });
         fireEvent.click(sign);
         const txidCell = await screen.findByText(txid);
         expect(messaging.buildControllerBindParams).toHaveBeenCalled();

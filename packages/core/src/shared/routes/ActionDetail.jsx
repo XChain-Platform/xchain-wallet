@@ -14,6 +14,7 @@ import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionDetail.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
@@ -35,7 +36,9 @@ const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
  * @param {() => void} props.onBack
  */
 export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
     const { offline: networkOffline } = useNetworkOffline({ walletId });
     const browserOnline = !networkOffline;
@@ -58,13 +61,10 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         setConfirmed(null);
     }, [entryProp?.key]);
     useEffect(() => {
-        if (!pendingTxHash || confirmed) return undefined;
+        if (!source.live || !pendingTxHash || confirmed) return undefined;
         if (!browserOnline) return undefined;
         if (!entryProp?.chainId || !entryProp?.address) return undefined;
         if (typeof messaging.getAddressHistory !== 'function') return undefined;
-        // A demo wallet's pending sample row never confirms, and a demo wallet's
-        // addresses never go to an explorer (issue #82).
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
         const { chainId, address } = entryProp;
         let cancelled = false;
         const look = () => {
@@ -96,7 +96,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             look();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
-    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, walletId]);
+    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, source.live]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
@@ -146,11 +146,11 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     // PC-50: the same SPV verdict the History list badges, on the detail view
     // the item names. Only a confirmed action with a numeric index is
-    // checkpointable, and the verdict is skipped for demo wallets and when the
+    // checkpointable, and the verdict is skipped for sample data and when the
     // user has opted out of proof traffic (`verifyProofs`, default on).
     const proofSettings = useSettings();
     const verifyEnabled = proofSettings.settings?.verifyProofs !== false
-        && !flowsLib.isDemoWallet(walletId);
+        && source.live;
     const verifyItems = useMemo(() => {
         if (!entry || isPending) return [];
         if (entry.actionIndex == null || entry.actionIndex === '') return [];

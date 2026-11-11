@@ -55,7 +55,11 @@ assert.doesNotMatch(
 
 // --- fiat rate + toggle state -----------------------------------------
 
-assert.match(sendSrc, /fiatRate = useFiatRate\(/, 'fiat rate via oracle-backed hook');
+assert.match(
+    sendSrc,
+    /amountFiatRate = useTickFiatRate\(/,
+    'fiat rate via oracle-backed per-tick hook',
+);
 assert.match(sendSrc, /amountInputMode/, 'amount-entry mode state');
 assert.match(sendSrc, /fiatAmount/, 'fiat-mode input state');
 assert.match(sendSrc, /'coin' \| 'fiat'/, 'mode union typed');
@@ -86,7 +90,7 @@ assert.match(
 
 // --- fiat preview hint ------------------------------------------------
 
-assert.match(sendSrc, /coinToFiatExact\(.*fiatRate\)/, 'fiat preview via exact conversion');
+assert.match(sendSrc, /coinToFiatExact\(.*amountFiatRate\)/, 'fiat preview via exact conversion');
 
 // --- Max button -------------------------------------------------------
 

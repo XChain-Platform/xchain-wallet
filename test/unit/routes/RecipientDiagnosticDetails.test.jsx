@@ -40,7 +40,8 @@ function mount(component) {
 }
 
 async function expectSkippedAddressDisclosure() {
-    const textarea = await screen.findByLabelText(/Recipients|Addresses/);
+    // By role: the field's help tip button is also named after its label.
+    const textarea = await screen.findByRole('textbox', { name: /Recipients|Addresses/ });
     fireEvent.change(textarea, { target: { value: WRONG_NETWORK } });
     const summary = await screen.findByText('Skipped addresses (1)');
     fireEvent.click(summary);
@@ -65,7 +66,7 @@ describe('wrong-network recipient diagnostics', () => {
 
 // A ^<index> entry is an address reference, so it is named as one rather than left as a typo.
 async function expectAddressReferenceNote() {
-    const textarea = await screen.findByLabelText(/Recipients|Addresses/);
+    const textarea = await screen.findByRole('textbox', { name: /Recipients|Addresses/ });
     fireEvent.change(textarea, { target: { value: `${SOURCE}\n^123\n^007` } });
     const summary = await screen.findByText('Address references (1)');
     expect(screen.getByText(/One entry is an address reference .* paste the address the reference points to\./))

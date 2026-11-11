@@ -34,6 +34,9 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
+const ADMIN_ACTION_PATTERN = /^(Lock token|Update description|Transfer ownership|Update mint settings|Update callback settings|Update access lists|Update bridge settings)$/;
+const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
+
 function deferred() {
     let resolve;
     let reject;
@@ -85,7 +88,7 @@ describe('TokenAdminForm token record read faults', () => {
             const target = mount(mode, {
                 getTokenInfo: vi.fn().mockRejectedValue(new Error('explorer unreachable')),
             });
-            const preview = await screen.findByRole('button', { name: 'Preview' });
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await act(async () => { await Promise.resolve(); });
             expect(preview).toBeDisabled();
             fireEvent.click(preview);
@@ -97,7 +100,7 @@ describe('TokenAdminForm token record read faults', () => {
             const target = mount(mode, {
                 getTokenInfo: vi.fn(() => new Promise(() => {})),
             });
-            const preview = await screen.findByRole('button', { name: 'Preview' });
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             expect(preview).toBeDisabled();
             fireEvent.submit(preview.closest('form'));
             expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
@@ -137,7 +140,7 @@ describe('TokenAdminForm access lists across a token switch', () => {
             await betaRead.promise;
         });
 
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         if (!preview.disabled) {
             fireEvent.click(preview);
             const review = await screen.findByRole('form', { name: /Review/ }).catch(() => null);
@@ -197,15 +200,15 @@ describe('TokenAdminForm access lists across a token switch', () => {
         expect(screen.queryByText(/List #7\b/)).toBeNull();
         expect(screen.queryByText(/List #55/)).toBeNull();
 
-        // Unchanged against the second token's record, so Preview stays closed.
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        // Unchanged against the second token's record, so the action stays closed.
+        const preview = adminAction();
         expect(preview).toBeDisabled();
 
         // A new allow-list composes only that change; the block-list matches
         // the second token's record and is left out.
         fireEvent.click(screen.getByRole('button', { name: /Choose allow-list/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
-        const openPreview = await screen.findByRole('button', { name: 'Preview' });
+        const openPreview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
         await waitFor(() => expect(openPreview).toBeEnabled());
         fireEvent.click(openPreview);
         fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
@@ -222,10 +225,10 @@ describe('TokenAdminForm lock matrix from a bare token record', () => {
         const target = mount('lock', {
             getTokenInfo: vi.fn().mockResolvedValue({ creator: SOURCE.address, locks: { max_supply: true } }),
         });
-        const maxSupply = await screen.findByRole('checkbox', { name: /Max supply \(already locked\)/ });
+        const maxSupply = await screen.findByRole('switch', { name: /Max supply \(already locked\)/ });
         expect(maxSupply).toBeChecked();
         expect(maxSupply).toBeDisabled();
-        const maxMint = screen.getByRole('checkbox', { name: /^Max mint per transaction/ });
+        const maxMint = screen.getByRole('switch', { name: /^Max mint per transaction/ });
         expect(maxMint).not.toBeChecked();
         expect(maxMint).toBeEnabled();
         expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -253,7 +256,7 @@ describe('TokenAdminForm list detail read faults', () => {
 
             fireEvent.click(screen.getByRole('button', { name: /Choose block-list/ }));
             fireEvent.click(await screen.findByText(/Address list #55/));
-            const preview = await screen.findByRole('button', { name: 'Preview' });
+            const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await waitFor(() => expect(preview).toBeEnabled());
             fireEvent.click(preview);
             fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
@@ -271,7 +274,7 @@ describe('TokenAdminForm address read fault', () => {
             getAddressesByChain: vi.fn().mockRejectedValue(new Error('Vault read failed.')),
         });
         expect(await screen.findByText('Vault read failed.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+        expect(screen.queryByRole('button', { name: ADMIN_ACTION_PATTERN })).toBeNull();
         expect(screen.queryByText(SOURCE.address)).toBeNull();
         expect(screen.queryByDisplayValue(SOURCE.address)).toBeNull();
         expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -287,7 +290,7 @@ describe('TokenAdminForm double press', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: /Review/ });
@@ -309,7 +312,7 @@ describe('TokenAdminForm double press', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'One update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.click(preview);

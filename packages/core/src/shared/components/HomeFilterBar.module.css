@@ -1,16 +1,25 @@
-/* Inline filter row above the Home asset tabs: a flex-growing search
-   box at the start, a fixed-width network dropdown at the end. */
+/* The default row gives search and network equal room when a host presents
+   them inline; the menu variant below stacks them in the header popover. */
 .bar {
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    /* HomeTabs' .wrap puts a 12px column gap above and below every
-       child. Trim it with negative margins so the filter row sits snug
-       above the tab strip. The top keeps an 8px gap to the quick-action
-       buttons (12px wrap gap minus 4px) to match the chart-to-buttons
-       spacing; the bottom stays tighter at 4px. */
+    /* Inline hosts use negative margins to keep this utility row close to
+       adjacent content; the menu variant resets both margins below. */
     margin-top: calc(-1 * var(--xc-space-1));
     margin-bottom: calc(-1 * var(--xc-space-2));
+}
+
+.menu {
+    flex-direction: column;
+    align-items: stretch;
+    margin: 0;
+}
+
+.menu .searchWrap,
+.menu .networkWrap {
+    flex-basis: auto;
+    width: 100%;
 }
 
 .searchWrap {
@@ -48,6 +57,13 @@
     background: var(--xc-bg);
     color: var(--xc-text);
     font-family: inherit;
+}
+
+/* The kit Input rule (.input:not(textarea)) outranks a bare class and resets
+   the inline padding, so the start padding that clears the search icon is
+   set through the wrapper. */
+.searchWrap input.search {
+    padding-inline-start: var(--xc-space-8);
 }
 
 /* No focus ring on the search box: the user wants it to look identical

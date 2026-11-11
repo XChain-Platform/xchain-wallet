@@ -1153,10 +1153,11 @@ export async function selectVenueChain(scope, field = 'Network') {
         .toBeVisible({ timeout: 30_000 });
     if (!((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) {
         await trigger.click();
-        await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
+        await trigger.page().getByRole('dialog', { name: field })
+            .getByRole('button', { name: new RegExp(`^Select ${REGTEST_CHAIN_LABEL}\\b`) })
             .first().click();
         // Assert the switch took: the picker closes on click whether or not the
-        // option was the one intended, so an unasserted click is a silent
+        // row was the one intended, so an unasserted click is a silent
         // wrong-chain run - the exact failure this helper exists to prevent.
         await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
             { timeout: 15_000 });
@@ -2098,7 +2099,7 @@ export async function readReceiveAddress(page) {
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
         await page.getByRole('button', { name: 'Choose receive address' }).first().click();
 
-        const filter = page.getByRole('button', { name: 'Filter by network' });
+        const filter = page.getByRole('button', { name: /^Filter by network/ });
         await expect(filter, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
         await filter.click();
         // The filter's options are coin FAMILIES ("Bitcoin" / "Litecoin" /

@@ -164,13 +164,17 @@ describe('CreateOrderForm coverage', () => {
         await renderForm();
 
         const getSection = screen.getByRole('region', { name: 'You get' });
-        expect(getSection).toContainElement(screen.getByLabelText('Receive at (optional)'));
+        expect(getSection).toContainElement(screen.getByLabelText('Receive at'));
         const timing = screen.getByRole('region', { name: 'Timing and fees' });
         // The section title no longer repeats the Expiration choice right below it.
         expect(timing).toContainElement(screen.getByRole('group', { name: 'Expiration' }));
         expect(screen.queryByRole('heading', { name: 'Expiration' })).toBeNull();
-        // Help text among the fields lines up with them instead of centring.
-        expect(screen.getByText(/Both sides of this order settle on the same chain/).className).toMatch(/hintLeft/);
+        // The same-network note lives in the From help tip, not as a line under Network,
+        // and the Network field carries its own help tip.
+        expect(screen.queryByText(/Both sides of this order settle on the same chain/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'About From' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Both sides of the order settle on this network');
     });
 
     it('surfaces actionable validation for malformed order fields', async () => {
@@ -180,17 +184,17 @@ describe('CreateOrderForm coverage', () => {
         expect(await screen.findByText('Enter the ticker to give.')).toBeInTheDocument();
 
         fillBasicOrder();
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'bad|address' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad;memo' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad;memo' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
@@ -212,9 +216,9 @@ describe('CreateOrderForm coverage', () => {
         fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.55' } });
         await waitFor(() => expect(state.messaging.getTokenInfo).toHaveBeenCalled());
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Give amount can have at most 1 decimal place for XCP.',
-        );
+        // The amount field shows its own decimal-places error beside the form's.
+        await waitFor(() => expect(screen.getAllByRole('alert')
+            .some((a) => /at most 1 decimal place/.test(a.textContent))).toBe(true));
 
         fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '100.1' } });
         await waitFor(() => expect(state.messaging.getWalletBalances).toHaveBeenCalled());
@@ -277,11 +281,11 @@ describe('CreateOrderForm coverage', () => {
         state.submit.mockResolvedValue({ psbtHex: 'deadbeef' });
         await renderForm();
         fillBasicOrder();
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '1devmockabc' } });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '1devmockabc' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText('Review order')).toBeInTheDocument();
-        expect(screen.getByText(/Watcher mode:/)).toBeInTheDocument();
+        expect(screen.getByText(/prepares the transaction for your offline signer/)).toBeInTheDocument();
         expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
         expect(screen.getByTestId('action-intent')).toHaveTextContent('0.1 BTC');
         expect(screen.getByTestId('action-intent')).toHaveTextContent('1devmockabc');
@@ -291,9 +295,10 @@ describe('CreateOrderForm coverage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
         expect(screen.getByLabelText('Ticker')).toHaveValue('XCP');
         expect(screen.getByLabelText('Amount')).toHaveValue('2.5');
-        expect(screen.getByLabelText('Amount (BTC)')).toHaveValue('0.1');
-        expect(screen.getByLabelText('Receive at (optional)')).toHaveValue('1devmockabc');
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        // Back from review the coin amount shows padded to 8 decimals (U61).
+        expect(screen.getByLabelText('Amount (BTC)')).toHaveValue('0.10000000');
+        expect(screen.getByLabelText('Receive at')).toHaveValue('1devmockabc');
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         await waitFor(() => expect(state.submit).toHaveBeenCalledWith(expect.objectContaining({
@@ -310,7 +315,7 @@ describe('CreateOrderForm coverage', () => {
         await renderForm();
         fillBasicOrder();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -321,7 +326,7 @@ describe('CreateOrderForm coverage', () => {
     });
 
     it.each([
-        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
         // The shared action-text refusal answers first, before the memo's own check.
         ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
         ['a tab', 'a\tb', /Memo cannot contain control characters/],
@@ -329,7 +334,7 @@ describe('CreateOrderForm coverage', () => {
         await renderForm();
         fillBasicOrder();
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: memo } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(state.confirm).not.toHaveBeenCalled();
@@ -339,7 +344,7 @@ describe('CreateOrderForm coverage', () => {
         await renderForm();
         fillBasicOrder();
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(250) } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'x'.repeat(250) } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
         await waitFor(() => expect(state.messaging.composeForConfirm.mock.calls.length + state.confirm.mock.calls.length + state.submit.mock.calls.length).toBeGreaterThan(0));
     });

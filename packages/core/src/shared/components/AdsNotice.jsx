@@ -39,7 +39,7 @@ export function AdsNotice({ onContinue, busy = false }) {
             </ul>
             <div className={styles.actions}>
                 <Button
-                    variant="primary"
+                    variant="success"
                     onClick={onContinue}
                     block
                     icon={<Icon.CheckIcon />}

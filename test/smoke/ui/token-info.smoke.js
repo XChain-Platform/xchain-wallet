@@ -159,11 +159,9 @@ for (const label of ['Creator', 'Total supply', 'Status']) {
         `TokenDetail renders the "${label}" row/card`,
     );
 }
-// The description body renders as plain prose (no labeled `Description`
-// row anymore. Moved into its own .descriptionBody block as part of
-// the §27.6 redesign).
-assert.ok(/descriptionBody/.test(td),
-    'TokenDetail still renders the description body block');
+// The description stays on the primary Details surface as escaped React text.
+assert.ok(/<DetailRow label="Description">[\s\S]*?detailText\(assetInfo\.description\)/.test(td),
+    'TokenDetail renders the description in its Details row');
 assert.ok(/socialLabel\(s\.platform\)[\s\S]*?s\.host/.test(td),
     'TokenDetail shows the actual destination host beside each social label');
 

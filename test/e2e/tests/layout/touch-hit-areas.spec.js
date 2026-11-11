@@ -66,11 +66,11 @@ function measureHitAreas(selectors) {
     });
 }
 
-function expectTapAreas(results) {
+function expectTapAreas(results, { width = TAP_MIN, height = TAP_MIN } = {}) {
     for (const r of results) {
         expect(r.missing, `${r.name} is on screen`).toBeFalsy();
-        expect(r.width, `${r.name} tap width`).toBeGreaterThanOrEqual(TAP_MIN - TOLERANCE);
-        expect(r.height, `${r.name} tap height`).toBeGreaterThanOrEqual(TAP_MIN - TOLERANCE);
+        expect(r.width, `${r.name} tap width`).toBeGreaterThanOrEqual(width - TOLERANCE);
+        expect(r.height, `${r.name} tap height`).toBeGreaterThanOrEqual(height - TOLERANCE);
         expect(r.centreOwned, `${r.name} centre is not covered by a neighbour's tap area`).toBe(true);
     }
 }
@@ -85,6 +85,13 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
     const rangePills = page.getByRole('main').locator('[role="tablist"][aria-label*="ange"] [role="tab"]');
     await expect(rangePills.first()).toBeVisible();
     const rangeCount = await rangePills.count();
+    const rangeRowWidth = await rangePills.first().evaluate((el) => el.parentElement.getBoundingClientRect().width);
+    // U42 keeps the painted chips compact and U67 requires all eight options
+    // on one minimal row. At 360px, each exclusive slot is the row's even
+    // share; the height remains the full 44px touch target. The share is
+    // floored to the half-pixel sampling grid, since a slot on a fractional
+    // position can lose one sample at its edge.
+    const rangeTapWidth = Math.min(TAP_MIN, Math.floor((rangeRowWidth / rangeCount) * 2) / 2);
     expectTapAreas(await page.evaluate(
         measureHitAreas,
         Array.from({ length: rangeCount }, (_, i) => ({
@@ -92,7 +99,7 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
             selector: 'main [role="tablist"][aria-label*="ange"] [role="tab"]',
             index: i,
         })),
-    ));
+    ), { width: rangeTapWidth });
 
     await gotoSection(page, 'Send');
     await expect(page.getByRole('button', { name: 'Create a real wallet' })).toBeVisible();

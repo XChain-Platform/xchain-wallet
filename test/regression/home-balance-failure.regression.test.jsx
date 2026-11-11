@@ -92,8 +92,9 @@ describe('regression/home-balance-failure', () => {
             .toBeInTheDocument();
         expect(screen.getByText('Litecoin')).toBeInTheDocument();
         expect(screen.getByLabelText('1.00000000 LTC')).toBeInTheDocument();
-        const syncLabel = screen.getByText(/Updated 10 minutes ago/);
-        expect(syncLabel.className).toMatch(/stale/i);
+        // The saved-balances notice above marks them stale; the balance box itself
+        // carries no Updated line online (U72).
+        expect(document.body).not.toHaveTextContent(/Updated /);
         expect(document.body).not.toHaveTextContent('Fund your wallet');
     });
 });

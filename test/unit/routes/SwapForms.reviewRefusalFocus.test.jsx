@@ -54,7 +54,9 @@ describe.each([
                 {makeForm({})}
             </MessagingProvider>,
         );
-        const review = await screen.findByRole('button', { name: 'Review' });
+        const review = await screen.findByRole('button', {
+            name: _name === 'SwapForm' ? 'Create swap' : 'Create cross-chain swap',
+        });
         review.focus();
         await waitFor(() => expect(review).toBeEnabled());
         fireEvent.click(review);

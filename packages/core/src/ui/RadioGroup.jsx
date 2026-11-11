@@ -4,7 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useId } from 'react';
+import { InfoTip } from './InfoTip.jsx';
+import { fieldHelpName } from './fieldRequirement.js';
 import styles from './RadioGroup.module.css';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * A native, single-choice fieldset with optional supporting copy.
@@ -15,6 +19,7 @@ import styles from './RadioGroup.module.css';
  * @param {string} props.value
  * @param {(value: string, event: import('react').ChangeEvent<HTMLInputElement>) => void} props.onChange
  * @param {Array<{ value: string, label: import('react').ReactNode, description?: import('react').ReactNode, disabled?: boolean }>} props.options
+ * @param {import('react').ReactNode} [props.help]   contextual help shown from an InfoTip beside the legend
  * @param {import('react').ReactNode} [props.hint]
  * @param {import('react').ReactNode} [props.error]
  * @param {boolean} [props.disabled]
@@ -27,6 +32,7 @@ export function RadioGroup({
     value,
     onChange,
     options,
+    help,
     hint,
     error,
     disabled = false,
@@ -39,6 +45,10 @@ export function RadioGroup({
     const groupName = name || `${autoId}-radio-group`;
     const hintId = hint && !error ? `${autoId}-hint` : undefined;
     const errorId = error ? `${autoId}-error` : undefined;
+    // With a help tip inside the legend, the group takes its name from the
+    // legend text alone so the tip button's name is not read twice.
+    const hasHelp = Boolean(help && legend);
+    const legendTextId = hasHelp ? `${autoId}-legend` : undefined;
     const groupDescribedBy = [externalDescribedBy, hintId, errorId]
         .filter(Boolean).join(' ') || undefined;
     const groupClassName = [
@@ -55,8 +65,18 @@ export function RadioGroup({
             disabled={disabled}
             aria-describedby={groupDescribedBy}
             aria-invalid={error ? 'true' : undefined}
+            aria-labelledby={fieldsetProps['aria-labelledby'] ?? legendTextId}
         >
-            <legend className={styles.legend}>{legend}</legend>
+            <legend className={styles.legend}>
+                {hasHelp ? <span id={legendTextId}>{legend}</span> : legend}
+                {hasHelp ? (
+                    <InfoTip
+                        className={styles.legendHelp}
+                        label={help}
+                        aria={t('ui.field.about', { label: fieldHelpName(legend, fieldsetProps['aria-label']) })}
+                    />
+                ) : null}
+            </legend>
             <div className={styles.options}>
                 {options.map((option, index) => {
                     const labelId = `${autoId}-label-${index}`;

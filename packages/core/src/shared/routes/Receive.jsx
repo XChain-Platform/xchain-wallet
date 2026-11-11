@@ -1136,6 +1136,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 walletId={walletId}
                 accountId={accountId}
                 chainId={activeChainId}
+                onChainChange={setActiveChainId}
                 onPick={(a) => {
                     addressManuallySelectedRef.current = true;
                     addressTypeRef.current = a?.addressType || addressType;
@@ -1246,6 +1247,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <Select
                     size="md"
                     label={t('receive.addressType')}
+                    help={t('receive.addressTypeHelp')}
                     value={addressType}
                     onChange={(event) => changeAddressType(event.target.value)}
                     disabled={generating || !addressType}
@@ -1296,7 +1298,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         onClick={copyAddress}
                         onKeyDown={onAddressKeyDown}
                         title={t('receive.tapToCopyAddress')}
-                        hint={t('receive.tapTheAddressToCopy')}
+                        help={t('receive.tapTheAddressToCopy')}
                         style={{ cursor: 'text', userSelect: 'text' }}
                         wrapReadOnlyAddress
                         onIconClick={() => setAddressPickerOpen(true)}
@@ -1316,6 +1318,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     <Input
                         size="md"
                         label={t('receive.addressLabel')}
+                        help={t('receive.addressLabelHelp')}
                         value={labelDraftValue}
                         onChange={(event) => setLabelDraft({
                             addressId: address.id,
@@ -1350,7 +1353,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     <Button
                         variant="link"
                         size="lg"
-                        icon={null}
                         className={styles.assetCard}
                         onClick={onChangeAsset || onBack}
                         // Icon-only control: the accessible name carries the chain the icon overlay shows.
@@ -1377,6 +1379,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             toggleAmountInputMode={toggleAmountInputMode}
                             inputRef={amountInputRef}
                             error={amountError || undefined}
+                            help={t('receive.amountHelp')}
                         />
                     </div>
                     {isHwAddress ? (

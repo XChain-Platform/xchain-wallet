@@ -43,16 +43,16 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
         expect(await screen.findByRole('button', { name: 'Looking up actions…' })).toBeDisabled();
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on the network A'));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify Action 1'));
         // The second lookup can still be running when the first one's error
-        // shows, so wait for the button to read Review again.
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        // shows, so wait for the main action button to become available again.
+        fireEvent.click(await screen.findByRole('button', { name: 'Link actions' }));
 
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
         expect(screen.queryByText('Review link')).not.toBeInTheDocument();
@@ -75,7 +75,7 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '01' } });
         fireEvent.change(inputs[1], { target: { value: '1' } });
 
@@ -100,14 +100,14 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Link actions' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Link actions' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        const restored = await screen.findAllByLabelText('Action to reference');
+        const restored = await screen.findAllByLabelText('Action number');
         expect(restored[0]).toHaveValue('10');
         expect(restored[1]).toHaveValue('20');
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
@@ -132,11 +132,11 @@ describe('LinkForm action preview validation', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Link actions' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Link actions' }));
 
         expect(await screen.findByText('First action')).toBeInTheDocument();
         expect(screen.getByText('Second action')).toBeInTheDocument();

@@ -78,7 +78,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const actions = (
         <div className={pickerStyles.pickerActions}>
-            <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
+            <Button variant="success" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
             </Button>
             {onRenameAccount && activeAccount ? (
@@ -119,7 +119,11 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         body={t('accountPicker.empty.body')}
                         titleAs="p"
                     />
-                ) : accounts.map((a) => {
+                ) : (
+                    // One flush list card with divider lines, rows never boxed apart (U41, U58).
+                    /* Safari needs an explicit list role because this class removes list styling. */
+                    <ul className={pickerStyles.list} role="list" aria-label={t('accountPicker.title')}>
+                    {accounts.map((a) => {
                     const active = a.id === activeAccountId;
                     const defaultName = t('accountPicker.defaultName', { number: a.index + 1 });
                     const label = a.name || defaultName;
@@ -127,9 +131,9 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     const customName = typeof a.name === 'string' ? a.name.trim() : '';
                     const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
-                        <div key={a.id} className={pickerStyles.rowWrap}>
+                        <li key={a.id} className={pickerStyles.rowWrap}>
                             <ListRow
-                                className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
+                                className={`${pickerStyles.listRow} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => {
                                     if (!active) runRouteAction(onSwitch, a.id);
@@ -164,9 +168,11 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     }}
                                 />
                             ) : null}
-                        </div>
+                        </li>
                     );
                 })}
+                    </ul>
+                )}
                 {actions}
             </ListPage>
         </Screen>

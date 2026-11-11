@@ -22,6 +22,7 @@ import {
     ChainBadge,
     AddressText,
     EmptyState,
+    Icon,
     ListPage,
     ListRow,
     StatusMessage,
@@ -29,6 +30,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
+import listStyles from './CoSignerAccountList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -67,35 +69,27 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     return wrap(
         <ListPage
-            toolbar={accounts.length > 0
-                ? <Button variant="primary" onClick={onProvision}>New agent account</Button>
-                : null}
+            // The screen's one green main action, in the empty and the filled
+            // state alike (U63); the shared EmptyState would draw a blue one.
+            toolbar={<Button variant="success" icon={<Icon.PlusIcon />} onClick={onProvision}>New agent account</Button>}
         >
-            {accounts.length > 0 ? (
-                <details>
-                    <summary>How agent accounts work</summary>
-                    <p className={styles.hint}>
-                        An automated agent shares a 2-of-2 address with this wallet. Requests that fit your policy
-                        are signed after your approval.
-                    </p>
-                </details>
-            ) : null}
             {accounts.length === 0 ? (
                 <EmptyState
                     title="No agent accounts yet"
                     body="Create one to let an agent share a 2-of-2 address with this wallet."
-                    actionLabel="New agent account"
-                    onAction={onProvision}
                 />
             ) : (
-                <ul aria-label="Agent accounts" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                // One flush list card with divider lines, rows never boxed apart (U41, U58).
+                /* Safari needs an explicit list role because this class removes list styling. */
+                <ul aria-label="Agent accounts" className={listStyles.list} role="list">
                     {accounts.map((a) => {
                         const descriptor = chainRegistry.get(a.chainId);
                         return (
-                            <li key={a.id} style={{ marginBottom: 'var(--xc-space-2)' }}>
+                            <li key={a.id}>
                                 <ListRow
                                     type="button"
                                     onClick={() => onOpen(a.id)}
+                                    leading={<span className={listStyles.rowIcon} aria-hidden="true"><Icon.UsersIcon /></span>}
                                     title={a.name}
                                     subtitle={<AddressText address={a.aggregateAddress} truncate />}
                                     trailing={(

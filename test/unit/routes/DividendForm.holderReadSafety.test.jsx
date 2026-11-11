@@ -65,7 +65,7 @@ async function flushTimers() {
 
 async function fillDividend() {
     await flushTimers();
-    fireEvent.click(screen.getByRole('button', { name: /Dividend token/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Dividend token:/i }));
     await flushTimers();
     const row = Array.from(document.querySelectorAll('button'))
         .find((button) => (button.textContent || '').includes('XCHAIN'));
@@ -82,18 +82,18 @@ afterEach(() => {
 });
 
 describe('Dividend holder reads fail closed', () => {
-    it('enables Preview for the complete explorer envelope served by the dev mock', async () => {
+    it('enables Pay dividend for the complete explorer envelope served by the dev mock', async () => {
         mountDividend(async () => fakeHoldersFor('SHARES', CHAIN), 'watcher');
         await fillDividend();
 
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Pay dividend' })).toBeEnabled();
         expect(document.body.textContent).toMatch(/12 eligible holders/);
     });
 
     it('does not compose after the explorer refuses the holder read', async () => {
         const messaging = mountDividend(async () => { throw new Error('explorer 500'); }, 'watcher');
         await fillDividend();
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Pay dividend' });
         expect(preview).toBeDisabled();
         fireEvent.click(preview);
         await flushTimers();

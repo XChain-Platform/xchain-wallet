@@ -16,7 +16,10 @@ import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } 
 import { act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 
-const widgetFailure = vi.hoisted(() => ({ current: null }));
+const { widgetFailure, tickFiatRate } = vi.hoisted(() => ({
+    widgetFailure: { current: null },
+    tickFiatRate: { current: null },
+}));
 let consoleError;
 const preventExpectedError = (event) => event.preventDefault();
 
@@ -36,11 +39,20 @@ vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', async (imp
     };
 });
 
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useTickFiatRate: ({ enabled = true } = {}) => (enabled ? tickFiatRate.current : null),
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 beforeEach(() => {
+    tickFiatRate.current = null;
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventExpectedError);
 });
@@ -68,6 +80,10 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
 const CHAIN = 'bitcoin-regtest';
 const MAINNET_CHAIN = 'bitcoin-mainnet';
+const HISTORY_DAILY = Array.from({ length: 366 }, (_, index) => [
+    Date.now() - (365 - index) * 86_400_000,
+    30_000 + index * 25,
+]);
 
 function renderDetail(walletId, { assetInfo, tokenProps } = {}) {
     const messaging = {
@@ -87,12 +103,12 @@ function renderDetail(walletId, { assetInfo, tokenProps } = {}) {
     ));
 }
 
-function renderNativeDetail() {
+function renderNativeDetail(walletId = 'real-wallet') {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
-        getNativePricesRequest: vi.fn().mockResolvedValue({
+        getNativePricesRequest: vi.fn().mockImplementation(async (request) => ({
             prices: {
-                [MAINNET_CHAIN]: {
+                [MAINNET_CHAIN]: request.includeHistory ? { historyDaily: HISTORY_DAILY } : {
                     priceFiat: 40000,
                     marketCapFiat: 1200000000,
                     change24hPct: 1.5,
@@ -100,14 +116,14 @@ function renderNativeDetail() {
                     fetchedAt: Date.now(),
                 },
             },
-        }),
+        })),
         getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
     };
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
         React.createElement(TokenDetail, {
-            walletId: 'real-wallet',
+            walletId,
             chainId: MAINNET_CHAIN,
             tick: 'BTC',
             kind: 'native',
@@ -121,7 +137,7 @@ function renderNativeDetail() {
 }
 
 describe('TokenDetail price history', () => {
-    it('keeps artwork, verification, and supply-history slots stable while they load', async () => {
+    it('keeps supply history hidden until More info reveals its stable slot', async () => {
         const finishInfo = [];
         let finishHistory;
         const messaging = {
@@ -148,11 +164,13 @@ describe('TokenDetail price history', () => {
 
         await screen.findByRole('status', { name: 'Loading token artwork' });
         expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(1);
-        expect(screen.getByRole('status', { name: 'Loading token verification' }).style.height).toBe('38px');
+        expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
         expect(screen.getByRole('status', { name: 'Loading supply history' }).style.height).toBe('94px');
         expect(screen.getByRole('status', { name: 'Loading price history' }).style.height).toBe('64px');
         const actions = screen.getByRole('group', { name: 'Quick actions' });
-        const supplySlot = actions.previousElementSibling;
+        const supplySlot = actions.nextElementSibling;
 
         await act(async () => {
             const info = {
@@ -166,12 +184,12 @@ describe('TokenDetail price history', () => {
         });
 
         expect(await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ })).toBeTruthy();
-        expect(screen.getByText(/official token in the/i)).toBeTruthy();
-        expect(actions.previousElementSibling).toBe(supplySlot);
+        expect(screen.getByText('Projects').closest('li')).toHaveTextContent('Example');
+        expect(actions.nextElementSibling).toBe(supplySlot);
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
     });
 
-    it('leaves no blank verification band once a token on no roster has loaded', async () => {
+    it('leaves no blank project row once a token on no roster has loaded', async () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
             getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', marketPrice: '0.5', projects: [] }),
@@ -193,10 +211,9 @@ describe('TokenDetail price history', () => {
         );
 
         const hero = await screen.findByRole('region', { name: 'NOROSTER balance' });
-        await vi.waitFor(() => expect(screen.queryByRole('status', { name: 'Loading token verification' })).toBeNull());
         // The element after the balance hero holds content, not an empty slot.
         expect(hero.nextElementSibling.textContent.trim()).not.toBe('');
-        expect(screen.queryByText(/official token in the/i)).toBeNull();
+        expect(screen.queryByText('Projects')).toBeNull();
     });
 
     it('shows an empty supply history beside the page sections, not inside a card', async () => {
@@ -221,18 +238,22 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
+        await vi.waitFor(() => expect(messaging.getSupplyHistory).toHaveBeenCalled());
+        expect(screen.queryByText('No supply history yet')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
         const title = await screen.findByText('No supply history yet');
         const hero = screen.getByRole('region', { name: 'NOSUPPLY balance' });
         const actions = screen.getByRole('group', { name: 'Quick actions' });
         // The empty state is a sibling of the hero and the actions: one
         // message in the page stack, with no card drawn around it.
-        expect(actions.previousElementSibling.contains(title)).toBe(true);
-        expect(actions.previousElementSibling.parentElement).toBe(hero.parentElement);
-        expect(actions.previousElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
-        expect(actions.previousElementSibling.className).not.toMatch(/infoCard/);
+        expect(actions.nextElementSibling.contains(title)).toBe(true);
+        expect(actions.nextElementSibling.parentElement).toBe(hero.parentElement);
+        expect(actions.nextElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
+        expect(actions.nextElementSibling.className).not.toMatch(/infoCard/);
     });
 
-    it('reserves price-history and price-alert space until native prices settle', async () => {
+    it('keeps the price alert behind More info while native prices settle', async () => {
         let finishPrices;
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD' }),
@@ -259,10 +280,9 @@ describe('TokenDetail price history', () => {
 
         const historySkeleton = await screen.findByRole('status', { name: 'Loading price history' });
         expect(historySkeleton.style.height).toBe('64px');
-        const alertSkeleton = screen.getByRole('status', { name: 'Loading price alert action' });
-        expect(alertSkeleton.style.height).toBe('28px');
+        expect(screen.queryByRole('status', { name: 'Loading price alert action' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
         const actions = screen.getByRole('group', { name: 'Quick actions' });
-        const alertSlot = actions.previousElementSibling;
 
         await act(async () => {
             finishPrices({
@@ -278,13 +298,14 @@ describe('TokenDetail price history', () => {
             });
         });
 
-        expect(await screen.findByRole('button', { name: 'Set price alert' })).toBeTruthy();
+        fireEvent.click(within(actions).getByRole('button', { name: 'More info' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Set price alert' }));
+        expect(await screen.findByRole('button', { name: 'Add alert' })).toBeTruthy();
         expect(screen.getByLabelText('1W price chart')).toBeTruthy();
         expect(screen.queryByText('No price history yet')).toBeNull();
         const chartRanges = screen.getByRole('tablist', { name: 'Chart range' });
         expect([...chartRanges.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent))
             .toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All']);
-        expect(actions.previousElementSibling).toBe(alertSlot);
         expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
     });
 
@@ -311,6 +332,56 @@ describe('TokenDetail price history', () => {
         await screen.findByText('€40,000.00');
         expect(within(hero).getByText(/€80,000\.00/)).toBeTruthy();
         expect(within(hero).queryByText(/€100\.00/)).toBeNull();
+    });
+
+    it('loads a real native daily range lazily and draws its recorded history', async () => {
+        const messaging = renderNativeDetail();
+        await screen.findByLabelText('1W price chart');
+
+        fireEvent.click(screen.getByRole('tab', { name: '1Y' }));
+
+        expect(await screen.findByLabelText('1Y price chart')).toBeTruthy();
+        expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: [MAINNET_CHAIN],
+            includeSparkline: false,
+            includeHistory: true,
+            fiatCurrency: 'EUR',
+        });
+        expect(screen.queryByText('No price history yet')).toBeNull();
+    });
+
+    it('opens a demo native coin detail with the 1W range selected', async () => {
+        renderNativeDetail('demo-wallet');
+
+        const tablist = await screen.findByRole('tablist', { name: 'Chart range' });
+        expect(within(tablist).getByRole('tab', { name: '1W' }))
+            .toHaveAttribute('aria-selected', 'true');
+        expect(await screen.findByLabelText('1W price chart')).toBeTruthy();
+    });
+
+    it('keeps the range tabs while daily history loads and reuses it after a trip back to 1W', async () => {
+        const messaging = renderNativeDetail();
+        let release;
+        const base = messaging.getNativePricesRequest.getMockImplementation();
+        messaging.getNativePricesRequest.mockImplementation((request) => (request.includeHistory
+            ? new Promise((resolve) => { release = () => resolve(base(request)); })
+            : base(request)));
+        await screen.findByLabelText('1W price chart');
+
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+        const tablist = await screen.findByRole('tablist', { name: 'Chart range' });
+        expect(within(tablist).getByRole('tab', { name: '1M' }).getAttribute('aria-selected')).toBe('true');
+        const loading = await screen.findByRole('status', { name: 'Loading price history' });
+        expect(loading.style.height).toBe('40px');
+
+        await act(async () => { release(); });
+        expect(await screen.findByLabelText('1M price chart')).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: '1W' }));
+        await screen.findByLabelText('1W price chart');
+        fireEvent.click(screen.getByRole('tab', { name: '3M' }));
+        expect(await screen.findByLabelText('3M price chart')).toBeTruthy();
+        const historyCalls = messaging.getNativePricesRequest.mock.calls.filter(([request]) => request.includeHistory);
+        expect(historyCalls).toHaveLength(1);
     });
 
     it('shows a message and no synthesized line for a real wallet', async () => {
@@ -404,7 +475,7 @@ describe('TokenDetail price history', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('No price history yet')).toBeTruthy();
+        expect(await screen.findByText('No market data available for this network.')).toBeTruthy();
         expect(view.container.textContent).not.toMatch(/NaN|Infinity/);
         expect(screen.getByText('Price').nextElementSibling).toHaveTextContent('-');
         expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('-');
@@ -422,4 +493,72 @@ describe('TokenDetail price history', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByRole('img', { name: /^Price trend/ })).toBeInTheDocument();
     });
+
+    it('offers and saves a token alert when the token has a market price', async () => {
+        tickFiatRate.current = { rate: 1.2, fiatCurrency: 'USD', source: 'oracle' };
+        const messaging = tokenAlertMessaging({ marketPrice: '1.2' });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={MAINNET_CHAIN}
+                    tick="XCHAIN"
+                    kind="token"
+                    quantity="10"
+                    onBack={() => {}}
+                    onReceive={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Set price alert' }));
+        expect(await screen.findByText('Current: $1.20')).toBeTruthy();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+
+        expect(await screen.findByRole('button', { name: /Price alert set/ })).toBeTruthy();
+        expect(messaging.savePriceAlert).toHaveBeenCalledWith({
+            walletId: 'real-wallet',
+            chainId: MAINNET_CHAIN,
+            tick: 'XCHAIN',
+            direction: 'above',
+            targetFiat: 2,
+            fiatCurrency: 'usd',
+        });
+    });
+
+    it('omits the token alert entry when the token has no market price', async () => {
+        const messaging = tokenAlertMessaging();
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOPRICE"
+                    kind="token"
+                    quantity="10"
+                    onBack={() => {}}
+                    onReceive={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
+        expect(screen.queryByRole('menuitem', { name: 'Set price alert' })).toBeNull();
+    });
 });
+
+function tokenAlertMessaging(assetInfo = {}) {
+    return {
+        getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD' }),
+        getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bc1qcreator', totalSupply: '1000', ...assetInfo }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+        getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+        listGatedContent: vi.fn().mockResolvedValue([]),
+        getSupplyHistory: vi.fn().mockResolvedValue([]),
+        listPriceAlertsForWallet: vi.fn().mockResolvedValue([]),
+        savePriceAlert: vi.fn().mockResolvedValue(undefined),
+        clearPriceAlert: vi.fn().mockResolvedValue(undefined),
+    };
+}

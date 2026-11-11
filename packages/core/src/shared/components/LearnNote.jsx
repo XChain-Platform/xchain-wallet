@@ -81,7 +81,6 @@ export function LearnNote({ variant = 'action', chainLabel, title = t('component
                     type="button"
                     variant="link"
                     size="sm"
-                    icon={null}
                     onClick={dismiss}
                     aria-label={DISMISS_LABEL}
                 >

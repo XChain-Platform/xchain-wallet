@@ -192,7 +192,7 @@ describe('Litecoin send flow', () => {
 });
 
 describe('Litecoin native protocol fee flow', () => {
-    it('adds the mandatory fee output before a fee-bearing XChain action reaches review', async () => {
+    it('keeps the mandatory flag on a feeless action without adding a fee output', async () => {
         const chainRegistry = registryLib.defaultRegistry();
         const createTx = vi.fn(async () => ({
             psbt: '70736274ff',
@@ -211,7 +211,7 @@ describe('Litecoin native protocol fee flow', () => {
             quoteNativeFee: vi.fn().mockResolvedValue({
                 supported: true,
                 valid: true,
-                requiredFeeSats: 5000,
+                requiredFeeSats: 0,
                 feeDestination: FEE_DESTINATION,
             }),
             wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
@@ -259,7 +259,7 @@ describe('Litecoin native protocol fee flow', () => {
                     ...composed,
                     chainId: CHAIN,
                     networkFeeSats: 1000,
-                    protocolFeeSats: 5460,
+                    protocolFeeSats: 0,
                     decoded: {
                         summary: 'Destroy 1 XCHAIN',
                         details: [],
@@ -280,18 +280,17 @@ describe('Litecoin native protocol fee flow', () => {
             />
         )));
 
-        expect(await screen.findByText('Protocol fees are paid in LTC')).toBeInTheDocument();
         await waitFor(() => expect(document.body.textContent).toContain('2 XCHAIN available'));
+        expect(screen.queryByText('Protocol fees are paid in LTC')).not.toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: 'Destroy' }));
 
         expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
         expect(sdk.quoteNativeFee).toHaveBeenCalledTimes(1);
         expect(createTx.mock.calls[0][0]).not.toHaveProperty('payFeeInNativeCoin');
-        expect(createTx.mock.calls[0][0].customOutputs).toContainEqual({
-            address: FEE_DESTINATION,
-            value: 5460,
-        });
+        expect(createTx.mock.calls[0][0].customOutputs || []).not.toContainEqual(
+            expect.objectContaining({ address: FEE_DESTINATION }),
+        );
     });
 });
 

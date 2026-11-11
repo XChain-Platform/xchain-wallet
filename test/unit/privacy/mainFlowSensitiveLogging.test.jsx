@@ -205,7 +205,7 @@ describe('main flow logging privacy', () => {
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await screen.findByText(MNEMONIC);
         expect(revealMnemonicRequest).toHaveBeenCalledWith({
             walletId: WALLET_ID,

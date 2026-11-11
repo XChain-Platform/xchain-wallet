@@ -59,8 +59,6 @@ const NEWEST_PERSONAL = hd(3);
 const DELEGATED = hd(4, { role: 'dispenser' });
 const ADDRESSES = { [CHAIN]: [ACTIVE, NEWEST_PERSONAL, DELEGATED] };
 
-const byId = (id) => ADDRESSES[CHAIN].find((a) => a.id === id)?.address;
-
 function mount(Form, props, activeByChain, walletMode, issuer) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
@@ -159,9 +157,9 @@ const FORMS = [
         Form: PsbtSignForm,
         props: {},
         read: async () => {
-            const select = await screen.findByLabelText('Signing address');
-            await waitFor(() => { if (!select.value) throw new Error('no default yet'); });
-            return byId(select.value);
+            const field = await screen.findByLabelText('Signing address');
+            await waitFor(() => { if (!field.value) throw new Error('no default yet'); });
+            return field.value;
         },
     },
     {
@@ -170,7 +168,7 @@ const FORMS = [
         props: { listRef: { chainId: CHAIN, actionIndex: '5', type: '1', items: ['AAA'] }, onDone() {} },
         walletMode: 'watcher',
         read: async () => {
-            const add = await screen.findByLabelText('Add tokens (one per line)');
+            const add = await screen.findByLabelText('Add tokens');
             fireEvent.change(add, { target: { value: 'BBB' } });
             submitFormOf(add);
             return reviewAddress();
@@ -202,13 +200,7 @@ const FORMS = [
         Form: LinkForm,
         props: {},
         walletMode: 'watcher',
-        read: async () => {
-            const [a, b] = await screen.findAllByLabelText('Action to reference');
-            fireEvent.change(a, { target: { value: '11' } });
-            fireEvent.change(b, { target: { value: '22' } });
-            submitFormOf(a);
-            return reviewAddress();
-        },
+        read: async () => (await screen.findByLabelText('From')).value,
     },
     {
         name: 'PublishFileForm',

@@ -90,7 +90,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'http://10.0.0.9:18080' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy).toHaveBeenCalledTimes(1);
         expect(updateSpy.mock.calls[0][0]).toEqual({
@@ -111,7 +111,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'localhost:10000' },   // no scheme
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
         expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
@@ -123,7 +123,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'http://node.example.com' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
         expect(within(block).getByRole('alert')).toHaveTextContent(
@@ -140,7 +140,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'https://explorer.example.com' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(within(block).queryByRole('alert')).toBeNull();
         expect(updateSpy).toHaveBeenCalledTimes(1);
@@ -157,7 +157,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'hub.example.com' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
         expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
@@ -169,7 +169,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'https://private.example.com/BTC///' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet'].hubUrl)
             .toBe('https://private.example.com/BTC');
@@ -181,7 +181,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'https://explorer.xchain.io/' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet']).toMatchObject({
             explorerUrl: 'https://explorer.xchain.io',
@@ -210,7 +210,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(within(block).getByRole('textbox', { name: 'Encoder URL' }), {
             target: { value: '' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(updateSpy.mock.calls[0][0].sdkEndpoints['litecoin-regtest'].encoderUrl)
             .toBe(LTC_REGTEST.encoder);
@@ -242,7 +242,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.change(explorer, {
             target: { value: 'http://10.0.0.9:18080' },
         });
-        fireEvent.click(within(block).getByRole('button', { name: 'Save' }));
+        fireEvent.click(within(block).getByRole('button', { name: 'Save endpoints' }));
 
         expect(await within(block).findByRole('alert')).toHaveTextContent('Storage is unavailable.');
         expect(explorer).toHaveValue(LTC_REGTEST.explorer);

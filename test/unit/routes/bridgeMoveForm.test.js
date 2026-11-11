@@ -138,7 +138,7 @@ const amountInput = () => screen.getByLabelText(/^Amount/i);
 // The submit button, named exactly: ChainPicker's own trigger carries the
 // accessible name "Move from: Bitcoin" / "Move to: Dogecoin", so a loose /^Move/
 // matches three controls.
-const moveButton = (name = 'Review move') => screen.getByRole('button', { name });
+const moveButton = (name = 'Move') => screen.getByRole('button', { name });
 
 afterEach(() => {
     cleanup();
@@ -181,7 +181,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         expect(requoteNativeFee).toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Move from: Bitcoin' }));
-        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Dogecoin/ }));
         expect(amountInput()).toHaveValue('');
         expect(screen.queryByText(/protocol fee is/i)).toBeNull();
 
@@ -343,7 +343,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1.25' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'keep me' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'keep me' } });
         fireEvent.click(moveButton());
 
         expect(await screen.findByText('1.25', {}, WAIT)).toBeInTheDocument();
@@ -352,7 +352,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         await waitFor(() => expect(amountInput()).toHaveValue('1.25000000'), WAIT);
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('keep me');
+        expect(screen.getByLabelText('Memo')).toHaveValue('keep me');
         expect(composeForConfirm).toHaveBeenCalledTimes(1);
     });
 });
@@ -400,15 +400,15 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
                 .toBeInTheDocument(),
             WAIT,
         );
-        // ChainPicker is a popover, not a <select>: open it and read the options.
+        // NetworkField opens its picker screen, so read the network rows there.
         fireEvent.click(screen.getByRole('button', { name: /^Move to:/ }));
-        const offered = (await screen.findAllByRole('option', {}, WAIT))
+        const offered = (await screen.findAllByRole('button', { name: /^Select / }, WAIT))
             .map((el) => el.textContent);
         expect(offered).toHaveLength(1);
         expect(offered[0]).toContain('Bitcoin');
         expect(offered.join(' ')).not.toContain('Litecoin');
         // And the button says what the leg really is.
-        expect(moveButton('Review move back')).toBeInTheDocument();
+        expect(moveButton('Move back')).toBeInTheDocument();
     });
 
     it('explains when the wallet has another network but no address on the only supported destination', async () => {
@@ -422,7 +422,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(msg.textContent).toContain('Use Receive there to create one first');
         expect(msg.textContent).not.toMatch(/Bitcoin|Dogecoin|mainnet|regtest|testnet|not mainnet/i);
         expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
-        expect(moveButton('Review move back')).toBeDisabled();
+        expect(moveButton('Move back')).toBeDisabled();
     });
 });
 
@@ -440,7 +440,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         const warning = screen.getByText(/costs 0.05 XCHAIN in protocol fees/i);
         expect(warning.textContent).toContain('Moving 0.01 XCHAIN');
         expect(warning.textContent).toContain('more than the amount you are moving');
-        expect(screen.getByText(/This action's protocol fee is 0.05 XCHAIN/i)).toBeInTheDocument();
+        expect(screen.getByText('0.05 XCHAIN')).toBeInTheDocument();
 
         // The fee is quoted for the exact action string, not read off a constant.
         const call = messaging.requoteNativeFee.mock.calls.at(-1)[0];
@@ -483,8 +483,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '1' } });
         await advanceFeeQuote();
-        expect(screen.getByText(/protocol fee is 0.05 XCHAIN/i))
-            .toBeInTheDocument();
+        expect(screen.getByText('0.05 XCHAIN')).toBeInTheDocument();
         expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
     });
 });
@@ -597,20 +596,20 @@ describe('BridgeMoveForm: invalid action fields', () => {
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'left|right' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'left|right' } });
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
     });
 
-    it('blocks a memo above the on-chain byte limit', async () => {
+    it('blocks a memo above the on-chain character limit', async () => {
         mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'é'.repeat(126) } });
-        expect(await screen.findByText('Memo is 252 bytes; the network accepts at most 250 bytes.'))
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: `${'😀'.repeat(125)}aa` } });
+        expect(await screen.findByText('Memo is 252 characters; the network accepts at most 250 characters.'))
             .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
     });

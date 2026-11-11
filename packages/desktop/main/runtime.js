@@ -514,8 +514,26 @@ export async function ensureHost(runtime) {
         // §46 price-alert poll watcher: same lifecycle + adapter as above.
         if (runtime.notify && !runtime.priceAlertWatcher && typeof globalThis.fetch === 'function') {
             const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+            // Token alerts price through the chain registry; the setting is read
+            // once per poll so a privacy toggle applies without a restart.
+            let tokenPriceDeps = {};
+            if (typeof notificationsLib.createTokenPriceLookup === 'function') {
+                let priceDataAllowed = true;
+                const lookup = notificationsLib.createTokenPriceLookup({
+                    chainRegistry: runtime.chainRegistry,
+                    allowCoingeckoFallback: () => priceDataAllowed,
+                });
+                tokenPriceDeps = {
+                    getTokenPrices: async (req) => {
+                        const settings = await flowsLib.getSettings(vault);
+                        priceDataAllowed = settings?.privacy?.priceDataEnabled !== false;
+                        return lookup(req);
+                    },
+                };
+            }
             runtime.priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
                 getNativePrices: ({ chainIds, fiatCurrency }) => priceOracle.getNativePrices({ chainIds, fiatCurrency }),
+                ...tokenPriceDeps,
                 listArmedAlerts: () => vault.priceAlerts.list(),
                 getSettings: () => flowsLib.getSettings(vault),
                 notify: runtime.notify,

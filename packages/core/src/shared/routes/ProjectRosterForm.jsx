@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import * as Icon from '../../ui/icons/index.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -31,9 +32,12 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { classifyTickItems } from '../utils/listTickItems.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import rosterStyles from './ProjectRosterForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -73,7 +77,7 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string | null} [props.issuerAddress]   the project's current owner (preferred signing address)
  * @param {() => void} props.onBack
  */
-export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
+export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -88,7 +92,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(initialChainId);
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // The project's ISSUE action index (the LINK's second leg).
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
@@ -138,7 +144,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
-                if (!byChain || !(byChain[chainId] || []).length) {
+                if (!byChain || !Object.values(byChain).some((rows) => Array.isArray(rows) && rows.length > 0)) {
                     setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
@@ -146,7 +152,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, chainId, messaging]);
+    }, [walletId, messaging]);
 
     // Resolve the project's ISSUE action index.
     useEffect(() => {
@@ -263,6 +269,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
+    const chainsWithAddresses = useMemo(
+        () => Object.entries(addressesByChain || {})
+            .filter(([, rows]) => Array.isArray(rows) && rows.length > 0)
+            .map(([id]) => id),
+        [addressesByChain],
+    );
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices both broadcasts (the LIST and the LINK).
@@ -595,7 +607,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     and wallets. Publishing a new list later replaces this one.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -630,7 +642,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
                 </div>
             </ListPage>,
         );
@@ -648,12 +660,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 actions={(
                     <>
                         {/* Prevent the reconciled button from submitting the compose form. */}
-                        <Button variant="ghost" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
-                            Back
+                        <Button variant="ghost" type="button" icon={<Icon.PencilIcon />} onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
+                            Back to edit
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.UploadIcon />}
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -677,15 +690,23 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Tokens</dt>
-                    <dd className={styles.detailsValue}>{memberTicks.join(', ')}</dd>
                 </dl>
+                <div className={rosterStyles.rosterList} role="list" aria-label="Tokens">
+                    {memberTicks.map((memberTick) => (
+                        <ListRow
+                            role="listitem"
+                            key={memberTick.toLowerCase()}
+                            leading={<TickerIcon tick={memberTick} chainId={chainId} size={28} />}
+                            title={memberTick}
+                        />
+                    ))}
+                </div>
                 <p className={styles.hint}>
                     This is step 1 of 2. The list goes on-chain first; once
                     it's indexed you'll sign one more transaction linking it
                     to {tick}. {hw
                         ? 'You will confirm on your hardware device twice.'
-                        : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
+                        : !signerReady ? 'You will enter your password twice.' : null}
                 </p>
                 <SignCredentials
                     unlocked={signerReady}
@@ -718,7 +739,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.LinkIcon />}
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
@@ -776,6 +798,26 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    setFromAddressId(null);
+                }}
+                onPick={(address) => {
+                    setFromAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     // stage === 'compose'
     const hasRoster = Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     return wrap(
@@ -789,16 +831,34 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.SaveIcon />}
                     disabled={issuerEligibility.pending || !!issuerEligibility.error}
                 >
-                    Review list
+                    Save roster
                 </Button>
             )}
         >
-            <p className={styles.hint}>
-                Tokens on {tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one.
-            </p>
+            <NetworkField
+                label="Network"
+                value={chainId}
+                onChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    setFromAddressId(null);
+                }}
+                chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]}
+                chainRegistry={chainRegistry}
+            />
+            <AddressField
+                label="From"
+                help={`Only the current owner of ${tick} can publish its official-token list.`}
+                icon="addresses"
+                value={fromAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose source address"
+            />
             {rosterChecked && hasRoster ? (
                 <p className={styles.hint}>
                     Current list ({currentRoster.members.length} token{currentRoster.members.length === 1 ? '' : 's'})
@@ -816,6 +876,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             <Textarea
                 id="roster-members"
                 label="Tokens (one per line)"
+                help={`Tokens on ${tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one. Enter one token name per line.`}
                 value={membersText}
                 onChange={(e) => setMembersText(e.target.value)}
                 rows={6}
@@ -834,14 +895,17 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
             ) : null}
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="An optional note stored with the link that makes this roster official."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

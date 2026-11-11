@@ -88,7 +88,7 @@ function mount(overrides = {}, props = {}) {
 }
 
 async function readySubmit() {
-    const button = await screen.findByRole('button', { name: 'Preview' });
+    const button = await screen.findByRole('button', { name: 'Execute callback' });
     await waitFor(() => expect(button.disabled).toBe(false));
     return button;
 }
@@ -122,7 +122,7 @@ describe('callback field validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -141,6 +141,16 @@ describe('callback field validation', () => {
 });
 
 describe('CallbackForm review safety', () => {
+    it('names the watcher action and explains the offline signing handoff', async () => {
+        mount();
+
+        fireEvent.click(await readySubmit());
+
+        expect(await screen.findByText(
+            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        )).toBeInTheDocument();
+    });
+
     it('keeps the destructive warning off the form', async () => {
         mount();
 
@@ -162,7 +172,7 @@ describe('CallbackForm review safety', () => {
         const messages = await screen.findAllByText(/no callback configured/i);
         expect(messages).toHaveLength(1);
         expect(messages[0].closest('dd')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
         expect(screen.queryByText(/nothing to recall/i)).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -175,6 +185,42 @@ describe('CallbackForm review safety', () => {
         const wideRules = css.match(/@media \(min-width: 834px\) \{([\s\S]*)\}\s*$/)?.[1] || '';
 
         expect(wideRules).toMatch(/\.summaryLabel\s*,\s*\.summaryValue\s*\{[^}]*align-self:\s*stretch/s);
+    });
+
+    it('keeps the holder help tip inside its dt and paired with the holder value', async () => {
+        mount();
+        await readySubmit();
+
+        const tip = screen.getByRole('button', { name: 'About the holder payout estimate' });
+        const labelCell = tip.closest('dt');
+        expect(labelCell).not.toBeNull();
+        expect(labelCell).toHaveTextContent('Holders to pay');
+        expect(labelCell.nextElementSibling?.tagName).toBe('DD');
+        const bubble = screen.getByText(/The holder count and payout are indicative/);
+        expect(bubble).toHaveAttribute('hidden');
+
+        fireEvent.click(tip);
+        expect(bubble).not.toHaveAttribute('hidden');
+        expect(bubble.closest('dt')).toBe(labelCell);
+    });
+
+    it('uses the success action style and an icon', async () => {
+        mount();
+        const submit = await readySubmit();
+
+        expect(submit.className).toMatch(/success/);
+        expect(submit.querySelector('svg')).not.toBeNull();
+    });
+
+    it('explains why the From address must own the token', async () => {
+        mount();
+        await readySubmit();
+
+        const tip = screen.getByRole('button', { name: 'About From (token owner)' });
+        fireEvent.click(tip);
+        expect(screen.getByText(
+            "The token owner's address. Only the owner can run a callback, so this must be the address that owns the token.",
+        )).toBeVisible();
     });
 
     it('uses the payout token divisibility for the displayed payout', async () => {
@@ -339,15 +385,15 @@ describe('CallbackForm review safety', () => {
 
     it('shows the exact wire memo on review and keeps it after Back', async () => {
         mount();
-        const memo = await screen.findByLabelText('Memo (optional)');
+        const memo = await screen.findByLabelText('Memo');
         fireEvent.change(memo, { target: { value: '  final note  ' } });
 
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText('final note')).toBeTruthy();
         expect(screen.getByText('CALLABLE')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: /back/i }));
-        expect(await screen.findByLabelText('Memo (optional)')).toHaveValue('  final note  ');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByLabelText('Memo')).toHaveValue('  final note  ');
     });
 
     it('turns refresh failures into plain user-facing copy', async () => {
@@ -384,7 +430,91 @@ describe('CallbackForm with an unread token record', () => {
         expect(screen.queryByText(/has no callback configured/)).toBeNull();
         expect(screen.queryByText(/No callback configured/)).toBeNull();
         expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Execute callback' })).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+});
+
+describe('CallbackForm opened without a token context', () => {
+    const LITECOIN = 'litecoin-mainnet';
+    const LITE_SOURCE = Object.freeze({
+        ...SOURCE,
+        id: 'ltc-0',
+        address: 'ltc1qdevmockabcd',
+        derivationPath: "m/84'/2'/0'/0/0",
+    });
+
+    function unlockedMessaging() {
+        return {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [SOURCE],
+                [LITECOIN]: [LITE_SOURCE],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({
+                [CHAIN]: { id: SOURCE.id },
+                [LITECOIN]: { id: LITE_SOURCE.id },
+            }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: SOURCE.address,
+                    balances: {
+                        native: { tick: 'BTC', divisibility: 8, quantity: '100000000' },
+                        tokens: [{ tick: 'CALLABLE', divisibility: 0, quantity: '1' }],
+                    },
+                }],
+                [LITECOIN]: [{
+                    address: LITE_SOURCE.address,
+                    balances: {
+                        native: { tick: 'LTC', divisibility: 8, quantity: '100000000' },
+                        tokens: [],
+                    },
+                }],
+            }),
+        };
+    }
+
+    it('starts Network, From, Token and refreshes callback data for the picked token', async () => {
+        const messaging = mount(unlockedMessaging(), {
+            initialChainId: undefined,
+            initialTick: undefined,
+            initialFromAddress: undefined,
+        });
+
+        const network = await screen.findByRole('button', { name: /^Network: Bitcoin/ });
+        const from = await screen.findByLabelText('From (token owner)');
+        const token = screen.getByRole('button', { name: 'Token: Select a token' });
+        expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(token);
+        fireEvent.click(await screen.findByLabelText(/^Select CALLABLE\b/i));
+
+        expect(await screen.findByRole('button', { name: /^Token: CALLABLE on Bitcoin/ })).toBeTruthy();
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            tick: 'CALLABLE',
+        })));
+        await waitFor(() => expect(messaging.tokenHolderSummary).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            tick: 'CALLABLE',
+        })));
+    });
+
+    it('clears a picked token when Network changes to another chain', async () => {
+        mount(unlockedMessaging(), {
+            initialChainId: undefined,
+            initialTick: undefined,
+            initialFromAddress: undefined,
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Token: Select a token' }));
+        fireEvent.click(await screen.findByLabelText(/^Select CALLABLE\b/i));
+        await screen.findByRole('button', { name: /^Token: CALLABLE on Bitcoin/ });
+
+        fireEvent.click(screen.getByRole('button', { name: /^Network: Bitcoin/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Litecoin/ }));
+
+        expect(await screen.findByRole('button', { name: 'Token: Select a token' })).toBeTruthy();
+        expect(await screen.findByLabelText('From (token owner)')).toHaveValue(LITE_SOURCE.address);
     });
 });

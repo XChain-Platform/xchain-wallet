@@ -79,10 +79,10 @@ afterEach(() => {
 describe('ListForkForm addition validation', () => {
     it('keeps malformed token names out of review and writes the error as a sentence', async () => {
         mountFork();
-        const additions = await screen.findByLabelText(/Add tokens/);
+        const additions = await screen.findByLabelText('Add tokens');
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         fireEvent.change(additions, { target: { value: 'BAD TICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(await screen.findByText('Remove 1 invalid token name before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
@@ -93,10 +93,10 @@ describe('ListForkForm addition validation', () => {
 
     it('keeps an address from another network out of review', async () => {
         mountFork({ type: '2', items: [ADDRESS.address] });
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_ADDRESS },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
@@ -109,33 +109,33 @@ describe('ListForkForm addition validation', () => {
         await waitFor(() => expect(messaging.listAnyCoinItems).toHaveBeenCalledWith({
             chainId: CHAIN, coin: 'bitcoin', networkKind: 'mainnet',
         }));
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_ADDRESS },
         });
 
         expect(await screen.findByText(/1 to add · 0 to remove/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(screen.queryByText(/invalid address before reviewing/)).toBeNull();
     });
 
     it('keeps a regtest coin out of a mainnet list even with the gate on', async () => {
         mountFork({ type: '2', items: [ADDRESS.address], anyCoins: ['bitcoin', 'litecoin'] });
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_REGTEST_ADDRESS },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
     });
 
     // A ^<index> reference is still kept out, but the note says it is a reference, not a typo.
     it('keeps an address reference out of review and says what it is', async () => {
         mountFork({ type: '2', items: [ADDRESS.address] });
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: '^123' },
         });
 
         expect(await screen.findByText(/One entry is an address reference/)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
     });
@@ -144,7 +144,7 @@ describe('ListForkForm addition validation', () => {
         const owner = { ...ADDRESS, id: 'litecoin-0', address: LITECOIN_REGTEST_ADDRESS };
         const stored = LITECOIN_REGTEST_ADDRESS.toUpperCase();
         mountFork({ type: '2', items: [stored], chainId: 'litecoin-regtest', owner });
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: LITECOIN_REGTEST_ADDRESS },
         });
 
@@ -157,8 +157,8 @@ describe('ListForkForm review', () => {
     it('shows both legs before an add-and-remove fork is signed', async () => {
         mountFork();
         fireEvent.click(await screen.findByRole('checkbox', { name: 'REMOVE' }));
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'ADD' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         const details = await screen.findByText('Adding');
         expect(details.closest('dl')?.textContent).toMatch(/Adding1 item/);

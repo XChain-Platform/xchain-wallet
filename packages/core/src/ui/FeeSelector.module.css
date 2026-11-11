@@ -146,6 +146,12 @@
     --xc-button-hover-border: currentColor;
 }
 
+.sliderTickLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 .sliderTickEta {
     font-size: var(--xc-text-xs);
     font-weight: 400;
@@ -281,6 +287,7 @@
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
+    gap: var(--xc-space-1);
     background: transparent;
     border: none;
     /* The figure is as tall as the custom input that replaces it, so the

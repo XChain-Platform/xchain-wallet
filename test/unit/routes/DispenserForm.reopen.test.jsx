@@ -134,7 +134,7 @@ async function mountReopen(reopen) {
 /** Press Create untouched, then Approve; return what was composed and signed. */
 async function createAsIs(utils, calls) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
         await drainMicrotasks();
     });
     await domAct(async () => {
@@ -158,7 +158,7 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         expect(utils.getByLabelText(/^Escrow amount/).value).toBe('100');
         expect(utils.getByLabelText(/^Trigger price/).value).toBe('0.001');
         expect(utils.getByLabelText('Dispenser address').value).toBe(PLAIN_HOST.address);
-        expect(utils.getByLabelText('Source').value).toBe(CREATOR.address);
+        expect(utils.getByLabelText('From').value).toBe(CREATOR.address);
         expect(utils.getByRole('button', { name: 'Allow-list #77' })).toBeTruthy();
     });
 

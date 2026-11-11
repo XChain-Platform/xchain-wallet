@@ -143,6 +143,16 @@ describe('MarketView market state', () => {
         expect(screen.getByText('Recent trades panel')).toBeInTheDocument();
     });
 
+    it('gives every market navigation button an icon', async () => {
+        renderMarket({ onSwap: () => {} });
+
+        for (const name of ['Book', 'Trades', 'Place', 'Orders', 'History']) {
+            expect(screen.getByRole('tab', { name }).querySelector('svg')).not.toBeNull();
+        }
+        expect((await screen.findByRole('button', { name: 'Reverse pair to BTC/XCHAIN' })).querySelector('svg'))
+            .not.toBeNull();
+    });
+
     it('announces the initial market load and replaces it with a load error', async () => {
         const request = deferred();
         messaging.getMarket = vi.fn(() => request.promise);

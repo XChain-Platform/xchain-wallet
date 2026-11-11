@@ -163,7 +163,7 @@ for (const viewport of VIEWPORTS) {
 
             await expectSameLineHeights([
                 page.getByRole('searchbox', { name: 'Search staking positions' }),
-                page.getByRole('button', { name: 'Filter by network' }),
+                page.getByRole('button', { name: /^Filter by network/ }),
             ], `${viewport.name} staking toolbar`);
 
             await expect(page.getByRole('button', { name: /^Open Validator stake/ })).toBeVisible();
@@ -190,10 +190,10 @@ for (const viewport of VIEWPORTS) {
         await test.step('new stake form stops at the demo note', async () => {
             await holdStakeBalanceLookup(page);
             const form = await fillNewStake(page, viewport);
-            // A demo wallet cannot move funds, so its stake form keeps Preview
-            // disabled under the demo note; the review is walked in a created
-            // wallet below.
-            await expect(form.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
+            // A demo wallet cannot move funds, so its stake form keeps its
+            // submit (Stake, or Review stake in watch-only mode) disabled under
+            // the demo note; the review is walked in a created wallet below.
+            await expect(form.getByRole('button', { name: /^(Stake|Review stake)$/ })).toBeDisabled();
             await expect(page.getByRole('main').getByText(/Demo wallets can.t move funds/)).toBeVisible();
             await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} demo stake note`);
             await releaseStakeBalanceLookup(page);
@@ -213,7 +213,7 @@ for (const viewport of VIEWPORTS) {
             const form = await fillNewStake(page, viewport);
             const main = page.getByRole('main');
             await main.evaluate((element) => { element.scrollTop = 0; });
-            await form.getByRole('button', { name: 'Preview', exact: true })
+            await form.getByRole('button', { name: 'Review stake', exact: true })
                 .evaluate((button) => button.click());
         });
 

@@ -64,18 +64,22 @@ describe('Issue token while the host composes', () => {
         const composeForConfirm = vi.fn(() => new Promise((resolve) => { release = resolve; }));
         const messaging = mount(composeForConfirm);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'HOLD' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
 
         for (const label of [
-            'Ticker', 'Supply', 'Initial mint (optional)', 'Max mint per transaction (optional)',
-            'Description (optional)', 'Transfer ownership to (optional)', 'Send the initial mint to (optional)',
+            'Ticker', 'Max supply', 'Initial mint', 'Max per transaction',
+            'Max per address', 'Start block', 'Stop block', 'Token description',
+            'Allow list', 'Block list', 'New owner address', 'Send initial mint to',
         ]) {
-            expect(screen.getByLabelText(label), label).toBeDisabled();
+            const field = label === 'Max supply'
+                ? screen.getByRole('textbox', { name: label })
+                : screen.getByLabelText(label);
+            expect(field, label).toBeDisabled();
         }
         expect(screen.getByRole('switch', { name: 'Divisible (8 decimal places)' })).toBeDisabled();
-        expect(screen.getByRole('switch', { name: /^Lock supply/ })).toBeDisabled();
+        expect(screen.getByLabelText('Max supply', { selector: 'input[role="switch"]' })).toBeDisabled();
 
         await act(async () => { release(COMPOSED); });
         const approve = await screen.findByTestId('confirm-approve');
@@ -90,10 +94,10 @@ describe('Issue token while the host composes', () => {
         const composeForConfirm = vi.fn().mockResolvedValue(COMPOSED);
         mount(composeForConfirm);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BACK' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '5' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '5' } });
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
         fireEvent.click(await screen.findByTestId('confirm-reject'));
-        expect(await screen.findByLabelText('Supply')).toBeEnabled();
-        expect(screen.getByLabelText('Supply').value).toBe('5');
+        expect(await screen.findByRole('textbox', { name: 'Max supply' })).toBeEnabled();
+        expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('5.00000000');
     });
 });

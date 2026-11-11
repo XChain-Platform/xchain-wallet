@@ -121,7 +121,7 @@ describe('contract route request isolation', () => {
 
         expect(screen.queryByLabelText('limit (number)')).toBeNull();
         expect(screen.getByLabelText('Method')).toHaveValue('');
-        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Arguments')).toHaveValue('');
     });
 
     it('clears positional values whenever a different declared method is selected', async () => {
@@ -214,7 +214,7 @@ describe('contract form submit locks', () => {
         )));
 
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'ping' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
         const form = await screen.findByRole('form', { name: 'Review contract call' });
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -232,7 +232,7 @@ describe('contract form submit locks', () => {
             target: { value: 'module.exports = { run() { return 1; } };' },
         });
         fireEvent.change(screen.getByLabelText('Gas limit'), { target: { value: '50000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish contract' }));
         const form = await screen.findByRole('form', { name: 'Review contract publication' });
         fireEvent.submit(form);
         fireEvent.submit(form);

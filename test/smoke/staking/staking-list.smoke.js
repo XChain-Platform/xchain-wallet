@@ -85,9 +85,24 @@ assert.ok(/getContractStakesForAddress[\s\S]{0,220}?\.catch\(\(\)\s*=>\s*\{\}\)/
 assert.ok(/getContractUnstakesForAddress[\s\S]{0,220}?\.catch\(\(\)\s*=>\s*\{\}\)/.test(listSrc),
     'StakingList silently degrades the contract-unstakes lane on error');
 
-// 4. Demo-wallet path renders synthesized validator + contract rows.
-for (const call of ['isDemoWallet', 'synthesizeDemoStaking', 'synthesizeDemoContractStakes']) {
-    assert.ok(listSrc.includes(call), `StakingList uses ${call}`);
+// 4. Demo-wallet path: StakingList reads through its wallet source and never
+// branches on demo (U64); the demo source answers the same reads with the
+// synthesized validator and contract rows.
+assert.ok(/useWalletSource\(walletId\)/.test(listSrc), 'StakingList reads through the wallet source');
+assert.ok(!/isDemoWallet\(/.test(listSrc), 'StakingList never branches on demo');
+const demoSourceSrc = readFileSync(
+    join(core, 'src', 'flows', 'demoFixtures.js'),
+    'utf8',
+);
+for (const [method, fixture] of [
+    ['getStakesForAddress', 'synthesizeDemoStaking'],
+    ['getDelegationsForAddress', 'synthesizeDemoStaking'],
+    ['getRewardsForAddress', 'synthesizeDemoStaking'],
+    ['getContractStakesForAddress', 'synthesizeDemoContractStakes'],
+    ['getContractUnstakesForAddress', 'synthesizeDemoContractStakes'],
+]) {
+    assert.ok(new RegExp(`${method}: [^\\n]*${fixture}\\(`).test(demoSourceSrc),
+        `the demo source answers ${method} with ${fixture}`);
 }
 
 // 5. List-pattern chrome: the "New stake" action, search, and rows

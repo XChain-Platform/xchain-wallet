@@ -123,6 +123,6 @@ describe('Native-fee refusals are translated on every submit path', () => {
         // On Bitcoin it is the fix, so it must still be offered - by the control's
         // own label, which is the only name the user can find on the form.
         const btc = nativeFeeErrorMessage(crossed, { coinTicker: 'BTC', mandatory: false });
-        expect(btc).toContain('Untick "Pay protocol fee in BTC instead of XCHAIN"');
+        expect(btc).toContain('Untick "Pay protocol fee in BTC"');
     });
 });

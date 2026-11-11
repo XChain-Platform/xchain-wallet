@@ -88,7 +88,7 @@ function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000',
 }
 
 const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
-const fillsInput = () => screen.findByLabelText(/Fills/i);
+const fillsInput = () => screen.findByLabelText(/^Fills/i);
 
 afterEach(() => cleanup());
 

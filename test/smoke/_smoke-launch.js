@@ -25,10 +25,13 @@ export const RAW_SOURCE_SMOKES = new Set([
     'core/i18n.smoke.js',
     'markets/place-order.smoke.js',
     'ui/ads-onboarding-notice.smoke.js',
+    'ui/blocklist-wildcards.smoke.js',
     'ui/demo-disclosure-on-home.smoke.js',
+    'ui/fee-selector.smoke.js',
     'ui/input-capslock-warning.smoke.js',
     'ui/reachability-banner.smoke.js',
     'ui/send-autocomplete.smoke.js',
+    'ui/send-watcher-mode.smoke.js',
     'ui/verify-signature.smoke.js',
 ]);
 

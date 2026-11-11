@@ -15,13 +15,11 @@
 // signing path. It has two software branches:
 //
 //   locked   -> a password Input, which carries submitError on its `error` prop
-//   unlocked -> "Wallet unlocked. No password needed."
+//   unlocked -> no password Input, with submitError rendered beside panic status
 //
-// The unlocked branch used to return that note ALONE, dropping submitError on
-// the floor. The calling forms only render their own error banner for the
-// watcher / hardware paths, so a failed submit on an unlocked software wallet
-// had nowhere at all to surface: pressing Sign did nothing visible. A user
-// cannot tell a rejected transaction from a dead button, and will press again.
+// Keep the unlocked branch's submit error visible because the password Input
+// cannot carry it. A user otherwise cannot distinguish a rejected transaction
+// from a dead button and may submit again.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, render, screen, cleanup } from '@testing-library/react';
@@ -42,9 +40,8 @@ describe('SignCredentials', () => {
             />,
         );
 
-        // The reassuring note is still there...
-        expect(screen.getByText(/no password needed/i)).toBeTruthy();
-        // ...and so is the failure, which is the whole point.
+        expect(screen.queryByText(/no password needed/i)).toBeNull();
+        // Keep the failure visible when there is no password Input to carry it.
         expect(screen.getByText('Insufficient funds.')).toBeTruthy();
     });
 
@@ -58,7 +55,7 @@ describe('SignCredentials', () => {
             />,
         );
 
-        expect(screen.getByText(/no password needed/i)).toBeTruthy();
+        expect(screen.queryByText(/no password needed/i)).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
@@ -73,7 +70,7 @@ describe('SignCredentials', () => {
             />,
         );
 
-        expect(screen.getByLabelText(/password/i)).toBeTruthy();
+        expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeTruthy();
         expect(screen.getByText('Incorrect password.')).toBeTruthy();
     });
 

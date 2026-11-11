@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 // Token detail quick actions are the same four square tiles as Home: Send,
-// Receive, Exchange and More info, each with its icon centred over its label.
-// History and Manage live in the More info menu, never as top-level tiles.
+// Receive, Exchange and More info, each with its icon centred over its label,
+// in one horizontal row. History and Manage live in the More info menu, never
+// as top-level tiles.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -174,19 +175,28 @@ describe('TokenDetail quick actions render', () => {
         fireEvent.click(more);
         expect(more).toHaveAttribute('aria-expanded', 'true');
         const menu = screen.getByRole('menu', { name: 'More info' });
-        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['History']);
+        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent))
+            .toEqual(['History', 'Gated content', 'Holders']);
         fireEvent.click(within(menu).getByRole('menuitem', { name: 'History' }));
         expect(onViewActivity).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('menu')).toBeNull();
     });
 
-    it('closes the More info menu on Escape', async () => {
+    it('focuses the menu and closes it on Escape or an outside press', async () => {
         renderDetail();
-        const more = await screen.findByRole('button', { name: 'More info' });
-        fireEvent.click(more);
-        expect(screen.getByRole('menu')).toBeTruthy();
+        const trigger = await screen.findByRole('button', { name: 'More info' });
+
+        fireEvent.click(trigger);
+        const history = screen.getByRole('menuitem', { name: 'History' });
+        expect(document.activeElement).toBe(history);
         fireEvent.keyDown(window, { key: 'Escape' });
-        await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'More info' })).toBeNull());
+        expect(document.activeElement).toBe(trigger);
+
+        fireEvent.click(trigger);
+        expect(screen.getByRole('menu', { name: 'More info' })).toBeTruthy();
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByRole('menu', { name: 'More info' })).toBeNull();
     });
 
     it('keeps a blocked Send visible with the reason that blocks it', async () => {
@@ -211,7 +221,7 @@ describe('TokenDetail quick actions render', () => {
         fireEvent.click(within(group).getByRole('button', { name: 'More info' }));
         const manage = await screen.findByRole('menuitem', { name: 'Manage' });
         expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent))
-            .toEqual(['History', 'Manage']);
+            .toEqual(['History', 'Gated content', 'Holders', 'Manage']);
         fireEvent.click(manage);
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });

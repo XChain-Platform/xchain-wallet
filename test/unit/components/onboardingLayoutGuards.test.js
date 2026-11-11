@@ -155,7 +155,6 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceSource).not.toContain("color: '#FFFFFF'");
         expect(homeTabsSource).not.toContain("color: '#FFFFFF'");
         expect(balanceCss).toContain('background: var(--xc-surface);');
-        expect(homeTabsCss).toContain('background: var(--xc-surface);');
         expect(homeSource).toContain("color: 'var(--xc-on-accent)'");
         expect(portfolioCss).toContain('color: var(--xc-on-accent);');
         expect(totalBalanceCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);

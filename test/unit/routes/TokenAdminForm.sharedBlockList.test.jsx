@@ -150,8 +150,7 @@ describe('shared block list entry points', () => {
         const onAccessLists = vi.fn();
         await mountManage(onAccessLists);
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Use a shared block list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Shared block list' }));
 
         expect(onAccessLists).toHaveBeenCalledTimes(1);
     });

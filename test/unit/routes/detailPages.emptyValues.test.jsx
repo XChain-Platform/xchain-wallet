@@ -144,7 +144,8 @@ describe('detail screens with sparse records', () => {
         expect(valueBeside('Total supply')).toHaveTextContent('1,234.56');
         expect(valueBeside('Current balance')).toHaveTextContent('1,234.56 PRECISE');
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Holders' }));
         const holders = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(holders).getByText('1,234.56')).toBeTruthy();
     });

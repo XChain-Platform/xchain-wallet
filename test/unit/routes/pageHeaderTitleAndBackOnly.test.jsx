@@ -323,7 +323,7 @@ describe('Rename forms', () => {
         const input = await screen.findByLabelText('Wallet name');
         expect(headerActions('Rename wallet')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Rename wallet' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());
@@ -335,7 +335,7 @@ describe('Rename forms', () => {
         const input = await screen.findByLabelText('Account name');
         expect(headerActions('Rename account')).toEqual([]);
         fireEvent.change(input, { target: { value: 'Spending' } });
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Rename account' });
         expect(save.closest('form')).toBeTruthy();
         fireEvent.click(save);
         await waitFor(() => expect(onRenamed).toHaveBeenCalled());

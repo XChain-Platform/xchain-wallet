@@ -129,13 +129,16 @@ async function openPaletteRoute(page, name) {
 
 async function selectBitcoinMainnet(page) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Give and get network:/ });
+    const trigger = main.getByRole('button', { name: /^Network:/ });
     await expect(trigger).toBeVisible();
-    if (await trigger.getAttribute('aria-label') === 'Give and get network: Bitcoin') return;
-
+    await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     await trigger.click();
-    await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
-    await expect(trigger).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
+    const picker = page.getByRole('dialog', { name: 'Network' });
+    await expect(picker).toBeVisible();
+    await picker
+        .getByRole('button', { name: 'Select Bitcoin' }).click();
+    await expect(picker).toBeHidden();
+    await expect(trigger).toHaveAttribute('aria-label', 'Network: Bitcoin');
 }
 
 async function checkViewports(page, surface, fields) {
@@ -182,7 +185,9 @@ test('trailing field actions stay inside their fields without squeezing input te
         tick: 'PEPECASH',
     });
     main = page.getByRole('main');
-    await expect(main.getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+    // Every amount field carries Max (disabled when nothing is held), so look in You give.
+    await expect(main.getByRole('region', { name: 'You give' })
+        .getByRole('button', { name: 'Use max available amount' })).toBeVisible();
     await checkViewports(page, 'Swap', [
         {
             name: 'Give amount',

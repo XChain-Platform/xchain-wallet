@@ -76,7 +76,7 @@ async function fillUtility({ name = 'BOUND', supply = '100', maxMint } = {}) {
     fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: name } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
     if (maxMint !== undefined) {
-        fireEvent.change(screen.getByLabelText(/Max mint per transaction/), { target: { value: maxMint } });
+        fireEvent.change(screen.getByLabelText(/Max mint per transaction/, { selector: 'input' }), { target: { value: maxMint } });
     }
     fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 }
@@ -108,7 +108,7 @@ describe('TokenWizard worker loss between compose and confirm', () => {
         await waitFor(() => expect(storedDraft()?.values.name).toBe('GONE'));
         fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(screen.getByRole('button', { name: /Continue to confirmation/ })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: /Issue token/ })).toBeEnabled());
         expect(screen.queryByTestId('confirm-approve')).toBeNull();
         expect(messaging.issueToken).not.toHaveBeenCalled();
         expect(screen.getByText('Step 4 of 4: Review')).toBeTruthy();
@@ -224,7 +224,7 @@ describe('TokenWizard double taps', () => {
         const messaging = mountWizard({ composeForConfirm: vi.fn(() => gate.promise) });
         await fillUtility({ name: 'TAPS', supply: '10' });
         await screen.findByText('Step 4 of 4: Review');
-        const go = screen.getByRole('button', { name: /Continue to confirmation/ });
+        const go = screen.getByRole('button', { name: /Issue token/ });
         fireEvent.click(go);
         fireEvent.click(go);
         await act(async () => { gate.resolve(COMPOSED); });
@@ -269,6 +269,6 @@ describe('TokenWizard parent ownership between steps', () => {
         expect(messaging.issueToken).not.toHaveBeenCalled();
         expect(screen.queryByTestId('confirm-approve')).toBeNull();
         expect(screen.getByText('Step 4 of 4: Review')).toBeTruthy();
-        expect(screen.getByRole('button', { name: /Continue to confirmation/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /Issue token/ })).toBeEnabled();
     });
 });

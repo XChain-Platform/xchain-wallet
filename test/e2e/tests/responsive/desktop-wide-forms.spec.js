@@ -25,6 +25,8 @@ const CONTROL_SELECTOR = [
     'select',
     'textarea',
     'button[aria-haspopup="listbox"]',
+    // The Network field opens the network picker screen (ruling U59).
+    'button[aria-haspopup="dialog"][aria-label^="Network"]',
 ].join(', ');
 const PIXEL_TOLERANCE = 1;
 
@@ -175,7 +177,9 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await gotoPalette(page, 'Create a token');
             await expect(page.getByRole('heading', { name: 'Issue a token', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            await page.getByRole('button', { name: /^Custom\b/ }).click();
+            // Custom opens the full Issue form (ruling U79); the other
+            // templates keep the wizard's network step this walk measures.
+            await page.getByRole('button', { name: /^Utility token\b/ }).click();
             const form = page.getByRole('form', { name: 'Choose token network', exact: true });
             await expectAlignedForm(form, `${viewport.name} Create token`);
             await expectNoHorizontalOverflow(page, `${viewport.name} Create token`);
@@ -198,7 +202,7 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
 
         await test.step(`${viewport.name} / license or terms`, async () => {
             await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
-            await page.getByRole('main').getByRole('button', { name: /^About\b/ }).click();
+            await page.getByRole('main').getByRole('button', { name: /^About v?\d/ }).click();
             await expect(page.getByRole('heading', { name: 'About', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('button', { name: 'Show full text', exact: true }).click();

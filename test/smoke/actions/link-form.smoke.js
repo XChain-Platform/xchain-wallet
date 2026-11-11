@@ -35,16 +35,19 @@ const src = readFileSync(formPath, 'utf8');
 assert.ok(/export function LinkForm\b/.test(src),
     'LinkForm is a named export');
 
-// Two-panel composer: side panels carry chain picker + action_index.
-assert.ok(/Network A/.test(src), 'LinkForm renders the Network A panel');
-assert.ok(/Network B/.test(src), 'LinkForm renders the Network B panel');
-assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
+// Layout 3 (U93): Action 1 and Action 2 cards each carry a network picker
+// and an action number; the old Network A / Network B panels are gone.
+assert.ok(/function ActionCard\b/.test(src), 'LinkForm uses an ActionCard sub-component');
+assert.ok(/number="1"/.test(src) && /number="2"/.test(src),
+    'LinkForm renders the Action 1 and Action 2 cards');
+assert.ok(!/Network A|Network B/.test(src), 'LinkForm no longer renders Network A / Network B panels');
 
-// Submit-on selector: defaults to chain A, can switch to chain B.
-assert.ok(/submitOn/.test(src),
-    'LinkForm tracks which network the LINK is submitted on');
-assert.ok(/Submit the link on/.test(src),
-    'LinkForm exposes a "Submit the link on" selector');
+// The form's own Network decides where the LINK is submitted; there is no
+// submit-on choice.
+assert.ok(/const submitChainId = formChainId;/.test(src),
+    'LinkForm submits on the form Network');
+assert.ok(!/submitOn|Submit the link on/.test(src),
+    'LinkForm has no submit-on selector');
 
 // Decoded preview: calls getActionByIndex per side.
 for (const call of [

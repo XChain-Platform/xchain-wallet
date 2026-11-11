@@ -35,13 +35,26 @@ function mount() {
 }
 
 describe('Locked unlock button', () => {
-    it('draws the Unlock Wallet submit in the success (green) fill, not primary', () => {
+    it('draws the initially disabled Unlock Wallet submit with an icon and the success fill', () => {
         clearLockoutState();
         mount();
         const button = screen.getByRole('button', { name: 'Unlock Wallet' });
         expect(button).toHaveAttribute('type', 'submit');
+        expect(button).toBeDisabled();
+        expect(button.querySelector('svg')).toBeInTheDocument();
         expect(buttonStyles.success).toBeTruthy();
         expect(button).toHaveClass(buttonStyles.success);
         expect(button).not.toHaveClass(buttonStyles.primary);
+    });
+
+    it('gives the Password label field-specific help', () => {
+        clearLockoutState();
+        mount();
+
+        const help = screen.getByRole('button', { name: 'About Password' });
+        expect(help).toHaveAttribute('aria-expanded', 'false');
+        expect(help).toHaveAccessibleDescription(
+            "The password you set for this wallet on this device. It only unlocks the wallet here and isn't used to restore it.",
+        );
     });
 });

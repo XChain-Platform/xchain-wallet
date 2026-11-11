@@ -96,8 +96,8 @@ function mount({
 }
 
 async function fillTransfer({ destination = DESTINATION, memo = '' } = {}) {
-    fireEvent.change(await screen.findByLabelText('Destination'), { target: { value: destination } });
-    if (memo) fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+    fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: destination } });
+    if (memo) fireEvent.change(screen.getByLabelText('Memo'), { target: { value: memo } });
     fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'TRANSFER' } });
 }
 
@@ -110,7 +110,7 @@ describe('ListTransferForm queued result', () => {
     it('shows the queued panel when the transfer is signed but not broadcast', async () => {
         const messaging = mount();
         await fillTransfer();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve.disabled).toBe(false));
         fireEvent.click(approve);

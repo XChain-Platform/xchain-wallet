@@ -73,8 +73,8 @@ const lengthErrorText = new RegExp(`at most ${INDEXER_MAX_MEMO_LENGTH}`);
 
 async function createWithMemo(memo) {
     const messaging = mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
-    fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), { target: { value: 'SWAPTEST' } });
-    fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: memo } });
+    fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
+    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
     const publish = await screen.findByRole('button', { name: 'Publish list' });
     await waitFor(() => expect(publish.disabled).toBe(false));
     fireEvent.click(publish);
@@ -89,9 +89,9 @@ async function forkWithMemo(memo) {
         onDone() {},
     });
     await screen.findByText(/Forking token list #2700/);
-    fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
-    fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: memo } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
+    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
     return messaging;
 }
 
@@ -142,13 +142,12 @@ describe('ListForkForm memo length', () => {
     });
 });
 
-// "Protocol rejects | or ;." under the Memo field read as an error to a
-// tester on Create list. The hint now says what the memo is and keeps the
-// character rule, and every memo form shares the one wording.
+// Create list uses memo help that distinguishes the action note from the
+// list metadata while preserving the protocol character rule.
 describe('Memo hint on Create list', () => {
-    it('says the memo is public and names the forbidden characters', async () => {
+    it('distinguishes the memo from list metadata and names the forbidden characters', async () => {
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
-        expect(await screen.findByText('A public note saved on the blockchain with this action. It cannot contain | or ;.')).toBeTruthy();
+        expect(await screen.findByText("A public note stored on-chain with this list creation action. It is separate from the list's name and description and cannot contain | or ;.")).toBeTruthy();
         expect(screen.queryByText('Protocol rejects | or ;.')).toBeNull();
     });
 });
@@ -170,8 +169,8 @@ describe('ListForkForm memo-only edit', () => {
     it('publishes a memo with no member change as one item-less edit', async () => {
         const messaging = openFork();
         await screen.findByText(/Forking token list #2700/);
-        fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: 'season two' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText(/Only the memo changes\. The list keeps its 1 member/)).toBeTruthy();
         expect(screen.getByText(/^Update the memo on list #2700/)).toBeTruthy();
         const publish = screen.getByRole('button', { name: 'Publish memo' });
@@ -185,7 +184,7 @@ describe('ListForkForm memo-only edit', () => {
     it('still refuses an edit with no member change and no memo', async () => {
         const messaging = openFork();
         await screen.findByText(/Forking token list #2700/);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

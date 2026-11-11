@@ -133,7 +133,7 @@ describe('AdvancedActionsForm action picker label', () => {
         }));
 
         fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
-        fireEvent.click(await screen.findByRole('option', { name: /Litecoin/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /Select Litecoin/i }));
 
         await waitFor(() => expect(target.listActions).toHaveBeenCalledWith({ chainId: LTC }));
         expect(actionPicker.value).toBe('');

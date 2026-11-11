@@ -15,13 +15,18 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 }));
 
 const { AlertsRoute } = await import('../../../packages/core/src/shared/routes/AlertsRoute.jsx');
+const { default: routeStyles } = await import('../../../packages/core/src/shared/routes/AlertsRoute.module.css');
 
-const now = Date.now();
-const yesterday = now - 86_400_000;
+const nowDate = new Date();
+const now = nowDate.getTime();
+const yesterday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() - 1, 12).getTime();
+const earlier = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() - 3, 12).getTime();
+const earlierLabel = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(earlier);
 const rows = [
     { id: 'price', type: 'price', title: 'BTC rose above $120,000', message: 'Your BTC price alert fired.', at: now, read: false },
     { id: 'activity', type: 'activity', title: 'Send still pending', message: 'A transfer has waited 2 hours.', at: now - 1000, read: true },
     { id: 'payment', type: 'payments', title: 'Payment due tomorrow', message: 'Review this payment.', at: yesterday, read: false },
+    { id: 'security', type: 'security', title: 'Security check complete', message: 'Your wallet passed its security check.', at: earlier, read: false },
 ];
 
 const mount = (props = {}) => render(<AlertsRoute onBack={vi.fn()} alerts={rows} {...props} />);
@@ -33,16 +38,40 @@ afterEach(() => {
 });
 
 describe('AlertsRoute', () => {
-    it('renders the one header action, inline filters, day groups, and unread dots', () => {
+    it('renders the header action, counted filters, and day-grouped alert row hierarchy', () => {
         mount();
         const header = screen.getByRole('banner');
-        expect(within(header).getByRole('button', { name: 'Mark all read' })).toBeTruthy();
+        const markAllButton = within(header).getByRole('button', { name: 'Mark all read' });
+        expect(markAllButton).toBeTruthy();
+        expect(markAllButton.querySelector('svg')).toHaveAttribute('width', '18');
+        expect(within(header).getByText('3')).toBeTruthy();
         expect(within(header).getAllByRole('button')).toHaveLength(2);
         expect(screen.getByRole('searchbox', { name: 'Search alerts' })).toBeTruthy();
-        expect(screen.getByRole('combobox', { name: 'Filter alert type' })).toBeTruthy();
+        const select = screen.getByRole('combobox', { name: 'Filter alert type' });
+        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
+        expect(within(select).getByRole('option', { name: 'Price (1)' })).toBeTruthy();
+        expect(within(select).getByRole('option', { name: 'Activity (1)' })).toBeTruthy();
+        expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
+        expect(within(select).getByRole('option', { name: 'Security (1)' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: 'Yesterday' })).toBeTruthy();
-        expect(screen.getAllByLabelText('Unread')).toHaveLength(2);
+        expect(screen.getByRole('heading', { name: earlierLabel })).toBeTruthy();
+
+        const unreadTitle = screen.getByText('BTC rose above $120,000');
+        const unreadRow = unreadTitle.closest('li');
+        expect(within(unreadRow).getByText('Price').compareDocumentPosition(unreadTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(unreadRow.querySelector('time')).toBeTruthy();
+        expect(within(unreadRow).getByLabelText('Unread')).toBeTruthy();
+        expect(unreadRow).toHaveClass(routeStyles.unread);
+
+        const readTitle = screen.getByText('Send still pending');
+        const readRow = readTitle.closest('li');
+        expect(within(readRow).getByText('Activity').compareDocumentPosition(readTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(readRow.querySelector('time')).toBeTruthy();
+        expect(within(readRow).queryByLabelText('Unread')).toBeNull();
+        expect(readRow).toHaveClass(routeStyles.read);
+        expect(readRow).not.toHaveClass(routeStyles.unread);
+        expect(screen.getAllByLabelText('Unread')).toHaveLength(3);
     });
 
     it('filters every alert text, reports matches, highlights matches, and clears search', () => {
@@ -61,7 +90,7 @@ describe('AlertsRoute', () => {
     it('shows type counts and filters to the selected type', () => {
         mount();
         const select = screen.getByRole('combobox', { name: 'Filter alert type' });
-        expect(within(select).getByRole('option', { name: 'All types (3)' })).toBeTruthy();
+        expect(within(select).getByRole('option', { name: 'All types (4)' })).toBeTruthy();
         expect(within(select).getByRole('option', { name: 'Payments (1)' })).toBeTruthy();
 
         fireEvent.change(select, { target: { value: 'payments' } });
@@ -74,10 +103,12 @@ describe('AlertsRoute', () => {
         mount({ walletId: 'wallet-1' });
         const button = screen.getByRole('button', { name: 'Mark all read' });
         expect(button).not.toBeDisabled();
+        expect(screen.getByRole('banner')).toHaveTextContent('3');
 
         fireEvent.click(button);
 
         expect(button).toBeDisabled();
+        expect(screen.getByRole('banner')).not.toHaveTextContent('3');
         expect(screen.queryByLabelText('Unread')).toBeNull();
         await waitFor(() => expect(messaging.markAllAlertsRead).toHaveBeenCalledWith({ walletId: 'wallet-1' }));
     });

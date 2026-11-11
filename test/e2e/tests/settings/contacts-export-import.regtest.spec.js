@@ -130,7 +130,7 @@ test.describe('Settings: contacts export / import', () => {
                 // violation rather than a fill.
                 await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
                 await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
-                await page.getByRole('button', { name: 'Save', exact: true }).click();
+                await page.getByRole('button', { name: 'Create contact', exact: true }).click();
 
                 await expect(contactRow(page, CONTACT_NAME),
                     'the contact was never created, so there is nothing to export')

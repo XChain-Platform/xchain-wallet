@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FieldNote, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, SectionHeader, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, FieldNote, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { isCompressedPublicKey, validateCosignerXpub } from '../utils/multisigXpub.js';
 import { MAX_MULTISIG_COSIGNERS } from '../../schemas/multisigConfig.js';
-import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
+import { MultisigCosignerShare, unavailableAddressReason } from './MultisigCosignerShare.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import sharedStyles from './IssueTokenForm.module.css';
 import styles from './MultisigCreate.module.css';
 
@@ -157,6 +158,9 @@ export function MultisigCreate({ walletId, onBack }) {
         { id: newRowId(), origin: 'external-xpub', name: 'Cosigner B', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
     ]));
     const [showCosignerShare, setShowCosignerShare] = useState(false);
+    const [localPickerRowId, setLocalPickerRowId] = useState(/** @type {string | null} */ (null));
+    const [sharePickerOpen, setSharePickerOpen] = useState(false);
+    const [shareAddressId, setShareAddressId] = useState('');
 
     // Keep the selected threshold while the group grows, but never leave it
     // above the number of cosigners or below Taproot's all-signers rule.
@@ -476,6 +480,41 @@ export function MultisigCreate({ walletId, onBack }) {
     const descriptor = chainRegistry.get(chainId);
     const localAddresses = (addressesByChain[chainId] || []);
 
+    if (localPickerRowId) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Use one of this wallet's addresses"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    handleLocalAddressPick(localPickerRowId, address);
+                    setLocalPickerRowId(null);
+                }}
+                onBack={() => setLocalPickerRowId(null)}
+            />
+        );
+    }
+
+    if (sharePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Address to share"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                unavailableReason={unavailableAddressReason}
+                onPick={(address) => {
+                    setShareAddressId(address.id);
+                    setSharePickerOpen(false);
+                }}
+                onBack={() => setSharePickerOpen(false)}
+            />
+        );
+    }
+
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
@@ -491,13 +530,15 @@ export function MultisigCreate({ walletId, onBack }) {
                             type="button"
                             variant="secondary"
                             disabled={stage === 'submitting'}
+                            icon={<Icon.PencilIcon />}
                             onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Edit
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.CheckIcon />}
                             loading={stage === 'submitting'}
                         >
                             Confirm multisig
@@ -542,13 +583,17 @@ export function MultisigCreate({ walletId, onBack }) {
                 </>
             ) : null}
         >
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The Bitcoin network for this multisig wallet. Every cosigner key must belong to this network."
                 value={chainId}
-                onChange={(value) => { setEdited(true); setChainId(value); }}
+                onChange={(value) => {
+                    setEdited(true);
+                    setChainId(value);
+                    setShareAddressId('');
+                }}
                 chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
 
             <div className={styles.typeField}>
@@ -571,32 +616,34 @@ export function MultisigCreate({ walletId, onBack }) {
             </div>
 
             <div className={styles.thresholdField}>
-                <span className={styles.fieldLabel}>Signatures required</span>
+                <div className={styles.fieldLabelRow}>
+                    <span className={styles.fieldLabel}>Signatures required</span>
+                    <InfoTip
+                        aria="About signatures required"
+                        label="Choose how many cosigners must approve each payment. Taproot requires every cosigner to approve."
+                    />
+                </div>
                 <div className={styles.thresholdRow}>
                     <div className={styles.stepper} role="group" aria-label="Signatures required">
                         <Button
                             type="button"
                             variant="secondary"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.MinusIcon />}
                             aria-label="Decrease signatures required"
                             onClick={() => adjustThreshold(-1)}
                             disabled={scheme === 'taproot-musig2' || Number(threshold) <= 1}
-                        >
-                            -
-                        </Button>
+                        />
                         <output aria-live="polite" className={styles.thresholdValue}>{threshold}</output>
                         <Button
                             type="button"
                             variant="secondary"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.PlusIcon />}
                             aria-label="Increase signatures required"
                             onClick={() => adjustThreshold(1)}
                             disabled={scheme === 'taproot-musig2' || Number(threshold) >= rows.length}
-                        >
-                            +
-                        </Button>
+                        />
                     </div>
                     <span>of {rows.length} {rows.length === 1 ? 'cosigner' : 'cosigners'}</span>
                 </div>
@@ -616,7 +663,7 @@ export function MultisigCreate({ walletId, onBack }) {
                         onChange={(patch, touchFields) => updateRow(row.id, patch, touchFields)}
                         onRemove={() => removeRow(row.id)}
                         canRemove={rows.length > 2}
-                        onLocalAddressPick={(addr) => handleLocalAddressPick(row.id, addr)}
+                        onOpenLocalAddressPicker={() => setLocalPickerRowId(row.id)}
                         onTouch={(field) => touch(`${row.id}:${field}`)}
                         complete={!rowsWithProblems.has(row.id)}
                     />
@@ -641,16 +688,16 @@ export function MultisigCreate({ walletId, onBack }) {
                     type="submit"
                     variant="success"
                     block
-                    icon={<Icon.CheckIcon />}
+                    icon={<Icon.MultisigIcon />}
                     disabled={composeError || stage === 'submitting'}
                     loading={stage === 'submitting'}
                 >
-                    Review multisig
+                    Create multisig
                 </Button>
                 <Button
                     type="button"
                     variant="link"
-                    icon={null}
+                    icon={<Icon.UsersIcon />}
                     className={styles.shareLink}
                     aria-expanded={showCosignerShare}
                     onClick={() => setShowCosignerShare((shown) => !shown)}
@@ -663,7 +710,11 @@ export function MultisigCreate({ walletId, onBack }) {
                     key={chainId}
                     walletId={walletId}
                     addresses={localAddresses}
+                    chainId={chainId}
                     networkKind={descriptor?.networkKind}
+                    addressId={shareAddressId}
+                    onAddressChange={setShareAddressId}
+                    onOpenAddressPicker={() => setSharePickerOpen(true)}
                 />
             ) : null}
         </FormPage>,
@@ -694,7 +745,7 @@ function ReviewCosigner({ index, row }) {
     );
 }
 
-function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick, onTouch, complete = false }) {
+function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onOpenLocalAddressPicker, onTouch, complete = false }) {
     const summaryValue = cosignerSummaryValue(row, addresses);
     // The entry fields open for a cosigner that still needs something and stay
     // open until the user folds the row with Done, so a row never collapses
@@ -719,7 +770,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     <Button
                         type="button"
                         variant="link"
-                        icon={null}
+                        icon={editing ? <Icon.CheckIcon /> : <Icon.PencilIcon />}
                         aria-expanded={editing}
                         aria-label={`${editing ? 'Done editing' : 'Edit'} cosigner ${index + 1}`}
                         onClick={() => setEditing((open) => !open)}
@@ -734,6 +785,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Name"
+                help="This label is visible only to you and helps you tell cosigners apart."
                 onBlur={() => onTouch('name')}
                 value={row.name}
                 onChange={(e) => onChange({ name: e.target.value })}
@@ -742,7 +794,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Select
                 label="Origin"
-                hint={ORIGIN_HINTS[row.origin]}
+                help={ORIGIN_HINTS[row.origin]}
                 value={row.origin}
                 onChange={(e) => onChange({
                     origin: e.target.value,
@@ -762,27 +814,25 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             </Select>
 
             {row.origin === 'local' ? (
-                <Select
+                <AddressField
                     label="Use one of this wallet's addresses"
-                    value={row.addressId || ''}
-                    onChange={(e) => {
-                        const a = addresses.find((x) => x.id === e.target.value);
-                        onLocalAddressPick(a || null);
-                    }}
-                >
-                    <option value="">Select address</option>
-                    {addresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                            {a.address} {a.label ? `· ${a.label}` : ''}
-                        </option>
-                    ))}
-                </Select>
+                    help="Choose the address whose key this wallet adds as a cosigner."
+                    icon="addresses"
+                    value={addresses.find((address) => address.id === row.addressId)?.address || ''}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={onOpenLocalAddressPicker}
+                    iconLabel="Choose one of this wallet's addresses"
+                    placeholder="Select address"
+                />
             ) : null}
 
             {row.origin === 'external-xpub' ? (
                 <>
                     <Textarea
-                        label="Shared cosigner setup (optional)"
+                        label="Shared cosigner setup"
+                        help="Paste the setup another wallet shared to fill the fields below."
+                        optional
                         value={row.sharePayload || ''}
                         onChange={(e) => onChange({ sharePayload: e.target.value, shareError: null })}
                         rows={3}
@@ -806,7 +856,8 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
                         label="Account public key"
-                onBlur={() => onTouch('xpub')}
+                        help="Enter the xpub from the other wallet."
+                        onBlur={() => onTouch('xpub')}
                         value={row.xpub}
                         onChange={(e) => onChange({ xpub: e.target.value.trim() })}
                         placeholder="xpub6CUGRUonZSQ4..."
@@ -816,6 +867,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Public key"
+                help="Enter the cosigner's compressed public key."
                 onBlur={() => onTouch('pubkey')}
                 value={row.pubkey}
                 onChange={(e) => onChange({ pubkey: e.target.value.trim() })}
@@ -824,6 +876,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Master fingerprint"
+                help="Enter the 8-character fingerprint of the cosigner's wallet, used by signers to find their key."
                 onBlur={() => onTouch('fingerprint')}
                 value={row.fingerprint}
                 onChange={(e) => onChange({ fingerprint: e.target.value.trim() })}
@@ -835,6 +888,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Account path"
+                help="Enter the derivation path of the cosigner's key."
                 onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}
@@ -885,8 +939,8 @@ function cosignerKind(origin) {
     return 'Someone else';
 }
 
-// The option labels stay short enough to show whole in a narrow select; what each
-// origin means sits under the field instead.
+// The option labels stay short enough to show whole in a narrow select; the help
+// tip explains each origin without crowding the field.
 const ORIGIN_HINTS = {
     local: 'A software account or paired hardware signer in this wallet.',
     'external-xpub': 'Paste the account public key from another wallet.',

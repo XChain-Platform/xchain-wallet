@@ -23,6 +23,10 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 
 // 0.5 BTC at $80,000: a valued row, so the chart has something to draw.
 const ROWS = [{ kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '50000000', divisibility: 8, fiatRate: 80000 }];
+const HISTORY_DAILY = Array.from({ length: 366 }, (_, index) => [
+    Date.now() - (365 - index) * 86_400_000,
+    60_000 + index * 25,
+]);
 
 function mount(walletId, prices, rows = ROWS, settings = {}) {
     const messaging = {
@@ -132,6 +136,28 @@ describe('PortfolioChart on a real wallet', () => {
         expect(unselected).toHaveAttribute('tabindex', '-1');
     });
 
+    it('draws recorded daily history and still refuses to synthesize missing daily history', async () => {
+        const messaging = mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline: [70_000, 71_000] } } });
+        messaging.getNativePricesRequest.mockResolvedValueOnce({
+            prices: { 'bitcoin-mainnet': { historyDaily: HISTORY_DAILY } },
+        });
+        await screen.findByRole('img', { name: /Range 1W/ });
+
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+        expect(await screen.findByRole('img', { name: /Range 1M/ })).toBeInTheDocument();
+
+        cleanup();
+        const emptyMessaging = mount('real-wallet-2', { prices: { 'bitcoin-mainnet': { sparkline: [70_000, 71_000] } } });
+        emptyMessaging.getNativePricesRequest.mockResolvedValueOnce({
+            prices: { 'bitcoin-mainnet': { historyDaily: null } },
+        });
+        await screen.findByRole('img', { name: /Range 1W/ });
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+
+        expect(await screen.findByText(/No price history/)).toBeInTheDocument();
+        expect(document.querySelector('svg polyline')).toBeNull();
+    });
+
     it('refetches and relabels the tooltip when the selected fiat currency changes', async () => {
         const sparkline = Array.from({ length: 168 }, (_, i) => 70000 + i * 50);
         const messaging = mount(
@@ -207,7 +233,7 @@ describe('PortfolioChart on the demo wallet', () => {
         expect(rangeLabels()).toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All']);
     });
 
-    it('opens each wallet mode on its own default range when the active wallet changes', async () => {
+    it('opens every wallet mode on 1W when the active wallet changes', async () => {
         const messaging = {
             getSettings: vi.fn(async () => ({})),
             getNativePricesRequest: vi.fn(async () => ({
@@ -224,6 +250,8 @@ describe('PortfolioChart on the demo wallet', () => {
 
         await screen.findByRole('img');
         expect(selectedRange()).toBe('1W');
+        fireEvent.click(screen.getByRole('tab', { name: '3M' }));
+        expect(selectedRange()).toBe('3M');
 
         markDemoWallet('demo-wallet-1');
         view.rerender(
@@ -232,7 +260,7 @@ describe('PortfolioChart on the demo wallet', () => {
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(selectedRange()).toBe('1M'));
+        await waitFor(() => expect(selectedRange()).toBe('1W'));
 
         clearDemoWalletId();
         view.rerender(

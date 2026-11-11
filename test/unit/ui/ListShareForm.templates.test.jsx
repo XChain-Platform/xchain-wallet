@@ -147,7 +147,7 @@ function listPageOf(node) {
 /** Confirms SHARE, reviews and approves through the confirm screen. */
 async function share(messaging) {
     fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), { target: { value: 'SHARE' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
     await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
     const approve = await screen.findByTestId('confirm-approve');
     await waitFor(() => expect(approve.disabled).toBe(false));

@@ -186,7 +186,8 @@ async function selectImportChain(page) {
     await expect(trigger, 'the import form has no Network picker').toBeVisible({ timeout: 30_000 });
     if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
     await trigger.click();
-    await page.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: new RegExp(`^Select ${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
     await expect(trigger, `the Network picker would not move to ${REGTEST_CHAIN_LABEL}`)
         .toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL), { timeout: 15_000 });
 }
@@ -198,7 +199,7 @@ async function submitImport(page, { wif, label }) {
     // the chain default is free to move.
     await page.getByLabel('Address type').selectOption('p2wpkh');
     await page.getByLabel('WIF private key').fill(wif);
-    if (label) await page.getByLabel('Label (optional)').fill(label);
+    if (label) await page.getByLabel('Label', { exact: true }).fill(label);
     // The password field renders only while the signer is NOT ready: unlocked,
     // the vault key is already in hand. Conditional rather than assumed, so
     // this spec does not depend on which side of that fork the shell is on.

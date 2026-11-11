@@ -95,7 +95,7 @@ describe('Review re-reads the token', () => {
             chainId: CHAIN, tick: 'TOK', locks: { mint: true }, maxSupply: '5000', totalSupply: '1', divisibility: 0,
         });
         fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: /^(Mint|Preview)$/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Mint' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(CHANGED);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('Review re-reads the token', () => {
         );
         await screen.findByText(/available to mint/);
         fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '10' } });
-        fireEvent.click(screen.getByRole('button', { name: /^(Mint|Preview)$/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Mint' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
     });
 
@@ -188,14 +188,14 @@ describe('Review re-reads the token', () => {
                 />
             </MessagingProvider>,
         );
-        const stop = await screen.findByLabelText(/Minting closes at block/i);
-        await waitFor(() => expect(screen.getByLabelText(/Max mint per transaction/i)).toHaveValue('100'));
+        const stop = await screen.findByLabelText(/Minting closes at block/i, { selector: 'input' });
+        await waitFor(() => expect(screen.getByLabelText(/Max mint per transaction/i, { selector: 'input' })).toHaveValue('100'));
         // Another tab raised MAX_MINT while this form sat open.
         getTokenInfo.mockResolvedValue({
             chainId: CHAIN, tick: 'TOKEN', creator: ADDRESS.address, locks: {}, mintMax: '500', divisibility: 0,
         });
         fireEvent.change(stop, { target: { value: '900' } });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = screen.getByRole('button', { name: 'Update mint settings' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 

@@ -41,7 +41,7 @@ async function submitPassword(value = 'wallet-password') {
     fireEvent.change(screen.getByLabelText('Confirm wallet password'), {
         target: { value },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Show public keys' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
 }
 
 beforeEach(() => {
@@ -134,14 +134,14 @@ describe('ThisWalletSection extended public key export', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
         expect(screen.getByText(/can't spend funds/i)).toBeInTheDocument();
         expect(screen.getByText(/including future addresses/i)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Show public keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
         expect(screen.getByText('Enter your wallet password.')).toBeInTheDocument();
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Confirm wallet password'), {
             target: { value: 'wallet-password' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Show public keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export keys' }));
 
         expect(await screen.findByText(XPUB)).toBeInTheDocument();
         expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith({

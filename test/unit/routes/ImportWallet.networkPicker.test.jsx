@@ -15,7 +15,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
-import { tickerForCoin } from '../../../packages/core/src/registry/coinTicker.js';
 
 function renderPrivateKeyLane() {
     render(
@@ -28,7 +27,7 @@ function renderPrivateKeyLane() {
 
 function openNetworkPicker() {
     fireEvent.click(screen.getByRole('button', { name: /^Coin network: / }));
-    return screen.getByRole('listbox', { name: 'Coin network' });
+    return screen.getByRole('dialog', { name: 'Coin network' });
 }
 
 function wifChains() {
@@ -46,15 +45,16 @@ afterEach(cleanup);
 describe('ImportWallet private key network picker', () => {
     it('offers only mainnet coins with WIF support', () => {
         renderPrivateKeyLane();
-        const options = within(openNetworkPicker()).getAllByRole('option');
+        const picker = openNetworkPicker();
+        const options = within(picker).getAllByRole('button', { name: /^Select / });
         const chains = wifChains();
         expect(options).toHaveLength(chains.length);
         options.forEach((option, index) => {
             const descriptor = chains[index];
-            const ticker = tickerForCoin(descriptor.coin);
             expect(descriptor.networkKind).toBe('mainnet');
-            expect(optionText(option)).toBe(`${descriptor.displayName}${ticker}`);
-            expect(computeAccessibleName(option)).not.toMatch(/testnet|regtest/);
+            expect(optionText(option)).toBe(descriptor.displayName);
+            expect(computeAccessibleName(option)).toBe(`Select ${descriptor.displayName}`);
+            expect(option.querySelector('img')).not.toBeNull();
         });
         expect(chains.map((descriptor) => descriptor.id).sort()).toEqual([
             'bitcoin-mainnet',

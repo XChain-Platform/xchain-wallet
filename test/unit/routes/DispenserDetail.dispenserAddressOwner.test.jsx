@@ -162,6 +162,9 @@ describe('a wallet holding only the dispenser address', () => {
         const [close, refill, edit] = ownerButtons(utils);
         expect([close.disabled, refill.disabled, edit.disabled]).toEqual([false, false, false]);
         expect(close.getAttribute('title')).toBe('Close this dispenser');
+        for (const action of [close, refill, edit, utils.getByRole('button', { name: 'More' })]) {
+            expect(action.querySelector('svg')).toBeTruthy();
+        }
     });
 
     it('closes signing from the dispenser address and says the escrow returns here, not to the creator', async () => {
@@ -187,9 +190,8 @@ describe('a wallet holding only the dispenser address', () => {
         const { utils, calls } = await mount({ addresses: [HOST_ADDRESS] });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
         expect(utils.queryByText(/Refill dispenser #4100/)).toBeNull();
-        expect(utils.getByLabelText(/^Refill amount/)).toHaveAccessibleDescription(
-            'Amount of XCHAIN to add to escrow.',
-        );
+        fireEvent.click(utils.getByRole('button', { name: 'About Refill amount (XCHAIN)' }));
+        expect(utils.getByRole('tooltip')).toHaveTextContent('Amount of XCHAIN to add to escrow.');
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '50' } }));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
         const btn = approveButton(utils);
@@ -204,9 +206,11 @@ describe('a wallet holding only the dispenser address', () => {
         const { utils, calls } = await mount({ addresses: [HOST_ADDRESS] });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
         expect(utils.queryByText(/Edit dispenser #4100/)).toBeNull();
-        expect(utils.getByLabelText(/^Block list/)).toHaveAccessibleDescription(/leave blank to keep it/i);
+        expect(utils.getByLabelText(/^Block list/)).toHaveAccessibleDescription('Optional Current: none.');
+        fireEvent.click(utils.getByRole('button', { name: 'About Block list' }));
+        expect(utils.getByRole('tooltip')).toHaveTextContent(/leave blank to keep it/i);
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update dispenser' })));
         const btn = approveButton(utils);
         if (btn && !btn.disabled) await step(() => fireEvent.click(btn));
 

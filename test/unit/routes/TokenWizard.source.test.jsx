@@ -84,6 +84,12 @@ async function driveToChainStage(template = 'Subtoken') {
 afterEach(() => cleanup());
 
 describe('TokenWizard signing address', () => {
+    it('gives the Network field a help tip written for the template', async () => {
+        mountWizard();
+        await driveToChainStage('Meme token');
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeTruthy();
+    });
+
     it('names the fee payer in a field that opens the address picker', async () => {
         mountWizard();
         const field = await driveToChainStage();

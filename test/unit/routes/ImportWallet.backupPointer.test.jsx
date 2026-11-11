@@ -88,12 +88,24 @@ async function scanPointerInBackupLane() {
 }
 
 describe('ImportWallet backup-pointer restore', () => {
-    it('labels the pasted backup contents field', () => {
+    it('puts the pointer scanner inside the backup contents field and toggles it', () => {
         renderImport({ importBackupRequest: vi.fn() });
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
 
-        expect(screen.getByRole('textbox', { name: 'Backup file contents' })).toBeTruthy();
+        const contents = screen.getByRole('textbox', { name: 'Backup file contents' });
+        const scan = screen.getByRole('button', { name: 'Scan pointer QR' });
+        expect(contents.parentElement).toContainElement(scan);
+        expect(document.querySelector('label[for="xc-backup-file"]').parentElement).not.toBe(scan.parentElement);
+        expect(scan).toHaveTextContent('');
+
+        fireEvent.click(scan);
+        expect(screen.getByRole('button', { name: 'Cancel scan' })).toHaveAttribute('aria-pressed', 'true');
+        expect(document.getElementById('xc-backup-scanner')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel scan' }));
+        expect(screen.getByRole('button', { name: 'Scan pointer QR' })).toHaveAttribute('aria-pressed', 'false');
+        expect(document.getElementById('xc-backup-scanner')).toBeNull();
     });
 
     it('opens the wired picker and reports picker and drag-drop states', async () => {
@@ -177,6 +189,11 @@ describe('ImportWallet backup-pointer restore', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
         clickFakeScan();
         await screen.findByText(/Backup pointer loaded/);
+        const rescan = screen.getByRole('button', { name: 'Scan pointer QR' });
+        expect(rescan).toHaveTextContent('');
+        fireEvent.click(rescan);
+        expect(document.getElementById('xc-backup-scanner')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel scan' }));
         fireEvent.click(screen.getByRole('button', { name: 'Use a file instead' }));
 
         expect(screen.getByRole('textbox', { name: 'Backup file contents' }).value).toBe('');

@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -561,7 +562,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         return wrap(
             <FormPage
                 label="Stake result"
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" onClick={onBack}>Done</Button>}
             >
                 <p className={styles.summary}>
                     Stake broadcast. Activation takes effect after 6 BTC blocks.
@@ -589,6 +590,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={isWatcherMode || isHwSource ? <Icon.SignIcon /> : <Icon.StakeIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -640,9 +642,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -698,6 +698,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -719,15 +720,16 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
                     loading={actionConfirm.composing}
+                    icon={<Icon.StakeIcon />}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Stake' : 'Preview'}
+                    {singleEncode ? 'Stake' : 'Review stake'}
                 </Button>
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} hideNetworkKind />
+            <NetworkField label="Network" help="The chain your stake is locked on. Only networks that support staking are listed, and the From address and the fee are on the network you pick." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -749,7 +751,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     { value: '1', label: 'New stake' },
                     { value: '2', label: 'Top up an existing stake' },
                 ]}
-                hint="Set automatically from the signing public key below. Change it only if you need to override the detected mode."
+                help="Set automatically from the signing public key below. Change it only if you need to override the detected mode."
             />
             {detectStatus !== 'idle' ? (
                 <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
@@ -762,7 +764,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             <AmountField
                 label="Amount"
-                hint="Amount to stake. Capabilities activate automatically when your total stake reaches their thresholds."
+                help="Amount to stake. Capabilities activate automatically when your total stake reaches their thresholds."
                 amount={amount}
                 tick="XCHAIN"
                 onAmountFieldChange={(rawValue) => {
@@ -829,7 +831,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             <Input
                 label="Signing public key"
-                hint="64-character hex-encoded Ed25519 public key. This key votes on the network on your behalf."
+                help="64-character hex-encoded Ed25519 public key. This key votes on the network on your behalf."
                 value={signingPubkey}
                 onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -840,6 +842,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

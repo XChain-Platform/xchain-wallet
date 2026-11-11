@@ -52,7 +52,9 @@ import {
     EmptyState,
     FormPage,
     FormSection,
+    Icon,
     Input,
+    PageNotice as Status,
     SectionHeader,
     Select,
     Textarea,
@@ -68,7 +70,6 @@ import {
     SettingsFieldRow,
     SettingsInlineForm,
     SettingsLoadError,
-    Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
@@ -176,7 +177,8 @@ export function DeveloperModeSection({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.ExternalLinkIcon />}
+                        className={styles.toolAction}
                         onClick={onNavigateToAdvanced}
                         disabled={typeof onNavigateToAdvanced !== 'function'}
                         aria-label={`${t('settings.developer.open')} ${t('settings.developer.advancedAction')}`}
@@ -193,7 +195,8 @@ export function DeveloperModeSection({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.ExternalLinkIcon />}
+                        className={styles.toolAction}
                         onClick={onNavigateToActionQueue}
                         disabled={typeof onNavigateToActionQueue !== 'function'}
                         aria-label={`${t('settings.developer.open')} ${t('settings.developer.actionQueue')}`}
@@ -284,7 +287,7 @@ function LogConsoleRow({ developerMode }) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.ChevronDownIcon style={{ transform: open ? 'rotate(180deg)' : undefined }} />}
                     onClick={() => setOpen((v) => !v)}
                     disabled={!developerMode}
                     aria-expanded={open && developerMode}
@@ -419,7 +422,8 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
     );
 
     return (
-        <SettingsInlineForm error={errorText}>
+        <SettingsInlineForm>
+            <Status text={errorText} tone="error" />
             {open ? (
                 <FormPage onSubmit={onActivate} sectioned submitFromAnyField label={descriptor.displayName}>
                     <FormSection
@@ -448,20 +452,29 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                         ) : (
                             <Input
                                 type="password"
+                                label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
+                                help={t('settings.help.developer.activationPassword', { displayName: descriptor.displayName })}
                                 enterKeyHint="go"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder={t('send.gated.passwordLabel')}
                                 autoComplete="current-password"
                                 disabled={busy}
-                                aria-label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
                             />
                         )}
                         <div className={styles.actions}>
-                            <Button type="submit" size="sm" icon={null} disabled={busy || (!isHardware && password.length === 0)}>
-                                {busy ? (isHardware ? t('settings.developer.checkYourDevice') : t('settings.developer.activating')) : t('settings.developer.activate2')}
+                            <Button
+                                type="submit"
+                                variant="success"
+                                size="sm"
+                                icon={<Icon.PlayIcon />}
+                                disabled={busy || (!isHardware && password.length === 0)}
+                            >
+                                {busy
+                                    ? `${isHardware ? t('settings.developer.checkYourDevice') : t('settings.developer.activating')} ${descriptor.displayName}`
+                                    : `${t('settings.developer.activate2')} ${descriptor.displayName}`}
                             </Button>
-                            <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
+                            <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>
                                 {t('common.cancel')}
                             </Button>
                         </div>
@@ -482,7 +495,7 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                icon={null}
+                                icon={<Icon.ChevronDownIcon />}
                                 onClick={() => setOpen(true)}
                                 disabled={disabled}
                             >
@@ -574,7 +587,8 @@ function RegtestFaucetForm({
     };
 
     return (
-        <SettingsInlineForm error={errorText}>
+        <SettingsInlineForm>
+            <Status text={errorText} tone="error" />
             <FormPage onSubmit={onGetFunds} sectioned submitFromAnyField label={t('settings.developer.regtestFaucet')}>
                 <FormSection
                     title={t('settings.developer.regtestFaucet')}
@@ -588,6 +602,7 @@ function RegtestFaucetForm({
                 <Input
                     type="text"
                     label={t('settings.developer.minerUrl')}
+                    help={t('settings.help.developer.minerUrl')}
                     enterKeyHint="next"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -600,6 +615,7 @@ function RegtestFaucetForm({
                 <Input
                     type="text"
                     label={t('settings.developer.amount', { coinTicker })}
+                    help={t('settings.help.developer.faucetAmount', { coinTicker })}
                     inputMode="decimal"
                     enterKeyHint="go"
                     aria-label={t('settings.developer.amount', { coinTicker })}
@@ -610,8 +626,9 @@ function RegtestFaucetForm({
                 <div className={styles.actions}>
                     <Button
                         type="submit"
+                        variant="success"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.TokenIcon />}
                         disabled={!developerMode || busy}
                     >
                         {busy ? t('settings.developer.sending') : t('settings.developer.getTest', { coinTicker })}
@@ -621,7 +638,7 @@ function RegtestFaucetForm({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.MintIcon />}
                             onClick={() => onNavigateToMint({ chainId: descriptor.id, tick: 'XCHAIN' })}
                             disabled={!developerMode || busy}
                         >
@@ -808,11 +825,12 @@ function CustomChainsRow({ developerMode }) {
                 </>
             )}
         >
-            <SettingsInlineForm error={errorText} onCancel={open ? cancelAdd : undefined} cancelDisabled={busy}>
-            {loadError ? <Status text={loadError} tone="error" /> : null}
-            {!loading && chains.length === 0 && !loadError ? (
-                <EmptyState title={t('settings.developer.noCustomChainsYet')} titleAs="h3" body={t('settings.developer.chainsYouAddHereAppear')} />
-            ) : null}
+            <SettingsInlineForm onCancel={open ? cancelAdd : undefined} cancelDisabled={busy}>
+                <Status text={errorText} tone="error" />
+                {loadError ? <Status text={loadError} tone="error" /> : null}
+                {!loading && chains.length === 0 && !loadError ? (
+                    <EmptyState title={t('settings.developer.noCustomChainsYet')} titleAs="h3" body={t('settings.developer.chainsYouAddHereAppear')} />
+                ) : null}
             {chains.length > 0 ? (
                 <>
                     {/* The style guide has no compact embedded list for custom-chain rows. */}
@@ -827,7 +845,7 @@ function CustomChainsRow({ developerMode }) {
                                         <Button
                                             variant="danger"
                                             size="sm"
-                                            icon={null}
+                                            icon={<Icon.TrashIcon />}
                                             onClick={() => onRemove(d?.id)}
                                             disabled={!developerMode || busy}
                                             aria-label={t('settings.developer.removeCustomChain', { value: d?.id })}
@@ -846,24 +864,31 @@ function CustomChainsRow({ developerMode }) {
                     <Textarea
                         id="custom-chain-descriptor"
                         label={t('settings.developer.customChainDescriptorJson')}
-                        hint={t('settings.developer.pasteAFullChaindescriptorJson')}
+                        help={t('settings.help.developer.customChainDescriptor')}
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
                         placeholder={CHAIN_DESCRIPTOR_SAMPLE}
                         rows={8}
+                        maxLength={MAX_CUSTOM_DESCRIPTOR_CHARS}
                         spellCheck={false}
                         disabled={busy}
                         className={styles.descriptor}
                     />
                     <div className={styles.actions}>
-                        <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>
+                        <Button
+                            type="submit"
+                            variant="success"
+                            size="sm"
+                            icon={<Icon.PlusIcon />}
+                            disabled={busy || pasted.length === 0}
+                        >
                             {busy ? t('settings.developer.adding') : t('settings.developer.addChain')}
                         </Button>
                         <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.XIcon />}
                             onClick={cancelAdd}
                             disabled={busy}
                         >
@@ -876,7 +901,7 @@ function CustomChainsRow({ developerMode }) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.PlusIcon />}
                     onClick={() => setOpen(true)}
                     disabled={!developerMode || busy}
                     className={styles.startAction}

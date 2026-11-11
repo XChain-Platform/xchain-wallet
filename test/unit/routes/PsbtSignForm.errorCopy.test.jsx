@@ -106,7 +106,7 @@ async function mountAndPaste(overrides = {}) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.change(utils.getByLabelText(/Unsigned transaction/i), { target: { value: PSBT_HEX } });
+        fireEvent.change(utils.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_HEX } });
         await drainMicrotasks();
     });
     return utils;
@@ -198,7 +198,7 @@ describe('PSBT sign screen: a paste that cannot be read', () => {
         const utils = await mountAndPaste({
             parsePsbtRequest: () => Promise.reject(new Error('Format Error: Invalid Magic Number')),
         });
-        const textarea = utils.getByLabelText(/Unsigned transaction/i);
+        const textarea = utils.getByLabelText('Unsigned transaction code');
         await domAct(async () => {
             fireEvent.change(textarea, { target: { value: 'not a transaction' } });
             await drainMicrotasks();

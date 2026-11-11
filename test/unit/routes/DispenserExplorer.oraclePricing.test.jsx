@@ -68,7 +68,7 @@ function renderExplorer(extra = {}) {
 
 async function searchFor(token) {
     await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: token } });
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
 

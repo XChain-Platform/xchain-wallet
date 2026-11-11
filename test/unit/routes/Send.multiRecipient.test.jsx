@@ -115,7 +115,10 @@ async function fillRow(n, { to, amount, tick } = {}) {
         fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
     }
     if (amount !== undefined) {
-        fireEvent.change(screen.getByLabelText(`Recipient ${n + 1} amount`), { target: { value: amount } });
+        fireEvent.change(
+            screen.getByLabelText(new RegExp(`^Recipient ${n + 1} amount`)),
+            { target: { value: amount } },
+        );
     }
 }
 
@@ -219,7 +222,9 @@ describe('Send: multi-recipient (PC-52)', () => {
         await fillRow(1, { amount: '.' });
         expect(fieldError('Recipient 2: amount must be a positive number.')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        await waitFor(() => expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument());
+        await waitFor(() => expect(
+            screen.getAllByText('Recipient 2: amount must be a positive number.').length,
+        ).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         await fillRow(1, { amount: '3' });

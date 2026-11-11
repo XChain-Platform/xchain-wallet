@@ -176,7 +176,7 @@ describe('VaultUnavailable: the destructive escape', () => {
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
         await waitFor(() => expect(confirm.disabled).toBe(false));
         fireEvent.click(confirm);
         await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
@@ -198,7 +198,7 @@ describe('VaultUnavailable: the destructive escape', () => {
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
         await waitFor(() => expect(confirm.disabled).toBe(false));
         fireEvent.click(confirm);
         await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
@@ -210,7 +210,7 @@ describe('VaultUnavailable: the destructive escape', () => {
         renderScreen({ kind: 'corrupt', wipe });
 
         fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIP' } });
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIP' } });
         fireEvent.click(screen.getByRole('button', { name: /remove damaged data/i }));
         expect(wipe).not.toHaveBeenCalled();
     });
@@ -220,7 +220,7 @@ describe('VaultUnavailable: the destructive escape', () => {
         renderScreen({ kind: 'corrupt', wipe });
 
         fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
-        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }), { target: { value: 'WIPE' } });
         fireEvent.click(screen.getByRole('button', { name: /remove damaged data/i }));
 
         await waitFor(() => expect(screen.getByText(/contact support/i)).toBeTruthy());

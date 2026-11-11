@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, Icon, InfoTip, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -18,18 +18,23 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { t } from '../../i18n/index.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import forkStyles from './ListForkForm.module.css';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -135,6 +140,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // Membership editor: every current item starts "kept" (checked); an
     // unchecked item is a REMOVE. New items typed/pasted below are ADDs.
@@ -320,9 +326,13 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     useEffect(() => {
         if (stage === 'compose' && ownerRecord) setFromAddressId(ownerRecord.id);
     }, [ownerRecord, stage]);
-    const ownershipReason = owner && !ownerRecord
+    const ownershipText = owner
         ? `List #${oldIndex} is owned by ${shortAddress(owner)}, which is not an address in this wallet. This wallet cannot edit it.`
         : null;
+    const ownershipReason = owner && !ownerRecord ? ownershipText : null;
+    // The user may pick another of this wallet's addresses as From; only the
+    // owner can sign a valid edit, so any other pick carries the same blocker.
+    const notOwnerPick = owner && fromAddress && fromAddress.address !== owner ? ownershipText : null;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -444,6 +454,16 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         LIST_ACTION_INDEX: '9'.repeat(20),
     }), [secondParams]);
     const resultingCount = currentItems.length - toRemove.length + toAdd.length;
+    const quoteActionString = needsAdd || needsRemove || memoOnly
+        ? firstActionSize.actionString
+        : null;
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionString: quoteActionString,
+        enabled: true,
+    });
 
     const firstDecoded = useMemo(() => (
         stage === 'review-1' || stage === 'wait-index'
@@ -561,6 +581,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         event.preventDefault();
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (ownershipReason) { setFormError(ownershipReason); return; }
+        if (notOwnerPick) { setFormError(notOwnerPick); return; }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
@@ -783,7 +804,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             <FormPage
                 as="div"
                 label="Edit published"
-                actions={<Button variant="primary" onClick={onDone}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             >
                 <h2 className={styles.successTitle}>Fork submitted</h2>
                 {tx1Txid ? (
@@ -834,7 +855,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                                 const open = t.built ? repointHandlers[t.id] : undefined;
                                 return (
                                     <li key={t.id} style={{ padding: '4px 0' }}>
-                                        <Button type="button" variant="ghost" disabled={!open} onClick={open}>
+                                        <Button type="button" variant="ghost" icon={<Icon.TokenListIcon />} disabled={!open} onClick={open}>
                                             {t.label}
                                         </Button>
                                     </li>
@@ -861,7 +882,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             <FormPage
                 as="div"
                 label="Waiting for fork to be indexed"
-                actions={<Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>}
+                actions={<Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>}
             >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
@@ -896,7 +917,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={hw ? <Icon.SignIcon /> : <Icon.UploadIcon />}
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
@@ -955,7 +977,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 <FormPage
                     as="div"
                     label="Not available in watcher mode"
-                    actions={<Button variant="ghost" onClick={() => setStage('compose')}>Back</Button>}
+                    actions={<Button variant="ghost" icon={<Icon.BackIcon />} onClick={() => setStage('compose')}>Back</Button>}
                 >
                     <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                     <p className={styles.hint}>
@@ -991,6 +1013,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         <Button
                             type="button"
                             variant="ghost"
+                            icon={<Icon.BackIcon />}
                             onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                             disabled={submitting}
                         >
@@ -998,7 +1021,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={isWatcherMode ? <Icon.PlusIcon /> : hw ? <Icon.SignIcon /> : <Icon.UploadIcon />}
                             loading={submitting}
                             disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -1078,7 +1102,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                     </p>
                 ) : null}
                 {isWatcherMode ? (
-                    <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -1098,6 +1122,29 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     }
 
     // stage === 'compose'
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); setFormError(null); }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    const itemNoun = isTick ? 'token' : 'address';
+    const resolutionHelp = resolution === true
+        ? `This edit becomes list #${oldIndex}'s current membership: everything that references #${oldIndex} will use it once it is indexed.`
+        : resolution === false
+            ? `This publishes a new list at a new index; #${oldIndex} itself never changes.`
+            : `This publishes an edit at a new index. Where list-edit resolution is active, everything that references #${oldIndex} follows it; before that, #${oldIndex} keeps its old membership.`;
+    const addHelp = `Enter one ${itemNoun} per line. ${resolutionHelp}`
+        + (isTick ? '' : ' Added addresses become permanent public on-chain data once the fork is published, the same as creating a new list.');
+
     return wrap(
         <FormPage
             demoGuard={demoGuard}
@@ -1105,31 +1152,47 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            status={formError
+                ? <StatusMessage variant="error">{formError}</StatusMessage>
+                : notOwnerPick ? <StatusMessage variant="warning">{notOwnerPick}</StatusMessage> : null}
             actions={(
-                <Button type="submit" variant="primary">
-                    Review
+                <Button type="submit" variant="success" icon={<Icon.UploadIcon />}>
+                    Publish edit
                 </Button>
             )}
         >
-            <p className={styles.summary}>
-                Forking {isTick ? 'token' : 'address'} list #{oldIndex}
-                {' '}({currentItems.length} current member{currentItems.length === 1 ? '' : 's'}).
-                {resolution === true
-                    ? ` This edit becomes list #${oldIndex}'s current membership: everything that references #${oldIndex} will use it once it is indexed.`
-                    : resolution === false
-                        ? ` This publishes a new list at a new index; #${oldIndex} itself never changes.`
-                        : ` This publishes an edit at a new index. Where list-edit resolution is active, everything that references #${oldIndex} follows it; before that, #${oldIndex} keeps its old membership.`}
-            </p>
+            <NetworkField
+                label="Network"
+                value={chainId}
+                onChange={() => {}}
+                chainIds={[chainId]}
+                chainRegistry={chainRegistry}
+            />
             {fromAddress ? (
-                <p className={styles.hint}>Signed from <AddressText address={fromAddress.address} /></p>
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                    help="Only the list's owner can edit it, and the network refuses an edit signed from any other address. This starts as the owner's address."
+                />
             ) : null}
+            <p className={styles.summary}>
+                Forking {itemNoun} list #{oldIndex}
+                {' '}({currentItems.length} current member{currentItems.length === 1 ? '' : 's'}).
+            </p>
             {currentItems.length > 0 ? (
                 <>
-                    <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                    <span className={forkStyles.membersLabel}>
+                        Current members
+                        <InfoTip aria="About current members" label="Uncheck a member to remove it from the list when you publish the edit." />
+                    </span>
+                    <ul className={forkStyles.memberList} data-testid="fork-current-members">
                         {currentItems.map((item, index) => (
-                            <li key={item} style={{ padding: '2px 0' }}>
+                            <li key={item} className={forkStyles.memberRow}>
                                 <Checkbox
                                     id={`fork-current-member-${index}`}
                                     label={<code>{item}</code>}
@@ -1146,7 +1209,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
 
             <Textarea
                 id="fork-add-items"
-                label={`Add ${isTick ? 'tokens' : 'addresses'} (one per line)`}
+                label={`Add ${isTick ? 'tokens' : 'addresses'}`}
+                help={addHelp}
                 value={addText}
                 onChange={(e) => setAddText(e.target.value)}
                 rows={6}
@@ -1172,32 +1236,35 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         : null}
                 </FieldNote>
             ) : null}
-            {!isTick ? (
-                <p className={styles.hint}>
-                    Added addresses become permanent public on-chain data once
-                    the fork is published, the same as creating a new list.
-                </p>
-            ) : null}
 
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A public note saved on the blockchain with this edit. It cannot contain | or ;."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            <FeesCard
+                chainId={chainId}
+                feeSelector={feeTiers ? (
+                    <FeeSelector
+                        chainId={chainId}
+                        label="Network fee"
+                        coinTicker={coinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            </FeesCard>
             <p className={styles.hint}>
                 Action size: {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes.
             </p>

@@ -35,7 +35,6 @@ describe('route network identity rendering', () => {
     it.each(ROUTES)('%s does not render network-kind text', (file) => {
         const source = routeSource(file);
 
-        expect(source).not.toContain('<NetworkField');
         expect(source).not.toContain('showNetworkKind');
         expect(source).not.toMatch(/\$\{[^}\n]*networkKind/);
         expect(source).not.toMatch(/\(\{(?:descriptor|d)\.networkKind\}\)/);

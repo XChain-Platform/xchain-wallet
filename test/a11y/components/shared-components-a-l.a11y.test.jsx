@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/flows/demoMode.js';
@@ -35,10 +35,12 @@ import { DiagnosticDetails } from '../../../packages/core/src/shared/components/
 import { DispenserBadge, __clearDispenserBadgeCache } from '../../../packages/core/src/shared/components/DispenserBadge.jsx';
 import { DraftDiscardButton } from '../../../packages/core/src/shared/components/DraftDiscardButton.jsx';
 import { EmptyStateNudge } from '../../../packages/core/src/shared/components/EmptyStateNudge.jsx';
+import { FeesCard } from '../../../packages/core/src/shared/components/FeesCard.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
+import { HomeListFilterMenu } from '../../../packages/core/src/shared/components/HomeListFilterMenu.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { HwFirmwareBanner } from '../../../packages/core/src/shared/components/HwFirmwareBanner.jsx';
 import { HwSignBlock } from '../../../packages/core/src/shared/components/HwSignBlock.jsx';
@@ -130,6 +132,7 @@ const fixtures = [
                     context="bc1qexampleexampleexampleexampleexample0"
                     amount="-0.01 BTC"
                     status="confirmed"
+                    block="Block 123,456"
                     timestamp={1700000000}
                     onClick={noop}
                 />
@@ -291,6 +294,27 @@ const fixtures = [
     ['EmptyStateNudge', () => (
         <EmptyStateNudge title="No tokens" body="Tokens appear here." actionLabel="Receive" onAction={noop} />
     )],
+    // The protocol-fee layout: network fee, protocol fee with its pay-in-native
+    // switch, and the total.
+    ['FeesCard', () => (
+        <FeesCard
+            feeSelector={<div>Network fee selector</div>}
+            tiers={{
+                low: { coinAmount: '0.00001' },
+                normal: { coinAmount: '0.000015' },
+                fast: { coinAmount: '0.00002' },
+            }}
+            value={{ mode: 'normal' }}
+            coinTicker="BTC"
+            quote={{ xchainFee: '0.064', requiredFeeSats: 197 }}
+            nativeFeeProps={{ checked: false, onChange: noop }}
+            fiat={{
+                formatNativeFee: () => '~$0.98',
+                formatProtocolFee: () => '~$0.13',
+                formatFeeTotal: () => '~$1.11',
+            }}
+        />
+    )],
     ['GatedFileViewer', () => (
         <GatedFileViewer
             name="note.txt"
@@ -326,6 +350,22 @@ const fixtures = [
             onTokenQueryChange={noop}
         />
     )],
+    // Checked open, so the sort, search and network controls in its popover are covered.
+    ['HomeListFilterMenu', () => (
+        <HomeListFilterMenu
+            sortBy="name"
+            onSortChange={noop}
+            chainRegistry={chainRegistry}
+            coinFamilies={['bitcoin']}
+            networkFilter="all"
+            onNetworkFilterChange={noop}
+            tokenQuery=""
+            onTokenQueryChange={noop}
+        />
+    ), async () => {
+        fireEvent.click(screen.getByRole('button', { name: /filter/i }));
+        await screen.findByRole('dialog');
+    }],
     ['HomeTabs', () => withMessaging(
         <HomeTabs
             chainRegistry={chainRegistry}

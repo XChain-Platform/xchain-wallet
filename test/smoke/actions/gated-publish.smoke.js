@@ -78,7 +78,8 @@ for (const [label, ...p] of [
 
 // ---- Form ---------------------------------------------------------------
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
-assert.match(form, /listGatedKeys\(\{ walletId, chainId, gateTicker: tick \}\)/, 'pack picker lists vault packs');
+// The gate token (and its chain) is chosen on the form, so packs follow the picked token.
+assert.match(form, /listGatedKeys\(\{ walletId, chainId: selectedChainId, gateTicker: gateTick \}\)/, 'pack picker lists vault packs');
 assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKeyHash');
 // User-facing copy lives in the English locale; the form renders it through t().
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
@@ -97,8 +98,10 @@ assert.match(form, /ResultScreen/, 'signed but unbroadcast publishes use the que
 
 // ---- ManageToken entry + 3-shell wiring ---------------------------------
 const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');
-assert.match(manage, /id: 'gated-content', label: 'Gated content'[\s\S]*?blockIssuerActions \? undefined : onGatedContent/,
+assert.match(manage, /id: 'gated-content'[^\n]*\.\.\.ownerAction\(options\.onGatedContent\)/,
     'ManageToken action is owner-gated');
+assert.match(manage, /const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: blockIssuerActions \? undefined : handler,[\s\S]*?disabled: blockIssuerActions/,
+    'ManageToken owner action helper disables actions for non-owners');
 for (const [label, ...p] of [
     ['web', 'packages', 'web', 'src', 'App.jsx'],
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],

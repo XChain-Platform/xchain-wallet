@@ -58,6 +58,13 @@ afterEach(() => {
 });
 
 describe('<Screen>', () => {
+    it('disables native scroll anchoring on the route body', () => {
+        const css = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
+        const body = css.match(/\.body\s*\{([^}]*)\}/)?.[1] ?? '';
+
+        expect(body).toMatch(/overflow-anchor:\s*none/);
+    });
+
     it('renders the full variant with a named section body and optional landmarks', () => {
         const { container } = render(
             <Screen

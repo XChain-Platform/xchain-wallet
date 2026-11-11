@@ -183,7 +183,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             // this test pins the market path itself rather than re-failing on a
             // defect its sibling below already owns.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Memo (optional)').fill(`book ${STAMP}`);
+            await main.getByLabel('Memo', { exact: true }).fill(`book ${STAMP}`);
 
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);

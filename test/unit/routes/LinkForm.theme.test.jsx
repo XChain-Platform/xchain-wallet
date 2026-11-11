@@ -24,7 +24,7 @@ describe('LinkForm themed errors', () => {
         expect(css).not.toMatch(/^\.error \{/m);
     });
 
-    it('keeps network panels one-up until the 834px boundary', () => {
+    it('keeps action cards one-up at every width with paired fields inside', () => {
         const source = readFileSync(
             'packages/core/src/shared/routes/LinkForm.jsx',
             'utf8',
@@ -33,13 +33,13 @@ describe('LinkForm themed errors', () => {
             'packages/core/src/shared/routes/IssueTokenForm.module.css',
             'utf8',
         );
-        const base = css.match(/\.linkPanels\s*\{([^}]*)\}/)?.[1] || '';
-        const tablet = css.match(/@media \(min-width: 834px\)\s*\{[\s\S]*?\.linkPanels\s*\{([^}]*)\}/)?.[1] || '';
-        const panel = css.match(/\.linkPanel\s*\{([^}]*)\}/)?.[1] || '';
+        const actions = css.match(/\.linkActions\s*\{([^}]*)\}/)?.[1] || '';
+        const fields = css.match(/\.linkActionFields\s*\{([^}]*)\}/)?.[1] || '';
 
-        expect(source).toContain('<div className={styles.linkPanels}>');
-        expect(base).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
-        expect(tablet).toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-        expect(panel).toMatch(/min-width:\s*0/);
+        expect(source).toContain('<div className={styles.linkActions}');
+        expect(actions).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(fields).toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+        expect(css.match(/\.linkActions\s*\{/g)).toHaveLength(1);
+        expect(source).not.toContain('style={{');
     });
 });

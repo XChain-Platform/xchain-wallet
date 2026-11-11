@@ -182,7 +182,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         // 4,999 XCHAIN across two addresses = 2,499.5 each. The old, wrong
         // number was the balance itself, once per recipient.
         // The field renders grouped, so the assertion reads as the user sees it.
-        expect(amountField().value).toBe('2,499.5');
+        expect(amountField().value).toBe('2,499.50000000');
         expect(amountField().value).not.toBe('4,999');
     });
 
@@ -211,6 +211,15 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.click(maxButton());
         expect(amountField().value).toBe('3');
+    });
+
+    it('pads the per-recipient amount to the selected token format', async () => {
+        mountAirdrop({ divisibility: 8 });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.blur(amountField());
+
+        expect(amountField()).toHaveValue('1.00000000');
     });
 
     it('discloses the balance left by per-recipient rounding', async () => {
@@ -242,7 +251,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.click(maxButton());
         // Four current holders of S19MINT, 4,999 to spread across them.
-        expect(amountField().value).toBe('1,249.75');
+        expect(amountField().value).toBe('1,249.75000000');
     });
 
     it('blocks a hand-typed over-payout at the form, before the LIST is composed', async () => {
@@ -274,24 +283,25 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('keeps excess token precision out of review', async () => {
         const messaging = mountAirdrop({ divisibility: 2 });
         await pasteRecipients();
-        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.001' } });
-        fireEvent.click(submitButton());
 
         expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-recipient amount can have at most 2 decimal places for XCHAIN.',
+            'Amount can have at most 2 decimal places.',
         );
+        expect(submitButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('keeps a fractional indivisible-token payout out of both review steps', async () => {
         const messaging = mountAirdrop({ balance: '10', divisibility: 0 });
         await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.5' } });
-        fireEvent.click(submitButton());
         expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-recipient amount must be a whole number because XCHAIN is indivisible.',
+            'Amount can have at most 0 decimal places.',
         );
+        expect(submitButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
@@ -314,7 +324,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        expect(await amountField()).toHaveValue('10.00');
+        expect(await amountField()).toHaveValue('10.00000000');
         expect(screen.getByRole('textbox', { name: 'Recipients' }))
             .toHaveValue(RECIPIENTS.join('\n'));
     });

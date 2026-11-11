@@ -9,16 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
-// A native select cannot middle-truncate, and a full address ran under the
-// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
-import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/parallelComposer.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -28,6 +26,7 @@ import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { BackIcon, CheckIcon, ForwardIcon, PlusIcon, RefreshIcon, SignIcon, TrashIcon, XIcon } from '../../ui/icons/index.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -111,6 +110,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
 
     const [rows, setRows] = useState(/** @type {Row[]} */ ([]));
+    const [sourcePickerRowId, setSourcePickerRowId] = useState(/** @type {string | null} */ (null));
     const [acknowledgedNoRollback, setAcknowledgedNoRollback] = useState(false);
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'signing' | 'done'} */ ('compose'),
@@ -252,6 +252,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         setValidating(false);
         setValidationError(null);
         setRows((rs) => rs.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    };
+
+    const updateRowNetwork = (index, nextChainId) => {
+        const newAddrs = addressesByChain?.[nextChainId] || [];
+        updateRow(index, {
+            chainId: nextChainId,
+            fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[nextChainId]),
+        });
     };
 
     const addRow = () => {
@@ -505,6 +513,25 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
+    const sourcePickerRowIndex = rows.findIndex((row) => row.id === sourcePickerRowId);
+    const sourcePickerRow = sourcePickerRowIndex >= 0 ? rows[sourcePickerRowIndex] : null;
+    if (sourcePickerRow) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={sourcePickerRow.chainId}
+                onChainChange={(nextChainId) => updateRowNetwork(sourcePickerRowIndex, nextChainId)}
+                onPick={(address) => {
+                    updateRow(sourcePickerRowIndex, { fromAddressId: address.id });
+                    setSourcePickerRowId(null);
+                }}
+                onBack={() => setSourcePickerRowId(null)}
+            />
+        );
+    }
+
     // Each row owns a separate confirm and dry-run. Reject closes this page
     // and returns to the same pending row without advancing the sequence.
     if (activeLane.open) {
@@ -548,7 +575,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         : (queuedRows ? queuedRowsHint(queuedRows) : 'Run finished. Skipped rows were not signed or broadcast.')}
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -562,7 +589,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 <ListPage>
                     <SummaryList rows={rows} />
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={() => setStage('done')}>Continue</Button>
+                        <Button variant="success" icon={<ForwardIcon />} onClick={() => setStage('done')}>Continue</Button>
                     </div>
                 </ListPage>,
             );
@@ -587,6 +614,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         <Button
                             type="button"
                             variant="ghost"
+                            icon={<XIcon />}
                             onClick={() => {
                                 updateRow(activeRowIndex, { status: 'skipped', error: null });
                                 const nextIdx = rows.findIndex(
@@ -601,7 +629,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         </Button>
                         <Button
                             type="button"
-                            variant="primary"
+                            variant="success"
+                            icon={activeRow.status === 'failed' ? <RefreshIcon /> : <SignIcon />}
                             loading={activeLane.composing}
                             disabled={!activeFromAddress || activeRow.status === 'submitting'}
                             onClick={signActiveRow}
@@ -625,6 +654,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 />
                 {feeTiers ? (
                     <FeeSelector
+                        chainId={activeChainId}
                         label="Network fee"
                         coinTicker={activeCoinTicker}
                         tiers={feeTiers}
@@ -649,13 +679,15 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         <Button
                             type="button"
                             variant="ghost"
+                            icon={<BackIcon />}
                             onClick={(event) => { event.preventDefault(); setStage('compose'); }}
                         >
                             Back to composer
                         </Button>
                         <Button
                             type="button"
-                            variant="primary"
+                            variant="success"
+                            icon={<SignIcon />}
                             disabled={!acknowledgedNoRollback}
                             onClick={startSigning}
                         >
@@ -706,17 +738,18 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             ]}
             actions={(
                 <>
-                    <Button type="button" variant="secondary" size="sm" onClick={addRow}>
-                        + Add action
+                    <Button type="button" variant="secondary" size="sm" icon={<PlusIcon />} onClick={addRow}>
+                        Add action
                     </Button>
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
                         size="sm"
+                        icon={<SignIcon />}
                         loading={validating}
                         disabled={Boolean(shownComposeError) || validating}
                     >
-                        Review
+                        Sign and send queue
                     </Button>
                 </>
             )}
@@ -728,9 +761,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     row={row}
                     chainIds={chainsWithAddresses}
                     addressesByChain={addressesByChain}
-                    activeByChain={activeByChain}
                     actionsList={actionsList}
                     onChange={(patch) => updateRow(i, patch)}
+                    onNetworkChange={(nextChainId) => updateRowNetwork(i, nextChainId)}
+                    onOpenSourcePicker={() => setSourcePickerRowId(row.id)}
                     onRemove={() => removeRow(i)}
                     canRemove={rows.length > 1}
                 />
@@ -739,8 +773,9 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
 }
 
-function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, actionsList, onChange, onRemove, canRemove }) {
+function RowEditor({ index, row, chainIds, addressesByChain, actionsList, onChange, onNetworkChange, onOpenSourcePicker, onRemove, canRemove }) {
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
+    const pickedAddress = addrs.find((address) => address.id === row.fromAddressId) || null;
 
     return (
         <FormSection title={`Row ${index + 1}`}>
@@ -750,40 +785,29 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 <StatusPill status={row.status} labelPrefix={t('parallelComposer.rowStatusPrefix', { row: index + 1 })} />
             </div>
 
-            <Select
+            <NetworkField
                 label="Network"
+                help="The network this row's action is submitted on."
                 value={row.chainId || ''}
-                onChange={(e) => {
-                    const cid = e.target.value;
-                    const newAddrs = (addressesByChain[cid] || []);
-                    onChange({
-                        chainId: cid,
-                        fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
-                    });
-                }}
-            >
-                {chainIds.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    return (
-                        <option key={cid} value={cid}>
-                            {d ? d.displayName : cid}
-                        </option>
-                    );
-                })}
-            </Select>
+                onChange={onNetworkChange}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+            />
 
-            <Select
-                label="From address"
-                value={row.fromAddressId || ''}
-                onChange={(e) => onChange({ fromAddressId: e.target.value })}
-            >
-                {addrs.map((a) => (
-                    <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
-                ))}
-            </Select>
+            <AddressField
+                label="From"
+                help="The wallet address that signs this row and pays its network fee."
+                icon="addresses"
+                value={pickedAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={onOpenSourcePicker}
+                iconLabel="Choose from address"
+            />
 
             <Select
                 label="Action"
+                help="The raw action this row sends. Each row is its own transaction, signed and broadcast one after another; the queue is not atomic, so a later failure does not undo an earlier transaction."
                 value={row.action || ''}
                 onChange={(e) => onChange({ action: e.target.value })}
             >
@@ -796,6 +820,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
 
             <Textarea
                 label="Params (JSON object)"
+                help="A JSON object containing this action's fields, using the same format as Advanced action."
                 rows={4}
                 value={row.paramsJson}
                 onChange={(e) => onChange({ paramsJson: e.target.value })}
@@ -808,6 +833,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                     type="button"
                     variant="ghost"
                     size="sm"
+                    icon={<TrashIcon />}
                     onClick={onRemove}
                     disabled={!canRemove}
                 >

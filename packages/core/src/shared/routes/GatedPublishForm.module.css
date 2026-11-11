@@ -1,0 +1,14 @@
+/* Copyright © 2025-2026 Dankest, LLC
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+.tokenPickerCard {
+    composes: card from '../../ui/Card.module.css';
+    padding: 0;
+    overflow: hidden;
+}
+
+/* One divider between owned-token rows, as Publish file's picker draws. */
+.tokenPickerCard > :not(:last-child) {
+    border-block-end: 1px solid var(--xc-border);
+}

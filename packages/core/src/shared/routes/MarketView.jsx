@@ -207,6 +207,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 {typeof onSwap === 'function' ? (
                     <Button
                         type="button"
+                        icon={<Icon.SwapIcon />}
                         onClick={() => {
                             setPrefill(null);
                             onSwap();
@@ -232,9 +233,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             cursor: 'pointer',
                             flex: '0 0 auto',
                         }}
-                    >
-                        <Icon.SwapIcon />
-                    </Button>
+                    />
                 ) : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
@@ -323,11 +322,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 style={{ width: '100%' }}
             >
                 {[
-                    { id: 'book',    label: 'Book' },
-                    { id: 'trades',  label: 'Trades' },
-                    { id: 'place',   label: 'Place' },
-                    { id: 'orders',  label: 'Orders' },
-                    { id: 'history', label: 'History' },
+                    { id: 'book',    label: 'Book',    icon: <Icon.BookIcon /> },
+                    { id: 'trades',  label: 'Trades',  icon: <Icon.SwapIcon /> },
+                    { id: 'place',   label: 'Place',   icon: <Icon.PlusIcon /> },
+                    { id: 'orders',  label: 'Orders',  icon: <Icon.MarketIcon /> },
+                    { id: 'history', label: 'History', icon: <Icon.HistoryIcon /> },
                 ].map((opt) => {
                     const active = tab === opt.id;
                     return (
@@ -342,7 +341,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
                             onClick={() => openTab(opt.id)}
-                            icon={null}
+                            icon={opt.icon}
                         >
                             {opt.label}
                         </Button>

@@ -23,15 +23,14 @@
     box-sizing: border-box;
     position: relative;
     display: grid;
-    /* Two lines: the title and amount on top, the context, status and time
-       below. The title owns the flexible column, so the context and amount
-       give way first and the title is never cut to a few letters. The title
-       column keeps a floor, so a long amount wraps inside its own column
-       instead of squeezing the label to nothing. */
+    /* Keep action/status, amount, and block/time on separate lines. The title
+       owns the flexible column and keeps a floor, so context and long amounts
+       give way or wrap without hiding the action. */
     grid-template-columns: auto minmax(3rem, 1fr) auto auto auto;
     grid-template-areas:
-        "mark label primary primary trailing"
-        "mark label status time trailing";
+        "mark label label status trailing"
+        "mark primary primary primary trailing"
+        "mark block block time trailing";
     align-items: center;
     column-gap: var(--xc-space-2);
     row-gap: var(--xc-space-1);
@@ -90,8 +89,24 @@
     gap: var(--xc-space-1);
 }
 
+.labelLine {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.actionIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
 .label {
     max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: var(--xc-text-sm);
@@ -127,7 +142,7 @@
     grid-area: primary;
     font-size: var(--xc-text-sm);
     font-weight: 700;
-    text-align: end;
+    text-align: start;
     white-space: normal;
     overflow-wrap: anywhere;
     text-overflow: clip;
@@ -162,6 +177,14 @@
     color: var(--xc-warning, #d99000);
 }
 
+.block {
+    grid-area: block;
+    justify-self: start;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+}
+
 .time {
     grid-area: time;
     justify-self: end;
@@ -181,9 +204,14 @@
 @media (max-width: 400px) {
     .row.row {
         column-gap: var(--xc-space-1);
+        grid-template-areas:
+            "mark label label status trailing"
+            "mark primary primary primary trailing"
+            "mark block block time trailing";
     }
 
     .primary,
+    .block,
     .time {
         font-size: var(--xc-text-xs);
     }

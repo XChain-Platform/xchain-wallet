@@ -34,7 +34,11 @@ describe('clipboard control feedback', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        const transaction = screen.getByRole('textbox', { name: 'Unsigned transaction code' });
+        const copy = screen.getByRole('button', { name: 'Copy unsigned transaction code' });
+        expect(transaction.parentElement).toContainElement(copy);
+        expect(copy).toHaveTextContent('');
+        fireEvent.click(copy);
 
         expect((await screen.findAllByText('Copied: unsigned transaction code')).length).toBeGreaterThan(0);
         expect(writeText).toHaveBeenCalledWith('deadbeef');
@@ -108,7 +112,9 @@ describe('clipboard control feedback', () => {
         await act(async () => resolveCopy({ ok: true }));
 
         expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
-            .toHaveTextContent('Copy code');
+            .toHaveAttribute('data-state', 'idle');
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
+            .toHaveTextContent('');
     });
 
     it('resets shared copy feedback when the transaction payload changes', async () => {
@@ -129,6 +135,8 @@ describe('clipboard control feedback', () => {
             />,
         );
         expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
-            .toHaveTextContent('Copy code');
+            .toHaveAttribute('data-state', 'idle');
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }))
+            .toHaveTextContent('');
     });
 });

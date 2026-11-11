@@ -551,12 +551,12 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports MultisigSigningSession`);
     assert.ok(app.includes("'multisig-sign'"),
         `${shell} tracks 'multisig-sign' sub-route`);
-    assert.ok(!/onMultisigSign:/.test(app),
-        `${shell} does not wire multisig signing into All actions`);
+    assert.ok(/onMultisigSign: hasBtcAddress \? \(\) => (?:\{[^}]*?)?setUnlockedView\('multisig-sign'\)/.test(app),
+        `${shell} BTC-gates onMultisigSign via hasBtcAddress`);
     assert.ok(/<MultisigSigningSession\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <MultisigSigningSession> with the active walletId`);
-    assert.ok(!surfacesEntry(app, 'multisig-sign', 'Multisig signing'),
-        `${shell} keeps multisig signing out of All actions`);
+    assert.ok(surfacesEntry(app, 'multisig-sign', 'Multisig signing'),
+        `${shell} ActionsMenu surfaces a "Multisig signing" entry`);
 }
 
 // ─── SDK pin ≥ 1.11.0 (Step 19 needed no bump; later steps may have) ─
@@ -571,5 +571,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK: multisig signing smoke (schema state machine + dual-mode tracker labels + threshold+msgHash guards + flow re-exports + P2WSH single-round end-to-end + MuSig2 two-round drive + duplicate-cosigner guard + status-gated contribution + cancel terminal state + bg handler 8 routes + 3-shell messaging exports + MultisigSigningSession route retained outside All actions + SDK pin unchanged)',
+    'OK: multisig signing smoke (schema state machine + dual-mode tracker labels + threshold+msgHash guards + flow re-exports + P2WSH single-round end-to-end + MuSig2 two-round drive + duplicate-cosigner guard + status-gated contribution + cancel terminal state + bg handler 8 routes + 3-shell messaging exports + MultisigSigningSession route + 3-shell App.jsx wiring + BTC gate + SDK pin unchanged)',
 );

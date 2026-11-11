@@ -22,6 +22,10 @@ const balanceListCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/BalanceList.module.css',
 ), 'utf8');
+const tokenPickerCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/TokenPicker.module.css',
+), 'utf8');
 const tokenPickerSource = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/routes/TokenPicker.jsx',
@@ -82,6 +86,13 @@ afterEach(() => {
 });
 
 describe('TokenPicker asset visibility and filtering', () => {
+    it('puts the network filter on the small control type of the search and kind tabs beside it', () => {
+        const filterRule = tokenPickerCss.match(/\.networkFilter\.networkFilter > \*\s*\{([^}]*)\}/)?.[1] || '';
+        expect(filterRule).toMatch(/--network-filter-font:\s*var\(--xc-control-font-sm\)/);
+        const searchRule = tokenPickerCss.match(/\.search\s*\{([^}]*)\}/)?.[1] || '';
+        expect(searchRule).toMatch(/font-size:\s*var\(--xc-text-sm\)/);
+    });
+
     it('keeps exactly one asset-kind tab in the keyboard tab order', async () => {
         mount();
         await screen.findByText(LONG_NAME);
@@ -116,6 +127,8 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         const pinnedButton = await screen.findByRole('button', { name: 'Unpin LTC' });
         expect(pinnedButton).toHaveAttribute('aria-pressed', 'true');
+        const pinRule = balanceListCss.match(/\.pinBtn\.pinBtn\s*\{([^}]*)\}/)?.[1] || '';
+        expect(pinRule).toMatch(/--xc-button-font-size:\s*var\(--xc-control-font-md\)/);
         expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
             .toEqual([
                 'litecoin-mainnet:LTC',

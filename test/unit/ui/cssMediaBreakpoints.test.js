@@ -37,7 +37,6 @@ describe('core CSS module media breakpoints', () => {
     it('uses only the documented viewport width scale', () => {
         const widths = new Set([...modules.values()].flatMap(widthValues));
         expect([...widths].sort()).toEqual([
-            '1024px',
             '360px',
             '400px',
             '420px',
@@ -58,9 +57,7 @@ describe('core CSS module media breakpoints', () => {
             .toContain('@media not all and (min-width: 640px)');
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media not all and (min-width: 400px)');
-        expect(modules.get('shared/routes/ManageToken.module.css').match(
-            /@media \(min-width: 834px\)/g,
-        )).toHaveLength(3);
+        expect(modules.get('shared/routes/ManageToken.module.css')).not.toContain('@media');
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media (min-width: 834px)');
     });

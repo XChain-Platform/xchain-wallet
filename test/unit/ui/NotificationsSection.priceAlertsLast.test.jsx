@@ -82,4 +82,21 @@ describe('Manage notifications order', () => {
             expect(precedes(priceSwitch, manager)).toBe(true);
         });
     }
+
+    it('names token alerts by ticker', () => {
+        priceAlerts.alerts = [{
+            id: 'token-alert',
+            chainId: 'bitcoin-mainnet',
+            tick: 'XCHAIN',
+            direction: 'above',
+            targetFiat: 1.2,
+            fiatCurrency: 'usd',
+            status: 'armed',
+        }];
+
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        expect(screen.getByText(/XCHAIN rises above \$1\.2/)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Edit XCHAIN price alert' })).toBeTruthy();
+    });
 });

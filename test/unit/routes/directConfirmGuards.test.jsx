@@ -101,7 +101,7 @@ async function approveAged(Form, { actionLabel, confirm, liveness }) {
         await drain();
     });
     if (confirm) {
-        const field = utils.queryByLabelText(/type .* to confirm/i);
+        const field = utils.queryByLabelText(/type .* to confirm/i, { selector: 'input' });
         if (field) {
             await act(async () => {
                 fireEvent.change(field, { target: { value: confirm } });

@@ -136,7 +136,7 @@ assert.ok(/buildActionPsbtRequest/.test(src), 'reuses the watcher-mode encode-on
 const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
 assert.ok(/onMintSettings/.test(manageSrc), 'ManageToken accepts onMintSettings');
 assert.ok(
-    /id:\s*'mint-settings'[\s\S]{0,120}onSelect:\s*blockIssuerActions \? undefined : onMintSettings/.test(manageSrc),
+    /id:\s*'mint-settings'[^\n]*\.\.\.ownerAction\(options\.onMintSettings\)/.test(manageSrc),
     'ManageToken hides Mint settings from non-owners (blockIssuerActions gate, same as Description/Transfer)',
 );
 

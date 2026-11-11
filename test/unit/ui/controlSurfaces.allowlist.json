@@ -28,10 +28,6 @@
             "count": 4,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
-        "packages/core/src/shared/components/HomeTabs.jsx": {
-            "count": 1,
-            "reason": "A sort select laid over a hand-drawn label and chevron, plus the tab buttons; moving it needs a design call on the compact sort control."
-        },
         "packages/core/src/shared/components/LayoutModeToggle.jsx": {
             "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
@@ -45,8 +41,8 @@
             "reason": "The developer log console draws its own dense toolbar; it is not a user screen."
         },
         "packages/core/src/shared/components/NetworkFilter.jsx": {
-            "count": 3,
-            "reason": "A popover search field and option rows inside the chain filter listbox."
+            "count": 4,
+            "reason": "A popover search field, option rows and the field-style trigger inside the chain filter."
         },
         "packages/core/src/shared/components/NetworkStatusIndicator.jsx": {
             "count": 2,
@@ -104,10 +100,6 @@
             "count": 1,
             "reason": "Currency option rows of a listbox opened from the search field; each row is the whole target."
         },
-        "packages/core/src/shared/routes/AddressPreferencesForm.jsx": {
-            "count": 1,
-            "reason": "A native checkbox whose label holds a sentence; the kit Checkbox does not take one."
-        },
         "packages/core/src/shared/routes/AttachContentForm.jsx": {
             "count": 1,
             "reason": "A hidden native file input behind a kit Button; the kit has no file-input primitive."
@@ -136,10 +128,6 @@
             "count": 1,
             "reason": "The hidden username field a password manager reads; it has no visible control."
         },
-        "packages/core/src/shared/routes/ManageToken.jsx": {
-            "count": 2,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/routes/MenuRoute.jsx": {
             "count": 3,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
@@ -151,10 +139,6 @@
         "packages/core/src/shared/routes/OracleRecord.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
-        "packages/core/src/shared/routes/PublishFileForm.jsx": {
-            "count": 2,
-            "reason": "Native radio inputs inside a radiogroup; the kit has no radio-row primitive for a two-line label."
         },
         "packages/core/src/shared/routes/Settings.jsx": {
             "count": 1,
@@ -202,10 +186,6 @@
             "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
-        "packages/core/src/shared/components/HomeTabs.module.css": {
-            "count": 2,
-            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
-        },
         "packages/core/src/shared/components/LayoutModeToggle.module.css": {
             "count": 4,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
@@ -232,10 +212,6 @@
         },
         "packages/core/src/shared/routes/IssueTokenForm.module.css": {
             "count": 2,
-            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
-        },
-        "packages/core/src/shared/routes/ManageToken.module.css": {
-            "count": 1,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/MarketActivity.module.css": {

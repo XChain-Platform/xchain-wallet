@@ -91,6 +91,7 @@ export function WalletModeSection() {
             <div className={cardStyles.card}>
             <RadioGroup
                 legend={t('settings.walletMode.transactionHandling')}
+                help={t('settings.help.walletMode.transactionHandling')}
                 name="walletMode"
                 value={selected}
                 onChange={onChange}

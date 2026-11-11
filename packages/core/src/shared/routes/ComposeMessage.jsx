@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -20,6 +20,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -31,10 +32,6 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
-import { coinToFiatExact } from '../../flows/priceLookup.js';
-import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
-import { useFiatRate } from '../hooks/useFiatRate.js';
-import { useSettings } from '../hooks/useSettings.js';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
 import {
     MAX_MESSAGE_ATTACHMENT_BYTES,
@@ -194,6 +191,8 @@ function ComposeMessageForm({
     // fewer rows on failure), the icon in the Address field opens the picker.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    // Own-address picker behind the From field (U60).
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [pubkeyState, setPubkeyState] = useState(
         /** @type {'idle' | 'checking' | 'found' | 'missing' | 'error'} */ ('idle'),
     );
@@ -456,25 +455,6 @@ function ComposeMessageForm({
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
     const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: customEstimate });
-
-    // Fiat value of a fee amount, paid on the delivery network. Passed to the
-    // FeeSelector so each tier's readout shows its cost in a colored bubble next
-    // to the time estimate. Tiny values collapse below the currency's minor unit.
-    // Oracle-primary with CoinGecko fallback (§45); the
-    // fallback is gated on the privacy.priceDataEnabled setting.
-    const { settings } = useSettings();
-    const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const fiatRate = useFiatRate({
-        chainCoin: chainRegistry.get(chainId)?.coin,
-        fiatCurrency,
-        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        enabled: chainRegistry.get(chainId)?.networkKind === 'mainnet',
-    });
-    const fiatForFee = useMemo(() => (coinAmount) => {
-        const value = coinToFiatExact(coinAmount, fiatRate);
-        if (value == null || !(Number(value) > 0)) return null;
-        return formatFiatAmount(value, fiatRate?.fiatCurrency || fiatCurrency);
-    }, [fiatRate, fiatCurrency]);
 
     // Catch random text before review. A message can be delivered on any chain
     // regardless of the recipient's chain, so the address is validated only as a
@@ -933,7 +913,7 @@ function ComposeMessageForm({
             <FormPage
                 as="div"
                 label={t('shell.messageSent')}
-                actions={<Button variant="primary" onClick={onBack}>{t('common.done')}</Button>}
+                actions={<Button variant="success" onClick={onBack}>{t('common.done')}</Button>}
             >
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('shell.messageSent')}</p>
                 {result?.txid ? (
@@ -1102,6 +1082,28 @@ function ComposeMessageForm({
         );
     }
 
+    // Own-address picker: opens filtered to the delivery network; picking an
+    // address on another network switches the form's Network to it (U60).
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title={t('send.fromAddress')}
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={(cid) => {
+                    setChainId(cid);
+                    if (submitError) setSubmitError(null);
+                }}
+                onPick={(a) => {
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <FormPage
             demoGuard={demoGuard}
@@ -1137,6 +1139,7 @@ function ComposeMessageForm({
                             id="compose-plaintext-cancel"
                             variant="secondary"
                             size="sm"
+                            icon={plaintextConfirmationPending === 'send' ? <Icon.XIcon /> : <Icon.LockIcon />}
                             onClick={() => setPlaintextConfirmationPending(false)}
                         >
                             {plaintextConfirmationPending === 'send' ? t('common.cancel') : t('composeMessage.keepEncrypted')}
@@ -1153,6 +1156,7 @@ function ComposeMessageForm({
                                 type="button"
                                 variant="secondary"
                                 size="sm"
+                                icon={<Icon.KeyIcon />}
                                 loading={handshakeBusy}
                                 onClick={handleRequestSession}
                             >
@@ -1185,9 +1189,39 @@ function ComposeMessageForm({
                 </Button>
             )}
         >
-            {/* 1. Address (recipient), with an address-book shortcut */}
+            {/* 1. Network, the standard picker field (U59, U60). The delivery
+                network sets COIN, resolves the recipient's key, funds the
+                transaction and pays the fee. */}
+            <NetworkField
+                value={chainId || ''}
+                chainIds={networkOptions.map((option) => option.value)}
+                chainRegistry={chainRegistry}
+                onChange={(v) => {
+                    setChainId(v);
+                    setFromAddressId(null);
+                    if (submitError) setSubmitError(null);
+                }}
+            />
+
+            {/* 2. From: the funding address, auto-picked per network and
+                changeable through the own-address picker. */}
+            {fromAddress ? (
+                <AddressField
+                    label={t('send.fields.from')}
+                    help={t('composeMessage.fromHelp')}
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel={t('send.source.choose')}
+                />
+            ) : null}
+
+            {/* 3. Address (recipient), with an address-book shortcut */}
             <AddressField
                 label={t('verifySignature.address')}
+                help={t('composeMessage.recipientHelp')}
                 icon="contacts"
                 value={toAddress}
                 onChange={(e) => {
@@ -1204,9 +1238,10 @@ function ComposeMessageForm({
                 error={addressError}
             />
 
-            {/* 2. Message */}
+            {/* 4. Message */}
             <Textarea
                 label={t('verifySignature.message')}
+                help={t('composeMessage.messageHelp')}
                 value={message}
                 onChange={(e) => {
                     setMessage(e.target.value);
@@ -1214,12 +1249,10 @@ function ComposeMessageForm({
                 }}
                 rows={4}
                 placeholder={t('composeMessage.messagePlaceholder')}
-                hint={messageError
-                    ? undefined
-                    : t(sendUnencrypted ? 'composeMessage.byteCountPlain' : 'composeMessage.byteCountEncrypted', {
-                        bytes: wireMessageBytes.toLocaleString(),
-                        max: MAX_MESSAGE_BYTES.toLocaleString(),
-                    })}
+                counter={t(sendUnencrypted ? 'composeMessage.byteCountPlain' : 'composeMessage.byteCountEncrypted', {
+                    bytes: wireMessageBytes.toLocaleString(),
+                    max: MAX_MESSAGE_BYTES.toLocaleString(),
+                })}
                 error={messageError}
                 style={{ minHeight: '4rem' }}
             />
@@ -1228,11 +1261,11 @@ function ComposeMessageForm({
                 <Input
                     id="message-attachment"
                     type="file"
-                    label={t('composeMessage.attachmentLabel')}
+                    label={t('composeMessage.attachmentLabelLimit', { max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString() })}
+                    help={t('composeMessage.attachmentHelp')}
                     optional
                     accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
                     onChange={handleAttachmentPick}
-                    hint={t('composeMessage.attachmentHint', { max: MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString() })}
                     error={attachmentError}
                 />
                 {attachment ? (
@@ -1254,10 +1287,11 @@ function ComposeMessageForm({
                 ) : null}
             </div>
 
-            {/* 3. Encryption. Locked (still visible) for thread replies: a
+            {/* 6. Encryption. Locked (still visible) for thread replies: a
                 conversation keeps the method it started with. */}
             <IconSelect
                 label={t('composeMessage.encryptionLabel')}
+                help={t('composeMessage.encryptionHelp')}
                 value={encryptionControlValue}
                 onChange={onEncryptionChange}
                 options={encryptionOptions}
@@ -1273,24 +1307,12 @@ function ComposeMessageForm({
                     {t('composeMessage.keyFound')}
                 </p>
             ) : null}
-            {/* 4. Delivery network */}
-            <IconSelect
-                label={t('composeMessage.deliveryNetworkLabel')}
-                value={chainId || ''}
-                onChange={(v) => {
-                    setChainId(v);
-                    setFromAddressId(null);
-                    if (submitError) setSubmitError(null);
-                }}
-                options={networkOptions}
-            />
-
-            {/* 5. Network fee (Low / Normal / Fast / Custom slider) */}
+            {/* 7. Network fee (Low / Normal / Fast / Custom slider) */}
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label={t('send.networkFee')}
                     coinTicker={descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : ''}
-                    formatFiat={fiatForFee}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={(next) => {

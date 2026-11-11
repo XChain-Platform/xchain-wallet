@@ -200,7 +200,7 @@ describe('MyOrdersView: cancel rows', () => {
         const row = rowFor(section(utils, 'Open orders'), 700);
 
         fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-        const submit = utils.getByRole('button', { name: 'Edit order' });
+        const submit = utils.getByRole('button', { name: 'Update order' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
 

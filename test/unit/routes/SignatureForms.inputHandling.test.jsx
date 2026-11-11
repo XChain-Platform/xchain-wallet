@@ -60,8 +60,8 @@ function deferred() {
 }
 
 function pickLitecoinMainnet() {
-    const option = screen.getAllByRole('option', { name: /Litecoin/ })
-        .find((item) => !/testnet|regtest/i.test(item.textContent || ''));
+    const option = screen.getAllByRole('button', { name: /Select Litecoin/ })
+        .find((item) => !/testnet|regtest/i.test(item.getAttribute('aria-label') || ''));
     expect(option).toBeTruthy();
     fireEvent.click(option);
 }
@@ -75,6 +75,7 @@ describe('message signing inputs', () => {
     it('shows the complete selected address and updates it with the signing network', async () => {
         renderForm(SignMessageForm, messagingFor());
         await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('bc1qexample'));
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
         expect(screen.getByLabelText('Address')).toHaveAttribute('readonly');
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
@@ -100,6 +101,7 @@ describe('signature verification inputs and results', () => {
     it('names each required input beside the disabled verify action', async () => {
         renderForm(VerifySignatureForm, messagingFor());
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
         const action = screen.getByRole('button', { name: 'Verify signature' });
 
         expect(action).toBeDisabled();
@@ -146,7 +148,7 @@ describe('signature verification inputs and results', () => {
         }));
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
-        expect(screen.getAllByRole('option', { name: /Bitcoin/ })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: /Select Bitcoin/ })).toHaveLength(1);
         fireEvent.click(picker);
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bcrt1qcounterparty' } });
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });

@@ -79,6 +79,13 @@ async function advanceBalanceLookup(ms) {
 }
 
 describe('DestroyForm amount validation', () => {
+    it('renders form-specific help for its network and token fields', async () => {
+        mountDestroy({ initialTick: null });
+
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
+    });
+
     it('keeps a lowercase managed ticker exact in the destroy action', async () => {
         const composeForConfirm = mountDestroy({ initialTick: 'caseSensitive' });
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
@@ -90,11 +97,13 @@ describe('DestroyForm amount validation', () => {
     });
 
     it('rejects decimals for an indivisible token before review', async () => {
+        // The field knows the token's precision, so it refuses the fraction
+        // as it is typed (U61), holds Destroy, and never composes.
         const composeForConfirm = mountDestroy();
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.5' } });
         fireEvent.click(screen.getByRole('button', { name: /^Destroy$/ }));
 
-        expect(await screen.findByText('Amount must be a whole number because ART is indivisible.'))
+        expect(await screen.findByText(/Amount must be a whole number because ART is indivisible\.|Amount can have at most 0 decimal places\./))
             .toBeInTheDocument();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });

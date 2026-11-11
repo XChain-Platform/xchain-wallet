@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
@@ -52,6 +52,39 @@ const balance = (tick) => [{
 afterEach(() => cleanup());
 
 describe('HomeTabs network filtering', () => {
+    it('opens one menu with sort, token search, and network controls', () => {
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{ 'custom-alpha': balance('BTC') }}
+                walletId="wallet"
+                networkFilter="all"
+                coinFamilies={['bitcoin', 'litecoin']}
+                onNetworkFilterChange={vi.fn()}
+                tokenQuery=""
+                onTokenQueryChange={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+        const button = screen.getByRole('button', { name: 'Filter and sort' });
+        expect(screen.getAllByRole('button', { name: 'Filter and sort' })).toHaveLength(1);
+        fireEvent.click(button);
+
+        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Value' })).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search tokens by name' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Filter and sort' })).toBeNull();
+        expect(button).toHaveFocus();
+
+        fireEvent.click(button);
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByRole('dialog', { name: 'Filter and sort' })).toBeNull();
+    });
+
     it('uses registry coin metadata instead of parsing the chain id', () => {
         render(
             <HomeTabs
@@ -94,5 +127,40 @@ describe('HomeTabs network filtering', () => {
         expect(dispensers).not.toMatch(/ChainBadge/);
         expect(staking).toMatch(/function StakeRow[\s\S]*?className=\{local\.chainOverlay\}/);
         expect(staking).not.toMatch(/ChainBadge/);
+    });
+
+    it('shows a block for confirmed activity and only the time for pending activity', async () => {
+        const address = 'bc1qwallet';
+        const entry = (key, blockIndex) => ({
+            key,
+            chainId: 'custom-alpha',
+            address,
+            actionIndex: key,
+            action: 'SEND',
+            blockIndex,
+            timestamp: 1_800_000_000,
+            txHash: `tx-${key}`,
+            source: address,
+            raw: { amount: '1', tick: 'BTC', destination: 'bc1qpeer' },
+            link: null,
+        });
+        const { container } = render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{ 'custom-alpha': balance('BTC') }}
+                walletId="wallet"
+                networkFilter="all"
+                recentActivity={[entry('confirmed', 123456), entry('pending', 0)]}
+                onActivityOpen={() => {}}
+            />,
+        );
+
+        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+        const rows = [...container.querySelectorAll('[data-activity-row]')];
+        const confirmed = rows.find((row) => row.textContent.includes('Confirmed'));
+        const pending = rows.find((row) => row.textContent.includes('Pending'));
+        expect(confirmed).toHaveTextContent('Block 123,456');
+        expect(pending).not.toHaveTextContent(/Block/);
+        expect(pending.querySelector('time')).not.toBeNull();
     });
 });

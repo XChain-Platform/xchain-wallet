@@ -116,7 +116,7 @@ function mountDividend({
 // every case opens it and takes the XCHAIN row, exactly as a user does.
 async function pickDividendToken() {
     await flushTimers();
-    fireEvent.click(screen.getByRole('button', { name: /Dividend token/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Dividend token:/i }));
     await flushTimers();
     const row = Array.from(document.querySelectorAll('button'))
         .find((button) => (button.textContent || '').includes('XCHAIN'));
@@ -129,7 +129,7 @@ const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable rate is not.
 const maxButtonOrNull = () => screen.queryByRole('button', { name: /max available/i });
-const submitButton = () => screen.getByRole('button', { name: /^(Pay dividend|Preview)$/ });
+const submitButton = () => screen.getByRole('button', { name: 'Pay dividend' });
 
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
@@ -168,9 +168,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         await pickDividendToken();
         await maxReady();
         fireEvent.click(maxButton());
-        // 4,999 XCHAIN across 500 units = 9.998 per unit. The old, wrong
-        // number was the balance itself.
-        expect(amountField().value).toBe('9.998');
+        // 4,999 XCHAIN across 500 units = 9.998 per unit, shown in the
+        // token's 8-decimal format. The old, wrong number was the balance.
+        expect(amountField().value).toBe('9.99800000');
         expect(amountField().value).not.toBe('4,999');
     });
 
@@ -264,7 +264,7 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         await pickDividendToken();
         await maxReady();
         fireEvent.click(maxButton());
-        expect(amountField().value).toBe('9.998');
+        expect(amountField().value).toBe('9.99800000');
     });
 
     it('offers no Max when nobody is eligible to receive', async () => {
@@ -307,11 +307,12 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         await pickDividendToken();
         await flushTimers();
         fireEvent.change(amountField(), { target: { value: '1.001' } });
-        fireEvent.click(submitButton());
 
-        expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-unit amount can have at most 2 decimal places for XCHAIN.',
-        );
+        // The field refuses the third decimal with its own error and the
+        // submit stays blocked; nothing is cut silently.
+        expect(screen.getByRole('alert')).toHaveTextContent('Amount can have at most 2 decimal places.');
+        expect(submitButton()).toBeDisabled();
+        fireEvent.click(submitButton());
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -369,10 +370,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         // Let the dividend token's divisibility lookup settle before submitting.
         await flushTimers();
         fireEvent.change(amountField(), { target: { value: '1.5' } });
+        expect(screen.getByRole('alert')).toHaveTextContent('Amount can have at most 0 decimal places.');
+        expect(submitButton()).toBeDisabled();
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
-            'Per-unit amount must be a whole number because XCHAIN is indivisible.',
-        );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -441,8 +441,12 @@ describe('DividendForm review hint', () => {
         await pickDividendToken();
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '9.998' } });
+        expect(submitButton()).toHaveAccessibleName('Pay dividend');
         fireEvent.click(submitButton());
         await flushTimers();
+        expect(screen.getByText(
+            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        )).toBeInTheDocument();
         const hint = screen.getByTestId('dividend-review-fee-hint');
         expect(hint.textContent).toMatch(/holds enough XCHAIN\s+to cover the full payout/);
         expect(hint.textContent).toMatch(/grows with the number\s+of holders paid/);
@@ -472,7 +476,35 @@ describe('DividendForm review hint', () => {
         expect(screen.getByText('Network fee')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(await amountField()).toHaveValue('9.00');
+        expect(await amountField()).toHaveValue('9.00000000');
         expect(screen.getByRole('button', { name: /Dividend token: XCHAIN/ })).toBeTruthy();
+    });
+});
+
+describe('DividendForm per-unit amount follows the dividend token format', () => {
+    it('pads a typed amount to an 8-decimal token once the field is left', async () => {
+        mountDividend({ divisibility: 8 });
+        await pickDividendToken();
+        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.blur(amountField());
+        expect(amountField().value).toBe('1.00000000');
+    });
+
+    it('keeps a whole amount whole on an indivisible token', async () => {
+        mountDividend({ divisibility: 0, balance: '10', holders: [{ address: HOLDER, amount: '3' }] });
+        await pickDividendToken();
+        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.blur(amountField());
+        expect(amountField().value).toBe('1');
+    });
+
+    it('gives From a help tip written for the dividend form', async () => {
+        mountDividend();
+        await flushTimers();
+        const tip = screen.getByRole('button', { name: 'About From' });
+        expect(document.getElementById(tip.getAttribute('aria-describedby')).textContent)
+            .toBe('The address that pays the dividend. It must hold the dividend token and pays the network fee.');
     });
 });

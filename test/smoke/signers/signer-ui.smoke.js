@@ -159,7 +159,7 @@ assert.ok(
 );
 
 assert.ok(
-    /type="password"/.test(viewSrc) && /Required every time/.test(viewSrc),
+    /type="password"/.test(viewSrc) && /every time you view a private key/.test(viewSrc),
     'ViewPrivateKey requires password confirmation for every export',
 );
 assert.ok(

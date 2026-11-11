@@ -153,11 +153,13 @@ describe.each(VIEWS)('$noun action wording', (view) => {
         const { composeForConfirm } = mount(view);
         await openAction(view, 'Edit');
 
-        expect(screen.getByText('Choose a date and time. Leave blank to keep the current expiration.')).toBeTruthy();
-        fireEvent.change(screen.getByLabelText('New expiration (optional)'), {
+        fireEvent.click(screen.getByRole('button', { name: 'About New expiration' }));
+        expect(screen.getByRole('tooltip'))
+            .toHaveTextContent('Leave it blank to keep the current expiration');
+        fireEvent.change(screen.getByLabelText('New expiration', { selector: 'input' }), {
             target: { value: EDIT_VALUE },
         });
-        fireEvent.click(screen.getByRole('button', { name: `Edit ${view.noun}` }));
+        fireEvent.click(screen.getByRole('button', { name: `Update ${view.noun}` }));
 
         const intent = await screen.findByTestId('action-intent');
         const formatted = formatLocalDateTime(Number(EDIT_EXPIRATION));

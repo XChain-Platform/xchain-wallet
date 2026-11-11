@@ -40,6 +40,7 @@ export const MAX_TICK_LOOKUPS = 50;
  * @param {object} props
  * @param {string} props.value                 the raw textarea text
  * @param {(text: string) => void} props.onChange
+ * @param {import('react').ReactNode} [props.help] contextual help for the token field
  * @param {{ valid: string[], invalid: string[], duplicates: number }} props.items   classifyTickItems(value)
  * @param {string | null} props.chainId
  * @param {string} props.chainLabel
@@ -53,6 +54,7 @@ export const MAX_TICK_LOOKUPS = 50;
 export function TickItemsEditor({
     value,
     onChange,
+    help = t('components.tickItemsEditor.tokensHelp'),
     items,
     chainId,
     chainLabel,
@@ -216,7 +218,8 @@ export function TickItemsEditor({
         <>
             <Textarea
                 id={controlId}
-                label={t('components.tickItemsEditor.tokensOnePerLine')}
+                label={t('components.tickItemsEditor.tokens')}
+                help={help}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 rows={6}

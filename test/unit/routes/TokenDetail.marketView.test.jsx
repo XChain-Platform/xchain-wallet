@@ -71,9 +71,9 @@ describe('TokenDetail Exchange action', () => {
         expect(screen.queryByText('Sell on DEX')).toBeNull();
     });
 
-    it('is absent when the shell has no market route', () => {
+    it('stays visible but disabled when the shell has no exchange route', () => {
         renderDetail({ onBuy: null });
 
-        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Exchange' })).toBeDisabled();
     });
 });

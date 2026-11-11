@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormErrorSummary, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -19,11 +19,13 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -32,7 +34,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
 import { targetBlockSecondsForCoin } from '../utils/blockDateEstimate.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -56,6 +58,7 @@ import {
     compareDecimal,
 } from './BridgeTick.js';
 import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -63,7 +66,6 @@ const chainRegistry = registryLib.defaultRegistry();
 // useTickBalance settles on: long enough that typing an amount does not fan a
 // request per character, short enough that the warning is on screen before the
 // user reaches the button.
-const FEE_QUOTE_DEBOUNCE_MS = 400;
 
 // Mirror the platform's factory confirmation depths so the form can explain
 // the normal wait before submission. Token MIN_DEPTH may only raise this floor.
@@ -334,22 +336,15 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     // /feequote through the host re-quote lane. Not a constant: the gas schedule
     // and GAS_PRICE are consensus configuration that moves without the wallet,
     // and a stale copy would go on lying confidently (protocolFeeRow.js).
-    const [feeQuote, setFeeQuote] = useState(/** @type {string | null} */ (null));
     const actionString = actionParams ? xbridgeActionString(actionParams) : null;
-    useEffect(() => {
-        setFeeQuote(null);
-        if (!sourceChainId || !actionString || !fromAddress?.address) return undefined;
-        if (typeof messaging.requoteNativeFee !== 'function') return undefined;
-        let cancelled = false;
-        const timer = setTimeout(() => {
-            messaging.requoteNativeFee({
-                chainId: sourceChainId, actionString, source: fromAddress.address,
-            })
-                .then((quote) => { if (!cancelled) setFeeQuote(quotedProtocolFee(quote)); })
-                .catch(() => { /* no quote is no warning, never a guessed one */ });
-        }, FEE_QUOTE_DEBOUNCE_MS);
-        return () => { cancelled = true; clearTimeout(timer); };
-    }, [sourceChainId, actionString, fromAddress?.address, messaging]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId: sourceChainId,
+        source: fromAddress?.address,
+        actionString,
+        enabled: Boolean(actionString),
+    });
+    const feeQuote = quotedProtocolFee(protocolFeeQuote);
 
     const noDestinationAccount = destChainIds.length === 0;
     const requiredDestinationMissing = destChainIds.length > 0
@@ -670,6 +665,16 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 title="From address"
                 walletId={walletId}
                 chainId={sourceChainId}
+                onChainChange={(cid) => {
+                    if (cid === sourceChainId) return;
+                    setSourceChainId(cid);
+                    setTick(GAS_TICK);
+                    setAmount('');
+                    setAmountInputError(null);
+                    setDestChainId(null);
+                    setFormError(null);
+                    setSubmitError(null);
+                }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -683,6 +688,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 title="Receive at"
                 walletId={walletId}
                 chainId={destChainId}
+                onChainChange={(cid) => {
+                    if (cid === destChainId) return;
+                    setDestChainId(cid);
+                    setFormError(null);
+                    setSubmitError(null);
+                }}
                 onPick={(a) => { setDestAddress(a.address); setDestPickerOpen(false); }}
                 onBack={() => setDestPickerOpen(false)}
             />
@@ -740,7 +751,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.MigrateIcon />}
                     loading={actionConfirm.composing || stage === 'submitting'}
                     disabled={
                         !!blockingError
@@ -752,12 +764,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         || actionConfirm.composing
                     }
                 >
-                    {leg.leg === 'burn' ? 'Review move back' : 'Review move'}
+                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
                 </Button>
             )}
         >
-            <ChainPicker
+            <NetworkField
                 label="Move from"
+                help="The network the token leaves. Your From address, the token and the network fee are on this network, and the move cannot be undone once it applies."
                 value={sourceChainId || ''}
                 onChange={(cid) => {
                     if (cid === sourceChainId) return;
@@ -766,17 +779,16 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     setAmount('');
                     setAmountInputError(null);
                     setDestChainId(null);
-                    setFeeQuote(null);
                     setFormError(null);
                     setSubmitError(null);
                 }}
                 chainIds={sourceChainIds}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="Your address on the source network that holds the tokens to move."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -787,6 +799,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
             <TokenField
                 label="Token"
+                help="The token to move across the bridge. Only tokens with a bridge route from the source network can be moved."
                 value={tick && sourceChainId ? { chainId: sourceChainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
@@ -813,22 +826,22 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 </FormNotice>
             ) : (
                 <>
-                    <ChainPicker
+                    <NetworkField
                         label="Move to"
+                        help="The network that receives the token. It is credited to the Receive at address below, which you control, and the credit cannot be redirected once it applies."
                         value={destChainId || ''}
                         onChange={(cid) => {
                             if (cid === destChainId) return;
                             setDestChainId(cid);
-                            setFeeQuote(null);
                             setFormError(null);
                             setSubmitError(null);
                         }}
                         chainIds={offeredDestChainIds}
                         chainRegistry={chainRegistry}
-                        hideNetworkKind
                     />
                     <AddressField
                         label="Receive at"
+                        help="The address on the destination network that receives the tokens. It starts as one of your own addresses; you can type or paste any valid address on that network."
                         icon="addresses"
                         value={destAddress}
                         onChange={(event) => setDestAddress(event.target.value)}
@@ -841,6 +854,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
             <AmountField
                 label="Amount"
+                help="How much of the token to move. It must fit the token's decimal places."
                 amount={amount}
                 tick={shown.label}
                 divisibility={tick.toUpperCase() === GAS_TICK ? 8 : tokenInfo?.divisibility}
@@ -858,22 +872,32 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             />
 
             <Input
-                label="Memo (optional)"
+                label="Memo"
+                help={MEMO_HINT}
+                optional
+                maxLength={MAX_MEMO_LENGTH}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={sourceCoin}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
+            <FeesCard
+                chainId={sourceChainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={feeTiers ? (
+                    <FeeSelector
+                        chainId={sourceChainId}
+                        label="Network fee"
+                        coinTicker={sourceCoin}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={protocolFeeQuote} />
+            </FeesCard>
 
             {destChainId && leg.version ? (
                 <FormNotice>
@@ -886,6 +910,10 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         requiredDepth,
                     })}
                 </FormNotice>
+            ) : null}
+
+            {isWatcherMode ? (
+                <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
             ) : null}
 
             {!isWatcherMode ? (

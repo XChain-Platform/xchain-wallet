@@ -106,7 +106,7 @@ async function mountSweep({
         container,
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
-        memo: () => labelledInput(container, 'Memo (optional)'),
+        memo: () => labelledInput(container, 'Memo'),
         category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
         button: (label) => container.querySelector(`button[aria-label="${label}"]`),
         /** Text of every rendered alert, joined. Cheap and dump-free. */
@@ -212,6 +212,14 @@ function labelledInput(container, labelText) {
 afterEach(() => cleanup());
 
 describe('SweepForm form-level errors (D-58)', () => {
+    it('gives the network field a help tip and keeps each category description visible (U83)', async () => {
+        const q = await mountSweep();
+
+        expect(q.button('About Network')).toBeInTheDocument();
+        expect(q.container).toHaveTextContent('Every token balance this address holds.');
+        expect(within(q.container).queryByRole('button', { name: /^About Token balances/ })).toBeNull();
+    });
+
     it('keeps network-kind text out of a regtest validation error', async () => {
         const chainId = 'bitcoin-regtest';
         const source = { ...SOURCE, id: 'regtest-source', address: 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt' };
@@ -343,6 +351,8 @@ describe('SweepForm gated key details', () => {
             expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing');
             expect(container.textContent).toContain(missingHash);
         });
+        expect(within(container).getByRole('button', { name: /^About Sweep anyway/ }))
+            .toBeInTheDocument();
     });
 });
 
@@ -386,7 +396,7 @@ describe('SweepForm preview and navigation states', () => {
         expect(addressesHeading.textContent).toBe('Addresses');
         expect(firstSection.getAttribute('aria-labelledby')).toBe(addressesHeading.id);
         expect(firstSection.className).toMatch(/untitledSection/);
-        expect(firstSection.querySelector('button, input, select, textarea').getAttribute('aria-label'))
+        expect(firstSection.querySelector('button[aria-label^="Network:"]').getAttribute('aria-label'))
             .toMatch(/^Network:/);
     });
 
@@ -464,8 +474,7 @@ describe('SweepForm preview and navigation states', () => {
             address: SOURCE.address,
         }));
         fireEvent.click(q.container.querySelector('button[aria-label^="Network:"]'));
-        const litecoin = Array.from(q.container.querySelectorAll('[role="option"]'))
-            .find((option) => option.textContent.includes('Litecoin'));
+        const litecoin = q.container.querySelector('button[aria-label="Select Litecoin"]');
         fireEvent.click(litecoin);
         await waitFor(() => expect(q.messaging.sweepPreview).toHaveBeenCalledWith({
             chainId: SECOND_CHAIN,

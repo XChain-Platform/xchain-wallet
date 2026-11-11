@@ -132,6 +132,7 @@ function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
  * @property {number|null} dustChangeLimitSats  native payment only: the coin dust floor when no spendable change output was created
  * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
  * @property {string|null} xchainFee         protocol fee in XCHAIN; NULL in native mode / unquotable
+ * @property {boolean} protocolFeeKnownFree  true only when a valid quote positively reported zero
  * @property {{ deltas: object[], sideEffects: object[], notes: string[] }|null} simulation  NULL when uncomputable
  * @property {object|null} decoded           the intent described from the action string; NULL when undescribable
  * @property {true} tamperVerified           reaching the caller at all means the checks passed
@@ -190,9 +191,10 @@ export async function composeActionForConfirm({
     const quotable = source
         && !encoderOpts.payFeeInNativeCoin
         && !isBareNativePayment(actionData, chainRegistry.get(chainId));
-    const xchainFeePromise = quotable
-        ? quoteXchainFee({ sdkRegistry, chainId, actionData, source, signal }).catch(() => null)
-        : Promise.resolve(null);
+    const xchainFeeStatePromise = quotable
+        ? quoteXchainFeeState({ sdkRegistry, chainId, actionData, source, signal })
+            .catch(() => ({ xchainFee: null, protocolFeeKnownFree: false }))
+        : Promise.resolve({ xchainFee: null, protocolFeeKnownFree: false });
 
     const composed = await composeForConfirm({
         sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal, signer,
@@ -373,7 +375,10 @@ export async function composeActionForConfirm({
     // on broadcast, so it belongs in a sentence that can say so. Kept as the
     // wire's own 8dp string; the line trims it for display and never parses it
     // through a float.
-    const xchainFee = await xchainFeePromise;
+    const quotedFeeState = await xchainFeeStatePromise;
+    const xchainFee = quotedFeeState.xchainFee;
+    const protocolFeeKnownFree = quotedFeeState.protocolFeeKnownFree
+        || knownFreeProtocolFeeQuote(composed.quote);
 
     let simulation = null;
     try {
@@ -479,6 +484,10 @@ export async function composeActionForConfirm({
         // dry run does not answer. Null in native mode and whenever the quote
         // was unavailable, refused or zero.
         xchainFee,
+        // A supported, valid zero quote is different from a missing quote. It
+        // proves the composed action carries no protocol fee, including an
+        // ISSUE that updates a token the indexer already knows.
+        protocolFeeKnownFree,
         // §5.2.3: projected balance deltas, or null when they could not be
         // computed. Never a zero that would read as "nothing changes".
         simulation,
@@ -524,14 +533,15 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
 }
 
 /**
- * The action's protocol fee in XCHAIN, or null when the venue will not say.
+ * The action's protocol fee state in XCHAIN, including whether a valid quote
+ * positively said the action is free.
  *
  * Read through `sdk.quoteNativeFee`, whose name is about the lane it was built
  * for rather than what it returns: `/feequote` answers `xchainFee` in every
  * payment mode, because the fee row is XCHAIN-denominated and the mode only
  * decides how it settles.
  *
- * Null - never zero, and never a guess - on every unusable answer:
+ * The display amount is null, never zero and never a guess, on every unusable answer:
  *   - a quote the indexer refused (`supported: false` / `valid: false`), whose
  *     `xchainFee` is either absent or about an action that will not run. The
  *     native lane REFUSES to sign on those (NativeFeeForfeitError) because it
@@ -540,19 +550,40 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
  *   - `valid: null`, which is the third answer, not a failure (DEPLOY/EXECUTE
  *     are priced from the gas schedule without a dry run) - so those DO get a
  *     line, and the unverified-ness is already stated elsewhere on the screen;
- *   - a zero fee, i.e. the action genuinely charges nothing. Saying so would be
- * the opposite failure and just as wrong.
+ *   - a zero fee. Its amount stays null while `protocolFeeKnownFree` preserves
+ *     the positive result so the confirmation screen does not call it unavailable.
  */
-async function quoteXchainFee({ sdkRegistry, chainId, actionData, source, signal }) {
+async function quoteXchainFeeState({ sdkRegistry, chainId, actionData, source, signal }) {
     const sdk = sdkRegistry.get(chainId);
-    if (!sdk || typeof sdk.quoteNativeFee !== 'function') return null;
+    if (!sdk || typeof sdk.quoteNativeFee !== 'function') {
+        return { xchainFee: null, protocolFeeKnownFree: false };
+    }
     const quote = await sdk.quoteNativeFee(actionData, { source, signal });
-    if (!quote || quote.supported === false || quote.valid === false) return null;
+    if (!quote || quote.supported === false || quote.valid === false) {
+        return { xchainFee: null, protocolFeeKnownFree: false };
+    }
     const raw = quote.xchainFee;
-    if (raw === undefined || raw === null) return null;
+    if (raw === undefined || raw === null) {
+        return { xchainFee: null, protocolFeeKnownFree: false };
+    }
     const amount = String(raw).trim();
-    // A plain non-negative decimal that is not all zeros. Tested as a STRING:
-    // an 8dp fee through a float is the one thing a fee display must not do.
-    if (!/^\d+(\.\d+)?$/.test(amount) || !/[1-9]/.test(amount)) return null;
-    return amount;
+    // A plain non-negative decimal. Tested as a STRING: an 8dp fee through a
+    // float is the one thing a fee display must not do.
+    if (!/^\d+(\.\d+)?$/.test(amount)) {
+        return { xchainFee: null, protocolFeeKnownFree: false };
+    }
+    if (!/[1-9]/.test(amount)) {
+        return {
+            xchainFee: null,
+            protocolFeeKnownFree: quote.valid === true,
+        };
+    }
+    return { xchainFee: amount, protocolFeeKnownFree: false };
+}
+
+function knownFreeProtocolFeeQuote(quote) {
+    if (!quote || quote.supported === false || quote.valid !== true) return false;
+    const raw = quote.xchainFee;
+    if (raw === undefined || raw === null) return false;
+    return /^0+(?:\.0+)?$/.test(String(raw).trim());
 }

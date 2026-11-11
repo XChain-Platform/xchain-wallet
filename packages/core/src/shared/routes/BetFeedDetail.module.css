@@ -1,0 +1,12 @@
+/* Bet market detail: styles this screen owns. The shared form styles stay in
+   IssueTokenForm.module.css. */
+
+/* The outcome picker's question reads as a field label, with its help tip. */
+.groupLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}

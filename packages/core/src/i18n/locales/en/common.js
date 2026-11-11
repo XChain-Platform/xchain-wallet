@@ -67,9 +67,8 @@ const messages = {
     'common.networkFeeUnavailable': 'Network fee estimate unavailable.',
     'common.notAvailable': 'Not available',
     'common.preview': 'Preview',
-    'common.review': 'Review',
     'common.watcherBuildsUnsigned':
-        'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
+        'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
     'common.contactName': 'Contact name',
     'common.allNetworks': 'All networks',
 };

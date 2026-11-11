@@ -32,7 +32,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Button, ChainPicker, EmptyState, FormPage, Input, PageHeader, Screen, Select, StatusMessage,
+    Button, EmptyState, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -248,13 +248,13 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         </>
                     ) : null}
                 >
-                        <ChainPicker
+                        <NetworkField
                             label="Coin"
+                            help="The coin network for the addresses you generate. Each address is added to this account on that network."
                             value={effectiveChainId}
                             onChange={changeCoin}
                             chainIds={coinOptions.map((c) => c.chainId)}
                             chainRegistry={chainRegistry}
-                            hideNetworkKind
                             disabled={busy}
                         />
                         <Select
@@ -282,7 +282,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 }}
                                 disabled={busy}
                                 data-testid="add-address-purpose"
-                                hint={purpose === 'dispenser'
+                                help={purpose === 'dispenser'
                                     ? 'Listed under Misc on the Addresses page and offered when opening a dispenser.'
                                     : undefined}
                             >

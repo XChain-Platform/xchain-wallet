@@ -70,7 +70,7 @@ describe('BackupSection reveal: offline and network transitions', () => {
         mount(revealMnemonicRequest);
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         expect(revealMnemonicRequest).toHaveBeenCalledOnce();
@@ -97,7 +97,7 @@ describe('BackupSection reveal: offline and network transitions', () => {
         mount(revealMnemonicRequest);
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         expect(screen.getByLabelText('Reveal passphrase').hasAttribute('data-secret')).toBe(true);
@@ -110,7 +110,7 @@ describe('BackupSection reveal: offline and network transitions', () => {
         mount(revealMnemonicRequest);
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
 
         flipNetwork();
         expect(screen.getByRole('button', { name: 'Revealing…' })).toBeDisabled();
@@ -137,7 +137,7 @@ describe('BackupSection reveal: offline and network transitions', () => {
         mount(revealMnemonicRequest);
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'typo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
 
         flipNetwork();
         await act(async () => {
@@ -150,7 +150,7 @@ describe('BackupSection reveal: offline and network transitions', () => {
         expect(screen.queryByText('Your recovery phrase')).toBeNull();
 
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
         expect(screen.queryByLabelText('Wallet password')).toBeNull();
         expect(revealMnemonicRequest).toHaveBeenCalledTimes(2);

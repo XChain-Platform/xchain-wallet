@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Content drawn over a kit Input (the read-only address preview and password
-// toggle) must stack above the input. The input is
+// Content drawn over a kit Input (the read-only address preview and in-field
+// actions) must stack above the input. The input is
 // positioned and has an opaque background, so an overlay without its own
 // layer above the input's paints underneath it: on the phone the From and
 // Receive address fields rendered as empty white boxes.
@@ -53,14 +53,14 @@ const inputLayer = zIndexOf(ruleBody(inputCss, '.controlHitArea > .input'));
 describe('overlays drawn on a kit Input', () => {
     it.each([
         ['AddressField address preview', addressFieldCss, '.readOnlyValue'],
-        ['Input password show and hide toggle', inputCss, '.revealToggle'],
+        ['Input action container', inputCss, '.controlActions'],
     ])('stacks the %s above the input', (_name, text, selector) => {
         const body = ruleBody(text, selector);
         expect(body).toMatch(/position:\s*absolute/);
         expect(zIndexOf(body)).toBeGreaterThan(inputLayer);
     });
 
-    it('renders the read-only address over the input and its picker on the label row', () => {
+    it('renders the read-only address over the input and its picker inside the control', () => {
         const { container } = render(
             <AddressField
                 label="From"
@@ -79,8 +79,8 @@ describe('overlays drawn on a kit Input', () => {
         expect(preview).not.toBeNull();
         // The single-line preview truncates the middle of the address.
         expect(preview.textContent).toMatch(/^bc1qso.*acking$/);
-        expect(label.parentElement).toContainElement(icon);
-        expect(input.parentElement).not.toContainElement(icon);
+        expect(label).not.toContainElement(icon);
+        expect(input.parentElement).toContainElement(icon);
         // The preview duplicates the input value, so it is not a second tab stop.
         expect(preview.querySelector('[tabindex]')).toBeNull();
         expect(input.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

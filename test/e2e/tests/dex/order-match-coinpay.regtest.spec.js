@@ -375,8 +375,8 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
                 .not.toContainText(/base units/);
 
             await main.getByRole('button', { name: 'Pay now' }).first().click();
-            await main.getByRole('button', { name: 'Review' }).click();
-            await page.getByRole('button', { name: 'Continue to confirmation' }).click();
+            await main.getByRole('button', { name: 'Pay order', exact: true }).click();
+            await page.getByRole('button', { name: /^Pay \d/ }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);

@@ -97,6 +97,15 @@ describe('TotalBalanceHero fiat formatting', () => {
         expect(screen.getByLabelText('1,256.56 US dollars')).toBeInTheDocument();
     });
 
+    it('shows a numeric zero when every holding lacks a price', () => {
+        mount({
+            rows: [row({ quantity: '50000000', divisibility: 8, fiatRate: null })],
+        });
+
+        expect(screen.getByText('$0.00')).toBeInTheDocument();
+        expect(screen.getByLabelText('0.00 US dollars')).toBeInTheDocument();
+    });
+
     it('uses locale currency placement and keeps the ISO code as the suffix', async () => {
         mount({ settings: { fiatCurrency: 'EUR', language: 'de-DE' } });
 
@@ -149,13 +158,10 @@ describe('TotalBalanceHero fiat formatting', () => {
 });
 
 describe('TotalBalanceHero message formatting', () => {
-    it.each([
-        ['Price unavailable', [row({ fiatRate: null })]],
-        ['Test coins have no value', [row({ chainId: 'bitcoin-testnet', fiatRate: null })]],
-    ])('renders "%s" in secondary body text', (copy, rows) => {
-        mount({ rows });
+    it('renders the test-coin message in secondary body text', () => {
+        mount({ rows: [row({ chainId: 'bitcoin-testnet', fiatRate: null })] });
 
-        const amount = screen.getByText(copy).closest('[aria-label]');
+        const amount = screen.getByText('Test coins have no value').closest('[aria-label]');
         expect(amount.className).toMatch(/amountMessage/);
         expect(cssRule('amountMessage')).toMatch(/font-family:\s*var\(--xc-font-sans\)/);
         expect(cssRule('amountMessage')).toMatch(/font-size:\s*var\(--xc-text-lg\)/);
@@ -171,21 +177,19 @@ describe('TotalBalanceHero message formatting', () => {
 });
 
 describe('TotalBalanceHero refresh status', () => {
-    it('renders the current update label once', () => {
+    it('does not render an updated line while online', () => {
         mount({ lastSyncedAt: Date.now() });
 
-        expect(screen.getAllByText('Updated just now')).toHaveLength(1);
+        expect(screen.queryByText(/^Updated/)).toBeNull();
     });
 
-    it('shows one shared status using the oldest balance or price update', () => {
+    it('keeps refresh in the actions menu without an online freshness line', () => {
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
         const pricesFetchedAt = Date.now() - 10 * 60_000;
         const { rerender } = mount({ lastSyncedAt, pricesFetchedAt, onRefresh });
 
-        const status = screen.getByText('Updated 10 minutes ago');
-        expect(status.className).toMatch(/stale/);
-        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.queryByText(/^Updated/)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Balance actions' }));
         fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh portfolio' }));
         expect(onRefresh).toHaveBeenCalledOnce();
@@ -234,9 +238,8 @@ describe('TotalBalanceHero responsive layout', () => {
     it('holds every hero action in one overflow menu', () => {
         const onOpenSettings = vi.fn();
         const onCommandPalette = vi.fn();
-        const onToggleFilter = vi.fn();
         const onLockWallet = vi.fn();
-        mount({ onOpenSettings, onCommandPalette, onToggleFilter, onLockWallet });
+        mount({ onOpenSettings, onCommandPalette, onLockWallet });
 
         const trigger = screen.getByRole('button', { name: 'Balance actions' });
         expect(screen.getAllByRole('button')).toEqual([trigger]);
@@ -249,6 +252,7 @@ describe('TotalBalanceHero responsive layout', () => {
             ...within(menu).getAllByRole('menuitem'),
             ...within(menu).getAllByRole('menuitemcheckbox'),
         ]).toHaveLength(6);
+        expect(within(menu).getByRole('menuitem', { name: 'Show in BTC' })).toBeTruthy();
         fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu', { name: 'Balance actions' })).toBeNull();

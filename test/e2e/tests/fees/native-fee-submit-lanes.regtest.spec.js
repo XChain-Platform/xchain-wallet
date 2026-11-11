@@ -138,7 +138,7 @@ async function fillIssueForm(page, tick, { nativeFee, initialMint = null }) {
     await main.getByLabel('Ticker').fill(tick);
     await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
     if (initialMint !== null) {
-        await main.getByLabel('Initial mint (optional)').fill(String(initialMint));
+        await main.getByLabel('Initial mint', { exact: true }).fill(String(initialMint));
     }
     await setNativeFee(main, nativeFee);
     return main;
@@ -266,7 +266,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             // In full mode this form is SINGLE-ENCODE: the form button
             // composes and opens the confirm screen directly, with no review
-            // stage in between. Watcher mode is the one that gets "Preview".
+            // stage in between. Watcher mode uses the same named action.
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
@@ -297,7 +297,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
             const build = async (tick, nativeFee) => {
                 const main = await fillIssueForm(page, tick, { nativeFee });
-                await main.getByRole('button', { name: 'Preview', exact: true }).click();
+                await main.getByRole('button', { name: 'Issue token', exact: true }).click();
                 await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
@@ -349,7 +349,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         });
     });
 
-    test('the Advanced SEND lane submits with native mode and settles on chain', async ({ page }) => {
+    test('the Advanced SEND lane has no fee switch and settles on chain', async ({ page }) => {
         const source = await setupFundedWallet(page, 'Native SEND Wallet');
         await issueToken(page, SEND_TICK);
         await waitForTokenBalance(source, SEND_TICK, Number(SUPPLY), 1_200_000);
@@ -371,7 +371,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             .fill(String(SEND_AMOUNT));
         await main.getByRole('textbox', { name: 'DESTINATION', exact: true })
             .fill(REGTEST_DESTINATION);
-        await setNativeFee(main, true);
+        await expect(feeToggle(main), 'SEND exposes a protocol-fee switch').toHaveCount(0);
         await main.getByRole('button', { name: 'Sign action', exact: true }).click();
 
         await expectConfirmModal(page, 'the SEND', 120_000);
@@ -388,7 +388,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         await waitForExactTokenBalance(source, SEND_TICK, Number(SUPPLY) - SEND_AMOUNT);
     });
 
-    test('the Mint form submits native mode and increases the indexed supply', async ({ page }) => {
+    test('the Mint form has no fee switch and increases the indexed supply', async ({ page }) => {
         const source = await setupFundedWallet(page, 'Native MINT Wallet');
         await issueToken(page, MINT_TICK, { initialMint: INITIAL_MINT });
         await waitForTokenBalance(source, MINT_TICK, Number(INITIAL_MINT), 1_200_000);
@@ -407,7 +407,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         await selectVenueChain(main);
         await pickMintToken(page, MINT_TICK);
         await main.getByRole('textbox', { name: /^Amount/ }).fill(String(MINT_AMOUNT));
-        await setNativeFee(main, true);
+        await expect(feeToggle(main), 'MINT exposes a protocol-fee switch').toHaveCount(0);
         await main.getByRole('button', { name: 'Mint', exact: true }).click();
 
         await expectConfirmModal(page, 'the MINT', 120_000);

@@ -16,8 +16,9 @@ import styles from './ListToolbar.module.css';
 /**
  * The search-and-filter row every list screen puts in ListPage's toolbar
  * slot: a search box first, then the screen's filters (the network picker,
- * a sort control), each taking an equal share of the row and wrapping onto
- * its own line when the window is too narrow for them side by side.
+ * a sort control). The search box takes the leftover space and shrinks,
+ * each filter keeps its own width at the end, and a filter wraps onto its
+ * own line only when it cannot fit beside a usable search box.
  *
  * @param {object} props
  * @param {string} props.query
@@ -28,7 +29,7 @@ import styles from './ListToolbar.module.css';
 export function ListToolbar({ query, onQueryChange, searchLabel, children }) {
     return (
         <div className={styles.toolbar}>
-            <div className={styles.field}>
+            <div className={styles.search}>
                 <Input
                     type="search"
                     size="md"
@@ -44,7 +45,7 @@ export function ListToolbar({ query, onQueryChange, searchLabel, children }) {
                 />
             </div>
             {Children.toArray(children).map((child, index) => (
-                <div className={styles.field} key={child.key ?? index}>{child}</div>
+                <div className={styles.filter} key={child.key ?? index}>{child}</div>
             ))}
         </div>
     );

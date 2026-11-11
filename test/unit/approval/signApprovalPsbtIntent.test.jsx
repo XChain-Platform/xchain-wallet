@@ -740,7 +740,9 @@ describe('approval window keyboard controls', () => {
         await user.tab();
         expect(document.activeElement).toBe(rawDetails);
         await user.tab();
-        const password = screen.getByLabelText('Password');
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Password' }));
+        await user.tab();
+        const password = screen.getByLabelText('Password', { selector: 'input' });
         expect(document.activeElement).toBe(password);
         await user.keyboard('secret{Enter}');
         expect(password).toHaveValue('secret');

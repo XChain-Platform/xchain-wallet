@@ -213,6 +213,15 @@ describe('useFocusTrap opener handling', () => {
         expect(document.activeElement).toBe(opener);
     });
 
+    it('keeps a focus move made inside the dialog before the deferred initial focus runs', async () => {
+        render(<TrapHarness active />);
+        // The initial focus waits a frame; a keyboard user who has already
+        // moved to another control in the dialog keeps that control.
+        screen.getByTestId('last').focus();
+        await flush();
+        expect(document.activeElement).toBe(screen.getByTestId('last'));
+    });
+
     it('prefers the first meaningful control when the requested target is the dialog', async () => {
         render(<ContainerInitialHarness />);
         await flush();

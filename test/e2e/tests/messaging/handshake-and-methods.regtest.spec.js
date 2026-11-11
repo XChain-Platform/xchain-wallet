@@ -178,7 +178,7 @@ async function onboardFundedWallet(page, walletName) {
 }
 
 /**
- * Points the compose form's "Delivery network" at this run's chain.
+ * Points the compose form's "Network" field at this run's chain.
  *
  * The pick itself is `selectVenueChain`'s job, and it now covers this screen:
  * it reads the picker on EVERY chain instead of returning early on Bitcoin,
@@ -191,17 +191,17 @@ async function onboardFundedWallet(page, walletName) {
  * message delivered on the wrong chain still looks green.
  */
 async function pickDeliveryNetwork(scope) {
-    const trigger = scope.getByRole('button', { name: /^Delivery network:/ });
-    await expect(trigger, 'the compose form has no "Delivery network" picker')
+    const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
+    await expect(trigger, 'the compose form has no "Network" field')
         .toBeVisible({ timeout: 30_000 });
 
-    await selectVenueChain(scope, 'Delivery network');
+    await selectVenueChain(scope, 'Network');
 
     await expect(trigger,
         `the message would have been delivered on the wrong chain: this form defaults to `
         + `DOGECOIN, not to ${REGTEST_CHAIN_LABEL}, and the explorer this run reads is `
         + `${REGTEST_COIN}'s`)
-        .toHaveAttribute('aria-label', new RegExp(`^Delivery network: ${REGTEST_CHAIN_LABEL}\\b`),
+        .toHaveAttribute('aria-label', new RegExp(`^Network: ${REGTEST_CHAIN_LABEL}\\b`),
             { timeout: 15_000 });
 }
 

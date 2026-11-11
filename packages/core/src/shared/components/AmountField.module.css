@@ -43,6 +43,16 @@
     line-height: var(--xc-space-5);
 }
 
+/* The in-field Max sits a fixed distance below the wrapper top, which assumes
+   the label line is one --xc-space-5 line. A label help tip has a 24px tap
+   target that would grow the label row and lift Max onto the box edge, so the
+   row keeps the line height and the target overflows it evenly. The field
+   always has a label (it defaults to "Amount"), so its first child is either
+   the plain label or this row, and only the row is a div. */
+.amountFieldWrap > div:first-child > div:first-child {
+    block-size: var(--xc-space-5);
+}
+
 .amountFieldWrap > div:first-child {
     flex: 1 1 12rem;
     min-width: 0;

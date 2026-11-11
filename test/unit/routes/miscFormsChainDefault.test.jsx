@@ -185,12 +185,13 @@ describe('ControllerBindForm network default', () => {
 });
 
 describe('LinkForm network default', () => {
+    // The form's own Network comes first; Action 1 and Action 2 follow.
     const chainButtons = async () => screen.findAllByRole('button', { name: /^Network: / });
 
     it('COIN1 opens on the last-used network, not the first-created one', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
-            const [first] = await chainButtons();
+            const [, first] = await chainButtons();
             expect(first.getAttribute('aria-label')).toMatch(/^Network: Dogecoin/);
         });
     });
@@ -198,7 +199,7 @@ describe('LinkForm network default', () => {
     it('COIN2 still lands on a distinct network from COIN1', async () => {
         mount(LinkForm, {}, messagingWith());
         await waitFor(async () => {
-            const [first, second] = await chainButtons();
+            const [, first, second] = await chainButtons();
             const firstName = first.getAttribute('aria-label');
             const secondName = second.getAttribute('aria-label');
             expect(firstName).not.toEqual(secondName);
@@ -241,18 +242,18 @@ describe('SignMessageForm network default', () => {
 });
 
 describe('PsbtSignForm network default', () => {
-    const addressSelect = async () => screen.findByRole('combobox', { name: 'Signing address' });
+    const addressField = async () => screen.findByRole('textbox', { name: 'Signing address' });
 
     it('defaults the signing network to the last-used network, not the first-created one', async () => {
         mount(PsbtSignForm, {}, messagingWith());
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_DOGE.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_DOGE.address));
     });
 
     it('falls back to the first network when the last-used network has no addresses any more', async () => {
         mount(PsbtSignForm, {}, messagingWith({
             getSettings: vi.fn().mockResolvedValue(settingsWith({ mainnet: 'dogecoin-testnet' })),
         }));
-        await waitFor(async () => expect((await addressSelect()).value).toBe(ADDR_BTC.id));
+        await waitFor(async () => expect((await addressField()).value).toBe(ADDR_BTC.address));
     });
 });
 

@@ -102,7 +102,7 @@ describe('primary actions explain missing list, publisher, and migration input',
             onDone() {},
         });
         await screen.findByText(/Forking token list #2700/);
-        const action = screen.getByRole('button', { name: 'Review' });
+        const action = screen.getByRole('button', { name: 'Publish edit' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

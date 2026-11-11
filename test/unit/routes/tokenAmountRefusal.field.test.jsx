@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe.each([
-    ['Mint', MintForm, /^(Mint|Preview)$/],
+    ['Mint', MintForm, /^Mint$/],
     ['Destroy', DestroyForm, /^Destroy$/],
 ])('%s amount refusal', (_name, Form, buttonName) => {
     it('shows once under the Amount field, focuses it and clears on the next edit', async () => {

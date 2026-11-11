@@ -53,7 +53,7 @@ const desktopAppSrc = readFileSync(
 assert.match(formSrc, /export function SignMessageForm/, 'exports SignMessageForm');
 assert.match(formSrc, /messaging\.signMessageRequest/, 'calls messaging.signMessageRequest');
 assert.match(formSrc, /messaging\.getAddressesByChain/, 'loads chain/address map');
-assert.match(formSrc, /<ChainPicker/, 'uses ChainPicker for chain selection');
+assert.match(formSrc, /<NetworkField/, 'uses the NetworkField picker for chain selection (U59)');
 assert.match(formSrc, /<AddressField[\s\S]*icon="addresses"/, 'uses the own-address field');
 assert.match(formSrc, /<OwnAddressPickerScreen/, 'opens the own-address picker');
 assert.match(formSrc, /<Textarea/, 'uses the kit message textarea');

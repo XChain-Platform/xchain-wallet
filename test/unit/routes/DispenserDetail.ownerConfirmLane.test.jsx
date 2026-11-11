@@ -158,7 +158,10 @@ describe('dispenser owner actions sign through the confirm page', () => {
     it('closes only after the pre-flight, signing the composed bytes', async () => {
         const { utils, calls } = await mount();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close dispenser' })));
+        const closeAction = utils.getByRole('button', { name: 'Close dispenser' });
+        expect(closeAction.className).toMatch(/danger/);
+        expect(closeAction.querySelector('svg')).toBeTruthy();
+        await step(() => fireEvent.click(closeAction));
 
         expect(signCalls(calls), 'nothing signs before Approve').toHaveLength(0);
         const compose = calls.find((c) => c.method === 'composeForConfirm');
@@ -179,8 +182,18 @@ describe('dispenser owner actions sign through the confirm page', () => {
     it('blocks an edit the pre-flight says the network would refuse', async () => {
         const { utils, calls } = await mount({ preflight: REFUSED });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
+        const updateAction = utils.getByRole('button', { name: 'Update dispenser' });
+        expect(updateAction.className).toMatch(/success/);
+        expect(updateAction.querySelector('svg')).toBeTruthy();
+        expect(utils.container.querySelectorAll('[data-optional-pill]')).toHaveLength(3);
+        for (const fieldName of ['New expiration', 'Allow list', 'Block list']) {
+            const help = utils.getByRole('button', { name: `About ${fieldName}` });
+            fireEvent.click(help);
+            expect(utils.getAllByRole('tooltip').some((tip) => Boolean(tip.textContent))).toBe(true);
+            fireEvent.click(help);
+        }
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+        await step(() => fireEvent.click(updateAction));
         await approve(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
@@ -191,8 +204,11 @@ describe('dispenser owner actions sign through the confirm page', () => {
     it('refills a hardware owner on the device lane with the same composed bytes', async () => {
         const { utils, calls } = await mount({ owner: HW_OWNER, dispenser: { ...DISPENSER, source: HW_OWNER.address } });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
+        const refillAction = utils.getByRole('button', { name: 'Refill dispenser' });
+        expect(refillAction.className).toMatch(/success/);
+        expect(refillAction.querySelector('svg')).toBeTruthy();
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '50' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        await step(() => fireEvent.click(refillAction));
         await approve(utils);
 
         const sign = calls.find((c) => c.method === 'dispenserActionHw');
@@ -307,7 +323,9 @@ describe('dispenser owner actions sign through the confirm page', () => {
             resolveBuild({ psbtHex: 'bb00', encoding: 'psbt', fromAddress: OWNER });
             await drainMicrotasks();
         });
-        fireEvent.click(success.utils.getByRole('button', { name: 'Done' }));
+        const done = success.utils.getByRole('button', { name: 'Done' });
+        expect(done.querySelector('svg')).toBeTruthy();
+        fireEvent.click(done);
         expect(onBack).toHaveBeenCalledOnce();
     });
 });
@@ -321,7 +339,7 @@ describe('dispenser edit checks the lists it is about to bind', () => {
         }));
         await step(() => fireEvent.change(utils.getByLabelText(/^Allow list/), { target: { value: '2701' } }));
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update dispenser' })));
 
         const expectedUnix = String(Math.floor(Date.parse('2099-01-02T03:04') / 1000));
         const params = calls.find((c) => c.method === 'composeForConfirm').args.actionData.params;
@@ -340,8 +358,10 @@ describe('dispenser edit checks the lists it is about to bind', () => {
         const dispenser = { ...DISPENSER, allow_list: '2701' };
         const { utils, calls } = await mount({ dispenser, chainId: 'bitcoin-regtest' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+        const remove = utils.getByRole('button', { name: 'Remove allow list' });
+        expect(remove.querySelector('svg')).toBeTruthy();
+        await step(() => fireEvent.click(remove));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update dispenser' })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({
@@ -362,7 +382,7 @@ describe('dispenser edit checks the lists it is about to bind', () => {
         await step(() => { vi.advanceTimersByTime(500); });
 
         expect(utils.getByText(/is not on the allow-list/)).toBeTruthy();
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Update dispenser' })));
         expect(approveButton(utils), 'the confirm page is open').toBeTruthy();
         expect(utils.getByText(/is not on the allow-list/), 'the warning rides to the confirm page').toBeTruthy();
     });
@@ -382,8 +402,8 @@ describe('dispenser edit checks the lists it is about to bind', () => {
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2701' } }));
 
         expect(utils.getByText(/both the allow-list and the block-list/)).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Edit dispenser' }).disabled).toBe(true);
-        fireEvent.submit(utils.getByRole('button', { name: 'Edit dispenser' }).closest('form'));
+        expect(utils.getByRole('button', { name: 'Update dispenser' }).disabled).toBe(true);
+        fireEvent.submit(utils.getByRole('button', { name: 'Update dispenser' }).closest('form'));
         await step(() => {});
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
@@ -394,7 +414,7 @@ describe('dispenser edit checks the lists it is about to bind', () => {
         await step(() => fireEvent.change(utils.getByLabelText(/^Allow list/), { target: { value: '2701' } }));
 
         expect(utils.getByText(/List #2701 is set as both/)).toBeTruthy();
-        fireEvent.submit(utils.getByRole('button', { name: 'Edit dispenser' }).closest('form'));
+        fireEvent.submit(utils.getByRole('button', { name: 'Update dispenser' }).closest('form'));
         await step(() => {});
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormNotice, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, NetworkField, OptionalPill, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -28,7 +28,9 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFee,
@@ -41,10 +43,11 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { humanizeError } from '../utils/humanizeError.js';
-import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
+import { AmountField } from '../components/AmountField.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
@@ -280,6 +283,58 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         if (memo.trim()) p.MEMO = memo.trim();
         return p;
     }, [coinTicker, giveType, giveTick, giveAmount, giveOwnership, getType, getTick, getAmount, getOwnership, getAddress, expMode, expInput, allowListIdx, blockListIdx, memo]);
+
+    const quoteActionData = useMemo(() => {
+        if (!chainId || !fromAddress || !coinTicker) return null;
+        if (giveType === 'coin' && getType === 'coin') return null;
+        if (giveType === 'token') {
+            if (!giveTick.trim()
+                || tickerReferenceError(giveTick, { noun: 'Give ticker', allowRef: true })
+                || isNativeCoinName(giveTick, coinTicker)
+                || (!giveOwnership && !isPlainPositive(giveAmount))) return null;
+        } else if (!isPlainPositive(giveAmount)) return null;
+        if (!giveOwnership) {
+            if (tokenAmountPrecisionError(wireAmount(giveAmount), {
+                divisibility: giveType === 'coin' ? 8 : giveTokenInfo?.divisibility,
+                tick: giveAssetTick,
+                noun: 'Give amount',
+            })) return null;
+            if (giveBalance !== null && compareAmounts(wireAmount(giveAmount), giveBalance) === 1) return null;
+        }
+        if (getType === 'token') {
+            if (!getTick.trim()
+                || tickerReferenceError(getTick, { noun: 'Get ticker', allowRef: true })
+                || isNativeCoinName(getTick, coinTicker)
+                || (!getOwnership && !isPlainPositive(getAmount))) return null;
+        } else if (!isPlainPositive(getAmount)) return null;
+        if (!getOwnership && tokenAmountPrecisionError(wireAmount(getAmount), {
+            divisibility: getType === 'coin' ? 8 : getTokenInfo?.divisibility,
+            tick: getType === 'coin' ? coinTicker : getTick,
+            noun: 'Get amount',
+        })) return null;
+        if (giveType === 'token' && getType === 'token'
+            && giveTick.trim().toUpperCase() === getTick.trim().toUpperCase()) return null;
+        if (getAddress.trim() && addressValidationError(getAddress.trim(), descriptor)) return null;
+        if (expMode === 'custom') {
+            const expiration = localInputToUnix(expInput.trim());
+            if (!expiration || expiration <= Math.floor(Date.now() / 1000)) return null;
+        }
+        const trimmedMemo = memo.trim();
+        if (/[|;]/.test(trimmedMemo) || memoLengthError(trimmedMemo)
+            || memoCharacterError(trimmedMemo)) return null;
+        if ((allowListIdx && !isCanonicalActionIndex(allowListIdx))
+            || (blockListIdx && !isCanonicalActionIndex(blockListIdx))) return null;
+        return { action: 'ORDER', params: actionParams };
+    }, [actionParams, allowListIdx, blockListIdx, chainId, coinTicker, descriptor,
+        expInput, expMode, fromAddress, getAddress, getAmount, getOwnership, getTick,
+        getTokenInfo?.divisibility, getType, giveAmount, giveAssetTick, giveBalance,
+        giveOwnership, giveTick, giveTokenInfo?.divisibility, giveType, memo]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     const decoded = useMemo(() => {
         // residual (§5.6 slice 5): the confirm page renders the intent
@@ -584,8 +639,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 label="Order broadcast"
                 actions={(
                     <>
-                        {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
-                        <Button variant="primary" onClick={onBack}>Done</Button>
+                        {onManageOrders ? <Button variant="secondary" icon={<Icon.TokenListIcon />} onClick={onManageOrders}>My orders</Button> : null}
+                        <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                     </>
                 )}
             >
@@ -630,6 +685,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={handleChainChange}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -667,10 +723,11 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
+                        <Button variant="secondary" icon={<Icon.PencilIcon />} onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.MarketIcon />}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -710,10 +767,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
-                    </p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -743,14 +797,17 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <>
-                    {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
+                    {onManageOrders ? <Button variant="secondary" icon={<Icon.TokenListIcon />} onClick={onManageOrders}>My orders</Button> : null}
+                    {/* Always named for what it does (U63); a review step still
+                        follows when the order does not fit one encode. */}
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.MarketIcon />}
                         loading={confirmAction.composing}
                         disabled={!fromAddress || confirmAction.composing}
                     >
-                        {singleEncode ? 'Place order' : 'Preview'}
+                        Place order
                     </Button>
                 </>
             )}
@@ -767,18 +824,16 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                   * GET amount field.
                   */}
                 <NetworkField
+                    help="The chain this order is posted on. Both sides of the order settle on this chain, so you give and get tokens on it; to get a token on another chain, use Cross-chain order."
                     value={chainId}
                     onChange={handleChainChange}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                 />
-                <p className={styles.hintLeft}>
-                    Both sides of this order settle on the same chain. To get a token on another chain, use Cross-chain order.
-                </p>
-
                 {fromAddress ? (
                     <AddressField
-                        label="From address"
+                        label="From"
+                        help="The address that posts this order and escrows what you give. Both sides of the order settle on this network; to get a token on another network, use Cross-chain order."
                         icon="addresses"
                         value={fromAddress.address}
                         readOnly
@@ -809,6 +864,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     coinTicker={coinTicker}
                     styles={styles}
                     showHeading={false}
+                    help={{
+                        type: `Offer a token this address holds, or ${coinTicker || 'the network coin'}. Native ${coinTicker || 'coin'} is not escrowed: when the order matches you pay it in a follow-up payment.`,
+                        ticker: 'The token you give. It is escrowed from this address when the order confirms and returns to you if the order expires or you cancel it.',
+                        amount: 'How much you give in total. A match can fill part of it; the rest stays open until it fills, expires or you cancel.',
+                    }}
+                    divisibility={giveType === 'coin' ? 8 : giveTokenInfo?.divisibility}
+                    onMax={giveType === 'token' && !giveOwnership && giveBalance && Number(giveBalance) > 0
+                        ? () => setGiveAmount(giveBalance)
+                        : undefined}
+                    maxDisabled={!(giveType === 'token' && giveBalance && Number(giveBalance) > 0)}
+                    balanceText={giveType === 'token' && giveBalance != null && giveTick.trim()
+                        ? `${giveBalance} ${giveTick.trim().toUpperCase()} available`
+                        : null}
                 />
             </FormSection>
 
@@ -832,6 +900,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     coinTicker={coinTicker}
                     styles={styles}
                     showHeading={false}
+                    help={{
+                        type: `Ask for a token, or for ${coinTicker || 'the network coin'}. When you ask for native ${coinTicker || 'coin'}, the matcher pays it to you within the expiration window.`,
+                        ticker: 'The token you want in return. Any holder of it can match your order.',
+                        amount: 'How much you want in total for what you give; together with the give amount it sets your price.',
+                    }}
+                    divisibility={getType === 'coin' ? 8 : getTokenInfo?.divisibility}
                 />
 
                 {giveType === 'coin' && getType === 'coin' ? (
@@ -841,8 +915,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 ) : null}
 
                 <AddressField
-                    label="Receive at (optional)"
-                    hint="Address where you receive the get side. Defaults to your source address."
+                    label="Receive at"
+                    optional
+                    help="Address where you receive the get side. Defaults to your source address."
                     value={getAddress}
                     onChange={(e) => setGetAddress(e.target.value)}
                     autoComplete="off"
@@ -854,6 +929,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             <FormSection title="Timing and fees">
                 <RadioGroup
                     legend="Expiration"
+                    help="How long the order stays open for matching. The default window suits most orders; pick a specific time to end it sooner or later. When it expires, what is still escrowed returns to you."
                     name="order-exp"
                     value={expMode}
                     onChange={setExpMode}
@@ -866,7 +942,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     <Input
                         label="Expires"
                         type="datetime-local"
-                        hint="The order is valid until this wall-clock time. Must be in the future."
+                        help="The order is valid until this wall-clock time. Must be in the future."
                         value={expInput}
                         onChange={(e) => setExpInput(e.target.value)}
                     />
@@ -876,7 +952,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     type="button"
                     variant="link"
                     size="sm"
-                    icon={null}
+                    icon={<Icon.GearIcon />}
                     className={styles.advancedToggle}
                     aria-expanded={showAdvanced}
                     onClick={() => setShowAdvanced((v) => !v)}
@@ -889,20 +965,30 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 {showAdvanced ? (
                     <>
                         <div className={styles.choiceGroup}>
-                            <p className={styles.choiceGroupLabel}>Restrict who can match (optional)</p>
+                            <p className={styles.choiceGroupLabel}>
+                                Restrict who can match <OptionalPill />
+                                <InfoTip aria="About Restrict who can match" label="An allow list limits which addresses can match this order and a block list shuts addresses out. Both are address lists you published (see My Lists)." />
+                            </p>
                             <div className={styles.choiceButtons}>
-                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
                                     {allowListIdx ? `Allow-list #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set allow-list'}
                                 </Button>
-                                {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
-                                <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                                {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
+                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
                                     {blockListIdx ? `Block-list #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set block-list'}
                                 </Button>
-                                {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
+                                {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
                             </div>
                         </div>
-                        <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
-                        <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                        <Input
+                            label="Memo"
+                            optional
+                            help="A short public note stored with the order on chain. Anyone can read it."
+                            maxLength={MAX_MEMO_LENGTH}
+                            value={memo}
+                            onChange={(e) => setMemo(e.target.value)}
+                            autoComplete="off"
+                        />
                     </>
                 ) : null}
 
@@ -923,6 +1009,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         {ackRequired ? (
                             <Checkbox
                                 label="I understand this web wallet only auto-pays while it is open and unlocked."
+                                help="Auto-pay runs inside this wallet. If the tab is closed or the wallet is locked when a match arrives, nothing is paid until you open and unlock it again."
                                 checked={keepOpenAck}
                                 onChange={(e) => setKeepOpenAck(e.target.checked)}
                             />
@@ -936,8 +1023,13 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </p>
                 ) : null}
 
-                {feeTiers ? (
+                <FeesCard
+                    chainId={chainId}
+                    quote={protocolFeeQuote}
+                    pending={protocolFeePending}
+                    feeSelector={feeTiers ? (
                     <FeeSelector
+                        chainId={chainId}
                         label="Network fee"
                         coinTicker={coinTicker}
                         tiers={feeTiers}
@@ -945,14 +1037,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         onChange={setFeePick}
                         customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                     />
-                ) : null}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                    ) : null}
+                >
+                    <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                </FeesCard>
             </FormSection>
         </FormPage>,
     );
 }
 
-function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, ownership, onOwnership, coinTicker, styles, showHeading = true }) {
+function SideEditor({
+    heading, type, onType, tick, onTick, amount, onAmount, ownership, onOwnership, coinTicker, styles,
+    showHeading = true, help, onMax, maxDisabled = true, balanceText = null, divisibility,
+}) {
     return (
         <>
             {showHeading ? <p className={styles.successLabel}>{heading}</p> : null}
@@ -960,6 +1057,7 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
                 names what it picks instead of repeating "You give". */}
             <RadioGroup
                 legend={t('createOrder.side.assetType')}
+                help={help?.type}
                 name={`${heading}-type`}
                 value={type}
                 onChange={onType}
@@ -972,6 +1070,7 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
                 <>
                     <Input
                         label="Ticker"
+                        help={help?.ticker}
                         value={tick}
                         onChange={(e) => onTick(e.target.value.toUpperCase())}
                         autoComplete="off"
@@ -980,18 +1079,31 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
                     />
                     <Checkbox
                         label="Trade ownership of this ticker (not a balance)"
+                        help="Trade control of the whole token instead of a quantity of it. It moves as one piece, with no partial fills."
                         checked={ownership}
                         onChange={(e) => onOwnership(e.target.checked)}
                     />
                 </>
             ) : null}
+            {/* The shared amount field keeps Max inside the field on both
+                sides (U61); a side with no sensible maximum shows it disabled. */}
             {!(type === 'token' && ownership) ? (
-                <Input
-                    label={type === 'coin' ? `Amount (${coinTicker})` : 'Amount'}
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => onAmount(e.target.value)}
-                    autoComplete="off"
+                <AmountField
+                    label="Amount"
+                    help={help?.amount}
+                    amount={amount}
+                    // The unit joins the label only for the coin side, so the
+                    // token side keeps the plain "Amount" label it has always had.
+                    tick={type === 'coin' ? coinTicker : undefined}
+                    divisibility={divisibility}
+                    onAmountFieldChange={(rawValue) => {
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        onAmount(stripped);
+                    }}
+                    onMax={onMax}
+                    maxDisabled={maxDisabled}
+                    balanceText={balanceText}
                 />
             ) : null}
         </>

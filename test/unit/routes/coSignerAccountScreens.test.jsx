@@ -15,6 +15,12 @@ import { CoSignerAccountDetail } from '../../../packages/core/src/shared/routes/
 import { CoSignerAccountList } from '../../../packages/core/src/shared/routes/CoSignerAccountList.jsx';
 import { CoSignerProvision } from '../../../packages/core/src/shared/routes/CoSignerProvision.jsx';
 
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => (
+        <button type="button" onClick={() => onPick({ id: 'address-1' })}>Pick wallet key</button>
+    ),
+}));
+
 const DAEMON_KEY = `02${'a'.repeat(64)}`;
 
 function mount(child, messaging) {
@@ -98,13 +104,14 @@ describe('co-signer account screens', () => {
             },
         );
 
-        const addressPicker = await screen.findByLabelText("This wallet's key");
-        fireEvent.change(addressPicker, { target: { value: 'address-1' } });
+        await screen.findByLabelText("This wallet's key");
+        fireEvent.click(screen.getByRole('button', { name: "Choose this wallet's key" }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick wallet key' }));
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: `04${'b'.repeat(64)}` },
         });
 
-        expect(await screen.findByText(/starting with 02 or 03/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review agent account' }).disabled).toBe(true);
+        expect(await screen.findByText(/starting with 02 or 03/i, { selector: 'p' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create agent account' }).disabled).toBe(true);
     });
 });

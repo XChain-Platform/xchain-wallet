@@ -111,6 +111,7 @@ describe('TokenDetail keyboard navigation', () => {
             { getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: creator }] }) },
         );
 
+        await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled());
         await screen.findByRole('button', { name: 'More info' });
         const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
             .getAllByRole('button');
@@ -137,6 +138,8 @@ describe('TokenDetail keyboard navigation', () => {
         const history = within(menu).getByRole('menuitem', { name: 'History' });
         expect(document.activeElement).toBe(history);
         fireEvent.keyDown(history, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Gated content' }));
+        fireEvent.keyDown(document.activeElement, { key: 'End' });
         expect(document.activeElement).toBe(manage);
         keyboardActivate(manage);
         expect(onManageToken).toHaveBeenCalledTimes(1);
@@ -153,15 +156,15 @@ describe('TokenDetail keyboard navigation', () => {
 
         const ranges = await screen.findByRole('tablist', { name: 'Chart range' });
         const tabs = within(ranges).getAllByRole('tab');
-        const selected = within(ranges).getByRole('tab', { name: '1M' });
+        const selected = within(ranges).getByRole('tab', { name: '1W' });
         expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([selected]);
 
         selected.focus();
         fireEvent.keyDown(selected, { key: 'ArrowRight' });
-        const next = within(ranges).getByRole('tab', { name: '3M' });
+        const next = within(ranges).getByRole('tab', { name: '1M' });
         expect(document.activeElement).toBe(next);
         expect(next).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByLabelText('3M price chart')).toBeTruthy();
+        expect(screen.getByLabelText('1M price chart')).toBeTruthy();
 
         fireEvent.keyDown(next, { key: 'Home' });
         const first = within(ranges).getByRole('tab', { name: '24h' });
@@ -169,16 +172,16 @@ describe('TokenDetail keyboard navigation', () => {
         expect(first).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('opens the holders list with arrows and reaches every holder control', async () => {
+    it('opens the holders list from More info and reaches every holder control', async () => {
         // A demo wallet reads no holders (it stays offline), so this uses a real one.
         mount({ walletId: 'wallet' });
 
-        const about = await screen.findByRole('tab', { name: 'About' });
-        about.focus();
-        fireEvent.keyDown(about, { key: 'ArrowLeft' });
-        const unlock = screen.getByRole('tab', { name: 'Unlock' });
-        expect(document.activeElement).toBe(unlock);
-        expect(unlock).toHaveAttribute('aria-selected', 'true');
+        const more = await screen.findByRole('button', { name: 'More info' });
+        keyboardActivate(more);
+        const holdersEntry = screen.getByRole('menuitem', { name: 'Holders' });
+        holdersEntry.focus();
+        keyboardActivate(holdersEntry);
+        expect(document.activeElement).toBe(more);
 
         const holders = await screen.findByRole('region', { name: 'Holders' });
         const copyButtons = within(holders).getAllByRole('button', { name: /Copy holder address/ });

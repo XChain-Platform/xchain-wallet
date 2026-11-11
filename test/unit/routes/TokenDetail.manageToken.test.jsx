@@ -109,7 +109,7 @@ describe('TokenDetail "Manage token" action', () => {
             'More info',
         ]);
         fireEvent.click(more);
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Manage' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Manage' }));
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
@@ -118,14 +118,14 @@ describe('TokenDetail "Manage token" action', () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
         expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
     });
 
     it('does not render Manage for a native coin', () => {
         renderDetail({ creator: MINE, kind: 'native' });
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
 
-        expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
         expect(screen.queryByRole('menuitem', { name: 'Manage' })).toBeNull();
     });
 

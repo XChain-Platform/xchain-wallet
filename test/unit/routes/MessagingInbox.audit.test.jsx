@@ -200,7 +200,7 @@ describe('MessagingInbox audit states', () => {
         await screen.findByText('No messages yet');
         const searchField = screen.getByRole('searchbox', { name: 'Search conversations' })
             .parentElement.parentElement;
-        const networkFilter = screen.getByRole('button', { name: 'Filter by network' })
+        const networkFilter = screen.getByRole('button', { name: /^Filter by network/ })
             .parentElement;
 
         expect(searchField.className).toMatch(/(?:^|\s)_?md_/);
@@ -218,9 +218,11 @@ describe('MessagingInbox audit states', () => {
         const messaging = messagingFor({ ready: false });
         mount(messaging);
 
-        const password = await screen.findByLabelText('Password');
+        const password = await screen.findByLabelText('Password', { selector: 'input' });
         const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
-        expect(password).toHaveAccessibleDescription("Decrypts this account's messages.");
+        expect(password).not.toHaveAccessibleDescription("Decrypts this account's messages.");
+        fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent("Decrypts this account's messages.");
         expect(screen.queryByText("Enter your wallet password to decrypt this account's messages.")).toBeNull();
         expect(unlock.disabled).toBe(true);
 
@@ -233,6 +235,17 @@ describe('MessagingInbox audit states', () => {
             type: 'all',
             password: 'secret',
         }));
+    });
+
+    it('gives the session request actions icons and makes Share my key the green action (U63)', async () => {
+        mount(messagingFor({ messages: [REQUEST] }));
+
+        const decline = await screen.findByRole('button', { name: 'Decline' });
+        const share = screen.getByRole('button', { name: 'Share my key' });
+        expect(decline.querySelector('svg')).not.toBeNull();
+        expect(share.querySelector('svg')).not.toBeNull();
+        expect(share.className).toMatch(/success/);
+        expect(decline.className).not.toMatch(/success/);
     });
 
     it('declines a session request and keeps it dismissed after reopening the inbox', async () => {

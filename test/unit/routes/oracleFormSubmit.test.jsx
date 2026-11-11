@@ -292,18 +292,18 @@ describe('OracleForm pre-review validation', () => {
         );
     });
 
-    it('stops an overlong UTF-8 memo before compose', async () => {
+    it('stops an overlong UTF-16 memo before compose', async () => {
         const { utils, calls } = await mountForm();
         await fill(utils);
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText(/^Memo/), { target: { value: '€'.repeat(84) } });
+            fireEvent.change(utils.getByLabelText(/^Memo/), { target: { value: `${'😀'.repeat(125)}aa` } });
             await drainMicrotasks();
         });
         await preview(utils);
         expectStoppedBeforeCompose(
             utils,
             calls,
-            /Memo is 252 bytes; the network accepts at most 250 bytes/i,
+            /Memo is 252 characters; the network accepts at most 250 characters/i,
         );
     });
 
@@ -326,7 +326,7 @@ describe('OracleForm deviation gate', () => {
         await clickSubmit(utils);
         expect(calls.some((c) => c.method === 'oraclePriceAction')).toBe(false);
 
-        const field = utils.getByLabelText(/type publish to confirm/i);
+        const field = utils.getByLabelText(/type publish to confirm/i, { selector: 'input' });
         await domAct(async () => {
             fireEvent.change(field, { target: { value: 'PUBLISH' } });
             await drainMicrotasks();

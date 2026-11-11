@@ -14,7 +14,8 @@ import {
     Screen,
     Button,
     Checkbox,
-    ChainPicker,
+    NetworkField,
+    FieldIconButton,
     FormPage,
     Input,
     Textarea,
@@ -77,6 +78,7 @@ import '../../i18n/locales/en/adsNotice.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/renameWallet.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/verifySignature.js';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -263,7 +265,7 @@ export function ImportWallet({
             addressType: effectiveWifAddressType,
         }) || ''
         : '';
-    // ChainPicker resolves ids through a registry; the supported list is the only one this lane needs.
+    // NetworkField resolves ids through a registry; the supported list is the only one this lane needs.
     const wifChainRegistry = {
         get: (id) => wifChains.find((descriptor) => descriptor.id === id),
     };
@@ -450,6 +452,11 @@ export function ImportWallet({
 
     function clearBackupPointer() {
         setBackupPointer(null);
+        if (error) setError(null);
+    }
+
+    function toggleBackupScanner() {
+        setBackupScanning((current) => !current);
         if (error) setError(null);
     }
 
@@ -831,13 +838,9 @@ export function ImportWallet({
         ? 0
         : normalizedMnemonic.split(' ').length;
     const detectedPhraseFormat = importPhraseFormat(normalizedMnemonic, isFreeWallet);
-    const phraseHint = isFreeWallet
-        ? (isFull
-            ? t('importWallet.freeWallet.fullSubtitle')
-            : t('importWallet.freeWallet.subtitle'))
-        : (isFull
-            ? t('importWallet.phrase.fullSubtitle')
-            : t('importWallet.phrase.subtitle'));
+    const phraseHelp = isFreeWallet
+        ? t('importWallet.phrase.freeWalletHelp')
+        : t('importWallet.phrase.help');
     const activeWord = wordRangeAt(mnemonic, mnemonicCursor);
     const wordSuggestions = activeWord.prefix.length < 2 || BIP39_WORDS.has(activeWord.prefix)
         ? []
@@ -963,7 +966,7 @@ export function ImportWallet({
     const formActions = lane === 'backup' ? (
         <Button
             type="submit"
-            variant="primary"
+            variant="success"
             loading={busy}
             icon={<Icon.KeyIcon />}
             disabled={Boolean(formDisabledReason)}
@@ -974,7 +977,7 @@ export function ImportWallet({
     ) : lane === 'wif' ? (
         <Button
             type="submit"
-            variant="primary"
+            variant="success"
             loading={busy}
             icon={<Icon.KeyIcon />}
             disabled={Boolean(formDisabledReason)}
@@ -985,7 +988,7 @@ export function ImportWallet({
     ) : (
         <Button
             type="submit"
-            variant="primary"
+            variant="success"
             loading={busy}
             icon={<Icon.KeyIcon />}
             disabled={Boolean(formDisabledReason)}
@@ -1022,25 +1025,15 @@ export function ImportWallet({
             {lane === 'backup' ? (
                 <>
                     <div className={styles.mnemonicHeader}>
-                        <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
-                            {t('importWallet.backup.file')}
-                        </label>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={null}
-                            onClick={() => {
-                                setBackupScanning((s) => !s);
-                                if (error) setError(null);
-                            }}
-                            disabled={busy}
-                            aria-pressed={backupScanning}
-                            aria-expanded={backupScanning}
-                            aria-controls="xc-backup-scanner"
-                        >
-                            {backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
-                        </Button>
+                        <div className={styles.fieldLabelGroup}>
+                            <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
+                                {t('importWallet.backup.file')}
+                            </label>
+                            <InfoTip
+                                aria={t('ui.field.about', { label: t('importWallet.backup.file') })}
+                                label={t('importWallet.backup.fileHelp')}
+                            />
+                        </div>
                     </div>
                     {backupScanning ? (
                         <div id="xc-backup-scanner" className={styles.scannerBox}>
@@ -1056,6 +1049,15 @@ export function ImportWallet({
                                 })}
                                 {' '}{t('importWallet.backup.location', { location: backupPointer.location })}
                             </p>
+                            <FieldIconButton
+                                icon={<Icon.ScanIcon />}
+                                label={backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
+                                onClick={toggleBackupScanner}
+                                disabled={busy}
+                                aria-pressed={backupScanning}
+                                aria-expanded={backupScanning}
+                                aria-controls="xc-backup-scanner"
+                            />
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -1096,7 +1098,10 @@ export function ImportWallet({
                         id="xc-backup-content"
                         {...backupDrop.rootProps}
                         label={t('importWallet.backup.contents')}
-                        size={isFull ? 'lg' : 'md'}
+                        help={t('importWallet.backup.contentsHelp')}
+                        // md at every width: the lg size also enlarges the
+                        // label, which then outweighs Backup file above it.
+                        size="md"
                         className={`${styles.mnemonicText}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
                         value={backupContent}
                         onChange={(e) => {
@@ -1112,6 +1117,17 @@ export function ImportWallet({
                         rows={4}
                         disabled={busy}
                         aria-describedby="xc-backup-content-description"
+                        fieldAction={(
+                            <FieldIconButton
+                                icon={<Icon.ScanIcon />}
+                                label={backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
+                                onClick={toggleBackupScanner}
+                                disabled={busy}
+                                aria-pressed={backupScanning}
+                                aria-expanded={backupScanning}
+                                aria-controls="xc-backup-scanner"
+                            />
+                        )}
                     />
                     <p id="xc-backup-content-description" className={styles.fieldDescription}>
                         {t('importWallet.backup.contentsDescription')}
@@ -1133,7 +1149,7 @@ export function ImportWallet({
                         id="import-backup-file-password"
                         type="password"
                         label={RESTORE_PASSWORD_LABELS.file}
-                        hint={RESTORE_PASSWORD_HINTS.file}
+                        help={RESTORE_PASSWORD_HINTS.file}
                         value={backupPassword}
                         onChange={(e) => {
                             setBackupPassword(e.target.value);
@@ -1146,7 +1162,7 @@ export function ImportWallet({
                         id="import-backup-wallet-password"
                         type="password"
                         label={RESTORE_PASSWORD_LABELS.wallet}
-                        hint={RESTORE_PASSWORD_HINTS.wallet}
+                        help={RESTORE_PASSWORD_HINTS.wallet}
                         value={backupWalletPassword}
                         onChange={(e) => {
                             setBackupWalletPassword(e.target.value);
@@ -1159,7 +1175,7 @@ export function ImportWallet({
                         id="import-backup-device-password"
                         type="password"
                         label={restoreDeviceLabel(mode)}
-                        hint={restoreDeviceHint(mode)}
+                        help={restoreDeviceHint(mode)}
                         value={backupDevicePassword}
                         onChange={(e) => {
                             setBackupDevicePassword(e.target.value);
@@ -1179,26 +1195,6 @@ export function ImportWallet({
             ) : null}
             {lane === 'mnemonic' ? (
             <>
-            <div className={styles.mnemonicHeader}>
-                <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
-                    {t('importWallet.recoveryPhrase')}
-                </label>
-                {/* Scan QR sits on the label row as a QR icon button, so the
-                    phrase box stays a plain textarea with no action strip. */}
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={<Icon.ScanIcon />}
-                    onClick={() => {
-                        setScanning((s) => !s);
-                        if (error) setError(null);
-                    }}
-                    disabled={busy}
-                    aria-pressed={scanning}
-                    aria-label={scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
-                />
-            </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
                     <QrScanner onFrame={handleQrFrame} alt={t('importWallet.phrase.scannerAlt')} />
@@ -1214,7 +1210,8 @@ export function ImportWallet({
                 onDrop={handleFileDrop}
             >
                 <Textarea
-                    hint={phraseHint}
+                    label={t('importWallet.recoveryPhrase')}
+                    help={phraseHelp}
                     id="xc-mnemonic"
                     ref={textareaRef}
                     size={isFull ? 'lg' : 'md'}
@@ -1240,6 +1237,18 @@ export function ImportWallet({
                     rows={3}
                     disabled={busy}
                     aria-describedby="xc-mnemonic-status"
+                    fieldAction={(
+                        <FieldIconButton
+                            icon={<Icon.ScanIcon />}
+                            label={scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
+                            onClick={() => {
+                                setScanning((current) => !current);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                            aria-pressed={scanning}
+                        />
+                    )}
                 />
                 <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>
@@ -1269,13 +1278,14 @@ export function ImportWallet({
                         ))}
                     </div>
                 ) : null}
-                <p className={styles.dropHint}>
-                    {dragOver ? t('importWallet.phrase.releaseToLoad') : t('importWallet.phrase.dropHint')}
-                </p>
+                {dragOver ? (
+                    <p className={styles.dropHint}>{t('importWallet.phrase.releaseToLoad')}</p>
+                ) : null}
             </div>
             <Input
                 id="import-name"
                 label={t('renameWallet.name')}
+                help={t('importWallet.walletNameHelp')}
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 autoComplete="off"
@@ -1285,11 +1295,8 @@ export function ImportWallet({
                 id="import-password"
                 type="password"
                 label={t('common.password')}
-                hint={
-                    isFull
-                        ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
-                        : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })
-                }
+                help={t('importWallet.password.fullHelp')}
+                hint={t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -1302,6 +1309,7 @@ export function ImportWallet({
                 id="import-confirm"
                 type="password"
                 label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
+                help={t('importWallet.confirmPasswordHelp')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -1332,7 +1340,7 @@ export function ImportWallet({
                             id="import-bip39-passphrase"
                             type="password"
                             label={t('importWallet.passphrase.label')}
-                            hint={t('importWallet.passphrase.hint')}
+                            help={t('importWallet.passphrase.hint')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
@@ -1348,10 +1356,39 @@ export function ImportWallet({
             ) : null}
             {lane === 'wif' ? (
                 <>
+                    <NetworkField
+                        label={t('importWallet.wif.chain')}
+                        help={t('importWallet.wif.chainHelp')}
+                        value={effectiveWifChainId}
+                        onChange={(chainId) => {
+                            setWifChainId(chainId);
+                            setWifAddressType('');
+                            if (error) setError(null);
+                        }}
+                        chainIds={wifChains.map((descriptor) => descriptor.id)}
+                        chainRegistry={wifChainRegistry}
+                        disabled={busy}
+                    />
+                    {wifDescriptor ? (
+                        <Select
+                            label={t('importWallet.wif.addressType')}
+                            help={t('importWallet.wif.addressTypeHelp')}
+                            value={effectiveWifAddressType}
+                            onChange={(e) => {
+                                setWifAddressType(e.target.value);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            {wifAddressTypes.map((type) => (
+                                <option key={type} value={type}>{addressTypeLabel(type)}</option>
+                            ))}
+                        </Select>
+                    ) : null}
                     <Input
                         type="password"
                         label={t('importWallet.wif.key')}
-                        hint={t('importWallet.wif.subtitle')}
+                        help={t('importWallet.wif.keyHelp')}
                         value={wif}
                         onChange={(e) => {
                             const nextWif = e.target.value;
@@ -1370,42 +1407,18 @@ export function ImportWallet({
                         spellCheck={false}
                         disabled={busy}
                     />
-                    <ChainPicker
-                        label={t('importWallet.wif.chain')}
-                        value={effectiveWifChainId}
-                        onChange={(chainId) => {
-                            setWifChainId(chainId);
-                            setWifAddressType('');
-                            if (error) setError(null);
-                        }}
-                        chainIds={wifChains.map((descriptor) => descriptor.id)}
-                        chainRegistry={wifChainRegistry}
-                        disabled={busy}
-                    />
-                    {wifDescriptor ? (
-                        <Select
-                            label={t('importWallet.wif.addressType')}
-                            value={effectiveWifAddressType}
-                            onChange={(e) => {
-                                setWifAddressType(e.target.value);
-                                if (error) setError(null);
-                            }}
-                            disabled={busy}
-                        >
-                            {wifAddressTypes.map((type) => (
-                                <option key={type} value={type}>{addressTypeLabel(type)}</option>
-                            ))}
-                        </Select>
-                    ) : null}
                     <Input
                         label={t('verifySignature.address')}
+                        help={t('importWallet.wif.addressHelp')}
                         value={wifAddress}
                         readOnly
                         autoComplete="off"
+                        spellCheck={false}
                     />
                     <Input
                         id="import-name"
                         label={t('renameWallet.name')}
+                        help={t('importWallet.walletNameHelp')}
                         value={name}
                         onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                         autoComplete="off"
@@ -1414,9 +1427,8 @@ export function ImportWallet({
                     <Input
                         type="password"
                         label={t('common.password')}
-                        hint={isFull
-                            ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
-                            : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}
+                        help={t('importWallet.password.fullHelp')}
+                        hint={t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -1428,6 +1440,7 @@ export function ImportWallet({
                     <Input
                         type="password"
                         label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
+                        help={t('importWallet.confirmPasswordHelp')}
                         value={confirm}
                         onChange={(e) => {
                             setConfirm(e.target.value);
@@ -1439,6 +1452,7 @@ export function ImportWallet({
                     <Checkbox
                         className={styles.advancedToggle}
                         label={t('importWallet.wif.ack')}
+                        help={t('importWallet.wif.ackHelp')}
                         checked={wifWarningAck}
                         onChange={(e) => {
                             setWifWarningAck(e.target.checked);

@@ -199,7 +199,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address').inputValue();
+    return main.getByLabel('Your oracle address', { exact: true }).inputValue();
 }
 
 /**
@@ -292,13 +292,13 @@ test.describe('BET unhappy stakes', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Unhappy stakes ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
-            await main.getByLabel('Betting closes')
+            await main.getByLabel('What is being bet on', { exact: true }).fill(`Unhappy stakes ${RUN_TAG}`);
+            await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
+            await main.getByLabel('Outcome 1', { exact: true }).fill('No');
+            await main.getByLabel('Betting closes', { exact: true })
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await page.getByTestId('confirm-approve').click();
@@ -350,7 +350,7 @@ test.describe('BET unhappy stakes', () => {
             // The button stays enabled and answers a blank stake in words, so the
             // proof that it never reaches compose is the refusal plus no confirm
             // screen.
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
             await expect(page.getByRole('alert').filter({ hasText: /positive bet amount/ }),
                 'a blank stake was not refused in words')
                 .toBeVisible({ timeout: 30_000 });
@@ -365,7 +365,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByLabel(/^Stake/).fill('0');
             await fillPasswordIfPresent(main);
 
-            const review = main.getByRole('button', { name: 'Review bet', exact: true });
+            const review = main.getByRole('button', { name: 'Place bet', exact: true });
             await expect(review,
                 'a zero stake is blocked by the same disabled-button rule as a blank one, so this '
                 + 'case is not testing what it claims to (update the spec, not the wallet)')
@@ -391,7 +391,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await main.getByLabel(/^Stake/).fill(OVER_STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
 
             // Either outcome is defensible - refused at the form, or carried to
             // a confirm screen that says it will fail. What is NOT defensible is

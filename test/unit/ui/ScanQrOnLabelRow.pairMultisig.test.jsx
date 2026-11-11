@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The partner-code and cosigner-reply scan controls are QR icon buttons on
-// their paste field's label row. The action row under the form holds only
+// The partner-code and cosigner-reply scan controls are QR icons inside
+// their paste fields. The action row under the form holds only
 // the form's own verbs (Pair, or Back, Clear and Submit), never a scan button.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -90,7 +90,7 @@ function mountWith(messaging, element) {
 }
 
 function fill(labelRe, value) {
-    fireEvent.change(screen.getByLabelText(labelRe), { target: { value } });
+    fireEvent.change(screen.getByLabelText(labelRe, { selector: 'input, textarea' }), { target: { value } });
 }
 
 async function reachExchange() {
@@ -122,15 +122,16 @@ async function reachPasteInbox() {
     fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
 }
 
-/** Asserts the scan control is an icon-only button on the field's label row. */
-function expectOnLabelRow(scan, textarea) {
+/** Asserts the scan control is an icon-only button inside the field control. */
+function expectInsideField(scan, textarea) {
     const label = document.querySelector(`label[for="${textarea.id}"]`);
     expect(label).not.toBeNull();
     expect(scan.textContent.trim()).toBe('');
     expect(scan.querySelector('svg')).not.toBeNull();
-    expect(label.parentElement.contains(scan)).toBe(true);
     expect(label.contains(scan)).toBe(false);
     expect(textarea.parentElement.contains(scan)).toBe(true);
+    expect(textarea.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
 }
 
 function buttonNames(container) {
@@ -143,12 +144,13 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('Pair partner wallet: scan sits on the code field label row', () => {
-    it('renders an icon-only scan button beside the field label and keeps it out of the action row', async () => {
+describe('Pair partner wallet: scan sits inside the code field', () => {
+    it('renders an icon-only scan button inside the field and keeps it out of the action row', async () => {
         await reachExchange();
         const textarea = screen.getByRole('textbox', { name: /Paste the other wallet's code/i });
         const scan = screen.getByRole('button', { name: "Scan the other wallet's QR" });
-        expectOnLabelRow(scan, textarea);
+        expectInsideField(scan, textarea);
+        expect(scan).toHaveAttribute('aria-pressed', 'false');
 
         const pair = screen.getByRole('button', { name: 'Pair a signer' });
         expect(pair.parentElement.contains(scan)).toBe(false);
@@ -168,6 +170,7 @@ describe('Pair partner wallet: scan sits on the code field label row', () => {
 
         const stop = screen.getByRole('button', { name: 'Stop scanning' });
         expect(stop.textContent.trim()).toBe('');
+        expect(stop).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(stop);
         expect(screen.queryByTestId('fake-qr-scanner')).toBeNull();
 
@@ -178,12 +181,13 @@ describe('Pair partner wallet: scan sits on the code field label row', () => {
     });
 });
 
-describe('Multisig cosigner reply: scan sits on the reply field label row', () => {
-    it('renders an icon-only scan button beside the field label and keeps it out of the action row', async () => {
+describe('Multisig cosigner reply: scan sits inside the reply field', () => {
+    it('renders an icon-only scan button inside the field and keeps it out of the action row', async () => {
         await reachPasteInbox();
         const textarea = screen.getByRole('textbox', { name: 'Cosigner reply chunks' });
         const scan = screen.getByRole('button', { name: 'Scan with camera' });
-        expectOnLabelRow(scan, textarea);
+        expectInsideField(scan, textarea);
+        expect(scan).toHaveAttribute('aria-pressed', 'false');
 
         const submit = screen.getByRole('button', { name: 'Submit chunks' });
         expect(submit.parentElement.contains(scan)).toBe(false);
@@ -201,6 +205,7 @@ describe('Multisig cosigner reply: scan sits on the reply field label row', () =
         expect(screen.getByTestId('fake-qr-scanner')).toBeTruthy();
         const stop = screen.getByRole('button', { name: 'Stop scanner' });
         expect(stop.textContent.trim()).toBe('');
+        expect(stop).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(stop);
         expect(screen.queryByTestId('fake-qr-scanner')).toBeNull();
         expect(screen.getByRole('button', { name: 'Scan with camera' })).toBeTruthy();

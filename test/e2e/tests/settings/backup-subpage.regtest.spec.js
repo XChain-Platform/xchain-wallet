@@ -175,7 +175,7 @@ test.describe('Settings: backup sub-page', () => {
 
             await test.step('CLAIM 2: a wrong password reveals nothing', async () => {
                 await page.getByLabel('Wallet password').fill(WRONG_PASSWORD);
-                await page.getByRole('main').getByRole('button', { name: 'Reveal', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true }).click();
 
                 // Wait for the attempt to SETTLE rather than racing it. Both
                 // outcomes are waited for on purpose: the button's label is
@@ -188,7 +188,7 @@ test.describe('Settings: backup sub-page', () => {
                 // falsification run, where the correct password was fed in
                 // here on purpose.
                 await expect(
-                    page.getByRole('main').getByRole('button', { name: 'Reveal', exact: true })
+                    page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true })
                         .or(page.getByText('Your recovery phrase', { exact: true })).first(),
                     'the reveal attempt never came back from its busy state')
                     .toBeVisible({ timeout: 120_000 });
@@ -207,7 +207,7 @@ test.describe('Settings: backup sub-page', () => {
 
             await test.step('CLAIM 3: the right password reveals THIS wallet\'s phrase, blurred', async () => {
                 await page.getByLabel('Wallet password').fill(PASSWORD);
-                await page.getByRole('main').getByRole('button', { name: 'Reveal', exact: true }).click();
+                await page.getByRole('main').getByRole('button', { name: 'Reveal phrase', exact: true }).click();
 
                 await expect(page.getByText('Your recovery phrase', { exact: true }),
                     'the wallet\'s OWN password did not open the seed-phrase panel, so either the row '

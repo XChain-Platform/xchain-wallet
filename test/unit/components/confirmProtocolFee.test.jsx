@@ -128,6 +128,60 @@ describe('confirm screen protocol-fee disclosure', () => {
         );
     });
 
+    describe('unavailable line by action', () => {
+        const noQuote = (action, extra = {}) => base({
+            report: { verdict: 'unknown', findings: [] },
+            composed: { psbt: 'x', networkFeeSats: 1176, xchainFee: null, action, ...extra },
+        });
+
+        it.each(['SEND', 'MINT', 'send'])('hides the line for free action %s', (action) => {
+            render(<ConfirmActionModal {...noQuote(action)} />);
+            expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
+        });
+
+        it('reads the action from the action string when the name is absent', () => {
+            render(<ConfirmActionModal {...noQuote(undefined, { actionString: 'MINT|0|X|1' })} />);
+            expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
+        });
+
+        it.each([
+            ['FILE request envelope', { actionData: { action: 'FILE', params: {} } }],
+            ['LINK decoded envelope', { decoded: { action: 'LINK' } }],
+            ['ADDRESS commit', { envelope: { commit: { actionData: { action: 'ADDRESS', params: {} } } } }],
+            ['PRICE reveal', { envelope: { reveal: { decoded: { action: 'PRICE' } } } }],
+        ])('hides the line when a free action is carried by a %s', (_label, shape) => {
+            render(<ConfirmActionModal {...noQuote(undefined, shape)} />);
+            expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
+        });
+
+        it('keeps the line for a fee-bearing action carried by a chunk reveal', () => {
+            render(<ConfirmActionModal {...noQuote(undefined, {
+                envelope: { reveal: { actionData: { action: 'DEPLOY', params: {} } } },
+            })} />);
+            expect(screen.getByTestId('confirm-protocol-fee-unavailable')).toBeTruthy();
+        });
+
+        it('keeps the line for a new ISSUE when its quote is missing', () => {
+            render(<ConfirmActionModal {...noQuote('ISSUE')} />);
+            expect(screen.getByTestId('confirm-protocol-fee-unavailable')).toBeTruthy();
+        });
+
+        it('hides the line for an ISSUE update known to be free from its compose quote', () => {
+            render(<ConfirmActionModal {...noQuote('ISSUE', { protocolFeeKnownFree: true })} />);
+            expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
+        });
+
+        it.each(['ORDER', 'ORDER_MATCH', 'DEPLOY_CHUNK'])('keeps the line for %s', (action) => {
+            render(<ConfirmActionModal {...noQuote(action)} />);
+            expect(screen.getByTestId('confirm-protocol-fee-unavailable')).toBeTruthy();
+        });
+
+        it('keeps the line when the action cannot be identified', () => {
+            render(<ConfirmActionModal {...noQuote(undefined)} />);
+            expect(screen.getByTestId('confirm-protocol-fee-unavailable')).toBeTruthy();
+        });
+    });
+
     it('does not claim an XCHAIN fee on a caller-supplied PSBT', () => {
         // The wallet did not build those bytes and cannot tell which lane
         // paid their fee, so "from your XCHAIN balance" could be flatly wrong.

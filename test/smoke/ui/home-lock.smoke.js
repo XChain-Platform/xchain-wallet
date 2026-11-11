@@ -56,11 +56,11 @@ assert.ok(
 // HomeTabs/BalanceList).
 const sharedHome = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const home = readFileSync(sharedHome, 'utf8');
-// Balances go through loadDisplayBalances, which calls
-// messaging.getWalletBalances for every wallet but the demo one.
+// Balances come from the wallet source's messaging (U64): a demo wallet's
+// source answers getWalletBalances from sample data.
 for (const call of [
     'messaging.listWallets',
-    'loadDisplayBalances(messaging',
+    'messaging.getWalletBalances(walletId, accountId)',
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }

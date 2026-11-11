@@ -81,7 +81,7 @@ function expectInsideTemplate(element) {
 }
 
 async function runToSign() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
     fireEvent.click(await screen.findByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));

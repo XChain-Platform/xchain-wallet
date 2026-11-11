@@ -39,7 +39,6 @@ import { HwSignBlock } from './HwSignBlock.jsx';
 import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import '../../i18n/locales/en/send.js';
 
 /**
  * @param {object} props
@@ -114,27 +113,11 @@ export function SignCredentials({
     // rejected transaction from a dead button, and the natural response is to
     // press it again.
     //
-    // The note is wrapped in <SigningReadyNote>, which withdraws it
-    // whenever panic mode has signing frozen (and states the freeze when the
-    // user armed it themselves). `submitError` stays OUTSIDE the wrapper: it
-    // is the surface and must survive every panic state.
+    // Keep submit errors beside the panic status so every freeze state surfaces them.
     if (unlocked) {
         return (
             <>
-                <SigningReadyNote>
-                    <p
-                        style={{
-                            margin: 'var(--xc-space-2) 0 0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 'var(--xc-space-1)',
-                            fontSize: 'var(--xc-text-sm)',
-                            color: 'var(--xc-text-muted)',
-                        }}
-                    >
-                        <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
-                    </p>
-                </SigningReadyNote>
+                <SigningReadyNote />
                 {submitError ? (
                     <FieldNote variant="error">{submitError}</FieldNote>
                 ) : null}
@@ -147,7 +130,7 @@ export function SignCredentials({
                 ref={passwordRef}
                 type="password"
                 label={t('common.password')}
-                hint={t('components.messageConfirmScreen.requiredToSign')}
+                help={t('components.messageConfirmScreen.requiredToSign')}
                 value={password || ''}
                 onChange={(e) => onPasswordChange?.(e.target.value)}
                 autoComplete="current-password"

@@ -165,11 +165,12 @@
     margin-top: auto;
 }
 
+/* No reserved second line: the ticker sits directly under the name's last
+   line, and .meta's auto top margin keeps each pair at its tile's foot. */
 .name {
     font-weight: 600;
     color: var(--xc-text);
     display: block;
-    min-height: 2.4em;
     overflow-wrap: break-word;
     word-break: normal;
     line-height: 1.2;

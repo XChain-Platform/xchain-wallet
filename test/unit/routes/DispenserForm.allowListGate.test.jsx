@@ -163,7 +163,7 @@ async function pickDispenserAddress(utils, address) {
     await step(() => fireEvent.click(utils.getByRole('button', { name: `View address ${address}` })));
 }
 
-const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create' })));
+const clickCreate = (utils) => step(() => fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' })));
 
 describe('DispenserForm allow-list self-check reads the list as the network resolves it', () => {
     it('an edit that added the dispenser address clears the warning, and the picker counts the edit', async () => {
@@ -234,7 +234,7 @@ describe('DispenserForm Create feedback', () => {
     it('names a missing token instead of disabling Create', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging, '');
-        const create = utils.getByRole('button', { name: 'Create' });
+        const create = utils.getByRole('button', { name: 'Create dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);
@@ -244,7 +244,7 @@ describe('DispenserForm Create feedback', () => {
     it('keeps Create actionable and names each missing required amount', async () => {
         const { messaging } = recordingMessaging({ created: [], current: [] });
         const utils = await mountForm(messaging);
-        const create = utils.getByRole('button', { name: 'Create' });
+        const create = utils.getByRole('button', { name: 'Create dispenser' });
         expect(create.disabled).toBe(false);
 
         await clickCreate(utils);

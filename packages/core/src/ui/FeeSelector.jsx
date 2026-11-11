@@ -8,8 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId, useMemo, useState } from 'react';
-import { customFeeRateBoundsError, customFeeRateDecimalsError, isPerKbUnit } from '../flows/feeEstimate.js';
+import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import {
+    customFeeRateBoundsError,
+    customFeeRateDecimalsError,
+    isPerKbUnit,
+    resolveFeeUnit,
+} from '../flows/feeEstimate.js';
+import { defaultRegistry } from '../registry/index.js';
+import { protocolCoinTickerFor } from '../registry/nativeFee.js';
+import { MessagingContext } from '../shared/MessagingContext.js';
+import { useFeeFiat } from '../shared/hooks/useFeeFiat.js';
+import { useSettings } from '../shared/hooks/useSettings.js';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
@@ -20,11 +30,14 @@ import {
 import buttonStyles from './Button.module.css';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
-import { FormNotice } from './FormNotice.jsx';
+import { CheckIcon, ClockIcon, ForwardIcon, PencilIcon } from './icons/index.jsx';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/send.js';
 import '../i18n/locales/en/ui.js';
 
+export { FeesCard } from '../shared/components/FeesCard.jsx';
+
+const chainRegistry = defaultRegistry();
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
 // Resolved per call so a locale switch applies; a module-level table would freeze the load-time text.
@@ -34,6 +47,8 @@ const speedLabel = (speed) => ({
     fast: t('ui.feeSelector.fast'),
     custom: t('ui.feeSelector.custom'),
 }[speed]);
+// One glyph per stop: hourglass-like clock for Slow, a check for Normal, forward for Fast, pencil for Custom.
+const SPEED_ICON = { low: ClockIcon, normal: CheckIcon, fast: ForwardIcon, custom: PencilIcon };
 const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
@@ -63,23 +78,24 @@ const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.sm
  * recompute the estimate through the same custom-rate path. Either edit
  * snaps the slider to the Custom stop.
  *
- * The component is presentation-only: it does NOT compute fees
- * itself. Callers fetch tiers via `estimateNativeSendFeeTiers` and
- * pass them in; the selected tier (or custom rate) flows back via
- * `onChange({ mode, customRate? })`.
+ * Callers fetch tiers via `estimateNativeSendFeeTiers` and pass them in;
+ * the selected tier (or custom rate) flows back via
+ * `onChange({ mode, customRate? })`. The selector resolves the selected
+ * fee's fiat value for its chain unless a FeesCard supplies one.
  *
  * Props
  *   - tiers      `{ low, normal, fast, unit }` from estimateNativeSendFeeTiers
  *   - value      `{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }`
  *   - onChange   `(next) => void` (same shape as `value`)
  *   - customEstimate  optional `FeeEstimate` for Custom mode. When provided,
- *                     its `coinAmount` + (via `formatFiat`) fiat figure render
- *                     in the same readout slot the tier modes use, so the live
- *                     fee stays visible as the user edits the rate.
+ *                     its `coinAmount` + fiat figure render in the same readout
+ *                     slot the tier modes use, so the live fee stays visible
+ *                     as the user edits the rate.
+ *   - chainId    registry chain id used for the fiat rate and empty-state unit
  *   - disabled   `boolean`
- *   - showEstimateNotice  whether fee-source availability notices render
  *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
  *               amount so it's unambiguous which coin the fee is paid in
+ *   - fiat       optional formatters already resolved by a parent FeesCard
  *   - error      a refusal about the fee (for example the node's relay
  *               minimum); renders in the selector's feedback slot
  *
@@ -88,16 +104,42 @@ const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.sm
  * @property {number} [customRate]   in chain's native unit (sat/vB or koinu/byte)
  */
 export function FeeSelector({
+    chainId,
+    fiat = null,
+    ...props
+}) {
+    // Settings and prices come through messaging; a selector rendered outside
+    // the wallet shell (the style guide, an isolated preview) shows no fiat.
+    const messaging = useContext(MessagingContext);
+    if (fiat || !chainId || !messaging) {
+        return <FeeSelectorContent {...props} chainId={chainId} fiat={fiat} />;
+    }
+    return <FeeSelectorWithFiat {...props} chainId={chainId} />;
+}
+
+function FeeSelectorWithFiat({ chainId, ...props }) {
+    const { settings } = useSettings();
+    const descriptor = chainRegistry.get(chainId);
+    const fiat = useFeeFiat({
+        chainId,
+        chainCoin: descriptor?.coin,
+        nativeTicker: protocolCoinTickerFor(descriptor),
+        settings,
+    });
+    return <FeeSelectorContent {...props} chainId={chainId} fiat={fiat} />;
+}
+
+function FeeSelectorContent({
+    chainId,
+    fiat,
     tiers,
     value,
     onChange,
     customEstimate = null,
     disabled = false,
-    formatFiat,
     allowCustom = true,
     label = null,
     coinTicker = '',
-    showEstimateNotice = true,
     error = null,
 }) {
     const customInputId = useId();
@@ -144,40 +186,36 @@ export function FeeSelector({
             .map((speed) => ({ speed, estimate: tiers[speed] }))
             .filter((t) => t.estimate);
     }, [tiers]);
-    const usesFallbackRates = tierList.some(
-        ({ estimate }) => estimate?.source === 'static-placeholder',
-    );
-
-    // Inside a FormPage the notice leads the page content with the form's
-    // others (above the card when wide); anywhere else it stays under the selector.
     const noEstimate = !tiers || tierList.length === 0;
-    let noticeText = null;
-    if (showEstimateNotice) {
-        if (noEstimate) noticeText = t('ui.feeSelector.feeEstimateUnavailableForThis');
-        else if (usesFallbackRates) noticeText = t('ui.feeSelector.liveFeeEstimateUnavailableUsing');
-    }
-    const inlineNotice = <FormNotice variant="warning">{noticeText}</FormNotice>;
+    const effectiveTiers = noEstimate
+        ? { unit: resolveFeeUnit(chainRegistry.get(chainId)) }
+        : tiers;
 
-    if (noEstimate) {
-        return (
-            <div className={styles.wrap}>
-                {headerRow()}
-                {inlineNotice}
-            </div>
-        );
+    // A chain with no estimate at all opens on Custom, so the form prices
+    // from the typed rate instead of a hidden default. Without a chain there
+    // is nothing to price yet, so the form keeps its pick for when one is set.
+    const opensOnCustom = noEstimate && Boolean(chainId);
+    useEffect(() => {
+        if (opensOnCustom && value?.mode !== 'custom') {
+            onChange({ mode: 'custom', customRate: value?.customRate });
+        }
+    }, [opensOnCustom, onChange, value?.customRate, value?.mode]);
+
+    if (noEstimate && !chainId) {
+        return <div className={styles.wrap}>{headerRow()}</div>;
     }
 
-    const mode = value?.mode || 'normal';
-    const isCustom = allowCustom && mode === 'custom';
+    const mode = noEstimate ? 'custom' : (value?.mode || 'normal');
+    const isCustom = noEstimate || (allowCustom && mode === 'custom');
     const sliderSpeed = SPEEDS.includes(mode) ? mode : 'normal';
     const sliderIndex = SPEEDS.indexOf(sliderSpeed);
-    const activeEstimate = isCustom ? customEstimate : tiers[sliderSpeed];
+    const activeEstimate = isCustom ? customEstimate : effectiveTiers[sliderSpeed];
 
     const seedCustomRate = () => (
         value?.customRate
-        ?? tiers.normal?.rateValue
-        ?? tiers.fast?.rateValue
-        ?? tiers.low?.rateValue
+        ?? effectiveTiers.normal?.rateValue
+        ?? effectiveTiers.fast?.rateValue
+        ?? effectiveTiers.low?.rateValue
         ?? 0
     );
 
@@ -196,10 +234,10 @@ export function FeeSelector({
     // of customFeeEstimate's sats = rate x vsize); falls back to the
     // rate/fee ratio of a known tier when vsize is absent (doc fixtures).
     const feeToDisplayRate = (fee) => {
-        const ref = tiers.normal || tiers.fast || tiers.low;
+        const ref = effectiveTiers.normal || effectiveTiers.fast || effectiveTiers.low;
         const vsize = activeEstimate?.vsize ?? ref?.vsize;
         if (Number.isFinite(vsize) && vsize > 0) {
-            const raw = isPerKbUnit(tiers.unit)
+            const raw = isPerKbUnit(effectiveTiers.unit)
                 ? (fee * 1000) / vsize
                 : (fee * 1e8) / vsize;
             return Number(raw.toFixed(8));
@@ -280,11 +318,11 @@ export function FeeSelector({
         && feeDraftCanonical !== '.'
         ? Number(feeDraftCanonical)
         : Number.NaN;
-    const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
-        ? tiers.fast.rateValue
+    const fastPresetRate = Number.isFinite(effectiveTiers.fast?.rateValue) && effectiveTiers.fast.rateValue > 0
+        ? effectiveTiers.fast.rateValue
         : null;
     // An out-of-range rate blocks the enclosing form's submit through the field's own validity.
-    const rangeError = isCustom ? customFeeRateBoundsError({ rate: customRateNumber, tiers }) : null;
+    const rangeError = isCustom ? customFeeRateBoundsError({ rate: customRateNumber, tiers: effectiveTiers }) : null;
     let customFeedback = null;
     let customFeedbackTone = null;
     if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
@@ -317,6 +355,8 @@ export function FeeSelector({
         <div className={styles.wrap}>
             {headerRow(activeEstimate?.etaMinutes, isCustom ? 'custom' : sliderSpeed)}
             <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
+                {!noEstimate ? (
+                    <>
                 <input
                     type="range"
                     min={0}
@@ -330,7 +370,7 @@ export function FeeSelector({
                     aria-valuetext={isCustom
                         ? t('ui.feeSelector.customValueText', {
                             rate: Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : '',
-                            unit: tiers.unit,
+                            unit: effectiveTiers.unit,
                         }).trim()
                         : (activeEstimate?.etaMinutes
                             ? t('ui.feeSelector.speedValueTextEta', {
@@ -356,16 +396,21 @@ export function FeeSelector({
                             tabIndex={-1}
                             aria-label={speedLabel(s)}
                         >
-                            <span>{speedLabel(s)}</span>
-                            {Number.isFinite(tiers[s]?.etaMinutes) ? (
-                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} {t('ui.feeSelector.min')}</span>
+                            <span className={styles.sliderTickLabel}>
+                                {(() => { const Icon = SPEED_ICON[s]; return <Icon />; })()}
+                                {speedLabel(s)}
+                            </span>
+                            {Number.isFinite(effectiveTiers[s]?.etaMinutes) ? (
+                                <span className={styles.sliderTickEta}>~{effectiveTiers[s].etaMinutes} {t('ui.feeSelector.min')}</span>
                             ) : null}
                         </button>
                     ))}
                 </div>
+                    </>
+                ) : null}
                 {(isCustom || activeEstimate || feeDraft !== null) ? (() => {
-                    const fiatStr = activeEstimate && typeof formatFiat === 'function'
-                        ? formatFiat(activeEstimate.coinAmount)
+                    const fiatStr = activeEstimate && typeof fiat?.formatNativeFee === 'function'
+                        ? fiat.formatNativeFee(activeEstimate.coinAmount)
                         : null;
                     const editingFee = feeDraft !== null;
                     return (
@@ -410,6 +455,7 @@ export function FeeSelector({
                                                 title={t('ui.feeSelector.selectToEditTheExact')}
                                             >
                                                 {formatWithThousands(activeEstimate.coinAmount)}
+                                                <PencilIcon />
                                             </button>
                                     ) : formatWithThousands(activeEstimate.coinAmount)}
                                         {coinTicker ? (
@@ -440,11 +486,11 @@ export function FeeSelector({
                                         }}
                                         aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
                                         aria-describedby={customFeedback ? customFeedbackId : undefined}
-                                        aria-label={t('ui.feeSelector.customFeeRate', { unit: tiers.unit })}
+                                        aria-label={t('ui.feeSelector.customFeeRate', { unit: effectiveTiers.unit })}
                                         disabled={disabled}
                                         autoFocus={!editingFee}
                                     />
-                                    <span className={styles.customUnit}>{tiers.unit}</span>
+                                    <span className={styles.customUnit}>{effectiveTiers.unit}</span>
                                 </span>
                             ) : !activeEstimate ? null : allowCustom ? (
                                 <button
@@ -452,14 +498,15 @@ export function FeeSelector({
                                     className={`${BUTTON_BASE} ${styles.readoutEdit} ${styles.sliderReadoutRate}`}
                                     onClick={beginRateEdit}
                                     disabled={disabled}
-                                    aria-label={t('ui.feeSelector.editFeeRate', { unit: tiers.unit })}
+                                    aria-label={t('ui.feeSelector.editFeeRate', { unit: effectiveTiers.unit })}
                                     title={t('ui.feeSelector.selectToEditTheFee')}
                                 >
-                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
+                                    {formatWithThousands(activeEstimate.rateValue)} {effectiveTiers.unit}
+                                    <PencilIcon />
                                 </button>
                             ) : (
                                 <span className={styles.sliderReadoutRate}>
-                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
+                                    {formatWithThousands(activeEstimate.rateValue)} {effectiveTiers.unit}
                                 </span>
                             )}
                             </div>
@@ -476,7 +523,6 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
-            {inlineNotice}
         </div>
     );
 }

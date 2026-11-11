@@ -77,7 +77,7 @@ describe('token action labels', () => {
         );
 
         const submit = await screen.findByRole('button', { name: label });
-        expect(submit.className).toMatch(/primary/);
+        expect(submit.className).toMatch(/success/);
         expect(screen.queryByRole('button', { name: 'Update token' })).toBeNull();
     });
 

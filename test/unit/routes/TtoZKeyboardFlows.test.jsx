@@ -154,22 +154,26 @@ describe('T through Z route keyboard flows', () => {
         const signature = screen.getByLabelText('Signature');
         const verify = screen.getByRole('button', { name: 'Verify signature' });
 
-        expect(tabStops(view.container)).toEqual([back, chain, address, message, signature]);
+        const tip = (name) => screen.getByRole('button', { name: `About ${name}` });
+        expect(tabStops(view.container)).toEqual([
+            back, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature,
+        ]);
         pressEnter(back);
         expect(onBack).toHaveBeenCalledOnce();
 
         chain.focus();
-        fireEvent.keyDown(chain, { key: 'ArrowDown' });
-        const chainList = await screen.findByRole('listbox', { name: 'Network' });
-        await waitFor(() => expect(chainList.contains(document.activeElement)).toBe(true));
-        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
-        expect(screen.queryByRole('listbox', { name: 'Network' })).not.toBeInTheDocument();
+        pressEnter(chain);
+        await screen.findByRole('dialog', { name: 'Network' });
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(chain);
 
         fireEvent.change(address, { target: { value: 'bc1qcounterparty' } });
         fireEvent.change(message, { target: { value: 'signed with a keyboard' } });
         fireEvent.change(signature, { target: { value: 'c2lnbmF0dXJl' } });
-        expect(tabStops(view.container)).toEqual([back, chain, address, message, signature, verify]);
+        expect(tabStops(view.container)).toEqual([
+            back, tip('Network'), chain, tip('Address'), address, tip('Message'), message, tip('Signature'), signature, verify,
+        ]);
 
         pressEnter(verify);
         await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledWith(expect.objectContaining({

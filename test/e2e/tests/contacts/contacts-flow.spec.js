@@ -60,7 +60,7 @@ for (const viewport of VIEWPORTS) {
             await page.getByRole('button', { name: 'Create first contact' }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
             await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
-            await page.getByRole('button', { name: 'Save', exact: true }).click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).click();
 
             await expect(contactRow(page, CONTACT_NAME)).toBeVisible();
             await contactRow(page, CONTACT_NAME).click();
@@ -68,7 +68,7 @@ for (const viewport of VIEWPORTS) {
             await actions.getByRole('button', { name: 'Edit', exact: true }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill(EDITED_NAME);
             await page.getByRole('textbox', { name: 'Notes', exact: true }).fill('Primary Bitcoin recipient');
-            await page.getByRole('button', { name: 'Save', exact: true }).click();
+            await page.getByRole('button', { name: 'Update contact', exact: true }).click();
 
             await expect(page.getByRole('heading', { name: 'View Contact' })).toBeVisible();
             await expect(page.getByRole('main').getByText(EDITED_NAME, { exact: true })).toBeVisible();
@@ -78,7 +78,7 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('filter contacts by network', async () => {
-            const filter = page.getByRole('button', { name: 'Filter by network' });
+            const filter = page.getByRole('button', { name: /^Filter by network/ });
             await filter.click();
             await page.getByRole('option', { name: 'Litecoin', exact: true }).click();
             await expect(contactRow(page, EDITED_NAME)).toHaveCount(0);
@@ -98,7 +98,7 @@ for (const viewport of VIEWPORTS) {
             await expect(bitcoinAsset).toBeVisible();
             await page.getByRole('button', { name: 'Open address book' }).click();
             await expect(page.getByRole('heading', { name: 'Contacts' })).toBeVisible();
-            await page.getByRole('button', { name: 'Filter by network' }).click();
+            await page.getByRole('button', { name: /^Filter by network/ }).click();
             await page.getByRole('option', { name: 'Bitcoin', exact: true }).click();
             await expectNoHorizontalOverflow(page, `${viewport.name} Send contacts picker`);
 

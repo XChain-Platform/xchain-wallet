@@ -92,7 +92,7 @@ export function WalletPicker({
     const actions = (
         <div className={pickerStyles.pickerActions}>
             <Button
-                variant="primary"
+                variant="success"
                 onClick={onAddWallet}
                 disabled={switching}
                 icon={<Icon.PlusIcon />}
@@ -124,13 +124,17 @@ export function WalletPicker({
                     <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : wallets.length === 0 ? (
                     <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
-                ) : wallets.map((w, index) => {
+                ) : (
+                    // One flush list card with divider lines, rows never boxed apart (U41, U58).
+                    /* Safari needs an explicit list role because this class removes list styling. */
+                    <ul className={pickerStyles.list} role="list" aria-label={t('walletPicker.title')}>
+                    {wallets.map((w, index) => {
                     const active = w.id === activeWalletId;
                     const walletName = w.name || 'Unnamed wallet';
                     return (
-                        <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
+                        <li key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
                             <ListRow
-                                className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
+                                className={`${pickerStyles.listRow} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
@@ -178,9 +182,11 @@ export function WalletPicker({
                                     }}
                                 />
                             ) : null}
-                        </div>
+                        </li>
                     );
                 })}
+                    </ul>
+                )}
                 {actions}
             </ListPage>
         </Screen>

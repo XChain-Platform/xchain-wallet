@@ -20,7 +20,7 @@
 //
 
 import { useState } from 'react';
-import { Input, Select } from '@xchain-wallet/core/ui';
+import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { isNativeShell } from '../../nativeShell.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -81,7 +81,13 @@ export function SafetySection() {
         <div style={STACK}>
             <PanicSaveNotice />
             <div style={ROW}>
-                <span style={ROW_TITLE}>{t('settings.safety.autoLockTimeout')}</span>
+                <span style={ROW_TITLE}>
+                    {t('settings.safety.autoLockTimeout')}{' '}
+                    <InfoTip
+                        aria={t('settings.help.safety.autoLockLabel')}
+                        label={t('settings.help.safety.autoLock')}
+                    />
+                </span>
                 <div data-settings-control="">
                     <Select
                         value={String(autolockValue)}
@@ -101,9 +107,12 @@ export function SafetySection() {
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_TITLE}>{t('settings.safety.newRecipientTestSendWarning')}</span>
-                    <span id="test-send-threshold-hint" style={ROW_HINT}>
-                        {t('settings.safety.forNativeCoinSendsAbove')}
+                    <span style={ROW_TITLE}>
+                        {t('settings.safety.newRecipientTestSendWarning')}{' '}
+                        <InfoTip
+                            aria={t('settings.help.safety.testSendLabel')}
+                            label={t('settings.help.safety.testSend')}
+                        />
                     </span>
                 </div>
                 <div data-settings-control="">
@@ -132,9 +141,7 @@ export function SafetySection() {
                         placeholder={t('settings.safety.0NoWarning')}
                         aria-label={t('settings.safety.testSendWarningThresholdSats')}
                         aria-invalid={thresholdError ? 'true' : undefined}
-                        aria-describedby={thresholdError
-                            ? 'test-send-threshold-hint test-send-threshold-error'
-                            : 'test-send-threshold-hint'}
+                        aria-describedby={thresholdError ? 'test-send-threshold-error' : undefined}
                         style={{ width: 140, textAlign: 'right' }}
                     />
                 </div>

@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Token metadata is issuer-controlled text. The About tab shows it as plain
+// Token metadata is issuer-controlled text. The About panel shows it as plain
 // text, links only to real http(s) targets and names the host a link opens.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -52,9 +52,15 @@ function renderInfo(tokenInfo) {
 
 const hrefs = () => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
 
+async function openMore(label) {
+    fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: label }));
+}
+
 describe('TokenDetail issuer metadata', () => {
     it('names the host a website link opens, so a look-alike domain is visible', async () => {
         renderInfo({ websites: ['https://xchain.io.evil.example/claim', 'https://xn--xchan-9ua.io/'] });
+        await openMore('About');
         const links = await screen.findAllByRole('link', { name: /Website/ });
         expect(links).toHaveLength(2);
         expect(links[0].textContent).toContain('xchain.io.evil.example');
@@ -71,6 +77,7 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'url', value: 'https://contact.example/' },
             ],
         });
+        await openMore('About');
         await screen.findByRole('link', { name: /Website/ });
         const found = hrefs();
         expect(found.filter((h) => /^(javascript|data|vbscript):/i.test(h))).toEqual([]);
@@ -86,6 +93,7 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'email', value: 'not an address' },
             ],
         });
+        await openMore('About');
         await screen.findByText('help@issuer.example');
         expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual(['mailto:help@issuer.example']);
         expect(screen.getByText(/bcc=thief@evil\.example/)).toBeTruthy();
@@ -95,21 +103,26 @@ describe('TokenDetail issuer metadata', () => {
         const markup = '<img src=x onerror=alert(1)><script>alert(2)</script> ‮evil‬ ';
         const description = markup + 'long text '.repeat(1100);
         renderInfo({ description });
-        const body = await screen.findByText((_, el) => el?.tagName === 'P' && el.textContent.startsWith('<img src=x'));
+        await screen.findByText('Description');
+        const body = document.querySelector('[class*="descriptionValue"]');
+        expect(body).not.toBeNull();
         expect(body.textContent.length).toBeGreaterThan(10_000);
         expect(document.querySelector('script')).toBeNull();
         expect(document.querySelector('img[src="x"]')).toBeNull();
     });
 
-    it('shows the About tab for a token whose only metadata is a websites list', async () => {
+    it('offers About for a token whose only supplemental metadata is a websites list', async () => {
         renderInfo({ websites: ['https://only-site.example/'] });
+        await openMore('About');
         expect(await screen.findByRole('link', { name: 'Website · only-site.example' })).toBeTruthy();
         expect(screen.queryByText('No additional information')).toBeNull();
     });
 
-    it('shows no empty Links block for a token whose only metadata is files', async () => {
+    it('hides About when files are the only supplemental metadata', async () => {
         renderInfo({ files: [{ url: 'https://files.example/a.txt', name: 'A', type: 'text/plain' }] });
-        expect(await screen.findByText('No additional information')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
+        expect(screen.queryByRole('menuitem', { name: 'About' })).toBeNull();
+        expect(screen.getByRole('menuitem', { name: 'Media' })).toBeTruthy();
         expect(screen.queryByText('Links')).toBeNull();
     });
 

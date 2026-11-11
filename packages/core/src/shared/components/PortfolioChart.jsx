@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { Sparkline, synthesizeTokenChart } from './Sparkline.jsx';
 import { useMessaging } from '../useMessaging.js';
@@ -22,31 +22,36 @@ import { fiatValue } from './BalanceList.jsx';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { defaultRegistry } from '../../registry/index.js';
 import styles from './PortfolioChart.module.css';
-import { t } from '../../i18n/index.js';
+import { getLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/routes.js';
 
 // Range definitions. Every wallet, demo or real, offers the same list.
 // CoinGecko's sparkline is 168 hourly points (one week), so 24h slices
-// the tail of that recorded series and 1W uses it as-is; a real wallet
-// shows the no-history message for the longer ranges. The demo wallet
-// synthesizes every range via the same helper TokenDetail uses. Point
-// counts are fixed (YTD included) so demo captures stay reproducible.
+// the tail of that recorded series and 1W uses it as-is. Longer ranges
+// use the daily 365-day series. The public API does not serve `days=max`,
+// so All is the complete 365-day series available from this source. Demo
+// wallets synthesize every range via the same helper TokenDetail uses.
+// Point counts are fixed (YTD included) so captures stay reproducible.
 export const RANGES = [
-    { id: '24h', label: '24h', points: 24,  realCapable: true  },
-    { id: '1w',  label: '1W',  points: 168, realCapable: true  },
-    { id: '1m',  label: '1M',  points: 60,  realCapable: false },
-    { id: '3m',  label: '3M',  points: 90,  realCapable: false },
-    { id: '6m',  label: '6M',  points: 120, realCapable: false },
-    { id: '1y',  label: '1Y',  points: 180, realCapable: false },
-    { id: 'ytd', label: 'YTD', points: 150, realCapable: false },
-    { id: 'all', label: 'All', points: 240, realCapable: false },
+    { id: '24h', label: '24h', points: 24,  source: 'hourly' },
+    { id: '1w',  label: '1W',  points: 168, source: 'hourly' },
+    { id: '1m',  label: '1M',  points: 60,  source: 'daily' },
+    { id: '3m',  label: '3M',  points: 90,  source: 'daily' },
+    { id: '6m',  label: '6M',  points: 120, source: 'daily' },
+    { id: '1y',  label: '1Y',  points: 180, source: 'daily' },
+    { id: 'ytd', label: 'YTD', points: 150, source: 'daily' },
+    { id: 'all', label: 'All', points: 240, source: 'daily' },
 ];
 
-// A real wallet opens on the recorded week; the demo wallet opens on 1M.
-export function defaultRangeId(isDemo) {
-    return isDemo ? '1m' : '1w';
+const HISTORY_RETRY_BACKOFF_MS = [2000, 4000, 8000];
+
+// Every wallet opens on the recorded week: demo mode swaps only the data
+// source, never the view, so the demo wallet opens where a real one does.
+export function defaultRangeId() {
+    return '1w';
 }
 
 /**
@@ -54,8 +59,8 @@ export function defaultRangeId(isDemo) {
  *
  * Sums each row's current fiat value into a single time series sized
  * by the active range. Native rows chart their real CoinGecko sparkline
- * (24h / 1W). A real wallet charts nothing else; only the demo wallet
- * fills the gaps with the deterministic walk Sparkline.jsx provides.
+ * (24h / 1W) or daily history (longer ranges). Only the demo wallet fills
+ * missing history with the deterministic walk Sparkline.jsx provides.
  * Each row's contribution is scaled so its series ends at the row's
  * current fiat value, which means the series end always equals the
  * portfolio total and stays in sync with TotalBalanceHero.
@@ -71,14 +76,14 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
     const chartPanelId = useId();
-    // Every wallet offers every range. Only 24h and 1W have recorded prices
-    // behind them, so a real wallet opens on 1W and a longer range shows
-    // the no-history message; the demo wallet synthesizes every range.
+    // Every wallet offers every range and opens on its hourly 1W view. Real
+    // wallets request daily history only after a daily range is selected;
+    // demo wallets synthesize every range without a network request.
     const isDemo = isDemoWallet(walletId);
     const ranges = RANGES;
-    const [rangeId, setRangeId] = useState(defaultRangeId(isDemo));
+    const [rangeId, setRangeId] = useState(defaultRangeId());
     useEffect(() => {
-        setRangeId(defaultRangeId(isDemo));
+        setRangeId(defaultRangeId());
     }, [isDemo]);
     const range = ranges.find((r) => r.id === rangeId) || ranges[ranges.length - 1];
 
@@ -94,6 +99,10 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
         return Array.from(set);
     }, [rows]);
     const nativeChainKey = nativeChainIds.join(',');
+    const historyChainIds = useMemo(() => nativeChainIds.filter(
+        (chainId) => defaultRegistry().get(chainId)?.networkKind === 'mainnet',
+    ), [nativeChainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    const historyChainKey = historyChainIds.join(',');
 
     // A demo wallet prices itself from its own fixtures, like every other
     // number on this screen (see TotalBalanceHero for the whole argument).
@@ -143,9 +152,99 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
             });
         return () => { cancelled = true; };
     }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
-    const effectivePriceMap = nativePriceMap ?? priceMap;
-    const priceLoading = nativePriceMap === undefined ? fetchedPriceLoading : Boolean(nativePricesLoading);
-    const priceError = nativePriceMap === undefined ? fetchedPriceError : nativePricesError;
+    const basePriceMap = nativePriceMap ?? priceMap;
+    const historyRequestKey = `${historyChainKey}|${fiatCurrency}`;
+    const historyRequests = useRef(new Set());
+    const [historyByKey, setHistoryByKey] = useState(
+        /** @type {Record<string, { histories: Record<string, Array<[number, number]> | null>, loading: boolean, error: string | null }>} */ ({}),
+    );
+    useEffect(() => {
+        if (isDemo || range.source !== 'daily' || historyChainIds.length === 0) return undefined;
+        if (historyRequests.current.has(historyRequestKey)) return undefined;
+        historyRequests.current.add(historyRequestKey);
+        let cancelled = false;
+        let retryTimer = null;
+        let retryIndex = 0;
+        const histories = {};
+        const existingHistories = historyByKey[historyRequestKey]?.histories || {};
+        for (const chainId of historyChainIds) {
+            const existing = existingHistories[chainId] ?? basePriceMap?.[chainId]?.historyDaily;
+            if (hasDailyHistory(existing)) histories[chainId] = existing;
+        }
+        if (typeof messaging?.getNativePricesRequest !== 'function') {
+            setHistoryByKey((current) => ({
+                ...current,
+                [historyRequestKey]: { histories, loading: false, error: null },
+            }));
+            return () => { historyRequests.current.delete(historyRequestKey); };
+        }
+        setHistoryByKey((current) => ({
+            ...current,
+            [historyRequestKey]: { histories: { ...histories }, loading: true, error: null },
+        }));
+
+        const publish = () => {
+            if (cancelled) return;
+            setHistoryByKey((current) => ({
+                ...current,
+                [historyRequestKey]: { histories: { ...histories }, loading: false, error: null },
+            }));
+        };
+        const requestHistories = async (chainIds) => {
+            let response = null;
+            try {
+                response = await messaging.getNativePricesRequest({
+                    chainIds,
+                    includeHistory: true,
+                    fiatCurrency,
+                });
+            } catch {
+                // A refused history request is treated as missing data so the
+                // partial chart and bounded retry path remain available.
+            }
+            if (cancelled) return;
+            for (const chainId of chainIds) {
+                const received = response?.prices?.[chainId]?.historyDaily;
+                if (hasDailyHistory(received)) histories[chainId] = received;
+            }
+            publish();
+            const missing = historyChainIds.filter((chainId) => !hasDailyHistory(histories[chainId]));
+            if (missing.length === 0 || retryIndex >= HISTORY_RETRY_BACKOFF_MS.length) return;
+            const delay = HISTORY_RETRY_BACKOFF_MS[retryIndex];
+            retryIndex += 1;
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                requestHistories(missing);
+            }, delay);
+        };
+        requestHistories(historyChainIds);
+        return () => {
+            cancelled = true;
+            if (retryTimer !== null) clearTimeout(retryTimer);
+            historyRequests.current.delete(historyRequestKey);
+        };
+    }, [fiatCurrency, historyChainKey, historyRequestKey, isDemo, messaging, range.source]); // eslint-disable-line react-hooks/exhaustive-deps
+    const historyState = historyByKey[historyRequestKey];
+    const effectivePriceMap = useMemo(() => {
+        if (!historyState) return basePriceMap;
+        const merged = { ...basePriceMap };
+        for (const chainId of historyChainIds) {
+            const nextHistory = historyState.histories[chainId];
+            const lastGoodHistory = basePriceMap?.[chainId]?.historyDaily;
+            merged[chainId] = {
+                ...(basePriceMap?.[chainId] || {}),
+                historyDaily: hasDailyHistory(nextHistory) ? nextHistory : (lastGoodHistory ?? null),
+            };
+        }
+        return merged;
+    }, [basePriceMap, historyChainKey, historyState]); // eslint-disable-line react-hooks/exhaustive-deps
+    const dailyHistorySelected = !isDemo && range.source === 'daily' && historyChainIds.length > 0;
+    const dailyHistoryLoading = dailyHistorySelected
+        && (!historyState || historyState.loading);
+    const priceLoading = (nativePriceMap === undefined ? fetchedPriceLoading : Boolean(nativePricesLoading))
+        || dailyHistoryLoading;
+    const priceError = (nativePriceMap === undefined ? fetchedPriceError : nativePricesError)
+        || (dailyHistorySelected ? historyState?.error : null);
 
     // A demo wallet's id is a fresh UUID on every demo session, and the
     // synthesized walk below is seeded by it, so the demo chart (and the
@@ -166,6 +265,25 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
 
     const hasData = Array.isArray(series) && series.length > 0;
     const hasBalance = (rows || []).some((row) => hasNonZeroQuantity(row));
+    const missingCoinNames = useMemo(() => {
+        if (isDemo || !hasData) return [];
+        const names = [];
+        const seen = new Set();
+        for (const row of rows || []) {
+            if (row?.kind !== 'native') continue;
+            const current = fiatValueOf(row);
+            if (current === null || !Number.isFinite(current) || current <= 0) continue;
+            if (seriesForRow(row, current, effectivePriceMap, seedId, range, false)) continue;
+            const name = String(row.displayName || row.name || row.coin || row.tick || '').trim();
+            if (!name || seen.has(name)) continue;
+            seen.add(name);
+            names.push(name);
+        }
+        return names;
+    }, [effectivePriceMap, hasData, isDemo, range, rows, seedId]);
+    const missingCoinsNotice = missingCoinNames.length > 0
+        ? t('components.portfolioChart.missingCoins', { coins: formatCoinList(missingCoinNames) })
+        : '';
 
     const { delta, pct } = useMemo(() => {
         if (!hasData) return { delta: null, pct: null };
@@ -238,8 +356,11 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                         <div className={styles.placeholder}>{t('components.portfolioChart.noPriceHistoryForThis')}</div>
                     )}
                 </div>
+                <div className={styles.missingNotice} aria-hidden={missingCoinsNotice ? undefined : 'true'}>
+                    {missingCoinsNotice}
+                </div>
             </div>
-            <div className={styles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
+            <div className={`${styles.ranges} ${styles.rangesSpread}`} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
                 {ranges.map((r) => (
                     <button
                         key={r.id}
@@ -249,10 +370,10 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                         aria-selected={r.id === range.id ? 'true' : 'false'}
                         aria-controls={chartPanelId}
                         tabIndex={r.id === range.id ? 0 : -1}
-                        className={`${styles.range} ${r.id === range.id ? styles.rangeActive : ''}`}
+                        className={`${styles.range} ${styles.rangeSlot} ${r.id === range.id ? styles.rangeActive : ''}`}
                         onClick={() => setRangeId(r.id)}
                     >
-                        {r.label}
+                        <span className={styles.rangeLabel}>{r.label}</span>
                     </button>
                 ))}
             </div>
@@ -279,11 +400,26 @@ function buildPortfolioSeries(rows, priceMap, seedId, range, synthesize) {
     return anyContrib ? sums : null;
 }
 
+function hasDailyHistory(value) {
+    return Array.isArray(value) && value.length >= 2;
+}
+
+function formatCoinList(names) {
+    try {
+        if (typeof Intl?.ListFormat === 'function') {
+            return new Intl.ListFormat(getLocale(), { style: 'long', type: 'conjunction' }).format(names);
+        }
+    } catch {
+        // A runtime without this locale or API falls back to a stable join.
+    }
+    return names.join(', ');
+}
+
 function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
-    // Native row + real CoinGecko sparkline → scale into the row's
+    // Native row + real CoinGecko history -> scale into the row's
     // current fiat value. The series always ends at `current`, so the
     // summed chart's last point equals the portfolio total exactly.
-    if (range.realCapable && row.kind === 'native' && row.chainId) {
+    if (row.kind === 'native' && row.chainId) {
         const resampled = priceHistoryForRange(priceMap?.[row.chainId], range);
         if (resampled) {
             const last = resampled[resampled.length - 1];
@@ -305,14 +441,52 @@ function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     return sparkline;
 }
 
-export function priceHistoryForRange(entry, range) {
-    if (!range?.realCapable || !Array.isArray(entry?.sparkline)) return null;
-    const finite = entry.sparkline.filter((point) => Number.isFinite(point) && point > 0);
-    if (finite.length === 0) return null;
-    const source = range.id === '24h'
-        ? finite.slice(-Math.min(range.points, finite.length))
-        : finite;
-    return resampleTo(source, range.points);
+const MONTHS_BACK = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 };
+
+// The daily series has one point at 00:00 UTC per day. A window opens on a
+// calendar day of the device's own calendar (1 January for YTD), and starts
+// at that day's 00:00 UTC point, so the first day is kept in every timezone.
+// A month back from the 31st lands on the earlier month's last day.
+export function rangeWindowStart(rangeId, now) {
+    if (rangeId === 'all') return -Infinity;
+    const at = new Date(now);
+    if (!Number.isFinite(at.getTime())) return Number.NaN;
+    const year = at.getFullYear();
+    let month = at.getMonth();
+    let day = at.getDate();
+    if (rangeId === 'ytd') {
+        month = 0;
+        day = 1;
+    } else if (MONTHS_BACK[rangeId]) {
+        month -= MONTHS_BACK[rangeId];
+        day = Math.min(day, new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
+    } else {
+        return Number.NaN;
+    }
+    return Date.UTC(year, month, day);
+}
+
+export function priceHistoryForRange(entry, range, now = Date.now()) {
+    if (range?.source === 'hourly') {
+        if (!Array.isArray(entry?.sparkline)) return null;
+        const finite = entry.sparkline.filter((point) => Number.isFinite(point) && point > 0);
+        if (finite.length === 0) return null;
+        const source = range.id === '24h'
+            ? finite.slice(-Math.min(range.points, finite.length))
+            : finite;
+        return resampleTo(source, range.points);
+    }
+    if (range?.source !== 'daily' || !Array.isArray(entry?.historyDaily)) return null;
+    const start = rangeWindowStart(range.id, now);
+    const prices = entry.historyDaily
+        .filter((point) => Array.isArray(point)
+            && Number.isFinite(point[0])
+            && Number.isFinite(point[1])
+            && point[1] > 0
+            && point[0] >= start)
+        .map((point) => point[1]);
+    if (prices.length < 2) return null;
+    return resampleTo(prices, range.points);
 }
 
 // Linear resample of `src` onto `n` evenly-spaced points. Used when a

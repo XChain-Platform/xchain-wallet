@@ -24,9 +24,39 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/demo.js';
 import '../../i18n/locales/en/send.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { demoMessaging } from '../../flows/demoFixtures.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { useMessaging } from '../useMessaging.js';
+
+/**
+ * Select the wallet's read source once so views never branch on wallet kind.
+ * Live capabilities stay explicit because polling and proof traffic must not
+ * run against sample data, while every ordinary read follows the same path.
+ *
+ * @param {string | null | undefined} walletId
+ * @returns {{ messaging: Record<string, any>, live: boolean, canSpend: boolean, pricesTestCoins: boolean }}
+ */
+export function useWalletSource(walletId) {
+    const { messaging } = useMessaging();
+    const sampleMessaging = useMemo(() => demoMessaging(messaging), [messaging]);
+    return useMemo(() => {
+        if (walletId && isDemoWallet(walletId)) {
+            return {
+                messaging: sampleMessaging,
+                live: false,
+                canSpend: false,
+                pricesTestCoins: true,
+            };
+        }
+        return {
+            messaging,
+            live: true,
+            canSpend: true,
+            pricesTestCoins: false,
+        };
+    }, [messaging, sampleMessaging, walletId]);
+}
 
 /**
  * @param {string | null | undefined} walletId

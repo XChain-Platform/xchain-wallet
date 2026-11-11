@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // useNativeFee (PC-51): the one place a form keeps its "pay the protocol
-// fee in the native coin" setting. Every quotable authoring form mounts
+// fee in the native coin" setting. Every fee-bearing authoring form mounts
 // the same NativeFeeToggle and must thread the SAME flag through up to
 // three submit paths (legacy submit, compose preview, watcher
 // encode-only); before this hook each form re-implemented the state and

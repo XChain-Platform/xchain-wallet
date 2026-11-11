@@ -8,18 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, Checkbox, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { AddressField, AddressText, Button, Checkbox, FeeSelector, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { TokenField } from '../components/TokenField.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import inputStyles from '../../ui/Input.module.css';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
 import {
     estimateNativeSendFee,
@@ -35,7 +37,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
@@ -138,6 +140,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // The token's ISSUE action index (the LINK's second leg). Fetched
     // from the same genesis endpoint ManageToken renders.
@@ -308,11 +311,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
 
-    // PC-51: native-coin protocol fee; every leg this form signs
-    // (FILE artwork, LINK, FILE token-info, ISSUE v1 describe) is quotable,
-    // so the one opt-in rides all of them. Authoritative price check runs
-    // at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for these feeless actions.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -450,6 +451,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
         return out;
     }
+
+    const fileFieldLabelId = useId();
+    const fileLimitId = useId();
 
     const previewUrl = useMemo(
         () => imagePreviewDataUrl(fileMeta?.bytes),
@@ -889,7 +893,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the network.`}
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -927,7 +931,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
                 </div>
             </>,
         );
@@ -957,7 +961,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (keep waiting)</Button>
                 </div>
             </>,
         );
@@ -974,12 +978,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                        <Button variant="ghost" type="button" icon={<Icon.XIcon />} onClick={() => setStage('done')} disabled={submitting}>
                             Skip (artwork only)
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.UploadIcon />}
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -1046,12 +1051,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                        <Button variant="ghost" type="button" icon={<Icon.XIcon />} onClick={() => setStage('done')} disabled={submitting}>
                             Skip
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.PencilIcon />}
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -1117,6 +1123,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         <Button
                             variant="ghost"
                             type="button"
+                            icon={<Icon.BackIcon />}
                             onClick={(event) => {
                                 event.preventDefault();
                                 setStage('compose');
@@ -1127,7 +1134,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.UploadIcon />}
                             loading={submitting}
                             disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -1215,7 +1223,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.LinkIcon />}
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
@@ -1267,6 +1276,32 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         );
     }
 
+    // The token lives on one chain, so the picker stays on it: an address
+    // from another chain could never sign this token's LINK.
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    setFromAddressId(address.id);
+                    setFormError(null);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    // The live cap under the chooser: the title and memo share the file's
+    // on-chain record, so every character typed there lowers it.
+    const fileLimitBytes = fileMeta
+        ? attachmentCapFor(fileMeta.name, fileMeta.type)
+        : attachmentCapFor('file.bin', 'application/octet-stream');
+
     // stage === 'compose' (also the fallback if review stages lose
     // their prerequisites, e.g. addresses reloaded)
     return wrapForm(
@@ -1280,38 +1315,76 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
                     disabled={genesisRefreshing || issuerEligibility.pending || !!issuerEligibility.error}
                 >
-                    Review upload
+                    Attach artwork
                 </Button>
             )}
         >
-            <p className={styles.summary}>
-                Store the artwork on the chain itself and link it to {tick}.
-                Two signatures: one to upload the file, one to make it
-                official.
-            </p>
-            <div
-                {...drop.rootProps}
-                style={{ marginBottom: 'var(--xc-space-3)' }}
-            >
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={ARTWORK_ACCEPT.join(',')}
-                    onChange={handleFilePick}
-                    style={{ display: 'none' }}
-                    aria-label="Choose file to attach"
-                />
-                <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => fileInputRef.current?.click()}
+            <NetworkField
+                label="Network"
+                help={`The chain ${tick} lives on. The artwork is stored and linked on this network, and your From address pays both fees here.`}
+                value={chainId}
+                onChange={() => {}}
+                chainIds={chainId ? [chainId] : []}
+                chainRegistry={chainRegistry}
+            />
+            <AddressField
+                label="From"
+                help={`The address that signs both the upload and the link. Only ${tick}'s current owner can make the artwork official, so pick the owner address.`}
+                icon="addresses"
+                value={fromAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose source address"
+            />
+            {/* Opened from one token's Manage page, so the token is fixed. */}
+            <TokenField
+                label="Token"
+                help="The token this artwork belongs to. It is fixed because you opened Artwork from this token's page."
+                value={chainId && tick ? { chainId, tick } : null}
+                onOpenPicker={() => {}}
+                disabled
+            />
+            <div className={inputStyles.field}>
+                <div className={inputStyles.labelRow}>
+                    <span id={fileFieldLabelId} className={inputStyles.label}>Artwork file</span>
+                    <InfoTip
+                        className={inputStyles.labelHelp}
+                        label={`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best. For larger artwork, put an image URL in the token's description instead.`}
+                        aria="About Artwork file"
+                    />
+                </div>
+                <div
+                    {...drop.rootProps}
+                    role="group"
+                    aria-labelledby={fileFieldLabelId}
+                    aria-describedby={fileLimitId}
                 >
-                    {fileMeta ? 'Choose a different file' : 'Choose a file'}
-                </Button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={ARTWORK_ACCEPT.join(',')}
+                        onChange={handleFilePick}
+                        style={{ display: 'none' }}
+                        aria-label="Choose file to attach"
+                    />
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<Icon.DocumentIcon />}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        {fileMeta ? 'Choose a different file' : 'Choose a file'}
+                    </Button>
+                </div>
+                <div id={fileLimitId} className={inputStyles.hint}>
+                    Up to {fileLimitBytes.toLocaleString()} bytes with the current title and memo.
+                </div>
             </div>
             {fileMeta ? (
                 <dl className={styles.detailsList}>
@@ -1322,15 +1395,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Size</dt>
                     <dd className={styles.detailsValue}>{(fileMeta.bytes.length / 1024).toFixed(1)} KB</dd>
                 </dl>
-            ) : (
-                <p className={styles.hint}>
-                    Keep it small. With the current title and memo, this file
-                    can be up to {attachmentCapFor('file.bin', 'application/octet-stream').toLocaleString()} bytes. A compact
-                    image (SVG, small PNG/JPEG/WebP) works best. For larger
-                    artwork, put an image URL in the token's description
-                    instead.
-                </p>
-            )}
+            ) : null}
             {previewUrl ? (
                 <img
                     src={previewUrl}
@@ -1343,16 +1408,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 />
             ) : null}
             <Input
-                label="Title (optional)"
-                hint="A short label stored with the file."
+                label="Title"
+                optional
+                help={`A short name for the artwork, stored on the chain with the file. If you also make it ${tick}'s picture, it becomes the token's display name. Every character here takes room from the file. It cannot contain | or ;.`}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoComplete="off"
                 maxLength={MAX_TITLE_LENGTH}
             />
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A public note stored on the chain with the artwork file. Every character here takes room from the file. It cannot contain | or ;."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
@@ -1360,18 +1428,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             <Checkbox
                 label={(
                     <>
-                        Also make this {tick}'s picture everywhere. This stores the
-                        token's info on the chain and points its description at
-                        it (two more signatures)
+                        Also make this {tick}'s picture everywhere
                         {fileMeta && !previewUrl ? '. Choose an image file to enable this option.' : ''}
                     </>
                 )}
+                help="Stores the token's info on the chain and points its description at it, so this becomes the token's picture everywhere. It takes two more signatures."
                 checked={setAsTokenInfo}
                 onChange={(e) => setSetAsTokenInfo(e.target.checked)}
                 disabled={Boolean(fileMeta && !previewUrl)}
             />
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -1380,7 +1448,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
         </FormPage>,
     );
 }

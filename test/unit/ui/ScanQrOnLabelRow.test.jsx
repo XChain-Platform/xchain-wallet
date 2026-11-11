@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The transaction scan control is a QR icon button on the field's label row,
-// never a text button inside the paste box or in the row below it.
+// The transaction scan control is a plain QR icon inside the paste field,
+// never a filled button on the label row or in the row below it.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -56,17 +56,12 @@ function mount() {
     );
 }
 
-/** True when node a comes before node b in document order. */
-function precedes(a, b) {
-    return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-}
-
 afterEach(() => {
     cleanup();
 });
 
-describe('Scan transaction sits on the paste field label row', () => {
-    it('renders an icon-only scan button beside the label, outside the box and the row below', async () => {
+describe('Scan transaction sits inside the paste field', () => {
+    it('renders an icon-only scan button inside the control and outside the label row', async () => {
         mount();
         const textarea = await screen.findByRole('textbox', { name: 'Unsigned transaction code' });
         const label = document.querySelector(`label[for="${textarea.id}"]`);
@@ -76,13 +71,11 @@ describe('Scan transaction sits on the paste field label row', () => {
         const scan = screen.getByRole('button', { name: 'Scan transaction' });
         expect(scan.textContent.trim()).toBe('');
         expect(scan.querySelector('svg')).not.toBeNull();
-        expect(label.parentElement.contains(scan)).toBe(true);
         expect(label.contains(scan)).toBe(false);
-
-        // Not drawn inside the box or under it: the control precedes the
-        // textarea in document order and no in-box actions wrapper exists.
-        expect(precedes(scan, textarea)).toBe(true);
-        expect(textarea.parentElement.contains(label)).toBe(true);
+        expect(textarea.parentElement.contains(scan)).toBe(true);
+        expect(textarea.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(scan).toHaveAttribute('aria-pressed', 'false');
         // Not in the row below the box, which keeps the file browse action.
         const browse = screen.getByRole('button', { name: /Browse for \.psbt file/ });
         expect(browse.parentElement.contains(scan)).toBe(false);
@@ -96,31 +89,30 @@ describe('Scan transaction sits on the paste field label row', () => {
         await waitFor(() => expect(screen.getByTestId('fake-psbt-scanner')).toBeTruthy());
         const close = screen.getByRole('button', { name: 'Close scanner' });
         expect(close.textContent.trim()).toBe('');
+        expect(close).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(close);
         await waitFor(() => expect(screen.queryByTestId('fake-psbt-scanner')).toBeNull());
         expect(screen.getByRole('button', { name: 'Scan transaction' })).toBeTruthy();
     });
 });
 
-describe('Textarea labelAction slot', () => {
-    it('renders the slot on the label row and leaves the box without an actions strip', () => {
+describe('Textarea fieldAction slot', () => {
+    it('renders the slot inside the control and leaves the bottom actions strip absent', () => {
         render(
             <Textarea
                 label="Notes"
                 value=""
                 onChange={() => {}}
-                labelAction={<button type="button" aria-label="Scan notes" />}
+                fieldAction={<button type="button" aria-label="Scan notes" />}
             />,
         );
         const textarea = screen.getByRole('textbox', { name: 'Notes' });
         const label = document.querySelector(`label[for="${textarea.id}"]`);
         const action = screen.getByRole('button', { name: 'Scan notes' });
-        expect(label.parentElement.contains(action)).toBe(true);
         expect(label.contains(action)).toBe(false);
-        // No in-box actions wrapper: the textarea sits directly in the field
-        // column beside the label row, and the slot precedes it.
-        expect(textarea.parentElement.contains(label)).toBe(true);
-        expect(precedes(action, textarea)).toBe(true);
+        expect(textarea.parentElement.contains(action)).toBe(true);
+        expect(textarea.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
         expect(textarea.style.resize).toBe('vertical');
     });
 });

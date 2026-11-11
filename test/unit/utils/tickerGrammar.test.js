@@ -25,7 +25,8 @@ import {
     ALLOWED_TICKER_CHARACTERS,
     MAX_TICKER_LENGTH,
     MIN_TICKER_LENGTH,
-    TICKER_HINT,
+    TICKER_HELP,
+    TICKER_LIMIT,
     isAuthorableTicker,
     tickerGrammarError,
     tickerReferenceError,
@@ -59,8 +60,8 @@ describe('ticker grammar', () => {
         it('discloses the rule without promising uppercase', () => {
             // The old hint said "A-Z, 0-9. Uppercase.", which was the only
             // disclosure a user got that the field rewrote what they typed.
-            expect(TICKER_HINT).not.toMatch(/uppercase/i);
-            expect(TICKER_HINT).toMatch(/250/);
+            expect(TICKER_HELP).not.toMatch(/uppercase/i);
+            expect(TICKER_LIMIT).toBe('Up to 250 characters.');
         });
     });
 

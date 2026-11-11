@@ -6,10 +6,19 @@
 }
 
 .tabsRow {
+    /* What the row gives to controls beside the tabs; the narrow sizing
+       below leaves it out of the room the labels can use. */
+    --home-tabs-aside: 0px;
     display: flex;
     align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+/* The list filter button (U72) shares the row: one square control and the
+   row gap. */
+.tabsRowWithFilter {
+    --home-tabs-aside: calc(var(--xc-control-h-md) + var(--xc-space-2));
 }
 
 .tabsRow > [role='tablist'] {
@@ -22,47 +31,7 @@
     white-space: nowrap;
 }
 
-.sortControl {
-    display: flex;
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-    height: var(--xc-control-h-md);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.sortCompactValue,
-.sortCompactIcon {
-    display: none;
-}
-
-.sortSelect {
-    height: 100%;
-    min-height: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    font: inherit;
-}
-
-.sortSelect:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
 @media not all and (min-width: 600px) {
-    .tabsRow {
-        flex-direction: column;
-        gap: var(--xc-space-2);
-    }
-
     /* The tab row has the whole width here. The five labels take about
        16.4em at the tab font size on the widest text rendering a platform
        gives Inter (hinted, whole-pixel advances run several percent wider
@@ -80,8 +49,8 @@
         }
 
         .tabsRow [role='tab'] {
-            font-size: min(var(--xc-text-sm), calc((100cqw - 10px) / 16.4));
-            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 16.4em) / 10), var(--xc-space-3));
+            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 10px) / 16.4));
+            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - var(--home-tabs-aside) - 16.4em) / 10), var(--xc-space-3));
         }
     }
 
@@ -89,66 +58,6 @@
         width: 100%;
     }
 
-    .sortControl {
-        align-self: flex-end;
-    }
-}
-
-@media (max-width: 420px) {
-    .sortControl {
-        position: relative;
-        justify-content: center;
-        gap: var(--xc-space-1);
-        padding: 0 var(--xc-space-2);
-        border: 1px solid var(--xc-border-strong);
-        border-radius: var(--xc-control-radius);
-        background: var(--xc-surface);
-        color: var(--xc-text);
-    }
-
-    .sortControl:focus-within {
-        outline: 2px solid var(--xc-focus-ring);
-        outline-offset: -2px;
-    }
-
-    /* The "Sort balances" label stays visible here: the sort control sits on
-       its own row under the tabs below 600px, so there is room for it at every
-       phone width, and a bare value with a chevron did not say what it sorted. */
-    .sortLabel {
-        color: var(--xc-text-muted);
-        white-space: nowrap;
-    }
-
-    .sortCompactValue,
-    .sortCompactIcon {
-        display: inline-flex;
-        align-items: center;
-        pointer-events: none;
-    }
-
-    .sortCompactIcon {
-        width: var(--xc-control-icon-sm, var(--xc-icon-sm));
-        height: var(--xc-control-icon-sm, var(--xc-icon-sm));
-    }
-
-    .sortCompactIcon > svg {
-        width: 100%;
-        height: 100%;
-    }
-
-    .sortSelect {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        min-height: 0;
-        opacity: 0;
-        cursor: pointer;
-        font-size: 16px;
-    }
-
-    .sortSelect:focus-visible {
-        outline: none;
-    }
 }
 
 /* ───── Tab panel ───── */

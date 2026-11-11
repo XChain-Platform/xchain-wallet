@@ -134,9 +134,9 @@ describe('ListTransferForm lays out every non-signing state through FormPage', (
 
     it('keeps the submitted panel and its Done step inside the FormPage template', async () => {
         const { container, messaging } = mountTransfer();
-        fireEvent.change(await screen.findByLabelText('Destination'), { target: { value: DESTINATION } });
+        fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: DESTINATION } });
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'TRANSFER' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Transfer list' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve.disabled).toBe(false));
         fireEvent.click(approve);

@@ -22,11 +22,17 @@ const SAMPLE_TIERS = {
     unit:   'sat/vB',
 };
 
-// Doc-page fiat stub. In-app the caller passes a real formatter that
-// converts the coin amount to the user's display currency via the price
-// oracle. Here a fixed BTC rate keeps the readout figure realistic.
-const formatFiat = (coinAmount) =>
-    `$${(parseFloat(coinAmount) * 60000).toFixed(2)} USD`;
+// In the app FeeSelector reads the chain's fiat rate itself; the style guide
+// has no wallet session behind it, so the live examples pass a fixed sample
+// rate (64,000 USD per BTC) through the same fiat prop a Fees card uses.
+const SAMPLE_FIAT = {
+    formatNativeFee: (amount) => {
+        const value = Number(amount) * 64000;
+        return value > 0 ? `~${value.toFixed(2)}` : null;
+    },
+    formatProtocolFee: () => null,
+    formatFeeTotal: () => null,
+};
 
 // Recompute a fee estimate from the user-typed Custom rate so the fee
 // amount + fiat keep showing in Custom mode. In-app this is what Send
@@ -54,14 +60,14 @@ export function FeeSelectorSection() {
             kicker="Low / Normal / Fast slider (optionally with Custom) over a native range input, styled with accent-color. Used anywhere the user expresses a fee preference: Send (typing the rate), Receive (encoding a preference into the QR), Settings defaults, etc."
         >
             <Guidance
-                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>. A header row carries the label (left) and the active tier's ETA (right); the readout below the track shows the fee amount + coin ticker + fiat (left) and the rate / Custom input (right). Both readout figures support direct editing when <code>allowCustom</code>: selecting the rate opens the Custom rate input seeded with the active tier's rate, and selecting the fee amount opens an exact-fee input (the typed fee is converted to the equivalent rate internally, so <code>onChange</code> still emits <code>{'{ mode: \'custom\', customRate }'}</code>). Either edit snaps the slider to the Custom stop. Tick labels are positioned under each slider nub. Renders a placeholder ("Fee estimate unavailable for this network.") when no <code>tiers</code> are passed.</>}
+                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>. A header row carries the label (left) and the active tier's ETA (right); the readout below the track shows the fee amount + coin ticker + fiat (left) and the rate / Custom input (right). Both readout figures support direct editing when <code>allowCustom</code>: selecting the rate opens the Custom rate input seeded with the active tier's rate, and selecting the fee amount opens an exact-fee input (the typed fee is converted to the equivalent rate internally, so <code>onChange</code> still emits <code>{'{ mode: \'custom\', customRate }'}</code>). Either edit snaps the slider to the Custom stop. Tick labels are positioned under each slider nub. When no <code>tiers</code> are available, the chain-specific Custom rate input stays available.</>}
                 when={<>Any form that submits a transaction or encodes a fee preference. Always use this (never build a one-off fee picker). Pulling tiers from <code>estimateNativeSendFeeTiers</code> (sync seed) + <code>fetchNativeSendFeeTiers</code> (live SDK upgrade) gives the consistent BTC/LTC/DOGE handling.</>}
                 whenNot={<>Settings panels that store the user's default fee strategy use a simpler radio group (Low/Normal/Fast/Custom) rather than this slider. The slider implies "this transaction" intent; settings imply "future transactions".</>}
                 variants={<>
                     <code>allowCustom</code> (default <code>true</code>, set <code>false</code> on Receive to omit the Custom stop, the sat/vB input, and both click-to-edit readout affordances). <code>label</code> renders inside the wrap so the label-to-slider gap matches the internal rhythm; don't pair the component with an external label. <code>disabled</code> for read-only review states.
                 </>}
                 doRule={<>✓ Always pull tiers via the feeEstimate helpers · use <code>allowCustom={'{false}'}</code> on receive-style flows (custom sat/vB ages out before the QR is scanned) · pass the <code>label</code> prop instead of wrapping the component in your own labeled container</>}
-                dontRule={<>✗ Build your own tier picker · hard-code rates inline · hide the placeholder when tiers fail to load (leaving the slot empty makes the affordance undiscoverable)</>}
+                dontRule={<>✗ Build your own tier picker · hard-code rates inline · hide the Custom input when tiers fail to load</>}
                 supersedes={<>Any inline tier picker. The component lives at <code>packages/core/src/ui/FeeSelector.jsx</code>; the tier-fetch helpers at <code>packages/core/src/flows/feeEstimate.js</code>.</>}
             />
 
@@ -83,52 +89,57 @@ useEffect(() => {
 }, [chainId, messaging]);
 
 <FeeSelector
+    chainId={chainId}
     label="Network fee"
     tiers={feeTiers}
     value={feePick}
     onChange={setFeePick}
     coinTicker={coinTicker}  // BTC / LTC / DOGE, shown after the fee
-    formatFiat={formatFiat}  // coin amount -> display-currency string
     allowCustom={false}      // omit / true on Send; false on Receive
 />`}
             </Markup>
 
             <LiveExample label="Send variant: Low / Normal / Fast / Custom. Select the fee amount or the rate to edit it directly; either edit jumps the slider to Custom.">
                 <FeeSelector
+                    chainId="bitcoin-mainnet"
+                    fiat={SAMPLE_FIAT}
                     tiers={SAMPLE_TIERS}
                     value={sendPick}
                     onChange={setSendPick}
                     customEstimate={sendPick.mode === 'custom' ? customEstimateFor(sendPick) : null}
                     coinTicker="BTC"
-                    formatFiat={formatFiat}
                 />
             </LiveExample>
 
             <LiveExample label="Receive variant: Low / Normal / Fast (no Custom)">
                 <FeeSelector
+                    chainId="bitcoin-mainnet"
+                    fiat={SAMPLE_FIAT}
                     tiers={SAMPLE_TIERS}
                     value={receivePick}
                     onChange={setReceivePick}
                     allowCustom={false}
                     coinTicker="BTC"
-                    formatFiat={formatFiat}
                 />
             </LiveExample>
 
             <LiveExample label="With inline label: Network fee + ETA on the label line, fee + fiat below">
                 <FeeSelector
+                    chainId="bitcoin-mainnet"
+                    fiat={SAMPLE_FIAT}
                     label="Network fee"
                     tiers={SAMPLE_TIERS}
                     value={labeledPick}
                     onChange={setLabeledPick}
                     customEstimate={labeledPick.mode === 'custom' ? customEstimateFor(labeledPick) : null}
                     coinTicker="BTC"
-                    formatFiat={formatFiat}
                 />
             </LiveExample>
 
-            <LiveExample label="No tiers available: built-in placeholder">
+            <LiveExample label="No tiers available: Custom rate input">
                 <FeeSelector
+                    chainId="bitcoin-mainnet"
+                    fiat={SAMPLE_FIAT}
                     tiers={null}
                     value={{ mode: 'normal' }}
                     onChange={() => {}}

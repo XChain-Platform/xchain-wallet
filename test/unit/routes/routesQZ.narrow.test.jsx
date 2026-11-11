@@ -84,7 +84,7 @@ describe('Q through Z routes at a 320px viewport', () => {
             { listAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Rename account' })).toBeEnabled();
         expectNoFixedWidthBeyondViewport(container);
     });
 

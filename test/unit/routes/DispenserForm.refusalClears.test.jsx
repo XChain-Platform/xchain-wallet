@@ -92,7 +92,7 @@ async function pickAddress(utils, address) {
 
 async function refuseCreate(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Create dispenser' }));
         await drainMicrotasks();
     });
     expect(utils.getByText(/network would refuse a dispenser at this address/i)).toBeInTheDocument();

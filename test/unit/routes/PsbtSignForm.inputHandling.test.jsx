@@ -166,7 +166,7 @@ describe('PSBT review validation', () => {
             }),
         }));
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
@@ -178,6 +178,12 @@ describe('PSBT review validation', () => {
 });
 
 describe('PSBT form input controls', () => {
+    it('shows help for the transaction network', async () => {
+        mount();
+
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+    });
+
     it.each([
         [`${PSBT_HEX}0`, /complete byte pairs/i],
         ['cHNidP8!', /base64 is incomplete or malformed/i],
@@ -185,7 +191,7 @@ describe('PSBT form input controls', () => {
         const messaging = mount();
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
 
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value } });
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value } });
 
         const alerts = screen.getAllByRole('alert');
         expect(alerts).toHaveLength(1);
@@ -218,7 +224,7 @@ describe('PSBT form input controls', () => {
     ])('shows one plain error for malformed transaction file %s and never signs', async (value, name) => {
         const messaging = mount();
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const input = screen.getByLabelText(/Unsigned transaction/);
+        const input = screen.getByLabelText('Unsigned transaction code');
 
         fireEvent.drop(input, {
             dataTransfer: {
@@ -234,7 +240,7 @@ describe('PSBT form input controls', () => {
     it('rejects an oversized transaction file before reading or signing it', async () => {
         const messaging = mount();
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const input = screen.getByLabelText(/Unsigned transaction/);
+        const input = screen.getByLabelText('Unsigned transaction code');
         fireEvent.change(input, { target: { value: PSBT_HEX } });
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/this transaction has no inputs/i));
 
@@ -254,8 +260,8 @@ describe('PSBT form input controls', () => {
         const messaging = mount();
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_BASE64 },
         });
 
@@ -276,8 +282,8 @@ describe('PSBT form input controls', () => {
         }));
         const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         fireEvent.click(picker);
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
@@ -296,7 +302,7 @@ describe('PSBT form input controls', () => {
             }),
         }));
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: PSBT_HEX },
         });
 
@@ -315,7 +321,7 @@ describe('PSBT form input controls', () => {
             }),
         }));
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), {
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), {
             target: { value: FINALIZED_PSBT_HEX },
         });
 
@@ -344,7 +350,7 @@ describe('PSBT form input controls', () => {
         }
 
         await waitFor(() => expect(screen.queryByTestId('fake-psbt-scan')).toBe(null));
-        expect(screen.getByLabelText(/Unsigned transaction/).value).toBe(PSBT_HEX);
+        expect(screen.getByLabelText('Unsigned transaction code').value).toBe(PSBT_HEX);
     });
 });
 
@@ -381,7 +387,7 @@ describe('PSBT signature type review', () => {
             }),
         }));
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT_HEX } });
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_HEX } });
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Input 1 asks for a signature that leaves part of the transaction open to change after you sign.',

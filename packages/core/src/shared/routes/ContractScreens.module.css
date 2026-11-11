@@ -16,6 +16,13 @@
     margin-bottom: 0;
 }
 
+/* The filter row shares one control size (U07): the small buttons beside the
+   small search field take the control font token the field uses, not the
+   compact chip text. The doubled class outranks the Button size class. */
+.toolbarControl.toolbarControl {
+    --xc-button-font-size: var(--xc-control-font-sm);
+}
+
 .chainFilters {
     display: flex;
     flex-wrap: wrap;

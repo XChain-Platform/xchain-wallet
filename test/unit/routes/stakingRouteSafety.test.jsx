@@ -98,7 +98,7 @@ describe('staking route request safety', () => {
 
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Review stake' }));
         expect(await screen.findByText(/Stake 1 XCHAIN for signing public key/)).toBeInTheDocument();
 
         await act(async () => {
@@ -131,7 +131,7 @@ describe('staking route request safety', () => {
         const view = render(app(child, first));
 
         await screen.findByText('10 XCHAIN available');
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review claim rewards' }));
         expect(await screen.findByText('10 XCHAIN (full pending rewards)')).toBeInTheDocument();
 
         view.rerender(app(child, second));

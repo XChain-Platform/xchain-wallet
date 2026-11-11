@@ -363,6 +363,9 @@ export function measureInPage(opts = {}) {
         const LISTY = /(^|_|-)(list|lists|card|cards|table|items|grid|panel|feed|results)(_|-|$)/i;
         const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
         const isCandidate = (el) => {
+            // An icon is never a list, whatever its class says: the Network
+            // field's list icon (U59) is a lucide "layout-list" svg.
+            if (el instanceof SVGElement) return false;
             if (!BLOCK.test(getComputedStyle(el).display)) return false;
             const role = el.getAttribute('role');
             if (role === 'list' || role === 'table' || role === 'grid') return true;
@@ -483,10 +486,19 @@ export function measureControlRows() {
         }
         return document.body;
     };
+    // A label's help tip (U57) belongs to the label line, not to the row of
+    // controls beside it, the way an in-field button belongs to its field
+    // (U53). It is known by its own markup: a button described by an element
+    // whose role is tooltip.
+    const labelHelpTip = (el) => {
+        const describedBy = el.getAttribute('aria-describedby');
+        if (!describedBy || !el.hasAttribute('aria-expanded')) return false;
+        return describedBy.split(/\s+/).some((id) => document.getElementById(id)?.getAttribute('role') === 'tooltip');
+    };
     // Nested interactive markup represents one control even when both the
     // wrapper and its implementation carry an interactive role.
     const controls = [...document.querySelectorAll(selector)].filter((el) => (
-        visible(el) && !el.parentElement?.closest(selector)
+        visible(el) && !el.parentElement?.closest(selector) && !labelHelpTip(el)
     ));
     // A control with no background and no full border draws no box: an
     // underlined text link in a sentence, an underline tab. Its height and
@@ -1263,7 +1275,8 @@ export function measureRulings() {
         if (styled.some((s) => /dotted|dashed/.test(cs[`border${s}Style`]))) {
             cap(out.dashedBorders, { el: desc(el), style: cs.borderTopStyle });
         }
-        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"]')) continue;
+        // An open help tip bubble is a tooltip with its own small radius, not a card (U16 covers cards).
+        if (styled.length !== 4 || el.matches(NOT_CARD) || el.closest('header, nav, [role="dialog"], [role="menu"], [role="tooltip"]')) continue;
         const r = el.getBoundingClientRect();
         if (r.height < 44 || r.width < 120) continue;
         if (parseFloat(cs.borderTopLeftRadius) === 0) continue;

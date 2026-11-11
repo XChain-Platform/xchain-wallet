@@ -29,14 +29,16 @@ import {
     FormErrorSummary,
     FormPage,
     FormSection,
+    Icon,
     Input,
+    PageNotice as Status,
 } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
@@ -253,12 +255,14 @@ export function ConnectedSitesSection() {
                                         })}
                                         size="sm"
                                         variant="secondary"
+                                        icon={isOpen ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                                     >
                                         {isOpen ? t('settings.developer.hide') : t('settings.connectedSites.permissions')}
                                     </Button>
                                     <Button
                                         size="sm"
                                         variant="danger"
+                                        icon={<Icon.UnlinkIcon />}
                                         onClick={() => onDisconnect(site.id)}
                                         loading={pendingAction === `disconnect:${site.id}`}
                                         disabled={pendingAction !== null}
@@ -269,6 +273,7 @@ export function ConnectedSitesSection() {
                                         <Button
                                             size="sm"
                                             variant="danger"
+                                            icon={<Icon.LockIcon />}
                                             onClick={() => onBlock(site.origin)}
                                             loading={pendingAction === `block:${site.origin}`}
                                             disabled={pendingAction !== null}
@@ -359,16 +364,18 @@ function BlocklistAuditPanel({ confirm }) {
 
     if (entries === null) return null;
     return (
-        <SettingsInlineForm error={error}>
-        <FormSection
-            headingLevel="h3"
-            title={t('settings.connectedSites.siteBlockHistory')}
-            description={t('settings.connectedSites.showsThe50MostRecent')}
-        >
+        <SettingsInlineForm>
+            <Status text={error} tone="error" />
+            <FormSection
+                headingLevel="h3"
+                title={t('settings.connectedSites.siteBlockHistory')}
+                description={t('settings.connectedSites.showsThe50MostRecent')}
+            >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                     type="button"
                     onClick={onClear}
+                    icon={<Icon.TrashIcon />}
                     disabled={clearing || entries.length === 0}
                     size="sm"
                     variant="danger"
@@ -425,7 +432,7 @@ function BlocklistAuditPanel({ confirm }) {
                     ))}
                 </ul></SettingsCard>
             )}
-        </FormSection>
+            </FormSection>
         </SettingsInlineForm>
     );
 }
@@ -513,13 +520,13 @@ function SignThrottlePanel() {
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
         <SettingsInlineForm>
-        <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
-        <FormPage
-            onSubmit={onApply}
-            sectioned
-            submitFromAnyField
-            label={t('settings.connectedSites.signRequestThrottleControls')}
-        >
+            <FormPage
+                onSubmit={onApply}
+                status={error ? <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} /> : null}
+                sectioned
+                submitFromAnyField
+                label={t('settings.connectedSites.signRequestThrottleControls')}
+            >
             <FormSection
                 headingLevel="h3"
                 title={t('settings.connectedSites.signRequestThrottle')}
@@ -534,6 +541,7 @@ function SignThrottlePanel() {
                     id="sign-throttle-burst"
                     size="md"
                     label={t('settings.connectedSites.burst')}
+                    help={t('settings.connectedSites.burstHelp')}
                     type="number"
                     inputMode="numeric"
                     enterKeyHint="next"
@@ -555,6 +563,7 @@ function SignThrottlePanel() {
                     id="sign-throttle-window"
                     size="md"
                     label={t('settings.connectedSites.windowSeconds')}
+                    help={t('settings.connectedSites.windowSecondsHelp')}
                     type="number"
                     inputMode="decimal"
                     enterKeyHint="go"
@@ -576,13 +585,14 @@ function SignThrottlePanel() {
                     type="submit"
                     disabled={submitting}
                     size="md"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.CheckIcon />}
                 >
-                    {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.apply')}
+                    {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.applyThrottle')}
                 </Button>
             </div>
             </FormSection>
-        </FormPage>
+            </FormPage>
         </SettingsInlineForm>
     );
 }
@@ -592,14 +602,6 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.blockedSites')}
-            description={(
-                <>
-                    {t('settings.connectedSites.blockPatternLead')}{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom')}</code>{' '}
-                    {t('settings.connectedSites.blockPatternJoin')}{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{t('settings.connectedSites.exampleCom2')}</code>.
-                </>
-            )}
         >
                 {blocked.length === 0 ? (
                     <EmptyState
@@ -621,6 +623,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                     type="button"
                                     size="sm"
                                     variant="secondary"
+                                    icon={<Icon.UnlockIcon />}
                                     onClick={() => onUnblock(origin)}
                                     loading={pendingAction === `unblock:${origin}`}
                                     disabled={pendingAction !== null}
@@ -644,19 +647,21 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
+                        label={t('settings.connectedSites.originOrWildcardToBlock')}
+                        help={t('settings.connectedSites.siteToBlockHelp')}
                         value={manualBlock}
                         onChange={(e) => setManualBlock(e.target.value)}
                         placeholder={t('settings.connectedSites.httpsExampleComOrExample')}
-                        aria-label={t('settings.connectedSites.originOrWildcardToBlock')}
                     />
                     <Button
                         type="submit"
                         size="md"
-                        variant="danger"
+                        variant="success"
+                        icon={<Icon.LockIcon />}
                         loading={pendingAction === 'block:manual'}
                         disabled={!manualBlock.trim() || pendingAction !== null}
                     >
-                        {t('settings.connectedSites.block')}
+                        {t('settings.connectedSites.blockOrigin')}
                     </Button>
                     </div>
                 </FormPage>

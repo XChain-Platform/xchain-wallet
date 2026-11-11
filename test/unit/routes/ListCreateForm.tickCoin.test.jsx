@@ -94,7 +94,7 @@ afterEach(cleanup);
 describe('ListCreateForm coin-qualified ticker items', () => {
     it('keeps legacy parsing and looks up a qualified-looking ticker on the list chain when support is false', async () => {
         const messaging = mount(false);
-        const textarea = await screen.findByLabelText('Tokens (one per line)');
+        const textarea = await screen.findByLabelText('Tokens');
         await waitFor(() => expect(messaging.isListTickCoinActive).toHaveBeenCalledTimes(1));
 
         fireEvent.change(textarea, { target: { value: 'DOGE:PEPE' } });
@@ -111,7 +111,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         const messaging = mount(true, {
             tokenInfo: { creator: null, totalSupply: null, canonicalTick: null },
         });
-        const textarea = await screen.findByLabelText('Tokens (one per line)');
+        const textarea = await screen.findByLabelText('Tokens');
         await waitFor(() => expect(messaging.isListTickCoinActive).toHaveBeenCalledTimes(1));
 
         fireEvent.change(textarea, { target: { value: 'PEPE' } });
@@ -138,12 +138,12 @@ describe('ListCreateForm coin-qualified ticker items', () => {
 
     it('adds a token-picker selection under the selected token chain', async () => {
         const messaging = mount(true);
-        await screen.findByLabelText('Tokens (one per line)');
+        await screen.findByLabelText('Tokens');
         await waitFor(() => expect(messaging.isListTickCoinActive).toHaveBeenCalledTimes(1));
 
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         fireEvent.click(await screen.findByLabelText(/^Select PEPE\b/));
 
-        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('DOGE:PEPE');
+        expect(await screen.findByLabelText('Tokens')).toHaveValue('DOGE:PEPE');
     });
 });

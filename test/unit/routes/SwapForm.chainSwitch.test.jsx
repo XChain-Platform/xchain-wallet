@@ -86,10 +86,10 @@ describe('SwapForm network switch', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Set block-list' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick Choose block-list' }));
         expect(screen.getByRole('button', { name: 'Allow-list #12' })).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/Receive at/), { target: { value: 'bc1qdevmockabcdef' } });
+        fireEvent.change(screen.getByLabelText(/Receive at/, { selector: 'input' }), { target: { value: 'bc1qdevmockabcdef' } });
 
         fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Dogecoin/ }));
 
         await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token'));
         expect(screen.getByRole('button', { name: /Get token:/ })).toHaveTextContent('Select a token');
@@ -97,7 +97,7 @@ describe('SwapForm network switch', () => {
         expect(screen.getByLabelText('Get amount')).toHaveValue('');
         expect(screen.getByRole('button', { name: 'Set allow-list' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Set block-list' })).toBeInTheDocument();
-        expect(screen.getByLabelText(/Receive at/)).toHaveValue('');
+        expect(screen.getByLabelText(/Receive at/, { selector: 'input' })).toHaveValue('');
     });
 
     it('keeps a seeded give token when the form opens on its chain', async () => {

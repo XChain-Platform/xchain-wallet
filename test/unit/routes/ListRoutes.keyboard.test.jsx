@@ -69,7 +69,7 @@ describe('list route keyboard flows', () => {
                 getWithdrawalsForAddress: vi.fn().mockResolvedValue([]),
                 getContractsBrowseAll: vi.fn().mockResolvedValue([]),
             },
-            primaryName: '+ Publish contract',
+            primaryName: 'Publish contract',
             props: (onPrimary) => ({ onDeploy: onPrimary, onOpenContract: vi.fn() }),
         });
     });

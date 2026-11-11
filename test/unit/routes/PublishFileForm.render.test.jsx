@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 
@@ -43,7 +44,7 @@ describe('PublishFileForm rendering', () => {
 
         const network = await screen.findByRole('button', { name: /^Network:/ });
         const from = screen.getByLabelText('From');
-        const modes = screen.getByRole('radiogroup', { name: 'Publish mode' });
+        const modes = screen.getByRole('radiogroup', { name: 'Publish as' });
         const follows = (earlier, later) => Boolean(
             earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
         );
@@ -51,7 +52,7 @@ describe('PublishFileForm rendering', () => {
         expect(follows(network, from)).toBe(true);
         expect(follows(from, modes)).toBe(true);
 
-        fireEvent.click(screen.getByRole('radio', { name: /^Encrypted & token-gated\s*:/ }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Encrypted & token-gated' }));
         await screen.findByRole('button', { name: /^Token:/ });
         expect(follows(network, from)).toBe(true);
         expect(follows(from, modes)).toBe(true);
@@ -73,6 +74,75 @@ describe('PublishFileForm rendering', () => {
         const file = await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
         expect(file).toHaveAttribute('type', 'file');
         expect(screen.queryByRole('button', { name: /Choose a file/i })).toBeNull();
+        expect(screen.queryByText('Protocol fee')).toBeNull();
+    });
+
+    it('uses field-specific help tips and keeps optional state on each label line', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PublishFileForm walletId="wallet-1" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        await screen.findByLabelText(/^File \(up to [\d,]+ bytes\)$/);
+        const fileLabel = screen.getByText(/^File \(up to [\d,]+ bytes\)$/, { selector: 'label' });
+        const assertTip = (label, copy) => {
+            fireEvent.click(screen.getByRole('button', { name: label }));
+            expect(screen.getByRole('tooltip')).toHaveTextContent(copy);
+            fireEvent.keyDown(document, { key: 'Escape' });
+        };
+
+        expect(screen.getByRole('radiogroup', { name: 'Publish as' })).toBeInTheDocument();
+        expect(screen.getByText('Anyone can read the file straight from the chain.')).toBeInTheDocument();
+        expect(screen.getByText('Only holders of a token you own can unlock the encrypted file.')).toBeInTheDocument();
+        assertTip(
+            'About Publish as',
+            'Choose whether this file is readable by everyone or encrypted for holders of a token you own.',
+        );
+        assertTip(
+            'About From',
+            "The wallet address that pays the network fee and is recorded as the file's publisher.",
+        );
+        assertTip(
+            `About ${fileLabel.textContent}`,
+            'The ceiling is exact per upload',
+        );
+        assertTip('About Title', 'A short label stored on-chain with the published file.');
+        assertTip('About Memo', 'An optional note stored on-chain with the published file.');
+
+        expect(screen.queryByText(/The ceiling is exact per upload/, { selector: 'p' })).toBeNull();
+
+        const titleRow = screen.getByText('Title', { selector: 'label' }).parentElement;
+        expect(within(titleRow).getByText('Optional')).toBeInTheDocument();
+        expect(within(titleRow).getByText('0 / 100')).toBeInTheDocument();
+        const memoRow = screen.getByText('Memo', { selector: 'label' }).parentElement;
+        expect(within(memoRow).getByText('Optional')).toBeInTheDocument();
+        expect(within(memoRow).getByText('0 / 250')).toBeInTheDocument();
+    });
+
+    it.each(['full', 'watcher'])('keeps Publish file as the success action in %s mode', async (walletMode) => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PublishFileForm walletId="wallet-1" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        const action = await screen.findByRole('button', { name: 'Publish file' });
+        expect(action.className).toMatch(/success/);
+        expect(action.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Review publish' })).toBeNull();
     });
 
     it('refuses hostile file metadata before watcher review', async () => {
@@ -92,11 +162,11 @@ describe('PublishFileForm rendering', () => {
             target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
         });
         await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'safe\u200bunsafe' },
         });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Title cannot contain zero-width characters.');
         expect(screen.queryByRole('form', { name: 'Review publish' })).toBeNull();
@@ -127,8 +197,8 @@ describe('PublishFileForm rendering', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'Publish file' })).toBeInTheDocument();
-        const publicMode = screen.getByRole('radio', { name: /^Public\s*:/ });
-        const gatedMode = screen.getByRole('radio', { name: /^Encrypted & token-gated\s*:/ });
+        const publicMode = screen.getByRole('radio', { name: 'Public' });
+        const gatedMode = screen.getByRole('radio', { name: 'Encrypted & token-gated' });
         expect(publicMode).toBeChecked();
         expect(getOwnedTokens).not.toHaveBeenCalled();
 
@@ -145,6 +215,8 @@ describe('PublishFileForm rendering', () => {
         const card = screen.getByRole('list');
         expect(card.className).toMatch(/tokenPickerCard/);
         expect(card).not.toHaveAttribute('style');
+        expect(readFileSync('packages/core/src/shared/routes/PublishFileForm.module.css', 'utf8'))
+            .toMatch(/\.tokenPickerCard > :not\(:last-child\)\s*\{[^}]*border-block-end:\s*1px solid var\(--xc-border\)/s);
         const rows = screen.getAllByRole('listitem');
         expect(rows).toHaveLength(2);
         fireEvent.click(rows.find((row) => row.textContent.includes('LITE')));
@@ -152,6 +224,9 @@ describe('PublishFileForm rendering', () => {
         expect(await screen.findByRole('button', { name: /^Token: LITE on Litecoin/ })).toHaveTextContent('LITE');
         expect(screen.getByRole('button', { name: /^Network: Litecoin/ })).toBeInTheDocument();
         expect(gatedMode).toBeChecked();
+        const continueButton = screen.getByRole('button', { name: 'Continue to file' });
+        expect(continueButton.className).toMatch(/success/);
+        expect(continueButton.querySelector('svg')).not.toBeNull();
     });
 
     it('returns from review without submitting the compose form again', async () => {
@@ -173,8 +248,11 @@ describe('PublishFileForm rendering', () => {
         });
         await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
         expect(await screen.findByRole('form', { name: 'Review publish' })).toBeTruthy();
+        const reviewAction = screen.getByRole('button', { name: 'Create unsigned transaction' });
+        expect(reviewAction.className).toMatch(/success/);
+        expect(reviewAction.querySelector('svg')).not.toBeNull();
 
         const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -204,7 +282,7 @@ describe('PublishFileForm rendering', () => {
         });
         await waitFor(() => expect(document.body.textContent).toContain('note.txt'));
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
         const review = await screen.findByRole('form', { name: 'Review publish' });
 
         window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: { walletMode: 'full' } }));

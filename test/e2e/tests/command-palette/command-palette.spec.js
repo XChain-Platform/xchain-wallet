@@ -55,7 +55,8 @@ test.describe('command palette', () => {
 
         await expect(dialog(page)).toBeHidden();
         await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
-        await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('100');
+        // XCP is divisible, so the amount takes its exact 8-decimal format (U61).
+        await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('100.00000000');
     });
 
     test('Escape closes the palette without running a command', async ({ page }) => {

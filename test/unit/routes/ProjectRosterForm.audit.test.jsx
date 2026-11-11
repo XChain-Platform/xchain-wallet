@@ -54,7 +54,7 @@ describe('ProjectRosterForm editing validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Review list' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Save roster' })).toBeDisabled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
 
@@ -66,9 +66,11 @@ describe('ProjectRosterForm editing validation', () => {
         });
 
         expect(screen.getByText(/2 valid token names/).textContent).toMatch(/1 duplicate removed/);
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
 
-        expect(await screen.findByText('Wow!, FLAM1N-H0T-CHEET0S')).toBeTruthy();
+        const roster = await screen.findByRole('list', { name: 'Tokens' });
+        expect(roster).toHaveTextContent('Wow!');
+        expect(roster).toHaveTextContent('FLAM1N-H0T-CHEET0S');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
@@ -78,10 +80,10 @@ describe('ProjectRosterForm editing validation', () => {
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
             target: { value: 'VALID' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
         expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
 
-        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to edit' }));
 
         expect(clickAllowed).toBe(false);
         expect(screen.getByRole('form', { name: 'Official token list' })).toBeTruthy();
@@ -94,12 +96,12 @@ describe('ProjectRosterForm editing validation', () => {
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
             target: { value: '^not-an-id' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
         expect(await screen.findByText("These don't look like token names: ^not-an-id")).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'x'.repeat(251) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
         expect(await screen.findByText(/network accepts at most 250/)).toBeTruthy();
     });
 
@@ -110,7 +112,7 @@ describe('ProjectRosterForm editing validation', () => {
 
         expect(await screen.findByText(/Failed to load the current official-token list/)).toBeTruthy();
         expect(screen.queryByText('No list published yet. This will be the first.')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Review list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save roster' })).toBeNull();
     });
 
     it('reports a creation-record request failure separately from an unindexed record', async () => {
@@ -119,7 +121,7 @@ describe('ProjectRosterForm editing validation', () => {
         }));
         await screen.findByText('No list published yet. This will be the first.');
         fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
 
         expect(await screen.findByText(/Couldn't load the creation record for PROJ/)).toBeTruthy();
         expect(screen.queryByText(/isn't indexed yet/)).toBeNull();

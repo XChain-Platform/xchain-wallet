@@ -105,7 +105,13 @@ async function step(fn) {
 }
 
 async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin } = {}) {
-    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Priced token network/), { target: { value: coin } }));
+    if (coin) {
+        // The priced token's network is the standard network field: open its
+        // picker screen and take the row for that coin's chain.
+        const chainName = { BTC: 'Bitcoin', LTC: 'Litecoin', DOGE: 'Dogecoin' }[coin];
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Priced token network:/ })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${chainName}\\b`) })));
+    }
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } }));
     if (fee) await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } }));
@@ -116,7 +122,11 @@ describe('OracleForm watcher review', () => {
     it('builds one unsigned publish for two submits in one turn', async () => {
         const { utils, calls } = await mountForm({ settings: { walletMode: 'watcher' } });
         await fill(utils);
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        expect(utils.getByRole('button', { name: 'Publish price' })).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
+        expect(utils.getByText(
+            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        )).toBeTruthy();
         const build = utils.getByRole('button', { name: 'Create unsigned transaction' });
         await step(() => {
             fireEvent.submit(build.closest('form'));

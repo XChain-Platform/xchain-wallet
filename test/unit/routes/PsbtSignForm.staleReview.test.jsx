@@ -58,7 +58,7 @@ describe('PSBT review while a new parse is pending', () => {
             </MessagingProvider>,
         );
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const box = screen.getByLabelText(/Unsigned transaction/);
+        const box = screen.getByLabelText('Unsigned transaction code');
 
         fireEvent.change(box, { target: { value: PSBT_A } });
         await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));

@@ -9,15 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, ListRow, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenField } from '../components/TokenField.jsx';
@@ -35,9 +34,10 @@ import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
+import { ForwardIcon, UploadIcon } from '../../ui/icons/index.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -235,14 +235,10 @@ export function PublishFileForm({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
-    // PC-51: native-coin protocol fee for the PUBLIC lane only (standalone
-    // FILE is quotable; the gated lane composes a BATCH, which is fee-quote
-    // DENIED, so GatedPublishForm has no toggle by design).: declared
-    // after `descriptor` because the hook needs the chain to know whether the
-    // native fee is an opt-in (BTC) or the only way to pay (LTC/DOGE).
-    const nativeFee = useNativeFee(descriptor);
-    // Same expression the NativeFeeToggle rows below render with; named here
-    // so the submit catch can tell the user WHICH coin the refused fee was in.
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(descriptor);
+    // Name the coin so a submit refusal identifies which network rejected it.
     const coinTicker = descriptor
         ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || ''
         : '';
@@ -661,7 +657,8 @@ export function PublishFileForm({ walletId, onBack }) {
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<UploadIcon />}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode
                                 ? false
@@ -721,8 +718,8 @@ export function PublishFileForm({ walletId, onBack }) {
                 </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this builds an unsigned transaction to sign
-                        on your Signer wallet.
+                        Watcher mode: this prepares the transaction for your offline signer. Sign it
+                        there, then bring the signed transaction to a wallet that can broadcast it.
                     </p>
                 ) : (
                     <SignCredentials
@@ -802,6 +799,11 @@ export function PublishFileForm({ walletId, onBack }) {
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    setFromOverrideId(null);
+                    if (gatePick?.chainId !== nextChainId) setGatePick(null);
+                }}
                 onPick={(address) => {
                     setFromOverrideId(address.id);
                     setFromPickerOpen(false);
@@ -822,22 +824,29 @@ export function PublishFileForm({ walletId, onBack }) {
             actions={mode === 'public' ? (
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<UploadIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
-                        : singleEncode ? 'Publish file' : 'Review publish'}
+                        : 'Publish file'}
                 </Button>
             ) : gatePick ? (
-                <Button type="button" variant="primary" onClick={() => setGatedComposerOpen(true)}>
+                <Button
+                    type="button"
+                    variant="success"
+                    icon={<ForwardIcon />}
+                    onClick={() => setGatedComposerOpen(true)}
+                >
                     Continue to file
                 </Button>
             ) : null}
         >
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The chain the file is published on. Your From address and the fee are on this network, and the file's bytes are stored in transactions on it."
                 value={chainId}
                 onChange={(nextChainId) => {
                     setChainId(nextChainId);
@@ -846,11 +855,11 @@ export function PublishFileForm({ walletId, onBack }) {
                 }}
                 chainIds={chainIds}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
 
             <AddressField
                 label="From"
+                help="The wallet address that pays the network fee and is recorded as the file's publisher."
                 icon="addresses"
                 value={fromAddress?.address || ''}
                 readOnly
@@ -859,41 +868,32 @@ export function PublishFileForm({ walletId, onBack }) {
                 iconLabel="Choose source address"
             />
 
-            <div role="radiogroup" aria-label="Publish mode">
-                <label className={styles.checkRow}>
-                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
-                    <input
-                        type="radio"
-                        name="publish-mode"
-                        value="public"
-                        checked={mode === 'public'}
-                        onChange={() => setMode('public')}
-                    />
-                    <span>
-                        <strong>Public</strong>: anyone can read the file straight
-                        from the chain.
-                    </span>
-                </label>
-                <label className={styles.checkRow}>
-                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
-                    <input
-                        type="radio"
-                        name="publish-mode"
-                        value="gated"
-                        checked={mode === 'gated'}
-                        onChange={() => setMode('gated')}
-                    />
-                    <span>
-                        <strong>Encrypted &amp; token-gated</strong>: the file is
-                        encrypted; only holders of a token you own can unlock it.
-                    </span>
-                </label>
-            </div>
+            <RadioGroup
+                role="radiogroup"
+                legend="Publish as"
+                name="publish-mode"
+                value={mode}
+                onChange={setMode}
+                help="Choose whether this file is readable by everyone or encrypted for holders of a token you own."
+                options={[
+                    {
+                        value: 'public',
+                        label: 'Public',
+                        description: 'Anyone can read the file straight from the chain.',
+                    },
+                    {
+                        value: 'gated',
+                        label: 'Encrypted & token-gated',
+                        description: 'Only holders of a token you own can unlock the encrypted file.',
+                    },
+                ]}
+            />
 
             {mode === 'gated' ? (
                 <div className={publishStyles.gatedTokenField}>
                     <TokenField
                         label="Token"
+                        help="The token whose holders can unlock this file. Only tokens you own are listed."
                         value={gatePick}
                         onOpenPicker={() => setGateTokenPickerOpen(true)}
                         disabled={ownedTokens === null}
@@ -921,6 +921,16 @@ export function PublishFileForm({ walletId, onBack }) {
                     <Input
                         type="file"
                         label={`File (up to ${capHint.toLocaleString()} bytes)`}
+                        help={(
+                            <>
+                                Up to about {capHint.toLocaleString()} bytes with the current title and memo.
+                                The ceiling is exact per upload: shorter names and titles leave a little more
+                                room for the file itself.
+                                {envelopeAvailable
+                                    ? ' This network and account support the compact Taproot encoding, which is what makes the larger ceiling possible. Files are compressed automatically when that makes them smaller, so what lands on-chain is often well under the size shown here.'
+                                    : ' Files are compressed automatically when that makes them smaller, so what lands on-chain is often less than the file size.'}
+                            </>
+                        )}
                         onChange={handlePickFile}
                     />
                     {fileMeta ? (
@@ -945,35 +955,22 @@ export function PublishFileForm({ walletId, onBack }) {
                                 <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
                             </dl>
                         </>
-                    ) : (
-                        <p className={styles.hint}>
-                            Up to about {capHint.toLocaleString()} bytes with the
-                            current title and memo. The ceiling is exact per
-                            upload: shorter names and titles leave a little more
-                            room for the file itself.
-                            {envelopeAvailable
-                                ? ' This network and account support the compact Taproot'
-                                  + ' encoding, which is what makes the larger ceiling'
-                                  + ' possible. Files are compressed automatically when'
-                                  + ' that makes them smaller, so what lands on-chain is'
-                                  + ' often well under the size shown here.'
-                                : ' Files are compressed automatically when that makes'
-                                  + ' them smaller, so what lands on-chain is often less'
-                                  + ' than the file size.'}
-                        </p>
-                    )}
+                    ) : null}
 
                     <Input
-                        label="Title (optional)"
-                        hint="A short label stored with the file."
+                        label="Title"
+                        optional
+                        help="A short label stored on-chain with the published file."
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         autoComplete="off"
                         maxLength={100}
                     />
                     <Input
-                        label="Memo (optional)"
-                        hint={MEMO_HINT}
+                        label="Memo"
+                        optional
+                        maxLength={MAX_MEMO_LENGTH}
+                        help="An optional note stored on-chain with the published file."
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
                         autoComplete="off"
@@ -981,12 +978,14 @@ export function PublishFileForm({ walletId, onBack }) {
 
                     <Checkbox
                         label="I understand the published bytes are on-chain forever and cannot be deleted."
+                        help="Publishing writes the file into transactions on the chain. Once confirmed it stays there permanently, so publish only what you are sure about."
                         checked={ackForever}
                         onChange={(e) => setAckForever(e.target.checked)}
                     />
 
                     {feeTiers ? (
                         <FeeSelector
+                            chainId={chainId}
                             label="Network fee"
                             coinTicker={descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : ''}
                             tiers={feeTiers}
@@ -995,10 +994,6 @@ export function PublishFileForm({ walletId, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    <NativeFeeToggle
-                        {...nativeFee.toggleProps}
-                        coinTicker={descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : ''}
-                    />
                 </>
             )}
         </FormPage>,

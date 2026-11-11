@@ -28,6 +28,7 @@ import {
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
@@ -46,7 +47,7 @@ import { getFormatLocale, t } from '../../i18n/index.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
-import { ActivityRow } from '../components/ActivityRow.jsx';
+import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/history.js';
@@ -289,7 +290,9 @@ export function timelineRuns(items) {
  *        by the desktop detach-pending-tx path.
  */
 export function History({ walletId, accountId, onBack, onReceive, onSelectEntry, initialSearchQuery = '', initialChainCoin = '', initialFocus = null }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
@@ -594,8 +597,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // it; the fetch itself decides whether to show the loading state.
     const [refreshTick, setRefreshTick] = useState(0);
     useEffect(() => {
-        if (!addressesByChain) return undefined;
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (!addressesByChain || !source.live) return undefined;
         // The addresses or the wallet just changed, so the rows on screen no
         // longer describe what is being fetched: no earlier bump may hold off
         // the next one.
@@ -628,7 +630,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             stopPollInterval();
             window.removeEventListener('focus', onFocus);
         };
-    }, [addressesByChain, walletId]);
+    }, [addressesByChain, source.live]);
 
     // Step 2: fan out history + links + unconfirmed rows + our own in-flight
     // sends per (chain, address). Merge results into a single sorted list.
@@ -682,11 +684,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
 
-        // Cluster J FOLLOWUP 1: for the demo wallet, replace the SDK
-        // fetch with synthesized fixture data so the History view
-        // isn't an empty wasteland during the demo. Real history rows
-        // arrive once the user exits demo mode + funds the wallet.
-        const isDemo = flowsLib.isDemoWallet(walletId);
         const optionalRows = (promise) => promise
             .then((response) => extractRows(response))
             .catch((err) => {
@@ -715,16 +712,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const tasks = [];
         for (const cid of chainsToLoad) {
             for (const a of addressesByChain[cid]) {
-                if (isDemo) {
-                    tasks.push(Promise.resolve({
-                        chainId: cid,
-                        address: a.address,
-                        addressLabel: a.label || '',
-                        history: flowsLib.synthesizeDemoHistory(cid, a.address),
-                        links: flowsLib.synthesizeDemoLinks(),
-                    }));
-                    continue;
-                }
                 tasks.push(
                     Promise.all([
                         readListPages(
@@ -1060,9 +1047,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // the timeline degrades gracefully. Demo wallets skip the probe (there is
     // no real explorer behind synthesized history).
     useEffect(() => {
-        if (!addressesByChain) return undefined;
+        if (!addressesByChain || !source.live) return undefined;
         if (!browserOnline) return undefined;
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
         const chains = Object.entries(addressesByChain)
             .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
             .map(([cid]) => cid);
@@ -1085,7 +1071,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ));
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
+    }, [addressesByChain, messaging, browserOnline, refreshTick, source.live]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
@@ -1116,12 +1102,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     // §7/§8: SPV action verification. Verify only visible, confirmed
     // entries that carry a numeric action index (an unconfirmed action has
-    // no checkpointable block yet). Off for demo wallets and when the user
+    // no checkpointable block yet). Off for sample data and when the user
     // opts out via `verifyProofs` (default on). The map is keyed by
     // entry.key; EntryRow badges from it.
     const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
-        && !flowsLib.isDemoWallet(walletId);
+        && source.live;
     // History-local fiat toggle, persisted on the Settings record
     // (same nested-patch pattern as the other §35 settings writes) so the
     // choice survives navigation and syncs across shells.
@@ -1682,7 +1668,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     <Button
                         className={`${styles.toolbarControl} ${styles.exportButton}`}
                         variant="secondary"
-                        icon={null}
+                        icon={<Icon.DownloadIcon />}
                         aria-haspopup="dialog"
                         aria-expanded={exportModalOpen}
                         aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
@@ -1851,7 +1837,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             type="button"
                             variant="ghost"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.XIcon />}
                             aria-label={t('history.filters.clearSearch')}
                             onClick={() => {
                                 setSearchQuery('');
@@ -1909,7 +1895,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         <Button
                             variant="ghost"
                             size="sm"
-                            icon={null}
+                            icon={<Icon.XIcon />}
                             onClick={() => setDatePreset(null)}
                         >
                             {t('history.filters.clearDateRange')}
@@ -2013,7 +1999,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             <Button
                                 variant={multisigOnly ? 'primary' : 'ghost'}
                                 size="sm"
-                                icon={null}
+                                icon={<Icon.MultisigIcon />}
                                 aria-pressed={multisigOnly}
                                 onClick={() => setMultisigOnly((v) => !v)}
                             >
@@ -2168,7 +2154,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                         type="button"
                                                         variant="secondary"
                                                         size="sm"
-                                                        icon={null}
+                                                        icon={<Icon.ChevronDownIcon />}
                                                         onClick={() => showMoreGroupMembers(
                                                             item.key,
                                                             item.members.length,
@@ -2225,7 +2211,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     <Button
                         type="button"
                         variant="secondary"
-                        icon={null}
+                        icon={<Icon.ChevronDownIcon />}
                         onClick={showMoreItems}
                     >
                         {t('history.showMore')}
@@ -2264,6 +2250,7 @@ function GroupCard({ item, expanded, onToggle }) {
             tick={tick}
             isNative={tick === nativeTick}
             label={groupBadgeLabel(item.subkind)}
+            actionIcon={actionIconForAction(item.leader.action)}
             context={isLinkPair ? 'Linked' : `${item.members.length}`}
             amount={displaySummary}
             status={classifyEntryStatus(item.leader)}
@@ -2400,24 +2387,7 @@ function stripSupplyParenthetical(summary) {
 /** Per-action-type icon lookup. Maps each option id to an Icon
  *  element from the shared ui library. */
 function actionTypeIcon(id) {
-    switch (id) {
-        case 'send':       return <Icon.SendIcon />;
-        case 'receive':    return <Icon.ReceiveIcon />;
-        case 'issue':      return <Icon.PlusIcon />;
-        case 'mint':       return <Icon.TokenIcon />;
-        case 'destroy':    return <Icon.TrashIcon />;
-        case 'sweep':      return <Icon.DownloadIcon />;
-        case 'dispenser':  return <Icon.MarketIcon />;
-        case 'dispense':   return <Icon.DownloadIcon />;
-        case 'order':      return <Icon.MarketIcon />;
-        case 'swap':       return <Icon.SwapIcon />;
-        case 'dividend':   return <Icon.DollarIcon />;
-        case 'broadcast':  return <Icon.BroadcastIcon />;
-        case 'message':    return <Icon.MessageIcon />;
-        case 'link':       return <Icon.LinkIcon />;
-        case 'crosschain': return <Icon.LinkIcon />;
-        default:           return null;
-    }
+    return actionIconForAction(id);
 }
 
 function specialFilterIcon(id) {
@@ -3012,8 +2982,9 @@ function ExportModal({
                         {t('common.cancel')}
                     </Button>
                     <Button
-                        variant="primary"
+                        variant="success"
                         size="sm"
+                        icon={<Icon.DownloadIcon />}
                         onClick={onConfirm}
                         disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >

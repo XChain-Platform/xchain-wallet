@@ -457,7 +457,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     description={t('createWallet.xchainPlatformIsEncryptingYour')}
                     progress={<span aria-current="step">{t('createWallet.step3Of3')}</span>}
                     aria-live="polite"
-                    actions={<Button loading icon={<Icon.CheckIcon />}>{t('createWallet.createWallet')}</Button>}
+                    actions={<Button variant="success" loading icon={<Icon.CheckIcon />}>{t('createWallet.createWallet')}</Button>}
                 />
             </Screen>
         );
@@ -495,6 +495,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                                     id={`create-quiz-word-${p}`}
                                     ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
                                     label={t('createWallet.word', { p })}
+                                    help={t('createWallet.wordHelp', { p })}
                                     value={quizAnswers[p] || ''}
                                     onChange={(e) => {
                                         setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
@@ -514,7 +515,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                     </ol>
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
                         loading={stage === 'persisting'}
                         icon={<Icon.CheckIcon />}
                     >
@@ -535,6 +536,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             <FormPage
                 ref={stageFormRef}
                 label={t('importWallet.recoveryPhrase')}
+                cardless
                 description={isFull
                     ? t('createWallet.theseWordsAreYourRecovery', { words: wordCount === 24 ? 'twentyFour' : 'twelve' })
                     : null}
@@ -565,7 +567,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                         disabled={stage === 'persisting'}
                     />
                     <Button
-                        variant="primary"
+                        variant="success"
                         onClick={handleStartVerify}
                         disabled={!saved}
                         icon={<Icon.CheckIcon />}
@@ -623,7 +625,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
                     disabled={Boolean(passwordStepDisabledReason)}
                     aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
                     icon={<Icon.MigrateIcon />}
@@ -635,7 +637,9 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             <Input
                 id="create-name"
                 label={t('renameWallet.name')}
+                help={t('createWallet.walletNameHelp')}
                 value={name}
+                maxLength={NAME_MAX_LENGTH}
                 onChange={(e) => {
                     nameEditedRef.current = true;
                     setName(e.target.value);
@@ -648,7 +652,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 ref={passwordRef}
                 type="password"
                 label={t('common.password')}
-                hint={t('createWallet.atLeastCharactersUseA', { MIN_PASSWORD_LENGTH })}
+                help={t('createWallet.passwordAdvice', { MIN_PASSWORD_LENGTH })}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -660,6 +664,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 id="create-confirm"
                 type="password"
                 label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
+                help={t('createWallet.confirmPasswordHelp')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -670,6 +675,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             <RadioGroup
                 className={styles.wordCountRow}
                 legend={t('createWallet.recoveryPhraseLength')}
+                help={t('createWallet.recoveryPhraseLengthHelp')}
                 name="word-count"
                 value={String(wordCount)}
                 onChange={(nextWordCount) => setWordCount(Number(nextWordCount))}
@@ -713,7 +719,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                             id="create-bip39-passphrase"
                             type="password"
                             label={t('importWallet.passphrase.label')}
-                            hint={t('createWallet.requiredWhenEnabled')}
+                            help={t('createWallet.requiredWhenEnabled')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
@@ -725,6 +731,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                             id="create-bip39-confirm"
                             type="password"
                             label={t('settings.duress.confirmPassphrase')}
+                            help={t('createWallet.confirmPassphraseHelp')}
                             value={bip39PassphraseConfirm}
                             onChange={(e) => {
                                 setBip39PassphraseConfirm(e.target.value);

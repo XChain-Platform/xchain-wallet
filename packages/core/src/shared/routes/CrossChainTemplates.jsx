@@ -188,11 +188,6 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                     were inline and the title ran straight into the text. */}
                 <span className={styles.entryLabel} style={{ display: 'block' }}>{t.name}</span>
                 <span className={styles.entryDescription} style={{ display: 'block' }}>{t.description}</span>
-                {Array.isArray(t.personas) && t.personas.length > 0 ? (
-                    <span className={styles.entryDescription} style={{ display: 'block', fontStyle: 'italic' }}>
-                        Persona: {t.personas.join(', ')}
-                    </span>
-                ) : null}
                 <ol style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85em' }}>
                     {t.actions.map((row, i) => (
                         <li key={i} style={{ marginBottom: '0.25rem' }}>

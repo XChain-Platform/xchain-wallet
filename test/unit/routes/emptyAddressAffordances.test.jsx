@@ -196,8 +196,8 @@ describe('Import WIF chain picker', () => {
         // list behind it.
         const trigger = await screen.findByRole('button', { name: /Bitcoin/ });
         fireEvent.click(trigger);
-        await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(1));
-        const labels = screen.getAllByRole('option').map((o) => o.textContent);
+        await waitFor(() => expect(screen.getAllByRole('button', { name: /^Select / }).length).toBeGreaterThan(1));
+        const labels = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
         expect(labels.some((l) => /Litecoin/.test(l))).toBe(true);
         expect(labels.some((l) => /Dogecoin/.test(l))).toBe(true);
     });
@@ -208,7 +208,7 @@ describe('Import WIF chain picker', () => {
 
         const wifField = await screen.findByLabelText(/WIF private key/i);
         fireEvent.change(wifField, { target: { value: 'cQexampleWifKeyValueForRegtestOnly' } });
-        const pwField = screen.queryByLabelText(/Wallet password/i);
+        const pwField = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
         if (pwField) fireEvent.change(pwField, { target: { value: 'correct horse' } });
         fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));

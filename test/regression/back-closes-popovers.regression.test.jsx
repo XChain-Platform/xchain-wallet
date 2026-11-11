@@ -84,7 +84,7 @@ describe('regression/back-closes-popovers', () => {
                 onTokenQueryChange={() => {}}
             />,
         );
-        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const trigger = screen.getByRole('button', { name: /^Filter by network/ });
         fireEvent.click(trigger);
         expect(screen.getByRole('listbox', { name: 'Networks' })).toBeInTheDocument();
 

@@ -30,6 +30,14 @@ const indexJs = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'ui', 'index.js'),
     'utf8',
 );
+const sendMessages = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'send.js'),
+    'utf8',
+);
+const uiMessages = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'ui.js'),
+    'utf8',
+);
 
 // --- public API --------------------------------------------------------
 
@@ -46,7 +54,8 @@ assert.match(
 // range input + aria-valuetext that announces the active tier).
 
 assert.match(cmp, /type="range"/, 'fee control is a range slider');
-assert.match(cmp, /aria-label="Network fee"/, 'slider is labelled "Network fee"');
+assert.match(cmp, /aria-label=\{t\('send\.networkFee'\)\}/, 'slider uses the network-fee label');
+assert.match(sendMessages, /'send\.networkFee': 'Network fee'/, 'slider label resolves to "Network fee"');
 assert.match(cmp, /aria-valuetext=/, 'slider announces the active tier via aria-valuetext');
 assert.match(cmp, /aria-label=\{speedLabel\(s\)\}/, 'each discrete tick is labelled by speed');
 assert.match(cmp, /aria-label=\{t\('ui\.feeSelector\.customFeeRate'/, 'custom rate input labelled');
@@ -91,7 +100,8 @@ assert.match(
     /customRate: activeEstimate\?\.rateValue \?\? seedCustomRate\(\)/,
     'rate click enters Custom seeded with the active tier rate',
 );
-assert.match(cmp, /aria-label="Edit exact fee amount"/, 'fee figure is an accessible edit button');
+assert.match(cmp, /aria-label=\{t\('ui\.feeSelector\.editExactFeeAmount'\)\}/, 'fee figure uses the edit label');
+assert.match(uiMessages, /'ui\.feeSelector\.editExactFeeAmount': 'Edit exact fee amount'/, 'fee figure is an accessible edit button');
 assert.match(cmp, /aria-label=\{t\('ui\.feeSelector\.editFeeRate'/, 'rate figure is an accessible edit button');
 assert.match(
     cmp,
@@ -106,17 +116,23 @@ assert.match(
 
 // --- empty state -------------------------------------------------------
 
-assert.match(cmp, /Fee estimate unavailable for this network\./, 'empty-state copy');
+assert.match(cmp, /resolveFeeUnit\(chainRegistry\.get\(chainId\)\)/, 'empty state resolves the chain fee unit');
+assert.match(cmp, /const opensOnCustom = noEstimate && Boolean\(chainId\)/, 'empty state requires a selected chain');
+assert.match(cmp, /if \(opensOnCustom && value\?\.mode !== 'custom'\)/, 'empty state selects Custom once');
 
 // --- contextual help (§37 / G122 InfoTip) ------------------------------
 
-// Anchor on the InfoTip's actual help copy rather than its `aria` string, which
-// was renamed ("Network fee help" -> "Fee priority help") in a UI pass without
-// changing the behaviour this smoke exists to protect.
+// Anchor on the InfoTip's actual help-copy key and its English value rather than
+// its `aria` string, which can be renamed without changing this behavior.
 assert.match(
     cmp,
-    /<InfoTip[\s\S]{0,80}?label="Pick how fast this transaction confirms/,
+    /<InfoTip[\s\S]{0,160}?label=\{t\('ui\.feeSelector\.pickHowFastThisTransaction'\)\}/,
     'fee selector carries the fee-priority InfoTip',
+);
+assert.match(
+    uiMessages,
+    /'ui\.feeSelector\.pickHowFastThisTransaction':\s*\n\s*'Pick how fast this transaction confirms\./,
+    'fee-priority InfoTip key resolves to its help copy',
 );
 
 // --- CSS hooks ---------------------------------------------------------

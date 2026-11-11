@@ -36,10 +36,11 @@ import '../i18n/locales/en/ui.js';
  * @param {number} [props.feedbackMs]
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
+ * @param {boolean} [props.iconOnly]      shows only the copy-state icon while the label remains its accessible name and title
  * @param {'filled' | 'outlined'} [props.appearance]  outlined for a per-row action
  *   repeated down a list (each message in a thread); filled everywhere else
  */
-export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied, appearance = 'filled' }) {
+export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLabel, feedbackMs = 1500, sensitive = false, onCopied, appearance = 'filled', iconOnly = false }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
     const [copiedText, setCopiedText] = useState('');
@@ -106,19 +107,23 @@ export function CopyButton({ value, label = t('ui.copyButton.copyValue'), ariaLa
 
     const text = state === 'copied' ? copiedText : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
+    const accessibleLabel = ariaLabel || label;
     return (
         <>
             <Button
                 ref={buttonRef}
                 size="sm"
-                className={appearance === 'outlined' ? `${styles.btn} ${styles.outlined}` : styles.btn}
+                variant={iconOnly ? 'ghost' : undefined}
+                className={iconOnly
+                    ? styles.iconOnly
+                    : appearance === 'outlined' ? `${styles.btn} ${styles.outlined}` : styles.btn}
                 onClick={handleCopy}
                 icon={icon}
-                aria-label={state === 'copied' ? text : ariaLabel || label}
-                title={text}
+                aria-label={iconOnly ? accessibleLabel : state === 'copied' ? text : accessibleLabel}
+                title={iconOnly ? accessibleLabel : text}
                 data-state={state}
             >
-                {text}
+                {iconOnly ? null : text}
             </Button>
             <span
                 key={announcement.id}

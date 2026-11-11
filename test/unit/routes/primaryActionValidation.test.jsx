@@ -159,8 +159,10 @@ describe('primary actions explain missing form input', () => {
             <SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />,
         );
         const field = await waitFor(() => getByLabelText(/^Price/));
+        // The Price field refuses the ninth decimal as it is typed and says why.
         fireEvent.change(field, { target: { value: '0.000000001' } });
-        await submitAndExpect(container, 'Price can have at most 8 decimal places for BTC.');
+        await waitFor(() => expect(container.textContent).toContain('at most 8 decimal places'));
+        expect(field.value).not.toBe('0.000000001');
     });
 
     it('AirdropForm explains that its token is required', async () => {

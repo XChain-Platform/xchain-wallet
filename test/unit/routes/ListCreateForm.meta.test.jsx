@@ -100,15 +100,15 @@ describe('ListCreateForm name and description', () => {
     ])('shows no inputs and sends version 0 on %s', async (_label, answer) => {
         const messaging = mount(vi.fn(answer));
         await ready(messaging);
-        expect(screen.queryByLabelText('Name (optional)')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('Description (optional)')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
         expect(await publish()).toEqual(V0);
     });
 
     it('sends version 4 with name and description when both formats exist', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        fireEvent.change(await screen.findByLabelText('Name (optional)'), { target: { value: 'Team' } });
+        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Team' } });
         expect(await publish()).toEqual({
             VERSION: '4', TYPE: '2', NAME: 'Team', DESCRIPTION: '', ITEM: [MEMBER],
         });
@@ -117,15 +117,15 @@ describe('ListCreateForm name and description', () => {
     it('sends today\'s version 0 params when both fields are empty', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        await screen.findByLabelText('Name (optional)');
+        await screen.findByLabelText('Name');
         expect(await publish()).toEqual(V0);
     });
 
     it('carries the memo between description and items on version 4', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        fireEvent.change(await screen.findByLabelText('Description (optional)'), { target: { value: 'About' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'note' } });
+        fireEvent.change(await screen.findByLabelText('Description'), { target: { value: 'About' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'note' } });
         expect(await publish()).toEqual({
             VERSION: '4', TYPE: '2', NAME: '', DESCRIPTION: 'About', MEMO: 'note', ITEM: [MEMBER],
         });
@@ -134,7 +134,7 @@ describe('ListCreateForm name and description', () => {
     it('shows an error and blocks review for a 65-byte name', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        fireEvent.change(await screen.findByLabelText('Name (optional)'), { target: { value: 'a'.repeat(65) } });
+        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'a'.repeat(65) } });
         expect(await screen.findByText('Too long.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
         expect(await screen.findByText('Fix the list name and description first.')).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('ListCreateForm name and description', () => {
     it('shows an error and blocks review for a lone dash name', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        fireEvent.change(await screen.findByLabelText('Name (optional)'), { target: { value: '-' } });
+        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '-' } });
         expect(await screen.findByText('A single - is not allowed.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
         await screen.findByText('Fix the list name and description first.');
@@ -154,7 +154,7 @@ describe('ListCreateForm name and description', () => {
     it('counts a four-byte emoji as four bytes', async () => {
         const messaging = mount(vi.fn().mockResolvedValue(WITH_META));
         await ready(messaging);
-        fireEvent.change(await screen.findByLabelText('Name (optional)'), { target: { value: '\u{1F600}' } });
+        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '\u{1F600}' } });
         expect(await screen.findByText('4 / 64 bytes')).toBeInTheDocument();
     });
 });

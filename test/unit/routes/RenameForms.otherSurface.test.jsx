@@ -44,6 +44,7 @@ const FORMS = [
     {
         label: 'wallet',
         field: 'Wallet name',
+        submit: 'Rename wallet',
         list: () => messaging.listWallets,
         write: () => messaging.renameWallet,
         rename: (name) => { stored.wallet = name; },
@@ -53,6 +54,7 @@ const FORMS = [
     {
         label: 'account',
         field: 'Account name',
+        submit: 'Rename account',
         list: () => messaging.listAccounts,
         write: () => messaging.renameAccount,
         rename: (name) => { stored.account = name; },
@@ -90,7 +92,7 @@ for (const form of FORMS) {
         it('saves the stored name, not the opened one, after the records are read again', async () => {
             const props = { onBack: vi.fn(), onRenamed: vi.fn(), refreshKey: 0 };
             const view = render(form.node(props));
-            await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+            await waitFor(() => expect(screen.getByRole('button', { name: form.submit })).toBeEnabled());
 
             form.rename('Renamed elsewhere');
             view.rerender(form.node({ ...props, refreshKey: 1 }));

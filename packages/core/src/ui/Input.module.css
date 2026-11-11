@@ -36,13 +36,11 @@
     font-weight: 500;
 }
 
-/* Label row with an end action (a Scan icon button): the label keeps its
-   start edge, the action sits at the row's end, and the row carries the
-   label gap so the box below keeps the same offset as a plain label. */
+/* The row keeps optional state, help and counters aligned with the label. */
 .labelRow {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
     margin-block-end: var(--xc-label-gap);
@@ -53,11 +51,27 @@
     min-width: 0;
 }
 
-.labelAction {
-    display: flex;
+.labelHelp {
     flex: none;
-    align-items: center;
-    gap: var(--xc-space-1);
+    margin-inline-start: 0;
+}
+
+.labelRow > .counter {
+    flex: none;
+    margin-inline-start: auto;
+}
+
+.optionalPill {
+    flex: none;
+    padding-inline: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-badge-radius);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
 }
 
 .input {
@@ -124,25 +138,35 @@
     position: relative;
 }
 
-/* A revealable password field keeps its show and hide button inside the
-   border, so the text stops short of the button instead of running under it. */
-.controlHitArea > .revealableInput {
-    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
+/* In-field actions share one trailing container, and the control reserves
+   enough inline space to keep its value clear of every action. */
+.controlHitArea > .inputWithFieldAction {
+    padding-inline-end: calc(var(--xc-tap-min) + var(--xc-control-padding-x) + var(--xc-space-1));
 }
 
-.revealToggle {
-    --xc-icon-size: var(--xc-icon-md);
+.controlHitArea > .inputWithTwoFieldActions {
+    padding-inline-end: calc(var(--xc-tap-min) * 2 + var(--xc-control-padding-x) + var(--xc-space-2));
+}
+
+.controlActions {
     position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    /* This half-grid inset keeps the toggle centered inside the input border. */
-    inset-inline-end: 2px;
-    top: 50%;
+    z-index: calc(var(--xc-z-base) + 2);
+    inset-inline-end: var(--xc-space-1);
+    inset-block-start: 50%;
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
-    min-height: var(--xc-control-h-sm);
+    gap: var(--xc-space-1);
+}
+
+.revealToggle {
+    --xc-icon-size: var(--xc-icon-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--xc-tap-min);
+    min-block-size: var(--xc-tap-min);
     padding: 0;
     color: var(--xc-text-muted);
     background: transparent;
@@ -238,6 +262,11 @@
     min-width: 0;
 }
 
+.textareaFieldAction {
+    inset-block-start: var(--xc-space-1);
+    transform: none;
+}
+
 .textareaWithActions {
     padding-block-end: calc(var(--xc-control-h-sm) + var(--xc-space-1) * 2);
 }
@@ -300,10 +329,14 @@
 }
 
 .counter {
-    margin-block-start: var(--xc-help-gap);
-    align-self: flex-end;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    white-space: nowrap;
+}
+
+.field > .counter {
+    margin-block-start: var(--xc-help-gap);
+    align-self: flex-end;
 }
 
 .capsLock {

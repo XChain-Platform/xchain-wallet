@@ -7,6 +7,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -115,7 +116,7 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('list', { name: 'Conversations' })).toBeVisible();
         });
 
-        await test.step('render and dismiss the alerts route list', async () => {
+        await test.step('render, search and mark read the alerts inbox', async () => {
             // The condensed header opens its action menu; the full wallet Menu
             // page is its "More wallet actions" row.
             await page.getByRole('button', { name: 'Open menu' }).click();
@@ -126,28 +127,56 @@ for (const viewport of VIEWPORTS) {
             await expectScreen(page, `${viewport.name} alerts list`, 'Alerts');
             await expectScreenStartsAtTop(page, `${viewport.name} alerts list`);
             const main = page.getByRole('main');
-            await expect(main.getByRole('list').getByText('Unread messages', { exact: true })).toBeVisible();
-            await expect(main.getByText(/\d+ unread/)).toBeVisible();
+            const markAll = page.getByRole('banner').getByRole('button', { name: 'Mark all read' });
+            const search = main.getByRole('searchbox', { name: 'Search alerts' });
+            const typeFilter = main.getByRole('combobox', { name: 'Filter alert type' });
+            await expect(search).toBeVisible();
+            await expect(typeFilter).toBeVisible();
 
-            const clearAlerts = main.getByRole('button', { name: 'Clear alerts' });
-            const toolbarControls = clearAlerts
-                .locator('xpath=ancestor::div[.//button][1]')
-                .locator('button');
+            // The seeded inbox renders as day groups of rows; the type
+            // filter lists a count per type, "All types" first.
+            const allTypes = typeFilter.locator('option').first();
+            await expect(allTypes).toHaveText(/^All types \(\d+\)$/);
+            const total = Number((await allTypes.innerText()).match(/\((\d+)\)/)[1]);
+            const rows = main.getByRole('list').getByRole('listitem');
+            if (total > 0) {
+                await expect(main.getByRole('region').first()).toBeVisible();
+                await expect(rows).toHaveCount(total);
+            } else {
+                await expect(main.getByRole('heading', { name: 'No alerts', exact: true })).toBeVisible();
+            }
+
+            const toolbarControls = search.locator('xpath=ancestor::div[.//select][1]').locator('select, input');
             await expectSharedLineControlHeights(toolbarControls, `${viewport.name} alerts toolbar`);
 
-            await clearAlerts.click();
+            // A search with no match reports it and shows the empty state.
+            await search.fill('zzz-no-such-alert');
+            await expect(main.getByText('0 alerts match', { exact: true })).toBeVisible();
             await expect(main.getByRole('heading', { name: 'No alerts', exact: true })).toBeVisible();
-            await expect(main.getByRole('list')).toHaveCount(0);
-            await expectScreen(page, `${viewport.name} dismissed alerts`, 'Alerts');
+            await expectScreen(page, `${viewport.name} alerts no match`, 'Alerts');
+            await main.getByRole('button', { name: 'Clear search', exact: true }).click();
+            await expect(search).toHaveValue('');
+            if (total > 0) await expect(rows).toHaveCount(total);
+
+            // Mark all read clears every unread dot and disables itself.
+            if (total > 0 && await markAll.isEnabled()) {
+                await markAll.click();
+                await expect(main.getByLabel('Unread', { exact: true })).toHaveCount(0);
+            }
+            await expect(markAll).toBeDisabled();
+            await expectScreen(page, `${viewport.name} alerts all read`, 'Alerts');
         });
 
         await test.step('create and edit a price alert from Notifications', async () => {
+            // Notifications is a section of the Settings screen, not a screen of its own.
+            await openSettings(page);
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Manage notifications' }).click();
-            await expectScreen(page, `${viewport.name} notifications`, 'Notifications');
+            await expect(main.getByRole('heading', { level: 2, name: 'Notifications', exact: true })).toBeVisible();
+            await expectScreen(page, `${viewport.name} notifications`, 'Settings');
             await expectScreenStartsAtTop(page, `${viewport.name} notifications`);
 
             const priceAlerts = main.getByRole('switch', { name: 'Price alerts' });
+            await priceAlerts.scrollIntoViewIfNeeded();
             if (!(await priceAlerts.isChecked())) await priceAlerts.click();
             await expect(priceAlerts).toBeChecked();
             await expect(main.getByText('No price alerts yet', { exact: true })).toBeVisible();
@@ -160,7 +189,7 @@ for (const viewport of VIEWPORTS) {
             await main.getByRole('button', { name: 'Add alert' }).click();
 
             await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toBeVisible();
-            await expectScreen(page, `${viewport.name} created price alert`, 'Notifications');
+            await expectScreen(page, `${viewport.name} created price alert`, 'Settings');
             const edit = main.getByRole('button', { name: 'Edit Bitcoin price alert' });
             const savedRowControls = edit.locator('xpath=parent::span').locator('button');
             await expectSharedLineControlHeights(savedRowControls, `${viewport.name} saved price alert row`);
@@ -173,15 +202,16 @@ for (const viewport of VIEWPORTS) {
                 priceAlertFormControls(page),
                 `${viewport.name} edit price alert row`,
             );
-            await expectScreen(page, `${viewport.name} edit price alert`, 'Notifications');
+            await expectScreen(page, `${viewport.name} edit price alert`, 'Settings');
 
             await main.getByLabel('Direction', { exact: true }).selectOption('below');
             await main.getByLabel('Target price', { exact: true }).fill('65000');
-            await main.getByRole('button', { name: 'Save changes' }).click();
+            // Editing keeps the form's one action name, Add alert (U51).
+            await main.getByRole('button', { name: 'Add alert' }).click();
 
             await expect(main.getByText('Bitcoin falls below $65,000', { exact: true })).toBeVisible();
             await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toHaveCount(0);
-            await expectScreen(page, `${viewport.name} updated price alert`, 'Notifications');
+            await expectScreen(page, `${viewport.name} updated price alert`, 'Settings');
         });
     });
 }

@@ -300,7 +300,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // strict-mode violation.
             await page.getByRole('textbox', { name: 'Address' }).fill(owner);
             await page.getByRole('textbox', { name: 'Notes' }).fill(NOTES_CANARY);
-            await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).first().click();
             // Back on the list, with the new contact on it: the publish reads
             // the vault, so the write has to have landed before it runs.
             await expect(page.getByText(CONTACT_CANARY).first(),

@@ -67,7 +67,7 @@ async function pasteAndReview(decomposed) {
     const parsePsbtRequest = vi.fn().mockResolvedValue({ decomposed, action: null, actionDecodeReason: 'NO_OP_RETURN' });
     renderForm(parsePsbtRequest);
     await screen.findByRole('button', { name: /Network: Bitcoin/ });
-    fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT_A } });
+    fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_A } });
     await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output').length).toBeGreaterThan(0));
     return parsePsbtRequest;
 }
@@ -129,7 +129,7 @@ describe('PSBT review fee share warning', () => {
     it('leaves the transaction the signer reviews unchanged', async () => {
         const parsePsbtRequest = await pasteAndReview(payment(100_000, 1_000));
         expect(screen.getByTestId('psbt-fee-share-warning')).toBeTruthy();
-        expect(screen.getByLabelText(/Unsigned transaction/).value).toBe(PSBT_A);
+        expect(screen.getByLabelText('Unsigned transaction code').value).toBe(PSBT_A);
         expect(parsePsbtRequest).toHaveBeenCalledTimes(1);
         expect(parsePsbtRequest.mock.calls[0][0].psbtHex).toBe(PSBT_A);
     });
@@ -156,7 +156,7 @@ describe('PSBT review fee share warning', () => {
             .mockReturnValueOnce(second.promise);
         renderForm(parsePsbtRequest);
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        const box = screen.getByLabelText(/Unsigned transaction/);
+        const box = screen.getByLabelText('Unsigned transaction code');
 
         fireEvent.change(box, { target: { value: PSBT_A } });
         await waitFor(() => expect(screen.getByTestId('psbt-fee-share-warning')).toBeTruthy());

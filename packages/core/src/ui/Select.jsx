@@ -9,8 +9,12 @@
 // contact legal@dankest.llc.
 
 import { forwardRef, useEffect, useId, useState } from 'react';
+import { InfoTip } from './InfoTip.jsx';
 import styles from './Input.module.css';
-import { resolveFieldRequirement } from './fieldRequirement.js';
+import { fieldHelpName, resolveFieldRequirement } from './fieldRequirement.js';
+import { OptionalPill } from './OptionalPill.jsx';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Controlled `<select>` that shares Input's field/label/control styling, so a
@@ -20,15 +24,17 @@ import { resolveFieldRequirement } from './fieldRequirement.js';
  *
  * @typedef {object} SelectOwnProps
  * @property {string} [label]
+ * @property {import('react').ReactNode} [help] contextual help shown from the label-row InfoTip.
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
- * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
+ * @property {boolean} [optional]   shows the shared Optional pill and exposes the field as optional to assistive technology.
  * @property {'sm' | 'md' | 'lg'} [size] field size, matching Input.
  */
 export const Select = /* @__PURE__ */ forwardRef(function Select(
     {
         label,
+        help,
         hint,
         error,
         id,
@@ -57,7 +63,9 @@ export const Select = /* @__PURE__ */ forwardRef(function Select(
     const visibleError = error && error !== dismissedError ? error : null;
     const hintId = hint && !visibleError ? `${selectId}-hint` : undefined;
     const errorId = visibleError ? `${selectId}-error` : undefined;
-    const describedBy = [externalDescribedBy, hintId, errorId]
+    const optionalPillId = requirement.isOptional ? `${selectId}-optional` : undefined;
+    const hasHelp = Boolean(label && help);
+    const describedBy = [externalDescribedBy, optionalPillId, hintId, errorId]
         .filter(Boolean).join(' ') || undefined;
     const selectClass = [styles.input, visibleError ? styles.invalid : '', className]
         .filter(Boolean).join(' ');
@@ -73,10 +81,22 @@ export const Select = /* @__PURE__ */ forwardRef(function Select(
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
-            {label ? (
-                <label htmlFor={selectId} className={styles.label}>
-                    {requirement.label}
-                </label>
+            {label && (requirement.isOptional || hasHelp) ? (
+                <div className={styles.labelRow}>
+                    <label htmlFor={selectId} className={styles.label}>
+                        {requirement.label}
+                    </label>
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
+                    {hasHelp ? (
+                        <InfoTip
+                            className={styles.labelHelp}
+                            label={help}
+                            aria={t('ui.field.about', { label: fieldHelpName(requirement.label, rest['aria-label']) })}
+                        />
+                    ) : null}
+                </div>
+            ) : label ? (
+                <label htmlFor={selectId} className={styles.label}>{requirement.label}</label>
             ) : null}
             <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
                 <select

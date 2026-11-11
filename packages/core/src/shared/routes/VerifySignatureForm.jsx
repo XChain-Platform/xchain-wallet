@@ -27,9 +27,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
+    Icon,
     Input,
     Textarea,
-    ChainPicker,
+    NetworkField,
     FormPage,
     PageHeader,
     StatusMessage,
@@ -175,20 +176,20 @@ export function VerifySignatureForm({ onBack }) {
 
     const fields = (
         <>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <ChainPicker
-                    chainIds={chainIds}
-                    chainRegistry={chainRegistry}
-                    value={chainId || ''}
-                    onChange={(nextChainId) => {
-                        setChainId(nextChainId);
-                        clearSettledFeedback();
-                    }}
-                    label={t('send.fields.chain')}
-                />
-            </div>
+            <NetworkField
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+                value={chainId || ''}
+                onChange={(nextChainId) => {
+                    setChainId(nextChainId);
+                    clearSettledFeedback();
+                }}
+                label={t('send.fields.chain')}
+                help={t('verifySignature.networkHelp')}
+            />
             <Input
                 label={t('verifySignature.address')}
+                help={t('verifySignature.addressHelp')}
                 value={address}
                 onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
@@ -199,6 +200,7 @@ export function VerifySignatureForm({ onBack }) {
                 id="verify-message"
                 dir="auto"
                 label={t('verifySignature.message')}
+                help={t('verifySignature.messageHelp')}
                 value={message}
                 onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
                 placeholder={t('verifySignature.messagePlaceholder')}
@@ -209,6 +211,7 @@ export function VerifySignatureForm({ onBack }) {
                 id="verify-signature"
                 dir="ltr"
                 label={t('verifySignature.signature')}
+                help={t('verifySignature.signatureHelp')}
                 value={signature}
                 onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
                 placeholder={t('verifySignature.signaturePlaceholder')}
@@ -228,7 +231,8 @@ export function VerifySignatureForm({ onBack }) {
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.VerifyIcon />}
                         loading={busy}
                         disabled={Boolean(disabledReason)}
                         aria-describedby={disabledReason ? 'verify-signature-disabled-reason' : undefined}

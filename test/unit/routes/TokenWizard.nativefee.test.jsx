@@ -110,7 +110,7 @@ async function driveToConfirm({ nativeFee }) {
     });
     if (nativeFee) fireEvent.click(screen.getByRole('switch'));
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
     // The confirm page opens once compose + pre-flight resolve.
     await screen.findByTestId('confirm-modal');
 }
@@ -140,7 +140,7 @@ describe('TokenWizard native-coin fee toggle', () => {
         const reviewFee = screen.getByText('Network fee').nextElementSibling;
         await waitFor(() => expect(reviewFee).toHaveTextContent(/BTC.*~€/));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
         await screen.findByTestId('confirm-modal');
         await waitFor(() => {
             expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*~€0\.50/);

@@ -75,9 +75,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     const variant = screenVariantFor(shell);
     const { offline, recheck } = useNetworkOffline({ walletId });
     const scope = `${walletId}:${activeAccountId || 'default'}`;
-    // Whether the session can sign without a per-action password. The shared
-    // confirmation screen uses this to either show the unlocked note or ask
-    // for the wallet password before sharing a key.
+    // Track signer readiness so confirmation asks for a password only when needed.
     const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -702,7 +700,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         ref={passwordRef}
                         type="password"
                         label="Password"
-                        hint="Decrypts this account's messages."
+                        help="Decrypts this account's messages."
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -1060,7 +1058,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                 aria-label="Message"
                 error={emptyError}
             />
-            <Button type="submit" variant="primary" size="sm" icon={null} aria-label="Send message">
+            <Button type="submit" variant="success" size="sm" icon={null} aria-label="Send message">
                 <Icon.SendIcon />
             </Button>
         </form>
@@ -1145,7 +1143,7 @@ function SessionRequestRow({
                 </StatusMessage>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="secondary" onClick={onDecline} disabled={stage === 'sending'}>
+                    <Button variant="secondary" icon={<Icon.XIcon />} onClick={onDecline} disabled={stage === 'sending'}>
                         Decline
                     </Button>
                     {onMessage ? (
@@ -1153,7 +1151,7 @@ function SessionRequestRow({
                             Message
                         </Button>
                     ) : null}
-                    <Button variant="primary" onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
+                    <Button variant="success" icon={<Icon.KeyIcon />} onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
                         Share my key
                     </Button>
                 </div>

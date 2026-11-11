@@ -220,7 +220,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
             await page.getByRole('textbox', { name: 'Address', exact: true })
                 .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
-            await page.getByRole('button', { name: 'Save', exact: true }).click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).click();
             await expect(page.getByRole('list', { name: 'Contacts' })
                 .getByText('Erin', { exact: true })).toBeVisible();
 
@@ -254,7 +254,8 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(form.getByRole('textbox', { name: 'Address label' })).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Receive request amount');
 
-            const addressType = form.getByLabel('Address type');
+            // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+            const addressType = form.getByLabel('Address type', { exact: true });
             const originalType = await addressType.inputValue();
             await addressType.focus();
             await page.keyboard.press('Alt+ArrowDown');
@@ -286,18 +287,23 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(createToken).toBeVisible();
             await createToken.click();
             await expect(palette).toBeHidden();
-            const custom = page.getByRole('button', { name: /^Custom/ });
-            await expect(custom).toBeVisible();
-            await custom.click();
+            // Custom opens the full Issue form (ruling U79), so the wizard's
+            // network step is reached through the Utility template.
+            const template = page.getByRole('button', { name: /^Utility token\b/ });
+            await expect(template).toBeVisible();
+            await template.click();
 
             const chainForm = page.getByRole('form', { name: 'Choose token network' });
             await expect(chainForm).toBeVisible();
             const network = chainForm.getByRole('button', { name: /^Network:/ });
             await expect(network).toBeVisible();
+            // The Network field opens the full network-picker screen (ruling
+            // U59); Escape closes it and returns to the step it came from.
             await network.click();
-            await expect(chainForm.getByRole('listbox', { name: 'Network' })).toBeVisible();
+            const picker = page.getByRole('dialog', { name: 'Network' });
+            await expect(picker).toBeVisible();
             await page.keyboard.press('Escape');
-            await expect(chainForm.getByRole('listbox', { name: 'Network' })).toHaveCount(0);
+            await expect(picker).toHaveCount(0);
             await expect(chainForm).toBeVisible();
             const next = chainForm.getByRole('button', { name: 'Next' });
             await expect(next).toBeEnabled();
@@ -331,8 +337,8 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expectHeaderMenuEscapeKeepsForm(page, form, 'Settings password security');
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByLabel('Current wallet password'),
-                lastField: form.getByLabel('Confirm new wallet password'),
+                firstField: form.getByLabel('Current wallet password', { exact: true }),
+                lastField: form.getByLabel('Confirm new wallet password', { exact: true }),
                 submitButton: form.getByRole('button', { name: 'Change password' }),
                 label: 'Settings password security',
             });

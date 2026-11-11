@@ -120,7 +120,7 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         expect(tokenField).toBeTruthy();
 
         // Signing pubkey: pre-filled with the position's key, not blank.
-        const pubkeyField = screen.getByLabelText(/signing public key/i);
+        const pubkeyField = screen.getByLabelText(/signing public key/i, { selector: 'input' });
         expect(pubkeyField.value).toBe(POSITION_PUBKEY);
 
         // From: the position's own address, not whichever address the
@@ -135,7 +135,7 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         const tokenField = await screen.findByRole('button', { name: /^Token: XCHAIN/ });
         expect(tokenField).toBeTruthy();
 
-        const pubkeyField = screen.getByLabelText(/signing public key/i);
+        const pubkeyField = screen.getByLabelText(/signing public key/i, { selector: 'input' });
         expect(pubkeyField.value).toBe('');
 
         // No initialFromAddress: the ordinary active-address default wins.
@@ -311,9 +311,10 @@ describe('ContractStakeForm stake amount validation', () => {
         fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
             target: { value: '2.50000000' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
         expect(await screen.findByRole('form', { name: 'Stake review' })).toBeInTheDocument();
+        expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         expect(screen.getByText('2.50000000 XCHAIN')).toBeInTheDocument();
         expect(screen.getByText('10 blocks')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to edit' }));
@@ -378,7 +379,7 @@ describe('ContractStakeForm penalty warning', () => {
         fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
             target: { value: '1' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
         const review = await screen.findByRole('form', { name: 'Stake review' });
         expect(review).toHaveTextContent('Penalty risk');

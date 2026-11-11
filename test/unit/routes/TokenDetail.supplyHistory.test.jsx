@@ -13,7 +13,7 @@
 // the tens of thousands of points.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -49,6 +49,8 @@ function renderHistory(history) {
             <TokenDetail walletId="w1" chainId={CHAIN} tick="HIST" kind="token" quantity="1" onBack={() => {}} />
         </MessagingProvider>,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
 }
 
 const pathOf = (chart) => chart.querySelector('path').getAttribute('d');

@@ -124,7 +124,7 @@ export function bridgeLegFor({ tick, sourceCoin }) {
     // refuses those at lock time (token-bridge section 3, D15). Saying so here
     // is the difference between a disabled button and a paid-for refusal.
     if (t.includes('.')) {
-        return refuse(`${t} is a subasset. Subassets cannot be bridged yet, so it can only move on ${coinDisplay(coin)}.`);
+        return refuse(`${t} is a subtoken. Subtokens cannot be bridged yet, so it can only move on ${coinDisplay(coin)}.`);
     }
 
     // Refuse a name whose rooted copy `<COIN>.<TICK>` would exceed the tick length limit.

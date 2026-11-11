@@ -148,7 +148,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         // eslint-disable-next-line no-await-in-loop
         await domAct(async () => { step(utils); await drainMicrotasks(); });
     }
-    const create = utils.getByRole('button', { name: 'Create' });
+    const create = utils.getByRole('button', { name: 'Create dispenser' });
     expect(create.disabled).toBe(false);
     await domAct(async () => {
         fireEvent.click(create);
@@ -222,7 +222,7 @@ describe('DispenserForm Mode B pricing', () => {
             pricingSteps: [
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
                 (utils) => {
-                    setValue(utils, 'Priced in fiat (optional)', 'USD');
+                    setValue(utils, 'Priced in fiat', 'USD');
                     setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
                 (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },

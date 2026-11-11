@@ -102,7 +102,7 @@ assert.doesNotMatch(panelSrc, /<input\b/, 'panel has no route-local radio inputs
 const cssSrc = readFileSync(join(wsRoot, cssPath), 'utf8');
 for (const cls of [
     'successSummary', 'successRow', 'successMono',
-    'successTxidBlock', 'successTxidRow',
+    'successTxidBlock',
     'successLabel', 'hint', 'body',
 ]) {
     assert.ok(

@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const confirmResult = { current: null };
 
@@ -46,7 +46,7 @@ const DOGE_ADDRESS = Object.freeze({
 const BY_CHAIN = Object.freeze({ [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] });
 const WAIT = { timeout: 4000 };
 
-function mountBridge({ getAddressesByChain } = {}) {
+function mountBridge({ getAddressesByChain, walletMode = 'full' } = {}) {
     const walletBalances = {};
     for (const [chainId, addrs] of Object.entries(BY_CHAIN)) {
         walletBalances[chainId] = addrs.map((a) => ({
@@ -61,7 +61,7 @@ function mountBridge({ getAddressesByChain } = {}) {
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
         getTokenInfo: vi.fn().mockResolvedValue(null),
         requoteNativeFee: vi.fn().mockResolvedValue(null),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
     };
@@ -100,7 +100,7 @@ async function submitMove(container) {
         expect(inputByLabel(container, /^Receive at/)?.value).toBe(DOGE_ADDRESS.address);
     }, WAIT);
     fireEvent.change(inputByLabel(container, /^Amount/i), { target: { value: '1' } });
-    const button = byText(container, 'button[type="submit"]', 'Review move');
+    const button = byText(container, 'button[type="submit"]', 'Move');
     await waitFor(() => expect(button.disabled).toBe(false), WAIT);
     fireEvent.click(button);
 }
@@ -113,6 +113,39 @@ afterEach(() => {
 });
 
 describe('BridgeMoveForm lays out every page state through FormPage', () => {
+    it('explains each form-specific field and gives the green review action a move icon', async () => {
+        const container = mountBridge();
+        await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)
+            .toBe(DOGE_ADDRESS.address), WAIT);
+
+        const help = [
+            ['From', 'Your address on the source network that holds the tokens to move.'],
+            ['Receive at', 'The address on the destination network that receives the tokens. It starts as one of your own addresses; you can type or paste any valid address on that network.'],
+            ['Amount (XCHAIN)', "How much of the token to move. It must fit the token's decimal places."],
+            ['Memo', 'A public note saved on the blockchain with this action. It cannot contain | or ;.'],
+        ];
+        for (const [label, copy] of help) {
+            const trigger = screen.getByRole('button', { name: `About ${label}` });
+            fireEvent.click(trigger);
+            expect(screen.getByText(copy, { selector: '[role="tooltip"]' })).toBeTruthy();
+        }
+
+        const review = byText(container, 'button[type="submit"]', 'Move');
+        expect(review.className).toMatch(/success/);
+        expect(review.querySelector('svg[data-xc-icon]')).not.toBeNull();
+    });
+
+    it('names the watcher action and explains offline signing', async () => {
+        const container = mountBridge({ walletMode: 'watcher' });
+        await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)
+            .toBe(DOGE_ADDRESS.address), WAIT);
+
+        expect(byText(container, 'button[type="submit"]', 'Move')).not.toBeNull();
+        expect(container.textContent).toContain(
+            'Watcher mode: this prepares the transaction for your offline signer.',
+        );
+    });
+
     it('keeps the editable receiving address and route notice inside the form page', async () => {
         const container = mountBridge();
         await waitFor(() => expect(inputByLabel(container, /^Receive at/)?.value)

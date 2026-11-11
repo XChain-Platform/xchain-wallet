@@ -30,7 +30,8 @@ test('the dispenser expiration field names its time zone and shows the UTC momen
     const main = page.getByRole('main');
     await main.getByRole('radio', { name: /Expire at a specific time/ }).check();
 
-    const field = main.getByLabel('Expires');
+    // Exact, since the label row's help tip is named "About Expires" (U57).
+    const field = main.getByLabel('Expires', { exact: true });
     await expect(field).toHaveAccessibleDescription(/Time is in your local time zone, America\/Chicago \(UTC-[56]\)\./);
 
     // December is standard time in Chicago, so the offset follows the entered

@@ -5,7 +5,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
+import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
+import onboardingStyles from '../../../packages/core/src/shared/routes/Onboarding.module.css';
 
 describe('FormPage onboarding layout', () => {
     it('keeps progress, title, status, body, and equal action stack in shared order', () => {
@@ -77,5 +82,28 @@ describe('FormPage onboarding layout', () => {
         const form = screen.getByRole('form', { name: 'Send' });
         expect(form.previousElementSibling).toHaveTextContent('Demo wallets cannot move funds.');
         expect(form).not.toHaveTextContent('Demo wallets cannot move funds.');
+    });
+
+    it('keeps the Welcome offline signer choice slate instead of promoting it to success', () => {
+        localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <Onboarding
+                    onCreate={() => {}}
+                    onImport={() => {}}
+                    onImportFromFreeWallet={() => {}}
+                    onPairPartner={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        localStorage.clear();
+
+        const pair = screen.getByRole('button', { name: 'Pair an offline signer' });
+        expect(pair).toHaveClass(buttonStyles.primary);
+        expect(pair).toHaveClass(onboardingStyles.pairSignerButton);
+        expect(pair).not.toHaveClass(buttonStyles.success);
     });
 });

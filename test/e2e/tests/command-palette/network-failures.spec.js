@@ -127,7 +127,8 @@ async function expectMoneyRoutes(page) {
     await page.keyboard.press('Enter');
     await expect(dialog).toBeHidden();
     await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('7');
+    // XCP is divisible, so the amount takes its exact 8-decimal format (U61).
+    await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('7.00000000');
     await expect(page.getByRole('main')).not.toContainText(/\bNaN\b|\bundefined\b/);
 
     await openPaletteSearch(page, 'receive');
@@ -176,7 +177,7 @@ for (const vp of VIEWPORTS) {
             await page.keyboard.press('Enter');
             await expect(dialog).toBeHidden();
             await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
-            await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('5');
+            await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('5.00000000');
             await expect(page.getByRole('button', { name: 'Change asset (currently XCP)' })).toBeVisible();
 
             // Abandoned without submitting: the plain Send command opens a

@@ -47,6 +47,7 @@ import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
 import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
+import * as notificationsIndex from '../../core/src/notifications/index.js';
 import { GovernancePollWatcher } from '../../core/src/notifications/GovernancePollWatcher.js';
 import { DeadlineWatcher } from '../../core/src/notifications/DeadlineWatcher.js';
 import { DispenserEscrowWatcher } from '../../core/src/notifications/DispenserEscrowWatcher.js';
@@ -153,6 +154,27 @@ import { resolveSdkFactory } from './sdkFactory.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 
 const chainRegistry = defaultRegistry();
+
+/**
+ * Token-ticker price source for the price-alert watcher, or null when the
+ * core build has no lookup. The price-data setting is read once per poll,
+ * before the lookup runs, so a toggle takes effect on the next poll.
+ */
+function buildTokenPriceSource(vault) {
+    const createLookup = notificationsIndex.createTokenPriceLookup;
+    if (typeof createLookup !== 'function') return null;
+    let priceDataEnabled = true;
+    const lookup = createLookup({
+        chainRegistry,
+        allowCoingeckoFallback: () => priceDataEnabled,
+    });
+    return async (req) => {
+        const flowsNs = await getFlows();
+        const settings = await flowsNs.getSettings(vault);
+        priceDataEnabled = settings?.privacy?.priceDataEnabled !== false;
+        return lookup(req);
+    };
+}
 
 // Dev-mode SDK stub: fallback when `xchain-sdk` isn't resolvable.
 //
@@ -947,7 +969,9 @@ function startNotificationsNow() {
 
     // §46 price-alert poll watcher: same lifecycle, same notify adapter.
     if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
+        const getTokenPrices = buildTokenPriceSource(vault);
         priceAlertWatcher = new PriceAlertWatcher({
+            ...(getTokenPrices ? { getTokenPrices } : {}),
             getNativePrices: async ({ chainIds, fiatCurrency }) => {
                 if (!priceOracleInstance) {
                     const flowsNs = await getFlows();

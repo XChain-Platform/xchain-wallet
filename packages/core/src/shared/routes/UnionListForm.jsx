@@ -16,6 +16,8 @@ import {
     FormNotice,
     FormPage,
     FormSection,
+    Icon,
+    InfoTip,
     Input,
     NetworkField,
     PageHeader,
@@ -29,6 +31,7 @@ import { unionPickState } from '../../flows/unionListPicks.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -36,11 +39,14 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const FROM_HELP = 'The address that publishes the union list and pays its network fee. It becomes the list\'s owner.';
+const MEMO_HELP = 'A public note saved on the blockchain with this union list. It cannot contain | or ;.';
+const ESTIMATE_HELP = "This count is an estimate because the indexer judges the merged membership at the create's block.";
 const SDK_REASON = "This wallet's SDK cannot build a union list yet; it arrives with the next SDK update.";
 
 function responseRows(response) {
@@ -161,6 +167,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
     const [addressesByChain, setAddressesByChain] = useState(null);
     const [activeByChain, setActiveByChain] = useState(null);
     const [fromAddressId, setFromAddressId] = useState(null);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [candidates, setCandidates] = useState(null);
     const [picked, setPicked] = useState([]);
     const [memo, setMemo] = useState('');
@@ -363,6 +370,21 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                accountId={activeAccountId}
+                chainId={chainId}
+                onChainChange={(value) => { setChainId(value); setFromAddressId(null); }}
+                onPick={(record) => { setFromAddressId(record.id); setSourcePickerOpen(false); }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <FormPage
             demoGuard={demoGuard}
@@ -381,16 +403,18 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.PlusIcon />}
                     loading={lane.composing}
                     disabled={sdkSupported !== true || !fromAddress || pickState.overLimit || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Create union list'}
                 </Button>
             )}
         >
             <FormSection title="Addresses">
             <NetworkField
+                help="The chain the union list is published on. Only your lists on this network can be combined."
                 value={chainId}
                 onChange={(value) => { setChainId(value); setFromAddressId(null); }}
                 chainIds={Object.keys(addressesByChain)}
@@ -398,7 +422,16 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
                 disabled={sdkSupported !== true}
             />
             {fromAddress ? (
-                <AddressField label="From" value={fromAddress.address} readOnly onChange={() => {}} />
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    help={FROM_HELP}
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
             ) : (
                 <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
@@ -433,8 +466,10 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
 
             <FormSection title="Union details">
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help={MEMO_HELP}
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -447,9 +482,7 @@ function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountI
                         {pickState.mergedCount === null
                             ? 'Estimated merged membership: unavailable'
                             : `Estimated merged membership: ${pickState.mergedCount.toLocaleString()}`}
-                    </p>
-                    <p className={styles.hint}>
-                        This count is an estimate because the indexer judges the merged membership at the create's block.
+                        <InfoTip aria="About the membership estimate" label={ESTIMATE_HELP} />
                     </p>
                 </div>
             ) : null}

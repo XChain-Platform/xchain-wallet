@@ -305,7 +305,7 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
             // The two fields only this template and Custom expose.
             await main.getByLabel('Divisible (8 decimal places)').check();
-            await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
+            await main.getByLabel('Max mint per transaction', { exact: true }).fill(String(MAX_MINT));
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);

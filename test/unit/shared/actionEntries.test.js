@@ -50,10 +50,17 @@ describe('ACTION_ENTRY_DEFS', () => {
         }
     });
 
-    it('leaves developer tools and multisig signing out of All actions', () => {
-        expect(ACTION_ENTRY_DEFS.map((entry) => entry.id)).not.toEqual(
-            expect.arrayContaining(['parallel', 'advanced', 'multisig-sign']),
-        );
+    it('describes token issuance as a template choice', () => {
+        const issue = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'issue');
+        expect(issue.label).toBe('Issue token');
+        expect(issue.description).toMatch(/template/i);
+    });
+
+    it('leaves developer tools out of All actions and lists Multisig signing for multisig sends', () => {
+        const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
+        expect(ids).not.toContain('parallel');
+        expect(ids).not.toContain('advanced');
+        expect(ids).toContain('multisig-sign');
     });
 
     it('is frozen, so a shell cannot mutate the menu for the others', () => {

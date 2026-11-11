@@ -23,7 +23,9 @@ import { humanizeError } from '../../../packages/core/src/shared/utils/humanizeE
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 
-function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalancesError = false } = {}) {
+function mount(quantity, {
+    walletMode = 'full', onReceive = vi.fn(), walletBalancesError = false, multisigs = [], onSessionStarted,
+} = {}) {
     const balances = {
         native: { tick: 'BTC', quantity, divisibility: 8 },
         tokens: [],
@@ -41,6 +43,7 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
         getSettings: vi.fn().mockResolvedValue({ walletMode, grace: { testSendThresholdSats: 0 } }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
+        listMultisigReceiveAddresses: vi.fn().mockResolvedValue(multisigs),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -54,7 +57,7 @@ function mount(quantity, { walletMode = 'full', onReceive = vi.fn(), walletBalan
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
-        React.createElement(Send, { walletId: 'w', onBack() {}, onReceive }),
+        React.createElement(Send, { walletId: 'w', onBack() {}, onReceive, onSessionStarted }),
     ));
     return { messaging, onReceive };
 }
@@ -99,6 +102,29 @@ describe('Send from an address holding no coin', () => {
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
+    });
+
+    it('lists a multisig source in the shared picker and replaces the normal body when selected', async () => {
+        mount('100000000', {
+            multisigs: [{
+                multisigConfigId: 'config-1',
+                address: 'bc1qmultisig',
+                scheme: 'p2wsh-multisig',
+                threshold: 2,
+                cosignerCount: 3,
+            }],
+        });
+        await screen.findByText(/BTC available/, {}, { timeout: 10_000 });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
+        // The multisig rides above the address list as a row of the one
+        // shared own-address picker (U60), not a separate source list.
+        const sources = await screen.findByRole('list', { name: 'Picker options' });
+        expect(screen.getByRole('list', { name: 'Addresses' })).toBeInTheDocument();
+        fireEvent.click(within(sources).getByRole('button', { name: /Multisig 2 of 3/ }));
+
+        expect(await screen.findByRole('form', { name: 'Send from multisig' })).toBeInTheDocument();
+        expect(screen.getByText('Needs 2 of 3 signatures')).toBeInTheDocument();
     });
 });
 

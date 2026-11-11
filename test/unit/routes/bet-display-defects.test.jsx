@@ -255,7 +255,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
 
@@ -282,7 +282,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review resolve/i));
+            fireEvent.click(button(utils, /Publish result/i));
             await drain();
         });
 
@@ -301,7 +301,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
         expect(utils.container.textContent).toContain('No outcomes recorded');
         // Keep Review active when the feed has no outcomes so the form can explain
         // why it cannot continue.
-        const review = button(utils, /Review bet/i);
+        const review = button(utils, /Place bet/i);
         expect(review.disabled).toBe(false);
         fireEvent.click(review);
         expect(utils.container.textContent).toContain('Choose an outcome.');

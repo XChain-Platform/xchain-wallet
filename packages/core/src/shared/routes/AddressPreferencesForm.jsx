@@ -20,15 +20,16 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { useNativeFee } from '../hooks/useNativeFee.js';
+import { t } from '../../i18n/index.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -47,7 +48,7 @@ import {
 } from '../../flows/addressPreferences.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -55,8 +56,8 @@ const chainRegistry = registryLib.defaultRegistry();
 /**
  * @param {object} props
  * @param {string} props.walletId
- * @param {string} props.chainId    chain of the address being configured (locked)
- * @param {string} props.address    the address whose preferences are edited (locked source; ADDRESS applies to SOURCE)
+ * @param {string} props.chainId    chain of the address the screen opens on
+ * @param {string} props.address    the address the screen opens on; From can pick another own address (ADDRESS applies to SOURCE)
  * @param {() => void} props.onBack
  */
 export function AddressPreferencesForm({ walletId, chainId: initialChainId, address, onBack }) {
@@ -66,9 +67,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const {
         chainId,
+        setChainId,
         addressesByChain,
         loadError,
         fromAddress,
+        setFromAddressId,
+        chainsWithAddresses,
         descriptor,
         signerReady,
         isWatcherMode,
@@ -84,10 +88,14 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    // The address whose preferences this form reads and writes: From, which
+    // opens on the address the screen was opened for (U60).
+    const editedAddress = fromAddress?.address || address;
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
-    // PC-51: native-coin protocol fee (ADDRESS is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     const [stage, setStage] = useState(/** @type {'form'|'review'|'submitting'|'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
@@ -120,17 +128,26 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         touched.current[field] = true;
         setter(value);
     };
+    // A different From is a different address with its own on-chain values:
+    // forget the picks made for the old one so the new read prefills all three.
+    function resetForNewAddress() {
+        touched.current = { fee: false, requireMemo: false, dispenser: false };
+        setFeePref('2');
+        setRequireMemo(false);
+        setDispPref('1');
+        setFormError(null);
+    }
 
     useEffect(() => {
         let cancelled = false;
-        if (!chainId || !address) return undefined;
+        if (!chainId || !editedAddress) return undefined;
         // The prefill read is skipped for a demo wallet, which cannot submit
         // this form: a demo wallet's addresses never go to an explorer (issue #82).
         if (demoGuard.blocked) return undefined;
         initialPrefillOpen.current = true;
         setCurrent(null);
         setCurrentError(null);
-        messaging.getAddressPreferences({ chainId, address })
+        messaging.getAddressPreferences({ chainId, address: editedAddress })
             .then((prefs) => {
                 if (cancelled) return;
                 setCurrent(prefs);
@@ -149,7 +166,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             })
             .catch((err) => { if (!cancelled) setCurrentError(err?.message || 'Could not load current preferences.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, address, demoGuard.blocked]);
+    }, [messaging, chainId, editedAddress, demoGuard.blocked]);
 
     // Network fee plumbing (mirrors DestroyForm).
     const [feePick, setFeePick] = useState(
@@ -219,7 +236,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         reviewPending.current = true;
         initialPrefillOpen.current = false;
         try {
-            const fresh = await messaging.getAddressPreferences({ chainId, address });
+            const fresh = await messaging.getAddressPreferences({ chainId, address: editedAddress });
             // The memo stays editable during the read, so Review checks the
             // text the write carries, which is the latest one.
             if (refuseMemo(memoRef.current)) return;
@@ -352,7 +369,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     </>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -372,6 +389,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={<Icon.ForwardIcon />}
                         loading={stage === 'submitting' || ownerLane.composing}
                     >
                         {isWatcherMode ? 'Build unsigned transaction' : 'Continue to confirmation'}
@@ -406,12 +424,28 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the signed
-                        transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : null}
             </FormPage>,
+        );
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); resetForNewAddress(); }}
+                onPick={(a) => {
+                    if (a.id !== fromAddress?.id) resetForNewAddress();
+                    setFromAddressId(a.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
         );
     }
 
@@ -425,15 +459,29 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="submit" variant="primary">Review</Button>
+                <Button type="submit" variant="primary" icon={<Icon.PencilIcon />}>Update preferences</Button>
             )}
         >
-            <details>
-                <summary>Who can see these preferences?</summary>
-                <p className={styles.hint}>
-                    They apply to <AddressText address={address} /> and are visible to the whole network once written.
-                </p>
-            </details>
+            {/* The form opens with Network, then From (U60). */}
+            <FormSection title="Address">
+                <NetworkField
+                    label="Network"
+                    value={chainId}
+                    onChange={(cid) => { setChainId(cid); setFromAddressId(null); resetForNewAddress(); }}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]}
+                    chainRegistry={chainRegistry}
+                />
+                <AddressField
+                    label="From"
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                    help="The address whose preferences you set. It sends this action and pays the network fee. Once written, its preferences are visible to the whole network."
+                />
+            </FormSection>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
                     <FieldNote variant="error">{currentError}</FieldNote>
@@ -448,6 +496,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 ) : null}
                 <RadioGroup
                     legend="Choose how the protocol fee is handled"
+                    help="When this address pays a protocol fee, donate it to protocol development (the default) or destroy it, which removes it from supply for good."
                     name="feePref"
                     value={feePref}
                     onChange={pick('fee', setFeePref)}
@@ -458,21 +507,22 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 />
             </FormSection>
 
-            <FormSection title="Incoming sends">
-                <label className={styles.checkRow}>
-                    {/* A native checkbox remains because the kit has no checkbox control. */}
-                    <input
-                        type="checkbox"
-                        checked={requireMemo}
-                        onChange={(e) => pick('requireMemo', setRequireMemo)(e.target.checked)}
-                    />
-                    <span>Require a memo on any send to this address</span>
-                </label>
+            <FormSection
+                title="Incoming sends"
+                // Checkbox has no help prop, so the tip sits on the section title (U57).
+                trailing={<InfoTip aria="About Incoming sends" label="When ticked, the network refuses any send to this address that carries no memo. Useful for an exchange or service that tells customers apart by memo." />}
+            >
+                <Checkbox
+                    label="Require a memo on any send to this address"
+                    checked={requireMemo}
+                    onChange={(e) => pick('requireMemo', setRequireMemo)(e.target.checked)}
+                />
             </FormSection>
 
             <FormSection title="Dispensers on this address">
                 <RadioGroup
-                    legend={<span className="sr-only">Who may open dispensers</span>}
+                    legend="Who may open dispensers"
+                    help="By default only this address can open a dispenser that sells from its balance. Allowing anyone lets other addresses open a dispenser funded by this address."
                     name="dispPref"
                     value={dispPref}
                     onChange={pick('dispenser', setDispPref)}
@@ -481,15 +531,21 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         { value: '2', label: 'Anyone may open a dispenser funded by this address' },
                     ]}
                 />
+            </FormSection>
+
+            <FormSection title="Memo and network fee">
                 <Input
-                    label="Memo (optional)"
-                    hint={MEMO_HINT}
+                    label="Memo"
+                    optional
+                    maxLength={MAX_MEMO_LENGTH}
+                    help="A short public note stored with this preferences update on chain. Anyone can read it."
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"
                 />
                 {feeTiers ? (
                     <FeeSelector
+                        chainId={chainId}
                         label="Network fee"
                         coinTicker={coinTicker}
                         tiers={feeTiers}
@@ -498,7 +554,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                     />
                 ) : null}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             </FormSection>
         </FormPage>,
     );

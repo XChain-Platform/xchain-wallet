@@ -90,9 +90,9 @@ describe('regression/remaining-control-rows', () => {
             </MessagingContext.Provider>,
         );
 
-        const chain = await screen.findByRole('combobox', { name: 'Token network' });
+        const chain = await screen.findByRole('button', { name: /^Network:/ });
+        expect(chain.parentElement.className).toMatch(/(?:^|\s)_?md_/);
         expectFieldsUseSize([
-            chain,
             screen.getByRole('textbox', { name: 'Token ticker' }),
         ], 'md');
         expectButtonsUseSize([
@@ -113,7 +113,7 @@ describe('regression/remaining-control-rows', () => {
             screen.getByRole('textbox', { name: 'Target price' }),
         ], 'md');
         expectButtonsUseSize([
-            screen.getByRole('button', { name: 'Save changes' }),
+            screen.getByRole('button', { name: 'Add alert' }),
             screen.getByRole('button', { name: 'Cancel' }),
         ], 'md');
     });

@@ -1,0 +1,44 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--xc-z-modal);
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    /* A fixed screen does not inherit the body's safe-area padding, so the
+       picker keeps its header and rows clear of the notch and home bar. The
+       inline sides take the larger physical inset so the padding stays right
+       in either writing direction. */
+    padding-block: env(safe-area-inset-top, 0) env(safe-area-inset-bottom, 0);
+    padding-inline: max(env(safe-area-inset-left, 0rem), env(safe-area-inset-right, 0rem));
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    --xc-screen-h: 100%;
+}
+
+.contained {
+    position: absolute;
+}
+
+.list {
+    composes: flush from './Card.module.css';
+    width: 100%;
+    margin: 0;
+    list-style: none;
+}
+
+.icon {
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 50%;
+}
+
+.icon img {
+    display: block;
+    width: 100%;
+    height: 100%;
+}

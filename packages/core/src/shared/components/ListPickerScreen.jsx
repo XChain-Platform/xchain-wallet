@@ -237,7 +237,6 @@ export function ListPickerScreen({
                     size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
-                    role="textbox"
                     className={styles.abSearch}
                     placeholder={t('routes.addressList.search')}
                     value={query}

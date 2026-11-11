@@ -158,7 +158,7 @@ for (const viewport of VIEWPORTS) {
         test('a Settings section returns to the list row, and Settings still opens at the top', async ({ page }) => {
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
             await openSettings(page);
-            const about = main(page).getByRole('button', { name: /^About/ });
+            const about = main(page).getByRole('button', { name: /^About v?\d/ });
             await expect(about).toBeVisible();
 
             const saved = await wheelScroll(page, 5000);
@@ -175,7 +175,7 @@ for (const viewport of VIEWPORTS) {
             await gotoSection(page, 'History');
             await expect(page.locator('[data-history-row]').first()).toBeVisible();
             await openSettings(page);
-            await expect(main(page).getByRole('button', { name: /^About/ })).toBeAttached();
+            await expect(main(page).getByRole('button', { name: /^About v?\d/ })).toBeAttached();
             await page.waitForTimeout(500);
             expect(await scrollTop(page), 'Settings reopened part way down').toBe(0);
         });

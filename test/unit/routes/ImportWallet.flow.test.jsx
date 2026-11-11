@@ -106,6 +106,26 @@ function deferred() {
 afterEach(cleanup);
 
 describe('wallet import flow', () => {
+    it('keeps every disabled import action in the success style', () => {
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <ImportWallet mode="fresh" onBack={() => {}} onImported={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const expectDisabledSuccessAction = (name) => {
+            const action = screen.getByRole('button', { name });
+            expect(action).toBeDisabled();
+            expect(action.className).toMatch(/success/);
+        };
+
+        expectDisabledSuccessAction('Import');
+        fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
+        expectDisabledSuccessAction('Import');
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+        expectDisabledSuccessAction('Restore');
+    });
+
     it('keeps the action label stable and blocks repeat import while busy', async () => {
         const pending = deferred();
         const importMnemonic = vi.fn(() => pending.promise);

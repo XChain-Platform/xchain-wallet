@@ -501,7 +501,7 @@ export async function submitTokenWizard(page, { onReview } = {}) {
     await main.getByRole('button', { name: 'Review token', exact: true }).click();
 
     const continueButton = main.getByRole('button', {
-        name: 'Continue to confirmation',
+        name: 'Issue token',
         exact: true,
     });
     const refusal = main.getByRole('alert');
@@ -622,7 +622,8 @@ export async function createWallet(page, options = {}) {
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Create new wallet' }).click();
 
-    if (name) await page.getByLabel('Wallet name').fill(name);
+    // Exact: every create wallet field's 'About ...' help tip (U57) carries its label too.
+    if (name) await page.getByLabel('Wallet name', { exact: true }).fill(name);
     await page.getByLabel('Password', { exact: true }).fill(password);
     // The shells label this field differently: the web app says "Confirm
     // password", the extension popup shortens it to "Confirm" for its narrow

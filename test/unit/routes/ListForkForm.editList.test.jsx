@@ -84,8 +84,8 @@ function mountFork(resolution, { owner = ACTIVE.address } = {}) {
 }
 
 async function publishEdit() {
-    fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
     await screen.findByText('Fork submitted');
 }
@@ -104,7 +104,7 @@ describe('ListForkForm edit presentation', () => {
         expect(member).toBeChecked();
         fireEvent.click(member);
         expect(member).not.toBeChecked();
-        expect(screen.getByRole('textbox', { name: 'Add tokens (one per line)' })).toBeTruthy();
+        expect(screen.getByRole('textbox', { name: 'Add tokens' })).toBeTruthy();
     });
 
     it.each([false, null])('shows the repoint rail when resolution is %s', async (resolution) => {

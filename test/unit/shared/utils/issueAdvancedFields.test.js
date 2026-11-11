@@ -58,7 +58,7 @@ describe('LOCK_FLAGS', () => {
     // owner two names for one control. MINT is the one protocol COMMAND name
     // the wallet shows users elsewhere (the Mint feature), so it alone stays;
     // token pausing is "Pause token" on screen, never SLEEP.
-    const COMMAND_NAMES = new Set(['MINT']);
+    const COMMAND_NAMES = new Set(['MINT', 'MINT_SUPPLY', 'ISSUE']);
 
     it('keeps ISSUE wire parameter names out of the visible hint copy', () => {
         const leaks = [];
@@ -78,8 +78,8 @@ describe('LOCK_FLAGS', () => {
     it('names the pause lock in the words of the Pause token screen', () => {
         const pause = LOCK_FLAGS.find((f) => f.field === 'LOCK_SLEEP');
         expect(pause.key).toBe('sleep');
-        expect(pause.label).toBe('Pausing');
-        expect(pause.hint).toMatch(/pause or resume/);
+        expect(pause.label).toBe('Pause');
+        expect(pause.hint).toBe('The token can never be paused');
         expect(pause.hint).not.toMatch(/sleep/i);
     });
 

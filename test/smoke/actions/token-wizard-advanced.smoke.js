@@ -147,7 +147,7 @@ assert.ok(
     'the lock matrix is rendered from LOCK_FLAGS, not a hardcoded subset',
 );
 for (const [label, needle] of [
-    ['callback token', /label="Callback token \(optional\)"/],
+    ['callback token', /<Input[\s\S]{0,200}?label="Callback token"[\s\S]{0,100}?\boptional\b/],
     ['callback payout', /label="Payout per unit"/],
     ['callback block', /label="Callback allowed from block"/],
     ['allow-list', /Choose allow-list/],

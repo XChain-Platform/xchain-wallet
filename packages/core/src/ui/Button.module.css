@@ -217,14 +217,18 @@
     border-color: var(--xc-on-danger);
 }
 
-/* The main forward action keeps its green fill while disabled; the shared
-   reduced saturation on disabled controls (tokens.css) marks it as not yet
-   usable. */
+/* The main forward action stays fully green while disabled: it opts out of the
+   shared reduced saturation on disabled controls (tokens.css) and differs from
+   the enabled button only in its not-allowed cursor and its disabled state. */
 .success {
     --xc-button-hover-bg: var(--xc-success-fill);
     --xc-button-hover-border: var(--xc-success-fill);
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
+}
+
+.success:disabled {
+    filter: none;
 }
 
 @media (hover: hover) and (pointer: fine) {

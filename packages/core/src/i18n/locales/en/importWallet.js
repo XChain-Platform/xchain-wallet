@@ -28,22 +28,18 @@ const messages = {
     'importWallet.existing.fullTitle': 'Import an existing wallet',
     'importWallet.wif.fullTitle': 'Import a private key',
     'importWallet.wif.title': 'Import private key',
-    'importWallet.wif.subtitle':
-        'Import one WIF private key as a wallet. Pick the matching network so the correct address is derived.',
     'importWallet.wif.tab': 'Private key',
     'importWallet.wif.key': 'WIF private key',
+    'importWallet.wif.keyHelp': 'Enter the WIF private key you want to import.',
     'importWallet.wif.chain': 'Coin network',
+    'importWallet.wif.chainHelp': 'Choose the coin network that matches this private key.',
     'importWallet.wif.addressType': 'Private key type',
+    'importWallet.wif.addressTypeHelp': 'Choose the address format to derive from this private key.',
+    'importWallet.wif.addressHelp': 'Shows the address derived from the private key, network, and type.',
     'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
-    'importWallet.freeWallet.fullSubtitle':
-        'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect a standard recovery phrase or the legacy Counterwallet/FreeWallet format automatically.',
-    'importWallet.freeWallet.subtitle':
-        'Enter your 12-word FreeWallet recovery phrase.',
-    'importWallet.phrase.fullSubtitle':
-        'Enter a standard recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.',
-    'importWallet.phrase.subtitle':
-        'Enter a recovery phrase with 12, 15, 18, 21, or 24 words.',
+    'importWallet.wif.ackHelp': 'Confirms that you saved this private key separately, because a recovery phrase can\'t restore it.',
     'importWallet.backup.file': 'Backup file',
+    'importWallet.backup.fileHelp': 'Choose the encrypted backup file to restore.',
     'importWallet.cancelScan': 'Cancel scan',
     'importWallet.scanPointerQr': 'Scan pointer QR',
     'importWallet.backup.scannerAlt': 'Backup-pointer QR scanner',
@@ -52,6 +48,7 @@ const messages = {
     'importWallet.backup.useFile': 'Use a file instead',
     'importWallet.backup.chooseFile': 'Choose backup file',
     'importWallet.backup.contents': 'Backup file contents',
+    'importWallet.backup.contentsHelp': 'Paste the encrypted backup file contents into this field.',
     'importWallet.backup.contentsDescription': 'Paste backup file contents here, or drop a backup file onto the box.',
     'importWallet.backup.placeholder.version': '"version":1,"kdf":',
     'importWallet.backup.placeholder.kdf': '"name":"argon2id"…',
@@ -73,11 +70,15 @@ const messages = {
     'importWallet.phrase.suggestions': 'Recovery word suggestions',
     'importWallet.phrase.useWord': 'Use recovery word "{word}"',
     'importWallet.phrase.releaseToLoad': 'Release to load',
-    'importWallet.phrase.dropHint': 'Drop a .txt file with your recovery phrase to load it here.',
-    'importWallet.password.fullHint':
-        'At least {count} characters. Encrypts this wallet on this device.',
+    'importWallet.phrase.help':
+        'Enter a recovery phrase with 12, 15, 18, 21, or 24 words. Drop a .txt file with your recovery phrase to load it here.',
+    'importWallet.phrase.freeWalletHelp':
+        'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect a standard recovery phrase or the legacy Counterwallet/FreeWallet format automatically. Drop a .txt file with your recovery phrase to load it here.',
+    'importWallet.walletNameHelp': 'Name this imported wallet on this device.',
+    'importWallet.password.fullHelp': 'Encrypts this wallet on this device.',
     'importWallet.password.hint': 'At least {count} characters.',
     'importWallet.confirmPassword': 'Confirm password',
+    'importWallet.confirmPasswordHelp': 'Enter the same password again to confirm it.',
     'importWallet.passphrase.toggle': 'This wallet uses an extra passphrase',
     'importWallet.passphrase.help': 'Extra passphrase help',
     'importWallet.passphrase.helpBody':

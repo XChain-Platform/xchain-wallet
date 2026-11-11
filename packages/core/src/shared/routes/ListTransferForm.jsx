@@ -10,12 +10,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressText,
+    AddressField,
     Button,
-    ChainBadge,
     FormNotice,
     FormPage,
+    Icon,
     Input,
+    NetworkField,
     PageHeader,
     Screen,
     StatusMessage,
@@ -24,13 +25,15 @@ import { airdrop as airdropLib, registry as registryLib } from '@xchain-wallet/c
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
@@ -79,6 +82,10 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     const [destination, setDestination] = useState('');
     const [memo, setMemo] = useState('');
     const [typedConfirm, setTypedConfirm] = useState('');
+    const [selectedFromAddress, setSelectedFromAddress] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
@@ -135,16 +142,22 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
-    const ownerRecord = useMemo(() => {
+    const walletOwnerRecord = useMemo(() => {
         if (!owner || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((record) => record.address === owner) || null;
     }, [owner, addressesByChain, chainId]);
+    const fromRecord = useMemo(() => {
+        if (!selectedFromAddress) return walletOwnerRecord;
+        return (addressesByChain?.[chainId] || [])
+            .find((record) => record.address === selectedFromAddress) || null;
+    }, [addressesByChain, chainId, selectedFromAddress, walletOwnerRecord]);
+    const selectedOwner = Boolean(fromRecord && owner && fromRecord.address === owner);
 
     const lane = useOwnerActionLane({
         messaging,
         walletId,
         chainId,
-        owner: ownerRecord,
+        owner: fromRecord,
         software: 'createList',
         hardware: 'createListHw',
     });
@@ -155,7 +168,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
-        if (!ownerRecord) {
+        if (!selectedOwner) {
             setFormError(owner
                 ? 'This list is owned by an address that is not in this wallet, so this wallet cannot transfer it.'
                 : 'The current owner could not be verified, so this wallet cannot transfer this list.');
@@ -222,6 +235,19 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         }
     }
 
+    async function openContactsPicker() {
+        let nextContacts = [];
+        if (typeof messaging.listContacts === 'function') {
+            try {
+                nextContacts = await messaging.listContacts();
+            } catch {
+                nextContacts = [];
+            }
+        }
+        setContacts(Array.isArray(nextContacts) ? nextContacts : []);
+        setContactsPickerOpen(true);
+    }
+
     const header = <PageHeader onBack={onBack} title="Transfer list" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -243,7 +269,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 extraCredentials={(
                     <Input
                         label='Type "TRANSFER" to confirm'
-                        hint={typedConfirmationCopy.listTransfer()}
+                        help={typedConfirmationCopy.listTransfer()}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -252,6 +278,39 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                     />
                 )}
                 hintClassName={styles.hint}
+            />
+        );
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    setSelectedFromAddress(address.address);
+                    setFormError(null);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    setDestination(entry.address);
+                    setFormError(null);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
             />
         );
     }
@@ -310,7 +369,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
     const ownershipReason = !owner
         ? 'The current owner could not be verified, so this wallet cannot transfer this list.'
-        : !ownerRecord
+        : !selectedOwner
             ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A transfer signed by another address will be refused by the network, so this wallet cannot transfer it.`
             : null;
     return wrap(
@@ -327,36 +386,50 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             actions={(
                 <Button
                     type="submit"
-                    variant="danger"
+                    variant="success"
+                    icon={lane.isWatcherMode ? undefined : <Icon.HandshakeIcon />}
                     loading={lane.composing}
-                    disabled={sdkSupported !== true || Boolean(ownershipReason) || !typedConfirmOk || !ownerRecord || lane.composing}
+                    disabled={sdkSupported !== true || Boolean(ownershipReason) || !typedConfirmOk || !selectedOwner || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Transfer list'}
                 </Button>
             )}
         >
+            <NetworkField
+                label="Network"
+                value={chainId}
+                onChange={() => {}}
+                chainIds={[chainId]}
+                chainRegistry={chainRegistry}
+            />
+            <AddressField
+                label="From"
+                icon="addresses"
+                help="Only this list's owner can transfer it. The network refuses a transfer signed by any other address."
+                value={fromRecord?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose source address"
+            />
+
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
-                </dd>
-                <dt className={styles.detailsLabel}>From</dt>
-                <dd className={styles.detailsValue}>
-                    {ownerRecord ? <AddressText address={ownerRecord.address} /> : 'Unavailable'}
-                </dd>
             </dl>
 
             {ownershipReason ? (
                 <FormNotice variant="warning" role="alert">{ownershipReason}</FormNotice>
             ) : null}
 
-            <Input
-                label="Destination"
-                hint="New owner's address on the selected network."
+            <AddressField
+                label="New owner"
+                icon="contacts"
+                help="The address that becomes this list's owner. It must be valid on the list's network."
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
+                onIconClick={openContactsPicker}
+                iconLabel="Choose new owner from contacts"
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
@@ -364,8 +437,10 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A note recorded with this list ownership transfer."
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -385,7 +460,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
             <Input
                 label="Type TRANSFER to confirm"
-                hint={typedConfirmationCopy.listTransferReview()}
+                help={typedConfirmationCopy.listTransferReview()}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

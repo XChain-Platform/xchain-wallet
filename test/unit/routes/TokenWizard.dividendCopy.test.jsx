@@ -24,9 +24,8 @@
 // working token and re-issue under Community - a fresh ISSUE fee, a dead
 // ticker, holders stranded, all for a distinction that never existed.
 //
-// So this file asserts the two halves of the fix together: the false
-// choice is gone from the picker, and the truth is stated where the
-// choice used to be made.
+// So this file asserts the template distinction where the choice is made,
+// along with the row presentation that helps users scan those choices.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -48,7 +47,7 @@ const ADDRESSES = {
 
 let composeForConfirm;
 
-function mountWizard() {
+function mountWizard(props = {}) {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
@@ -66,7 +65,7 @@ function mountWizard() {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(TokenWizard, { walletId: 'w', onBack() {} }),
+            React.createElement(TokenWizard, { walletId: 'w', onBack() {}, ...props }),
         ),
     );
 }
@@ -94,12 +93,36 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
         expect(screen.queryByText(/Dividend-enabled/i)).toBeNull();
     });
 
-    it('says on the picker that any token can pay dividends', async () => {
-        mountWizard();
-        const note = await screen.findByText(/Any token you issue here can pay dividends/i);
-        // The second sentence is the one that closes the inverse reading:
-        // without it the note still reads as "some templates enable this".
-        expect(note.textContent).toMatch(/not something a template turns on/i);
+    it('opens the full issue form through the Custom template when the shell provides it', async () => {
+        const onCustom = vi.fn();
+        mountWizard({ onCustom });
+        fireEvent.click(await screen.findByText('Custom'));
+        expect(onCustom).toHaveBeenCalledOnce();
+    });
+
+    it('renders every template with its icon and name together, without the old note or legacy names', async () => {
+        const { container } = mountWizard();
+        await screen.findByText('Utility token');
+
+        const templates = [
+            ['meme', 'Meme token'],
+            ['utility', 'Utility token'],
+            ['collectible', 'Collectible'],
+            ['edition', 'Limited edition'],
+            ['subtoken', 'Subtoken'],
+            ['custom', 'Custom'],
+        ];
+        for (const [id, name] of templates) {
+            const title = container.querySelector(`[data-template-title="${id}"]`);
+            expect(title, `${id} title row`).toBeTruthy();
+            expect(title.textContent).toBe(name);
+            expect(title.querySelector('svg'), `${id} icon`).toBeTruthy();
+        }
+
+        expect(container.querySelector('[data-template-title="meme"] svg'))
+            .toHaveAttribute('data-icon', 'frog');
+        expect(screen.queryByText(/Any token you issue here can pay dividends/i)).toBeNull();
+        expect(container.textContent).not.toMatch(/child token|subasset|sub-token/i);
     });
 
     it('names dividends on the Utility card itself, where the old choice was made', async () => {
@@ -118,11 +141,11 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
             target: { value: 'DANKUTIL' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.change(screen.getByLabelText('Max mint per transaction (optional)'), {
+        fireEvent.change(screen.getByLabelText('Max mint per transaction'), {
             target: { value: '100' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Issue token' }));
 
         const params = await composedParams();
         expect(params).toMatchObject({

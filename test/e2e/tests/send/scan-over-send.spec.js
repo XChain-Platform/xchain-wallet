@@ -42,12 +42,13 @@ async function openScanner(page) {
     await expect(palette).toBeVisible({ timeout: 15_000 });
     await palette.getByRole('combobox').first().fill('Scan a QR');
     await page.getByRole('option', { name: /^Scan a QR code/ }).first().click();
-    await expect(page.getByLabel('Or paste it here')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Or paste it here', exact: true })).toBeVisible();
 }
 
 async function openSendFor(page, uri) {
     await page.evaluate((url) => globalThis.__deliverLink(url), uri);
-    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    // Coin amounts show their exact 8-decimal format (U61).
+    await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
 }
 
 test('a request scanned over an open Send form fills that request', async ({ page }) => {
@@ -55,11 +56,11 @@ test('a request scanned over an open Send form fills that request', async ({ pag
     await openSendFor(page, `bitcoin:${FIRST}?amount=0.001`);
 
     await openScanner(page);
-    await page.getByLabel('Or paste it here').fill(`bitcoin:${SECOND}?amount=0.5&message=Invoice%2042`);
+    await page.getByRole('textbox', { name: 'Or paste it here', exact: true }).fill(`bitcoin:${SECOND}?amount=0.5&message=Invoice%2042`);
     await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     await expect(page.locator('#send-destination')).toHaveValue(SECOND);
-    await expect(page.locator('#send-amount')).toHaveValue('0.5');
+    await expect(page.locator('#send-amount')).toHaveValue('0.50000000');
     await expect(page.getByRole('main').getByText('Invoice 42')).toBeVisible();
 });
 
@@ -68,11 +69,11 @@ test('a request for another coin scanned over Send never keeps the old payee or 
     await openSendFor(page, `bitcoin:${FIRST}?amount=0.001`);
 
     await openScanner(page);
-    await page.getByLabel('Or paste it here').fill(`litecoin:${LITECOIN}?amount=5`);
+    await page.getByRole('textbox', { name: 'Or paste it here', exact: true }).fill(`litecoin:${LITECOIN}?amount=5`);
     await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     await expect(page.locator('#send-destination')).toHaveValue(LITECOIN);
-    await expect(page.locator('#send-amount')).toHaveValue('5');
+    await expect(page.locator('#send-amount')).toHaveValue('5.00000000');
     await expect(page.locator('label[for="send-amount"]')).toContainText('LTC');
 });
 
@@ -83,9 +84,9 @@ test('a link that lands while the scanner is open closes it', async ({ page }) =
     await openScanner(page);
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${SECOND}?amount=0.002`);
 
-    await expect(page.getByLabel('Or paste it here')).toBeHidden();
+    await expect(page.getByRole('textbox', { name: 'Or paste it here', exact: true })).toBeHidden();
     await expect(page.locator('#send-destination')).toHaveValue(SECOND);
-    await expect(page.locator('#send-amount')).toHaveValue('0.002');
+    await expect(page.locator('#send-amount')).toHaveValue('0.00200000');
 });
 
 test('a request scanned over an approved payment wins over a link waiting behind it', async ({ page }) => {
@@ -101,9 +102,9 @@ test('a request scanned over an approved payment wins over a link waiting behind
     await expect(main.getByText('This development build cannot sign.', { exact: false })).toBeVisible();
 
     await openScanner(page);
-    await page.getByLabel('Or paste it here').fill(`bitcoin:${THIRD}?amount=0.3`);
+    await page.getByRole('textbox', { name: 'Or paste it here', exact: true }).fill(`bitcoin:${THIRD}?amount=0.3`);
     await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     await expect(page.locator('#send-destination')).toHaveValue(THIRD);
-    await expect(page.locator('#send-amount')).toHaveValue('0.3');
+    await expect(page.locator('#send-amount')).toHaveValue('0.30000000');
 });

@@ -63,7 +63,7 @@ async function searchFor(token) {
     // The settings load is async; the chain list is empty until it lands, and
     // searching before then would escape the filter - so wait for it.
     await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('searchbox');
     fireEvent.change(input, { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
@@ -108,7 +108,7 @@ describe('DispenserExplorer network scoping', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
         expect(screen.getByText('Loading available networks…')).toBeTruthy();
         const action = screen.getByRole('button', { name: /search/i });
         expect(action).toBeDisabled();
@@ -129,7 +129,7 @@ describe('DispenserExplorer network scoping', () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        const input = screen.getByRole('textbox');
+        const input = screen.getByRole('searchbox');
         const form = input.closest('form');
 
         fireEvent.change(input, { target: { value: 'FIRST' } });
@@ -247,7 +247,7 @@ describe('DispenserExplorer network scoping', () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
 
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        const input = screen.getByRole('textbox');
+        const input = screen.getByRole('searchbox');
         fireEvent.change(input, { target: { value: 'XCHAIN' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 

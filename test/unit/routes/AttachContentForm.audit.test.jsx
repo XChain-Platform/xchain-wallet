@@ -78,7 +78,7 @@ async function chooseFile(name = 'art.txt', type = 'text/plain') {
 }
 
 async function review() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
 }
 
 beforeEach(() => {
@@ -99,17 +99,17 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeDisabled();
         expect(client.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('shows normalized FILE values and keeps the draft when Back returns to the form', async () => {
         mount();
         await chooseFile(' art.png ', 'image/png');
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: '  Gallery  ' },
         });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: ' memo with spaces ' },
         });
 
@@ -123,24 +123,24 @@ describe('AttachContentForm validation and review', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
-        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('  Gallery  ');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue(' memo with spaces ');
+        expect(await screen.findByLabelText('Title')).toHaveValue('  Gallery  ');
+        expect(screen.getByLabelText('Memo')).toHaveValue(' memo with spaces ');
         expect(screen.getByText((_, element) => (
             element?.tagName === 'DD' && element.textContent === ' art.png '
         ))).toBeInTheDocument();
     });
 
-    it('refuses a memo beyond the network byte limit before review', async () => {
+    it('refuses a memo beyond the network character limit before review', async () => {
         mount();
         await chooseFile();
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
-            target: { value: 'é'.repeat(126) },
+        fireEvent.change(screen.getByLabelText('Memo'), {
+            target: { value: `${'😀'.repeat(125)}aa` },
         });
 
         await review();
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Memo is 252 bytes; the network accepts at most 250 bytes.',
+            'Memo is 252 characters; the network accepts at most 250 characters.',
         );
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
@@ -148,7 +148,7 @@ describe('AttachContentForm validation and review', () => {
     it('refuses a title beyond its field limit before review', async () => {
         mount();
         await chooseFile();
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'x'.repeat(101) },
         });
 
@@ -160,8 +160,8 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it.each([
-        ['Title (optional)', 'safe\u202eunsafe', 'Title cannot contain text-direction control characters.'],
-        ['Memo (optional)', 'safe\u200bunsafe', 'Memo cannot contain zero-width characters.'],
+        ['Title', 'safe\u202eunsafe', 'Title cannot contain text-direction control characters.'],
+        ['Memo', 'safe\u200bunsafe', 'Memo cannot contain zero-width characters.'],
     ])('refuses hostile %s text before review', async (label, value, message) => {
         mount();
         await chooseFile();
@@ -308,7 +308,7 @@ describe('AttachContentForm validation and review', () => {
         });
         mount(client);
         await chooseFile('art.png', 'image/png');
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: ' Gallery ' },
         });
         fireEvent.click(screen.getByRole('checkbox'));

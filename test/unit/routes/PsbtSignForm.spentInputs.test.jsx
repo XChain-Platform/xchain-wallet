@@ -51,7 +51,7 @@ function setup(liveness) {
 
 async function openReview() {
     await screen.findByRole('button', { name: /Network: Bitcoin/ });
-    fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT } });
+    fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT } });
     await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: 'Sign transaction' }));
     return screen.findByTestId('confirm-approve');

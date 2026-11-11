@@ -183,7 +183,7 @@ async function contractFor(codeHash) {
 async function openDeployForm(page) {
     await openPaletteCommand(page, 'Contracts');
     const main = page.getByRole('main');
-    const deploy = main.getByRole('button', { name: '+ Publish contract', exact: true });
+    const deploy = main.getByRole('button', { name: 'Publish contract', exact: true });
     await expect(deploy, 'the Contracts route offers no Publish contract control').toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(main.getByLabel('Gas limit'), 'the deploy form did not open')
@@ -689,10 +689,10 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await expect(page.getByRole('heading', { name: rowLabel }).first())
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('button', { name: 'Call method', exact: true }).click();
-            // ExecuteContractForm has no network picker: the contract's own
-            // chain fixes it. The Caller address is what proves the call
-            // signs on the venue chain, and from the address that deployed.
-            await expect(scope.getByLabel('Caller', { exact: true }),
+            // ExecuteContractForm's network field is fixed to the contract's
+            // own chain. The From address is what proves the call signs on
+            // the venue chain, and from the address that deployed.
+            await expect(scope.getByLabel('From', { exact: true }),
                 `the call form is not signing from this run's ${REGTEST_COIN} address`)
                 .toHaveValue(payer, { timeout: 30_000 });
             await scope.getByLabel('Method', { exact: true }).fill('inc');

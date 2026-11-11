@@ -326,7 +326,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await row.click();
 
             const buySection = page.getByRole('main');
-            await expect(buySection.getByLabel('Fills'),
+            await expect(buySection.getByLabel('Fills', { exact: true }),
                 'the buy panel never rendered for a dispenser this wallet does not own')
                 .toBeVisible({ timeout: 30_000 });
             // The panel must know what the buyer holds of the PAYMENT token;
@@ -337,7 +337,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // The buyer already holds XCHAIN (the gas mint, less the ISSUE
             // fee), so the fill is measured as a delta from this figure.
             buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
-            await buySection.getByLabel('Fills').fill('1');
+            await buySection.getByLabel('Fills', { exact: true }).fill('1');
             const buyButton = buySection.getByRole('button', { name: /^Buy 1 fill$/ });
             await expect(buyButton, 'the Buy button is disabled for a funded buyer').toBeEnabled();
             await buyButton.click();

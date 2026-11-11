@@ -15,10 +15,9 @@ describe('governance and staking screen theme colors', () => {
         ['BetFeedsList.jsx', 'var(--xc-accent-primary)'],
         ['MyBets.jsx', 'var(--xc-danger-bg)'],
         ['ContractStakeForm.jsx', 'var(--xc-danger-text)'],
-        ['CoinpayForm.jsx', 'var(--xc-accent-primary)'],
+        ['CoinpayForm.module.css', 'var(--xc-accent-primary)'],
         ['OperatorDashboard.jsx', 'var(--xc-border)'],
         ['StakeForm.jsx', 'var(--xc-text-muted)'],
-        ['StakingActionForm.jsx', 'var(--xc-text-muted)'],
         ['StakingList.module.css', 'var(--xc-on-accent)'],
         ['MyLists.module.css', 'var(--xc-danger-bg)'],
         ['StakeDetail.module.css', 'var(--xc-warning)'],
@@ -38,6 +37,9 @@ describe('governance and staking screen theme colors', () => {
         ['BetFeedsList.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
         ['MyBets.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
         ['StakeForm.jsx', ['var(--border,', 'var(--muted,']],
+        // Its muted explanation paragraphs moved into the Amount help tip (U57);
+        // no hard-coded color may come back in their place.
+        ['StakingActionForm.jsx', ["color: '#", "'#fff'", 'var(--muted,']],
         ['StakingList.module.css', ['var(--color-border,', 'var(--color-surface-raised,', 'var(--xc-info,', 'background: #FFFFFF']],
         ['MyLists.module.css', ['background: #FFFFFF', 'background: rgba(34', 'background: rgba(220']],
     ])('%s does not retain the dark-mode-breaking value', (file, forbidden) => {

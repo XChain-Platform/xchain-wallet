@@ -48,6 +48,12 @@ describe('createPriceAlert', () => {
     it('passes validation immediately after creation', () => {
         expect(validatePriceAlert(createPriceAlert(BASE_INPUT)).ok).toBe(true);
     });
+
+    it('stores only a present normalized token ticker', () => {
+        expect(createPriceAlert({ ...BASE_INPUT, tick: ' pepe ' })).toMatchObject({ tick: 'PEPE' });
+        expect(createPriceAlert({ ...BASE_INPUT, tick: '  ' })).not.toHaveProperty('tick');
+        expect(createPriceAlert({ ...BASE_INPUT, tick: null })).not.toHaveProperty('tick');
+    });
 });
 
 describe('validatePriceAlert', () => {
@@ -99,11 +105,24 @@ describe('validatePriceAlert', () => {
         expect(validatePriceAlert({ ...createPriceAlert(BASE_INPUT), walletId: '' }).ok).toBe(false);
         expect(validatePriceAlert({ ...createPriceAlert(BASE_INPUT), chainId: '' }).ok).toBe(false);
     });
+
+    it('accepts an absent or null ticker and rejects an empty ticker', () => {
+        const alert = createPriceAlert(BASE_INPUT);
+        expect(validatePriceAlert(alert).ok).toBe(true);
+        expect(validatePriceAlert({ ...alert, tick: null }).ok).toBe(true);
+        expect(validatePriceAlert({ ...alert, tick: 'PEPE' }).ok).toBe(true);
+        expect(validatePriceAlert({ ...alert, tick: '' }).ok).toBe(false);
+    });
 });
 
 describe('priceAlertKey', () => {
-    it('builds the canonical key', () => {
+    it('keeps the native coin key byte-identical', () => {
         expect(priceAlertKey(createPriceAlert(BASE_INPUT))).toBe('bitcoin-mainnet::above::70000::usd');
+    });
+
+    it('includes a normalized ticker in a token alert key', () => {
+        expect(priceAlertKey(createPriceAlert({ ...BASE_INPUT, tick: ' pepe ' })))
+            .toBe('bitcoin-mainnet::PEPE::above::70000::usd');
     });
 
     it('differs by direction, target, and currency', () => {

@@ -10,13 +10,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressText,
+    AddressField,
     Button,
-    ChainBadge,
     FormNotice,
     FormPage,
+    Icon,
     Input,
     ListPage,
+    NetworkField,
     PageHeader,
     Screen,
     StatusMessage,
@@ -25,9 +26,13 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -37,7 +42,7 @@ import {
     listShareEligibility,
 } from '../../flows/listShareEligibility.js';
 import { currentListMemberCount, findListOwner, recheckListOwner } from '../../flows/listMembership.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -99,6 +104,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
     const signerReady = useSignerReady(walletId);
     const nativeFee = useNativeFee(coinTicker);
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -110,6 +119,8 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [memo, setMemo] = useState('');
     const [typedConfirm, setTypedConfirm] = useState('');
+    const [selectedFromAddress, setSelectedFromAddress] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitInFlightRef = useRef(false);
@@ -168,10 +179,16 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
-    const ownerRecord = useMemo(() => {
+    const walletOwnerRecord = useMemo(() => {
         if (!owner || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((record) => record.address === owner) || null;
     }, [owner, addressesByChain, chainId]);
+    const fromRecord = useMemo(() => {
+        if (!selectedFromAddress) return walletOwnerRecord;
+        return (addressesByChain?.[chainId] || [])
+            .find((record) => record.address === selectedFromAddress) || null;
+    }, [addressesByChain, chainId, selectedFromAddress, walletOwnerRecord]);
+    const selectedOwner = Boolean(fromRecord && owner && fromRecord.address === owner);
 
     const alreadyShared = useMemo(() => (
         (sharedRows || []).some((row) => isHomeRowForList(
@@ -186,11 +203,29 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     });
     const typedConfirmOk = isShareConfirmed(typedConfirm);
     const trimmedMemo = memo.trim();
+    const actionParams = useMemo(() => ({
+        VERSION: '2',
+        LIST_ACTION_INDEX: listActionIndex,
+        MEMO: trimmedMemo,
+    }), [listActionIndex, trimmedMemo]);
+    const quoteActionData = useMemo(() => {
+        const memoValid = !/[|;]/.test(memo) && !memoLengthError(trimmedMemo);
+        if (!listActionIndexValid || sdkSupported !== true || !eligibility.ok
+            || !selectedOwner || !memoValid) return null;
+        return { action: 'LIST', params: actionParams };
+    }, [actionParams, eligibility.ok, listActionIndexValid, memo, selectedOwner,
+        sdkSupported, trimmedMemo]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromRecord?.address,
+        actionData: quoteActionData,
+    });
     const lane = useOwnerActionLane({
         messaging,
         walletId,
         chainId,
-        owner: ownerRecord,
+        owner: fromRecord,
         software: 'createList',
         hardware: 'createListHw',
     });
@@ -199,7 +234,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
         if (!eligibility.ok) { setFormError(eligibility.reasons[0].text); return false; }
-        if (!ownerRecord) {
+        if (!selectedOwner) {
             setFormError(owner
                 ? 'This list is owned by an address that is not in this wallet, so this wallet cannot share it.'
                 : 'The current owner could not be verified, so this wallet cannot share this list.');
@@ -221,11 +256,6 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         if (!validate()) return;
         submitInFlightRef.current = true;
         setFormError(null);
-        const params = {
-            VERSION: '2',
-            LIST_ACTION_INDEX: listActionIndex,
-            MEMO: trimmedMemo,
-        };
         try {
             if (true) {
                 const ownerCheck = await recheckListOwner({
@@ -240,9 +270,9 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 }
             }
             const next = await lane.run({
-                actionData: { action: 'LIST', params },
+                actionData: { action: 'LIST', params: actionParams },
                 encoderOpts: { payFeeInNativeCoin: nativeFee.flag || undefined },
-                submitExtra: { params, payFeeInNativeCoin: nativeFee.flag },
+                submitExtra: { params: actionParams, payFeeInNativeCoin: nativeFee.flag },
             });
             setResult(next || {});
         } catch (err) {
@@ -279,7 +309,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 extraCredentials={(
                     <Input
                         label='Type "SHARE" to confirm'
-                        hint={typedConfirmationCopy.listShare()}
+                        help={typedConfirmationCopy.listShare()}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -288,6 +318,24 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                     />
                 )}
                 hintClassName={styles.hint}
+            />
+        );
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    setSelectedFromAddress(address.address);
+                    setFormError(null);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
             />
         );
     }
@@ -343,7 +391,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
     const ownershipReason = !owner
         ? 'The current owner could not be verified, so this wallet cannot share this list.'
-        : !ownerRecord
+        : !selectedOwner
             ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A share signed by another address will be refused by the network, so this wallet cannot share it.`
             : null;
     // Why the form cannot be submitted, in one notice: the owner first, then the list itself.
@@ -363,14 +411,33 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="danger"
+                    variant="success"
+                    icon={lane.isWatcherMode ? undefined : <Icon.UsersIcon />}
                     loading={lane.composing}
-                    disabled={formDisabled || !typedConfirmOk || !ownerRecord || lane.composing}
+                    disabled={formDisabled || !typedConfirmOk || !selectedOwner || lane.composing}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Share list'}
                 </Button>
             )}
         >
+            <NetworkField
+                label="Network"
+                value={chainId}
+                onChange={() => {}}
+                chainIds={[chainId]}
+                chainRegistry={chainRegistry}
+            />
+            <AddressField
+                label="From"
+                icon="addresses"
+                help="Only this list's owner can share it. The network refuses a share signed by any other address."
+                value={fromRecord?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose source address"
+            />
+
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -380,16 +447,8 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                         <dd className={styles.detailsValue}>{neutralizeControlText(detail.name)}</dd>
                     </>
                 ) : null}
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
-                </dd>
                 <dt className={styles.detailsLabel}>Current members</dt>
                 <dd className={styles.detailsValue}>{eligibility.countKnown ? memberCount : 'Unavailable'}</dd>
-                <dt className={styles.detailsLabel}>From</dt>
-                <dd className={styles.detailsValue}>
-                    {ownerRecord ? <AddressText address={ownerRecord.address} /> : 'Unavailable'}
-                </dd>
             </dl>
 
             {blockers.length > 0 ? (
@@ -397,8 +456,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             ) : null}
 
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A note recorded with this permanent list share."
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -415,15 +476,25 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 ]}
             />
 
-            <NativeFeeToggle
-                {...nativeFee.toggleProps}
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={null}
+                tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                value={{ mode: 'normal' }}
                 coinTicker={coinTicker}
-                disabled={formDisabled}
-            />
+            >
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    coinTicker={coinTicker}
+                    disabled={formDisabled}
+                />
+            </FeesCard>
 
             <Input
                 label="Type SHARE to confirm"
-                hint={typedConfirmationCopy.hint('SHARE')}
+                help={typedConfirmationCopy.hint('SHARE')}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

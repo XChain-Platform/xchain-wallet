@@ -64,7 +64,8 @@ describe('the Privacy clipboard control', () => {
         expect(input).toHaveValue(90);
         expect(input).toHaveAttribute('min', '0');
         expect(input).toHaveAttribute('max', '600');
-        expect(screen.getByText(/Set to 0 to keep them until they are replaced/)).toBeTruthy();
+        // U57: the zero-keeps-copies rule is in the label tip, not a line under the field.
+        expect(screen.getByRole('button', { name: 'About clipboard auto-clear' })).toBeTruthy();
     });
 
     it('persists zero as the never-clear choice', async () => {

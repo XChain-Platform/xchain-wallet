@@ -21,7 +21,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ u
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { HideReachabilityNotice } from '../../../packages/core/src/shared/components/hideReachabilityNotice.js';
-import { FormNotice, FormPage, Screen, StatusMessage } from '../../../packages/core/src/ui/index.js';
+import { FormNotice, FormPage, PageNotice, PageNoticeHostContext, Screen, StatusMessage } from '../../../packages/core/src/ui/index.js';
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -48,6 +48,49 @@ function mountInShell(overall, form, refresh = () => {}, state = {}) {
 }
 
 describe('one notice box per form', () => {
+    it('portals a lifted form notice into the provided page host', () => {
+        function HostedForm() {
+            const [host, setHost] = useState(null);
+            return (
+                <>
+                    <div ref={setHost} data-testid="page-notice-host" />
+                    <PageNoticeHostContext.Provider value={host}>
+                        <section data-testid="settings-card">
+                            <FormPage status={<StatusMessage variant="error">Vault unavailable.</StatusMessage>}>
+                                <input aria-label="Password" />
+                            </FormPage>
+                        </section>
+                    </PageNoticeHostContext.Provider>
+                </>
+            );
+        }
+
+        const { getByTestId } = render(<HostedForm />);
+        expect(getByTestId('page-notice-host')).toHaveTextContent('Vault unavailable.');
+        expect(getByTestId('settings-card')).not.toHaveTextContent('Vault unavailable.');
+        expect(getByTestId('page-notice-host').querySelector('[data-form-status]')).not.toBeNull();
+    });
+
+    it('portals a nested page notice out of its card', () => {
+        function HostedNotice() {
+            const [host, setHost] = useState(null);
+            return (
+                <>
+                    <div ref={setHost} data-testid="page-notice-host" />
+                    <PageNoticeHostContext.Provider value={host}>
+                        <section data-testid="settings-card">
+                            <PageNotice text="Settings unavailable." tone="error" />
+                        </section>
+                    </PageNoticeHostContext.Provider>
+                </>
+            );
+        }
+
+        const { getByTestId } = render(<HostedNotice />);
+        expect(getByTestId('page-notice-host')).toHaveTextContent('Settings unavailable.');
+        expect(getByTestId('settings-card')).not.toHaveTextContent('Settings unavailable.');
+    });
+
     it('merges the form status and a notice raised from its body', () => {
         const restore = vi.fn();
         const { container } = render(

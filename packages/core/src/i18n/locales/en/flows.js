@@ -58,7 +58,13 @@ const messages = {
         '{ticker} is the only way to pay a protocol fee on this network.',
     'flows.protocolFee.unverifiedNotice':
         "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
-    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
+    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker}',
+    'flows.feesCard.calculating': 'Calculating',
+    'flows.feesCard.pricedAtReview': 'Priced at review',
+    'flows.feesCard.protocolFeeHelpLabel': 'Protocol fee help',
+    'flows.feesCard.protocolFeeHelp':
+        'The protocol charges this fee for the action. Choose whether to pay it in XCHAIN or the native coin when both are available.',
+    'flows.feesCard.total': 'Total',
 
     'flows.rbf.unsupportedBuild': "Fee replacement isn't supported by this build.",
     'flows.rbf.noEntry': 'No entry to replace.',

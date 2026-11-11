@@ -10,7 +10,7 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
-import { Button } from './Button.jsx';
+import { FieldIconButton } from './FieldIconButton.jsx';
 import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
@@ -21,8 +21,8 @@ const ICONS = {
 };
 
 /**
- * AddressField: an address input with an optional icon action on its label
- * row. The two canonical icon uses:
+ * AddressField: an address input with an optional icon action inside its
+ * trailing edge. The two canonical icon uses:
  *
  *   - To ("contacts"): outbound destination. The field accepts typed or
  *     pasted addresses; the address-book icon navigates to the user's
@@ -33,7 +33,7 @@ const ICONS = {
  *     icon navigates to the wallet's own address list (the same screen
  *     as change-address) to select one.
  *
- * The component renders the field + label action only; the host owns the picker
+ * The component renders the field and its action only; the host owns the picker
  * screen the icon navigates to and writes the result back via
  * `value` / `onChange` (To) or its own selection state (From).
  *
@@ -78,6 +78,7 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
+        IconComponent ? styles.hasFieldAction : '',
     ].filter(Boolean).join(' ');
 
     const handlePaste = (event) => {
@@ -104,16 +105,12 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                 label={label}
                 size={size}
                 disabled={disabled}
-                labelAction={IconComponent ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
+                fieldAction={IconComponent ? (
+                    <FieldIconButton
                         icon={<IconComponent />}
+                        label={iconLabel || defaultLabel}
                         onClick={onIconClick}
                         disabled={disabled}
-                        aria-label={iconLabel || defaultLabel}
-                        title={iconLabel || defaultLabel}
                     />
                 ) : null}
                 autoComplete="off"
@@ -132,7 +129,7 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
             />
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">
-                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
+                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} fit />
                 </span>
             ) : null}
         </div>

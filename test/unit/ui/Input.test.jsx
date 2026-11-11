@@ -135,9 +135,88 @@ describe('<Input>', () => {
         );
 
         expect(screen.getByLabelText('Account name')).toHaveAttribute('aria-required', 'true');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveAttribute('aria-required', 'false');
-        expect(screen.getByLabelText('Expiration (optional)')).toHaveAttribute('aria-required', 'false');
+        expect(screen.getByLabelText('Memo')).toHaveAttribute('aria-required', 'false');
+        expect(screen.getByLabelText('Expiration')).toHaveAttribute('aria-required', 'false');
         expect(screen.queryByText(/\(required\)/i)).toBeNull();
+    });
+
+    it.each([
+        ['the optional prop', <Input key="prop" label="Memo" optional />],
+        ['an optional suffix', <Input key="suffix" label="Memo (optional)" />],
+        ['the optional prop and suffix', <Input key="both" label="Memo (OPTIONAL)" optional />],
+    ])('renders one described pill for Input with %s', (_case, field) => {
+        const { container } = render(field);
+        const input = screen.getByLabelText('Memo');
+        const pill = container.querySelector('[data-optional-pill]');
+
+        expect(screen.queryByText(/\(optional\)/i)).toBeNull();
+        expect(container.querySelectorAll('[data-optional-pill]')).toHaveLength(1);
+        expect(pill).toHaveTextContent('Optional');
+        expect(pill.closest('label')).toBeNull();
+        expect(input).toHaveAttribute('aria-required', 'false');
+        expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(pill.id);
+    });
+
+    it.each([
+        ['the optional prop', <Select key="prop" label="Memo" optional defaultValue="none"><option value="none">None</option></Select>],
+        ['an optional suffix', <Select key="suffix" label="Memo (optional)" defaultValue="none"><option value="none">None</option></Select>],
+        ['the optional prop and suffix', <Select key="both" label="Memo (OPTIONAL)" optional defaultValue="none"><option value="none">None</option></Select>],
+    ])('renders one described pill for Select with %s', (_case, field) => {
+        const { container } = render(field);
+        const select = screen.getByLabelText('Memo');
+        const pill = container.querySelector('[data-optional-pill]');
+
+        expect(screen.queryByText(/\(optional\)/i)).toBeNull();
+        expect(container.querySelectorAll('[data-optional-pill]')).toHaveLength(1);
+        expect(pill).toHaveTextContent('Optional');
+        expect(pill.closest('label')).toBeNull();
+        expect(select).toHaveAttribute('aria-required', 'false');
+        expect(select.getAttribute('aria-describedby')?.split(' ')).toContain(pill.id);
+    });
+
+    it('lets required fields override optional state and a leftover suffix', () => {
+        const { container } = render(
+            <>
+                <Input label="Name" required optional />
+                <Select label="Memo (optional)" required defaultValue="none">
+                    <option value="none">None</option>
+                </Select>
+            </>,
+        );
+
+        expect(screen.getByLabelText('Name')).toHaveAttribute('aria-required', 'true');
+        expect(screen.getByLabelText('Memo')).toHaveAttribute('aria-required', 'true');
+        expect(screen.queryByText(/\(optional\)/i)).toBeNull();
+        expect(container.querySelectorAll('[data-optional-pill]')).toHaveLength(0);
+    });
+
+    it('keeps a field action inside the control and outside the label row', () => {
+        const { container } = render(
+            <Input label="Memo" optional fieldAction={<button type="button">Scan</button>} />,
+        );
+        const row = container.querySelector('[data-optional-pill]').parentElement;
+        const input = screen.getByLabelText('Memo');
+        const action = screen.getByRole('button', { name: 'Scan' });
+
+        expect([...row.children].map((element) => element.tagName)).toEqual([
+            'LABEL',
+            'SPAN',
+        ]);
+        expect(row).not.toContainElement(action);
+        expect(input.parentElement).toContainElement(action);
+        expect(input.className).toContain('inputWithFieldAction');
+    });
+
+    it('builds the optional pill entirely from shared tokens', () => {
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const pillRule = inputCss.match(/\.optionalPill\s*\{([^}]*)\}/s)?.[1] || '';
+
+        expect(pillRule).toContain('var(--xc-text-muted)');
+        expect(pillRule).toContain('var(--xc-bg-muted)');
+        expect(pillRule).toContain('var(--xc-border)');
+        expect(pillRule).toContain('var(--xc-badge-radius)');
+        expect(pillRule).toContain('var(--xc-text-xs)');
+        expect(pillRule).toContain('var(--xc-space-2)');
     });
 
     it('renders hint and ties it via aria-describedby', () => {

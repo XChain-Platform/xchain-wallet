@@ -55,7 +55,7 @@ describe('HomeFilterBar', () => {
 
     it.each(['all', ''])('shows All networks for the %j filter', (networkFilter) => {
         mount({ networkFilter });
-        const button = screen.getByRole('button', { name: 'Filter by network' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
         expect(button).toHaveTextContent('All networks');
         expect(button).toHaveClass(chipStyles.chip);
         expect(button).toHaveAttribute('aria-pressed', 'false');
@@ -63,20 +63,20 @@ describe('HomeFilterBar', () => {
 
     it('shows a selected network display name', () => {
         mount({ networkFilter: 'bitcoin' });
-        const button = screen.getByRole('button', { name: 'Filter by network' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
         expect(button).toHaveTextContent('Bitcoin');
         expect(button).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('falls back to the coin code without a descriptor', () => {
         mount({ coinFamilies: ['unknown'], networkFilter: 'unknown' });
-        const button = screen.getByRole('button', { name: 'Filter by network' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
         expect(button).toHaveTextContent('unknown');
     });
 
     it('opens the labelled network list and exposes its options', () => {
         mount();
-        const button = screen.getByRole('button', { name: 'Filter by network' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
 
         expect(button).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(button);
@@ -87,7 +87,7 @@ describe('HomeFilterBar', () => {
 
     it('closes the network list on Escape and an outside mousedown', () => {
         mount();
-        const button = screen.getByRole('button', { name: 'Filter by network' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
 
         fireEvent.click(button);
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -101,7 +101,7 @@ describe('HomeFilterBar', () => {
     it('reports the picked option and closes the network list', () => {
         const onNetworkFilterChange = vi.fn();
         mount({ onNetworkFilterChange });
-        fireEvent.click(screen.getByRole('button', { name: 'Filter by network' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
 
         const listbox = screen.getByRole('listbox', { name: 'Networks' });
         fireEvent.click(within(listbox).getByRole('option', { name: 'Litecoin' }));

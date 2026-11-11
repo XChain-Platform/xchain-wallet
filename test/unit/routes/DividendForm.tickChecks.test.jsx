@@ -96,7 +96,8 @@ function mountDividend(verdictByTick = {}) {
 
 async function openPicker(fieldLabel) {
     await flushTimers();
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(fieldLabel, 'i') }));
+    // Anchored: the field's own help tip is named "About <label>".
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${fieldLabel}`, 'i') }));
     await flushTimers();
 }
 
@@ -108,7 +109,7 @@ async function pickRow(tick) {
 }
 
 const amountField = () => screen.getByLabelText(/^Per-unit amount/);
-const submitButton = () => screen.getByRole('button', { name: /^(Pay dividend|Preview)$/ });
+const submitButton = () => screen.getByRole('button', { name: 'Pay dividend' });
 
 async function flushTimers() {
     for (let pass = 0; pass < 3; pass += 1) {

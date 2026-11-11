@@ -42,9 +42,12 @@ const chainRegistry = {
  * @param {(value: string) => void} props.onChange
  * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {boolean} [props.announceNetworkCount]
- * @param {boolean} [props.iconOnly]  the trigger draws only its icon, so a
- *   list toolbar never repeats the network as text (U12); the name stays in
- *   the title and the accessible name
+ * @param {boolean} [props.iconOnly]  draw only the trigger icon; the name stays
+ *   in the title and the accessible name. On by default so toolbar filters do
+ *   not draw network names
+ * @param {boolean} [props.fieldTrigger]  draw the trigger like the standard
+ *   network field (name text, list icon, no accent fill), as the own-address
+ *   picker does
  */
 export function NetworkFilterDropdown({
     value,
@@ -52,11 +55,15 @@ export function NetworkFilterDropdown({
     size = 'md',
     announceNetworkCount = false,
     iconOnly = true,
+    fieldTrigger = false,
 }) {
     const selectedValue = value || 'all';
+    const selectedName = selectedValue === 'all'
+        ? t('common.allNetworks')
+        : (NETWORK_OPTIONS.find((entry) => entry.value === selectedValue)?.label || selectedValue);
     const ariaLabel = announceNetworkCount && selectedValue === 'all'
         ? t('components.networkFilterDropdown.filterByNetworkAll', { count: NETWORK_OPTIONS.length })
-        : t('home.filter.filterByNetwork');
+        : t('components.networkFilterDropdown.filterByNetworkNamed', { name: selectedName });
 
     return (
         <div className={`${styles.networkWrap} ${styles[size] || ''}`.trim()}>
@@ -68,6 +75,7 @@ export function NetworkFilterDropdown({
                 ariaLabel={ariaLabel}
                 size={size}
                 iconOnly={iconOnly}
+                fieldTrigger={fieldTrigger}
             />
         </div>
     );

@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../registry/index.js';
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { useFiatRate, useTickFiatRate } from './useFiatRate.js';
-
-const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * Fiat formatters for the two fees an XChain action can disclose.
@@ -19,7 +17,7 @@ export function useFeeFiat({ chainId, chainCoin, nativeTicker, settings } = {}) 
     const allowCoingeckoFallback = settings?.privacy?.priceDataEnabled !== false;
     // The action's own chain decides: test coins have no market price even
     // when another network is active. Without a chain, the active network does.
-    const networkKind = chainId ? chainRegistry.get(chainId)?.networkKind : null;
+    const networkKind = chainId ? defaultRegistry().get(chainId)?.networkKind : null;
     const enabled = networkKind
         ? networkKind === 'mainnet'
         : Boolean(settings)

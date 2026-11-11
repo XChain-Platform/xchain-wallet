@@ -27,7 +27,7 @@
 // it explicitly.
 
 import { useEffect, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import {
     activatePanicMode,
     deactivatePanicMode,
@@ -101,7 +101,7 @@ export function PanicModeRow() {
                         {t('settings.panic.remaining')}
                     </span>
                 </div>
-                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
+                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={<Icon.UnlockIcon />} onClick={handleDeactivate}>
                     {t('settings.panic.deactivate')}
                 </Button>
             </div>
@@ -120,10 +120,10 @@ export function PanicModeRow() {
                         </span>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                        <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
+                        <Button type="button" size="sm" variant="ghost" icon={<Icon.XIcon />} onClick={() => setConfirming(false)}>
                             {t('common.cancel')}
                         </Button>
-                        <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
+                        <Button type="button" size="sm" variant="danger" icon={<Icon.LockIcon />} onClick={handleActivate}>
                             {t('settings.panic.confirm24HourFreeze')}
                         </Button>
                     </div>
@@ -140,7 +140,7 @@ export function PanicModeRow() {
                     {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
-            <Button ref={swap.target} type="button" size="sm" variant="danger" icon={null} style={COMPACT_CONTROL} onClick={() => setConfirming(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="danger" style={COMPACT_CONTROL} icon={<Icon.LockIcon />} onClick={() => setConfirming(true)}>
                 {t('settings.developer.activate2')}
             </Button>
         </div>

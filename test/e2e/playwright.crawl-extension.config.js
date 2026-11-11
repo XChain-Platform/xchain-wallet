@@ -16,6 +16,7 @@
 //     pnpm --dir test/e2e exec playwright test --config playwright.crawl-extension.config.js
 //     CRAWL_SURFACE=sidepanel ...          the side panel instead of the popup
 //     CRAWL_SIZE=360x600 ...               another page size for the surface
+//     CRAWL_MEASURE_ONLY=1 ...             measure each screen once, press nothing
 //     node test/e2e/layout/crawl-summary.js tmp/click-crawl/extension-popup-360x600/<run>
 //
 // The build is not run here: a persistent context loads the directory at

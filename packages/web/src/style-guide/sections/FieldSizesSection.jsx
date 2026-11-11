@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, ChainPicker, Input, Select, Textarea } from '@xchain-wallet/core/ui';
+import { Button, ChainPicker, FieldIconButton, Icon, Input, OptionalPill, Select, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { NetworkFilter } from '@xchain-wallet/core/shared/components/NetworkFilter.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
@@ -30,21 +30,27 @@ export function FieldSizesSection() {
             kicker="Fields, selects, pickers, filters, and buttons share sm (28px), md (36px), and lg (44px), stepping up to 36px, 44px, and 48px on touch. The default is md; touch hit areas remain at least 44px."
         >
             <Guidance
-                what={<>One <code>size</code> prop across text fields, native selects, custom pickers, the network filter, and buttons. Every control uses the shared height, font, radius, and horizontal-padding tokens.</>}
+                what={<>One <code>size</code> prop across text fields, native selects, custom pickers, the network filter, and buttons. Every control uses the shared height, font, radius, and horizontal-padding tokens. Labelled Input, Textarea, and Select fields accept <code>help</code> for a shared InfoTip on the label row. Input and Textarea accept one plain <code>FieldIconButton</code> through <code>fieldAction</code>; it sits inside the trailing edge and the typed value stops before it.</>}
                 when={<>Use <code>md</code> by default. Use <code>sm</code> in dense toolbars and rows where its expanded touch target cannot overlap another action. Use <code>lg</code> for one or two hero controls, including Send's To and Amount fields.</>}
                 whenNot={<>Do not invent a nearby height, mix arbitrary dimensions within a row, or enlarge a painted control to satisfy touch. The coarse-pointer hit area expands around <code>sm</code> and <code>md</code> without changing layout.</>}
                 sizing={<><code>sm</code>: 28px visual with a mouse, 36px on touch with a 44px hit area. <code>md</code>: 36px with a mouse, 44px on touch. <code>lg</code>: 44px with a mouse, 48px on touch. All share <code>--xc-control-font</code>, <code>--xc-control-radius</code>, and <code>--xc-control-pad-x</code>.</>}
                 variants={<><code>size="sm" | "md" | "lg"</code>. Default is <code>md</code>. Composed fields forward the size to their shared primitive.</>}
-                doRule={<>✓ Pick one size per form · mark only optional fields with the exact <code>(optional)</code> suffix · use <code>optional</code> when the base label is translated or dynamic · pair an inline action (Max, address book) with the field via the component</>}
-                dontRule={<>✗ Mix required and optional markers · write <code>(required)</code> in labels · put units inside the optional marker · use literal control heights</>}
+                doRule={<>✓ Pick one size per form · mark optional fields with the <code>optional</code> prop and the shared <OptionalPill /> · place a picker, scan, or copy icon inside its field with <code>fieldAction</code></>}
+                dontRule={<>✗ Mix required and optional markers · write <code>(required)</code> in labels · put icon actions on the label row · use filled buttons for field icons · use literal control heights</>}
                 supersedes={<>Literal component heights and one-off field padding. The contract lives in <code>tokens.css</code> and the shared control primitives.</>}
             />
 
             <Markup>
 {`<Input label="Amount" size="lg" />   // 44px hero field, 48px on touch
+<Input label="Fee rate" help="Choose the fee paid for each byte." />
 <Input label="Memo" optional />       // 36px default field, 44px on touch
+<Input label="Address" fieldAction={
+    <FieldIconButton icon={<Icon.ScanIcon />} label="Scan address" />
+} />
 <Select label="Network" size="lg">…</Select>
-<Textarea label="Message" size="lg" rows={3} />
+<Textarea label="Message" size="lg" rows={3} fieldAction={
+    <FieldIconButton icon={<Icon.ScanIcon />} label="Scan message" />
+} />
 <AmountField size="lg" … />          // composed fields take the same prop`}
             </Markup>
 
@@ -100,7 +106,36 @@ export function FieldSizesSection() {
                     rows={2}
                     placeholder="Optional message"
                     defaultValue=""
+                    fieldAction={(
+                        <FieldIconButton
+                            icon={<Icon.ScanIcon />}
+                            label="Scan message"
+                            onClick={() => {}}
+                        />
+                    )}
                 />
+            </LiveExample>
+
+            <LiveExample label="Plain trailing icon inside an Input">
+                <Input
+                    label="Address"
+                    placeholder="Enter or scan an address"
+                    autoComplete="off"
+                    fieldAction={(
+                        <FieldIconButton
+                            icon={<Icon.ScanIcon />}
+                            label="Scan address"
+                            onClick={() => {}}
+                        />
+                    )}
+                />
+            </LiveExample>
+
+            <LiveExample label="Optional state marker for field groups">
+                <div style={sizeRow}>
+                    <span>Access lists</span>
+                    <OptionalPill />
+                </div>
             </LiveExample>
         </Section>
     );

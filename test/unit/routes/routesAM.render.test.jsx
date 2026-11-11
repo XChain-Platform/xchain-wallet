@@ -66,7 +66,7 @@ describe('A through M route render coverage', () => {
             }],
         });
 
-        expect(await screen.findByRole('button', { name: 'Review agent account' })).toBeDisabled();
+        expect(await screen.findByRole('button', { name: 'Create agent account' })).toBeDisabled();
     });
 
     it('renders the template heading, primary actions, and empty state', async () => {

@@ -469,7 +469,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                     </span>
                                 ) : null}
                                 <Button
-                                    variant="primary"
+                                    variant="success"
                                     onClick={handleAcceptLicense}
                                     disabled={Boolean(licenseDisabledReason)}
                                     aria-describedby={licenseDisabledReason
@@ -507,7 +507,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     actions={(
                         <>
                             <Button
-                                variant="primary"
+                                variant="success"
                                 block
                                 onClick={() => handleGraduate('create', onCreate)}
                                 loading={gradBusy === 'create'}
@@ -517,7 +517,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 {t('onboarding.clearDemoCreateNewWallet')}
                             </Button>
                             <Button
-                                variant="secondary"
+                                variant="primary"
                                 block
                                 onClick={() => handleGraduate('import', onImport)}
                                 loading={gradBusy === 'import'}
@@ -619,7 +619,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 actions={(
                     <>
                         <Button
-                            variant="primary"
+                            variant="success"
                             block
                             onClick={onCreate}
                             disabled={!onCreate}
@@ -628,7 +628,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             {t('onboarding.createNewWallet')}
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             block
                             onClick={onImport}
                             disabled={!onImport}
@@ -665,6 +665,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         {onPairPartner ? (
                             <Button
                                 variant="primary"
+                                className={styles.pairSignerButton}
                                 block
                                 onClick={onPairPartner}
                                 icon={<Icon.LinkIcon />}
@@ -686,6 +687,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         ) : null}
                     </>
                 )}
+                choiceActions
                 stackedActions
             />
         </Screen>

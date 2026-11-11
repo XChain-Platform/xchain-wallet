@@ -154,8 +154,7 @@
 
 .dispenseAmount,
 .dispensePaid,
-.remainingPill,
-.buyerAddressSelect {
+.remainingPill {
     direction: ltr;
     unicode-bidi: isolate;
 }
@@ -241,13 +240,6 @@
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
-}
-
-.buyerAddressSelect {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
 }
 
 @media not all and (min-width: 400px) {

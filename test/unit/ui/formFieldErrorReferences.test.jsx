@@ -99,7 +99,7 @@ describe('form field error references', () => {
         expectLinkedError(screen.getByLabelText('Address field'), 'Address error');
         expectLinkedError(screen.getByLabelText('Amount field'), 'Amount error');
         expectLinkedError(screen.getByRole('button', { name: /Token field/ }), 'Token error');
-        expectLinkedError(screen.getByLabelText('Tokens (one per line)'), 'Not a token name: bad token');
+        expectLinkedError(screen.getByLabelText('Tokens'), 'Not a token name: bad token');
         expectLinkedError(screen.getByLabelText('Target price'), 'Enter a price greater than zero.');
         expectLinkedError(fee, 'Enter a custom fee rate.');
 

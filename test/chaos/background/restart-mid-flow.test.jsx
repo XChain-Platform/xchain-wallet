@@ -274,14 +274,14 @@ describe('chaos/background/restart-mid-flow', () => {
             fireEvent.change(screen.getByLabelText('Confirm backup password'), {
                 target: { value: BACKUP_PASSWORD },
             });
-            fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
 
             expect(await screen.findByText('Could not export the backup. Try again.')).toBeInTheDocument();
             expect(screen.queryByText(RESTART_MESSAGE)).not.toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
+            expect(screen.getByRole('button', { name: 'Export backup' })).toBeEnabled();
             expect(URL.createObjectURL).not.toHaveBeenCalled();
 
-            fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
             expect(await screen.findByText('Confirm the backup file')).toBeInTheDocument();
             fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
             expect(await screen.findByText('Backup file saved')).toBeInTheDocument();

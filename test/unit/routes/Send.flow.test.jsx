@@ -613,12 +613,12 @@ describe('Send flow with mocked messaging', () => {
         );
 
         expect(await screen.findByLabelText('Method')).toHaveValue('pay');
-        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue(argument);
+        expect(screen.getByLabelText('Arguments')).toHaveValue(argument);
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.contractLinkRan).toBeUndefined();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
         const review = await screen.findByRole('form', { name: 'Review contract call' });
         expect(review).toHaveTextContent(argument);
         expect(document.querySelector('img[src="x"]')).toBeNull();
@@ -682,12 +682,16 @@ describe('Send flow with mocked messaging', () => {
         await screen.findByLabelText('From');
         const destination = await screen.findByLabelText(/^To$/);
         const contacts = screen.getByRole('button', { name: 'Open address book' });
-        contacts.focus();
+        destination.focus();
 
         await user.tab();
-        expect(document.activeElement).toBe(destination);
+        expect(document.activeElement).toBe(contacts);
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Token' }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Amount (BTC)' }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
         await user.keyboard('{Enter}');
@@ -807,7 +811,7 @@ describe('Send flow with mocked messaging', () => {
         expect(toField).toHaveValue(TO);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25000000');
         fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Coffee shop');
+        expect(screen.getByLabelText('Memo')).toHaveValue('Coffee shop');
 
         fireEvent.change(toField, { target: { value: '' } });
         fireEvent.paste(toField, {
@@ -854,12 +858,12 @@ describe('Send flow with mocked messaging', () => {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
         });
         fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Rent');
+        expect(screen.getByLabelText('Memo')).toHaveValue('Rent');
 
         fireEvent.paste(toField, {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
         });
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Memo')).toHaveValue('');
         expect(screen.queryByTestId('payment-request-message')).toBeNull();
     });
 
@@ -1292,7 +1296,8 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
+        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
+        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -1349,7 +1354,7 @@ describe('Send flow with mocked messaging', () => {
         active.resolve({ [CHAIN_ID]: { id: 'active', address: FROM } });
         await Promise.resolve();
         expect(review).toHaveTextContent('bc1q11…abcdef');
-        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
+        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(
             expect.objectContaining({ from: expect.objectContaining({ address: SAVED_LOOKALIKE }) }),
@@ -1365,7 +1370,7 @@ describe('Send flow with mocked messaging', () => {
             overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
         });
         await fillSendForm();
-        fireEvent.click(await screen.findByRole('button', { name: 'Create transaction for signing' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Send' }));
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
 
         messaging.unmountView();

@@ -68,7 +68,7 @@ async function gotoPaletteRoute(page, name) {
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', {
-        name: new RegExp(`^${escapeRegExp(name)}\\b`),
+        name: new RegExp(`^${escapeRegExp(name)}\\b(?! the )`),
     }).first().click();
     await expect(palette).toBeHidden();
 }
@@ -177,7 +177,7 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
             await test.step(label, async () => {
                 await gotoSection(page, 'Settings');
                 const row = page.getByRole('main').getByRole('button', {
-                    name: new RegExp(`^${escapeRegExp(subpage)}\\b`),
+                    name: new RegExp(`^${escapeRegExp(subpage)}\\b(?! the )`),
                 });
                 // Phone layouts leave Keyboard out of Settings; wait for the
                 // list to render before deciding the row is absent.

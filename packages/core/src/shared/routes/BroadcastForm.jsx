@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, CopyButton, FeeSelector, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, FeeSelector, FormNotice, FormPage, Icon, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -26,7 +26,7 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { useNativeFee } from '../hooks/useNativeFee.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -165,9 +165,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = tickerForDescriptor(descriptor);
 
-    // PC-51: native-coin protocol fee (BROADCAST is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -512,7 +512,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Broadcast'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : 'Sign'}
@@ -540,9 +540,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -599,6 +597,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -630,11 +629,12 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 </Button>
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
+            <NetworkField label="Network" help="The chain where the message is recorded. Your From address and the network fee are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that signs and pays for this message. The message is recorded on-chain as coming from this address."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -650,6 +650,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
             <Textarea
                 label="Message"
+                help="Plain text recorded on-chain with this transaction. Anyone can read it, and it cannot be edited or removed later."
                 required
                 rows={4}
                 maxLength={MAX_BROADCAST_MESSAGE_LENGTH}
@@ -666,6 +667,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

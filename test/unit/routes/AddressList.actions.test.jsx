@@ -9,6 +9,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { AddressList } from '../../../packages/core/src/shared/routes/AddressList.jsx';
 import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet', format: 'bip39' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -158,11 +159,24 @@ describe('Address detail actions', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), {
             target: { value: 'Savings' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
 
         await waitFor(() => expect(messaging.setAddressLabel).toHaveBeenCalledWith('addr-1', 'Savings'));
         expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Savings');
         expect(screen.getByRole('status', { name: 'Notifications' })).toHaveTextContent('Address label saved.');
+    });
+
+    it('gives the label form a named green Save label action with an icon and a help tip on Label', async () => {
+        mount(messagingWith());
+        fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
+
+        const save = screen.getByRole('button', { name: 'Save label' });
+        expect(save.className).toMatch(/success/);
+        expect(save.querySelector('svg')).not.toBeNull();
+        // Unchanged label: the action stays green while disabled.
+        expect(save).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Label help' })).toBeInTheDocument();
     });
 
     it('titles the detail card once, with no single-tab strip repeating it', async () => {
@@ -235,17 +249,53 @@ describe('Address detail actions', () => {
         });
         mount(messaging);
         await screen.findByRole('button', { name: `View address ${ADDRESS}` });
-        fireEvent.click(screen.getByRole('button', { name: 'Filter by network' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
         fireEvent.click(screen.getByRole('option', { name: 'Dogecoin' }));
 
         expect(screen.queryByRole('button', { name: `View address ${ADDRESS}` })).toBeNull();
         expect(screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeInTheDocument();
     });
 
+    it('hides the network switch on a locked picker and keeps rows on its chain', async () => {
+        const messaging = messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'btc', address: ADDRESS, source: 'hd', role: 'receive' }],
+                'dogecoin-regtest': [{ id: 'doge', address: DOGE_ADDRESS, source: 'hd', role: 'receive' }],
+            }),
+        });
+        mount(messaging, { pickerMode: true, onPick: vi.fn(), networkFilter: 'bitcoin', networkLocked: true });
+
+        await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        expect(screen.queryByRole('button', { name: /Filter by network/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeNull();
+    });
+
+    it('keeps the network switch on a picker that may change chains', async () => {
+        mount(messagingWith(), { pickerMode: true, onPick: vi.fn(), networkFilter: 'bitcoin' });
+
+        await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        expect(screen.getByRole('button', { name: /Filter by network/ })).toBeInTheDocument();
+    });
+
+    it('disables a picker row the form cannot use and says why', async () => {
+        const onPick = vi.fn();
+        mount(messagingWith(), {
+            pickerMode: true,
+            onPick,
+            pickerUnavailableReason: (record) => (record.id === 'addr-1' ? 'Watch-only' : null),
+        });
+
+        const row = await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        expect(row).toBeDisabled();
+        expect(row).toHaveTextContent('Watch-only');
+        fireEvent.click(row);
+        expect(onPick).not.toHaveBeenCalled();
+    });
+
     it('keeps style-guide search and menu controls available by role', async () => {
         mount(messagingWith());
 
-        const search = await screen.findByRole('textbox', { name: 'Search addresses' });
+        const search = await screen.findByRole('searchbox', { name: 'Search addresses' });
         expect(search).toHaveAttribute('type', 'search');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
@@ -254,6 +304,27 @@ describe('Address detail actions', () => {
             'Generate at index (advanced)',
             'Import address',
         ]);
+    });
+
+    it('shows help for the advanced generation network', async () => {
+        mount(messagingWith());
+
+        await screen.findByRole('searchbox', { name: 'Search addresses' });
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Generate at index (advanced)' }));
+
+        expect(screen.getByRole('button', { name: 'About Coin' })).toBeInTheDocument();
+    });
+
+    it('shows help for the imported key network and recovery acknowledgement', async () => {
+        mount(messagingWith());
+
+        await screen.findByRole('searchbox', { name: 'Search addresses' });
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Import address' }));
+
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^About I understand this key/ })).toBeInTheDocument();
     });
 
     it('renders picker actions with shared list-row interaction styles', async () => {
@@ -299,6 +370,10 @@ describe('Address detail actions', () => {
         const scroller = document.querySelector('main');
         scroller.scrollTop = 173;
         const showMore = screen.getByRole('button', { name: 'Show more addresses' });
+        // Every button carries an icon (U63).
+        expect(showMore.querySelector('svg')).not.toBeNull();
+        // Add or import address is the screen's one green main action (U63).
+        expect(screen.getByTestId('address-add-menu')).toHaveClass(buttonStyles.success);
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
@@ -306,7 +381,7 @@ describe('Address detail actions', () => {
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(200));
         expect(scroller.scrollTop).toBe(173);
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search addresses' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search addresses' }), {
             target: { value: 'Fixture 4999' },
         });
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(1));

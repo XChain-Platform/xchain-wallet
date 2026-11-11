@@ -9,6 +9,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const CHAIN_ID = 'bitcoin-regtest';
 const FROM = {
@@ -79,7 +80,7 @@ describe('ParallelComposer confirmation', () => {
         }));
         const messaging = mount({ messagingOverrides: { validateAction } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
 
         expect(await screen.findByText(`Row 1: ${message}`)).toBeTruthy();
         expect(screen.getByRole('form', { name: 'Compose parallel actions' })).toBeTruthy();
@@ -106,7 +107,7 @@ describe('ParallelComposer confirmation', () => {
             ],
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
 
         expect(await screen.findByText('Row 1: first is invalid')).toBeTruthy();
         expect(validateAction).toHaveBeenCalledTimes(2);
@@ -128,7 +129,7 @@ describe('ParallelComposer confirmation', () => {
         const editor = await screen.findByRole('textbox', { name: 'Params (JSON object)' });
         fireEvent.change(editor, { target: { value: paramsJson } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign and send queue' }));
 
         expect(await screen.findByRole('checkbox')).toBeTruthy();
         expect(screen.getByLabelText(FROM.address)).toBeTruthy();
@@ -143,7 +144,7 @@ describe('ParallelComposer confirmation', () => {
         expect(screen.getByRole('textbox', { name: 'Params (JSON object)' }).value).toBe(paramsJson);
         expect(onBack).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
@@ -162,7 +163,7 @@ describe('ParallelComposer confirmation', () => {
             });
         const messaging = mount({ messagingOverrides: { validateAction } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
@@ -179,7 +180,9 @@ describe('ParallelComposer confirmation', () => {
     it('keeps the narrow draft controls contained and identifies each row state', async () => {
         mount();
 
-        const fromPicker = await screen.findByRole('combobox', { name: 'From address' });
+        const fromPicker = await screen.findByRole('textbox', { name: 'From' });
+        expect(fromPicker).toHaveAttribute('readonly');
+        expect(screen.queryByRole('combobox', { name: 'From' })).toBeNull();
         expect(fromPicker.className).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Params (JSON object)' }).className).toBeTruthy();
         expect(screen.getByLabelText('Row 1 status: Pending')).toHaveTextContent('Pending');
@@ -189,7 +192,7 @@ describe('ParallelComposer confirmation', () => {
     it('states the no-rollback consequence in the required acknowledgement', async () => {
         mount();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         await screen.findByRole('checkbox');
         expect(screen.getByText('No rollback:')).toBeTruthy();
         const acknowledgement = screen.getByRole('checkbox', {
@@ -197,7 +200,11 @@ describe('ParallelComposer confirmation', () => {
         });
         expect(acknowledgement).toHaveAttribute('aria-describedby', 'parallel-no-rollback-warning');
         const signAll = screen.getByRole('button', { name: 'Sign all' });
+        const back = screen.getByRole('button', { name: 'Back to composer' });
         expect(signAll.disabled).toBe(true);
+        expect(signAll).toHaveClass(buttonStyles.success);
+        expect(signAll.querySelector('svg')).not.toBeNull();
+        expect(back.querySelector('svg')).not.toBeNull();
         fireEvent.click(acknowledgement);
         expect(signAll.disabled).toBe(false);
     });
@@ -205,7 +212,7 @@ describe('ParallelComposer confirmation', () => {
     it('returns from review without submitting the compose form again', async () => {
         mount();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         expect(await screen.findByRole('form', { name: 'Review parallel actions' })).toBeTruthy();
 
         const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to composer' }));
@@ -218,7 +225,7 @@ describe('ParallelComposer confirmation', () => {
     it('dry-runs and confirms each row before signing the composed PSBT', async () => {
         const messaging = mount();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
@@ -241,6 +248,9 @@ describe('ParallelComposer confirmation', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: COMPOSED.psbt }),
         })));
         expect(await screen.findByText('Parallel run complete')).toBeTruthy();
+        const done = screen.getByRole('button', { name: 'Done' });
+        expect(done.querySelector('svg')).not.toBeNull();
+        expect(done).toHaveClass(buttonStyles.success);
     });
 
     it('blocks signing when preflight reports that the row is above balance', async () => {
@@ -256,7 +266,7 @@ describe('ParallelComposer confirmation', () => {
         }));
         const messaging = mount({ messagingOverrides: { preflight } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
@@ -283,7 +293,7 @@ describe('ParallelComposer confirmation', () => {
         }));
         const messaging = mount({ messagingOverrides: { composeForConfirm, requoteNativeFee } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
@@ -304,9 +314,15 @@ describe('ParallelComposer confirmation', () => {
             .mockResolvedValueOnce({ txid: 'retry-txid' });
         const messaging = mount({ messagingOverrides: { advancedAction } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
+
+        const skip = screen.getByRole('button', { name: 'Skip' });
+        const sign = screen.getByRole('button', { name: 'Sign' });
+        expect(skip.querySelector('svg')).not.toBeNull();
+        expect(sign.querySelector('svg')).not.toBeNull();
+        expect(sign).toHaveClass(buttonStyles.success);
 
         const progress = screen.getByText(
             'Action 1 of 1. 0 broadcast, 0 skipped, 1 remaining. Current row: Pending.',
@@ -337,7 +353,7 @@ describe('ParallelComposer confirmation', () => {
             ],
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
@@ -377,7 +393,7 @@ describe('ParallelComposer confirmation', () => {
     it('shows an unsigned transaction without completing the row in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));

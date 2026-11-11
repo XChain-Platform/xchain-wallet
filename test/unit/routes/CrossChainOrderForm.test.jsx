@@ -20,6 +20,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const DOGE = 'dogecoin-mainnet';
 const BTC = 'bitcoin-mainnet';
@@ -76,7 +77,18 @@ function recordingMessaging(overrides = {}) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({}),
+        getWalletBalances: () => Promise.resolve({
+            [DOGE]: [{
+                address: DOGE_ADDRESS.address,
+                balances: {
+                    tokens: [
+                        { tick: 'JDOG', displayName: 'JDOG', quantity: '1000', divisibility: 0 },
+                        { tick: 'OTHER', displayName: 'OTHER', quantity: '100000000', divisibility: 8 },
+                    ],
+                },
+            }],
+        }),
+        getTokenInfo: ({ tick }) => Promise.resolve({ divisibility: tick === 'JDOG' ? 0 : 8 }),
         composeForConfirm: (args) => {
             calls.push({ method: 'composeForConfirm', args });
             return Promise.resolve({ ...COMPOSED });
@@ -154,16 +166,28 @@ async function pickChain(utils, label, optionLabel) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const row = utils.getAllByRole('option').find((o) => (o.textContent || '').startsWith(optionLabel));
+        const row = utils.getAllByRole('button', { name: /^Select / })
+            .find((o) => (o.textContent || '').startsWith(optionLabel));
         if (!row) throw new Error(`no ${optionLabel} row in the ${label} picker`);
         fireEvent.click(row);
         await drainMicrotasks();
     });
 }
 
-async function fillPair(utils) {
+async function pickGiveToken(utils, tick) {
     await domAct(async () => {
-        setValue(utils, 'Give token', 'JDOG');
+        fireEvent.click(utils.getByRole('button', { name: /^Give token:/ }));
+        await drainMicrotasks();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${tick}(?: on |$)`) }));
+        await drainMicrotasks();
+    });
+}
+
+async function fillPair(utils) {
+    await pickGiveToken(utils, 'JDOG');
+    await domAct(async () => {
         setValue(utils, /^Give amount/, '10');
         setValue(utils, 'Get token', 'XCHAIN');
         setValue(utils, /^Get amount/, '20');
@@ -188,6 +212,89 @@ async function placeAndApprove(utils) {
 }
 
 describe('CrossChainOrderForm', () => {
+    it('uses field help, memo label state, and no standalone order-fill disclosure', async () => {
+        const { utils } = await mount({ initialChainId: DOGE });
+
+        for (const label of [
+            'From',
+            'Give token',
+            'Give amount',
+            'Get token',
+            'Get amount',
+            'Expiration',
+            'Memo',
+        ]) {
+            expect(utils.getByRole('button', { name: `About ${label}` })).toBeTruthy();
+        }
+        expect(utils.queryByText('How orders fill')).toBeNull();
+        expect(utils.container.querySelector('details')).toBeNull();
+        expect(utils.getByText('Optional')).toBeTruthy();
+        expect(utils.getByText('0 / 250')).toBeTruthy();
+        expect(utils.container.textContent).not.toContain('(optional)');
+    });
+
+    it('lists only token holdings from the selected source address on the give chain', async () => {
+        const otherAddress = { ...DOGE_ADDRESS, id: 'addr-doge-1', address: 'Dothermock02aabbcc' };
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getWalletBalances: () => Promise.resolve({
+                [DOGE]: [
+                    {
+                        address: DOGE_ADDRESS.address,
+                        balances: { tokens: [{ tick: 'JDOG', quantity: '5', divisibility: 0 }] },
+                    },
+                    {
+                        address: otherAddress.address,
+                        balances: { tokens: [{ tick: 'HIDDEN', quantity: '9', divisibility: 0 }] },
+                    },
+                ],
+                [BTC]: [{
+                    address: BTC_ADDRESS.address,
+                    balances: { tokens: [{ tick: 'WRONGCHAIN', quantity: '7', divisibility: 0 }] },
+                }],
+            }),
+        });
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /^Give token:/ }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByRole('button', { name: /^Select JDOG(?: on |$)/ })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: /^Select HIDDEN(?: on |$)/ })).toBeNull();
+        expect(utils.queryByRole('button', { name: /^Select WRONGCHAIN(?: on |$)/ })).toBeNull();
+        expect(utils.queryByRole('button', { name: /^Select Dogecoin(?: on |$)/ })).toBeNull();
+    });
+
+    it('uses one named green icon action in both form branches and on watcher review', async () => {
+        const full = await mount({ initialChainId: DOGE });
+        const fullAction = full.utils.getByRole('button', { name: 'Place order' });
+        expect(fullAction).toHaveClass(buttonStyles.success);
+        expect(fullAction.querySelector('svg')).toBeTruthy();
+        expect(full.utils.container.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
+        expect(full.utils.queryByRole('button', { name: 'Preview' })).toBeNull();
+        full.utils.unmount();
+
+        const watcher = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        const watcherAction = watcher.utils.getByRole('button', { name: 'Place order' });
+        expect(watcherAction).toHaveClass(buttonStyles.success);
+        expect(watcherAction.querySelector('svg')).toBeTruthy();
+        expect(watcher.utils.container.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
+        expect(watcher.utils.queryByRole('button', { name: 'Preview' })).toBeNull();
+
+        await fillPair(watcher.utils);
+        await domAct(async () => {
+            fireEvent.click(watcher.utils.getByRole('button', { name: 'Place order' }));
+            await drainMicrotasks();
+        });
+        const reviewAction = watcher.utils.getByRole('button', { name: 'Create unsigned transaction' });
+        expect(reviewAction).toHaveClass(buttonStyles.success);
+        expect(reviewAction.querySelector('svg')).toBeTruthy();
+        expect(watcher.utils.getByRole('button', { name: 'Edit' }).querySelector('svg')).toBeTruthy();
+        expect(watcher.utils.container.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
+    });
+
     it('gives on DOGE, gets on BTC, and names the wallet\'s BTC address as GET_ADDRESS', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         // The get chain defaulted to the other coin, and the receiver was
@@ -196,9 +303,7 @@ describe('CrossChainOrderForm', () => {
         expect(pickerName(utils, 'Get network')).toBe('Get network: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
-        const disclosure = utils.getByText('How orders fill').closest('details');
-        expect(disclosure).toHaveProperty('open', false);
-        expect(disclosure).toHaveTextContent(/order book and fills automatically/);
+        expect(utils.queryByText('How orders fill')).toBeNull();
         expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         await fillPair(utils);
@@ -251,7 +356,7 @@ describe('CrossChainOrderForm', () => {
         expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
     });
 
-    it('clears amounts when either token or network changes the represented asset', async () => {
+    it('reformats the give amount when its token changes and clears assets when a network changes', async () => {
         const { utils } = await mount({ initialChainId: DOGE }, {
             getAddressesByChain: () => Promise.resolve({
                 [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
@@ -260,23 +365,30 @@ describe('CrossChainOrderForm', () => {
         });
         await fillPair(utils);
 
+        await pickGiveToken(utils, 'OTHER');
         await domAct(async () => {
-            setValue(utils, 'Give token', 'OTHER');
             setValue(utils, 'Get token', 'WANTED');
             await drainMicrotasks();
         });
-        expect(utils.getByLabelText(/^Give amount/).value).toBe('');
+        expect(pickerName(utils, 'Give token')).toBe('Give token: OTHER on Dogecoin');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10.00000000');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
 
-        await fillPair(utils);
+        await pickGiveToken(utils, 'JDOG');
+        await domAct(async () => {
+            setValue(utils, /^Give amount/, '10');
+            setValue(utils, 'Get token', 'XCHAIN');
+            setValue(utils, /^Get amount/, '20');
+            await drainMicrotasks();
+        });
         await pickChain(utils, 'Get network', 'Litecoin');
         expect(utils.getByLabelText('Get token').value).toBe('');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
-        expect(utils.getByLabelText('Give token').value).toBe('JDOG');
+        expect(pickerName(utils, 'Give token')).toBe('Give token: JDOG on Dogecoin');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
 
         await pickChain(utils, 'Give network', 'Bitcoin');
-        expect(utils.getByLabelText('Give token').value).toBe('');
+        expect(pickerName(utils, 'Give token')).toBe('Give token: Select a token');
         expect(utils.getByLabelText(/^Give amount/).value).toBe('');
     });
 
@@ -293,7 +405,7 @@ describe('CrossChainOrderForm', () => {
         });
         await fillPair(utils);
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
             await drainMicrotasks();
         });
 
@@ -365,13 +477,13 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('refuses a native-coin side: only a token can be offered', async () => {
+    it('refuses a native coin on the requested side', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         await domAct(async () => {
-            setValue(utils, 'Give token', 'DOGE');
+            setValue(utils, 'Get token', 'BTC');
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toMatch(/cannot give native DOGE\. Pick a token to offer\./);
+        expect(utils.container.textContent).toMatch(/cannot get native BTC; ask for a token on the get network\./);
         expect(utils.container.textContent).not.toMatch(/escrowed for the federation/);
         expect(utils.getByRole('button', { name: 'Place order' }).disabled).toBe(true);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
@@ -411,7 +523,7 @@ describe('CrossChainOrderForm', () => {
             setValue(utils, /^Give amount/, '1.5');
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toContain('Give amount must be a whole number because JDOG is indivisible.');
+        expect(utils.getByText('Amount can have at most 0 decimal places.')).toBeTruthy();
 
         await domAct(async () => {
             setValue(utils, /^Give amount/, '6');
@@ -426,14 +538,15 @@ describe('CrossChainOrderForm', () => {
         await fillPair(utils);
 
         await domAct(async () => {
-            setValue(utils, 'Give token', '^0');
+            setValue(utils, 'Get token', '^0');
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toContain("Give token can be a name, or ^ followed by the token's number (^123).");
+        expect(utils.container.textContent).toContain("Get token can be a name, or ^ followed by the token's number (^123).");
 
         await domAct(async () => {
-            setValue(utils, 'Give token', 'JDOG');
+            setValue(utils, 'Get token', 'XCHAIN');
             setValue(utils, /^Give amount/, '10');
+            setValue(utils, /^Get amount/, '20');
             setValue(utils, 'Receive at', 'not an address');
             await drainMicrotasks();
         });
@@ -457,11 +570,12 @@ describe('CrossChainOrderForm', () => {
         await fillPair(utils);
         await domAct(async () => {
             setValue(utils, 'Receive at', `  ${BTC_ADDRESS.address}  `);
-            setValue(utils, 'Memo (optional)', '  exact memo  ');
-            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            setValue(utils, 'Memo', '  exact memo  ');
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
             await drainMicrotasks();
         });
 
+        expect(utils.getByText(/prepares the transaction for your offline signer/)).toBeTruthy();
         expect(utils.getByText('10 JDOG')).toBeTruthy();
         expect(utils.getByText('20 XCHAIN')).toBeTruthy();
         expect(utils.getByLabelText(BTC_ADDRESS.address)).toBeTruthy();
@@ -472,9 +586,9 @@ describe('CrossChainOrderForm', () => {
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
-        expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('20.00000000');
         expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
-        expect(utils.getByLabelText('Memo (optional)').value).toBe('  exact memo  ');
+        expect(utils.getByLabelText('Memo').value).toBe('  exact memo  ');
     });
 
     it('refuses a custom expiration that passes while editing but expires on watcher review', async () => {
@@ -491,7 +605,7 @@ describe('CrossChainOrderForm', () => {
         await domAct(async () => {
             fireEvent.click(utils.getByLabelText('Expire at a specific time'));
             setValue(utils, 'Expires', localExpiration);
-            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
             await drainMicrotasks();
         });
         expect(utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
@@ -611,7 +725,8 @@ describe('CreateOrderForm state safety', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            // Create order names its action Place order in watcher mode too (U63).
+            fireEvent.click(utils.getByRole('button', { name: 'Place order' }));
             await drainMicrotasks();
         });
 

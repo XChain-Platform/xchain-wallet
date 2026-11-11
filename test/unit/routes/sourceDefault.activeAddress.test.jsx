@@ -75,7 +75,7 @@ const FORMS = [
         name: 'DispenserForm',
         Form: DispenserForm,
         props: {},
-        read: async () => (await screen.findByLabelText('Source')).value,
+        read: async () => (await screen.findByLabelText('From')).value,
     },
     {
         name: 'TokenWizard',
@@ -90,19 +90,13 @@ const FORMS = [
         name: 'BatchComposerForm',
         Form: BatchComposerForm,
         props: {},
-        read: async () => {
-            const select = await screen.findByLabelText('From address');
-            return ADDRESSES[CHAIN].find((a) => a.id === select.value)?.address;
-        },
+        read: async () => (await screen.findByLabelText(/^From(?: address)?$/)).value,
     },
     {
         name: 'ParallelComposer',
         Form: ParallelComposer,
         props: {},
-        read: async () => {
-            const select = await screen.findByLabelText('From address');
-            return ADDRESSES[CHAIN].find((a) => a.id === select.value)?.address;
-        },
+        read: async () => (await screen.findByLabelText('From')).value,
     },
 ];
 

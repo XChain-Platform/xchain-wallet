@@ -135,7 +135,7 @@ describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
         const msg = await screen.findByText(/frozen for good/i, {}, WAIT);
         expect(msg).toBeInTheDocument();
         expect(screen.getByLabelText('Bitcoin')).toBeDisabled();
-        expect(screen.getByLabelText(/Minimum confirmations/i)).toBeDisabled();
+        expect(screen.getByLabelText(/Minimum confirmations/i, { selector: 'input' })).toBeDisabled();
         // And there is no freeze checkbox to re-apply.
         expect(screen.queryByLabelText(/Freeze these settings/i)).toBeNull();
     });
@@ -157,8 +157,8 @@ describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
     });
 });
 
-describe('IssueTokenForm: the bridgeability disclosure', () => {
-    it('says bridging is off, where it is turned on, and the list decision that is final', async () => {
+describe('IssueTokenForm: bridge settings stay on their own form', () => {
+    it('does not show the bridge explainer or bridge controls', async () => {
         const base = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [DOGE]: [DOGE_ADDRESS] }),
             getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -180,10 +180,10 @@ describe('IssueTokenForm: the bridgeability disclosure', () => {
             { shell: 'web', messaging },
             React.createElement(IssueTokenForm, { walletId: 'w', onBack() {} }),
         ));
-        const note = await screen.findByText(/Bridging is off/i, {}, WAIT);
-        expect(note.textContent).toContain('Manage Token');
-        const listNote = screen.getByText(/can't be bridged, and a bound list can never be cleared/i);
-        expect(listNote).toBeInTheDocument();
+        await screen.findByLabelText('Ticker', {}, WAIT);
+        expect(screen.queryByText(/Bridging is off/i)).toBeNull();
+        expect(screen.queryByText(/bound list can never be cleared/i)).toBeNull();
+        expect(screen.queryByLabelText(/Bridge/i)).toBeNull();
     });
 });
 
@@ -192,7 +192,7 @@ describe('IssueTokenForm: the bridgeability disclosure', () => {
 describe('TokenAdminForm bridge settings: a Review refusal takes focus', () => {
     it('focuses the depth refusal raised by the Review press', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'BTC' });
-        const depth = await screen.findByLabelText(/Minimum confirmations/i, {}, WAIT);
+        const depth = await screen.findByLabelText(/Minimum confirmations/i, { selector: 'input' }, WAIT);
         fireEvent.change(depth, { target: { value: 'six' } });
         await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
         applyButton().focus();

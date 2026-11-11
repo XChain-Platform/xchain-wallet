@@ -14,7 +14,6 @@ export const CONTROL_SIZE_LITERAL_ALLOWLIST = [
     { file: 'shared/routes/Receive.module.css', selector: '.assetCard', property: 'height', value: '48px', reason: 'Receive asset artwork geometry is not a control height.' },
     { file: 'shared/routes/Send.module.css', selector: '.heroChainOverlay', property: 'height', value: '32px', reason: 'Send hero badge artwork is not a control height.' },
     { file: 'shared/routes/StakeDetail.module.css', selector: '.quickActionIcon', property: 'height', value: '32px', reason: 'Quick-action artwork geometry is not a control height.' },
-    { file: 'shared/routes/TokenDetail.module.css', selector: '.officialBannerSlot', property: 'min-height', value: '38px', reason: 'The official-asset banner slot reserves its loaded height so the page does not shift; it is not a control height.' },
     { file: 'ui/Checkbox.module.css', selector: '.root', property: 'min-height', value: '44px', reason: 'The checkbox label row keeps a 44px pointer target floor; the painted box uses the control icon token.' },
     { file: 'ui/RadioGroup.module.css', selector: '.option', property: 'min-height', value: '44px', reason: 'Each radio label row keeps a 44px pointer target floor; the painted circle uses the control icon token.' },
     { file: 'ui/AssetMark.module.css', selector: '.mark', property: 'height', value: '32px', reason: 'Phone-width asset artwork geometry is not a control height.' },

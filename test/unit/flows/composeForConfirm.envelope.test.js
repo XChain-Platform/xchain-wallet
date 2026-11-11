@@ -169,7 +169,7 @@ async function pickFile(utils, size = FILE_BYTES) {
 
 async function publishAndApprove(utils) {
     await waitFor(() => expect(utils.getByRole('button', { name: 'Publish file' }).disabled).toBe(false));
-    const ack = utils.getByLabelText(/on-chain forever/);
+    const ack = utils.getByRole('checkbox', { name: /on-chain forever/ });
     await domAct(async () => { fireEvent.click(ack); await drain(); });
     await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Publish file' })); await drain(); });
     const approve = await waitFor(() => {

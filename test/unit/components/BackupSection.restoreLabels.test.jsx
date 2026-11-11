@@ -73,7 +73,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         await openRestoreForm();
         expect(screen.getByRole('option', { name: 'Dogecoin' })).toBeTruthy();
         expect(screen.queryByText(/testnet/i)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for contacts' }));
 
         await waitFor(() => expect(messaging.restoreLabelsRequest).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -103,7 +103,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for contacts' }));
 
         expect(await screen.findByText('No backed-up labels found on Dogecoin.')).toBeTruthy();
     });
@@ -113,7 +113,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for contacts' }));
 
         expect(await screen.findByText('Invalid password')).toBeTruthy();
     });
@@ -125,7 +125,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         mount(restoreLabelsRequest);
 
         await openRestoreForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Check for contacts' }));
 
         expect(await screen.findByText('Incorrect password.')).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);

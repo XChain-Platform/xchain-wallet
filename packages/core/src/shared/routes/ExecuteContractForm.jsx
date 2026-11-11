@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
@@ -58,12 +59,39 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 function isPositiveDecimal(value) {
     const text = String(value).trim();
     return /^\d+(?:\.\d+)?$/.test(text) && /[1-9]/.test(text);
+}
+
+async function buildExecuteBatchParams({
+    messaging,
+    chainId,
+    contractActionIndex,
+    depositTick,
+    depositQuantity,
+    actionParams,
+}) {
+    const res = await messaging.buildBatchCommand({
+        chainId,
+        subActions: [
+            {
+                action: 'DEPOSIT',
+                params: {
+                    VERSION: '0',
+                    CONTRACT_ACTION_INDEX: String(contractActionIndex),
+                    TICK: depositTick.trim().toUpperCase(),
+                    QUANTITY: depositQuantity.trim(),
+                },
+            },
+            { action: 'EXECUTE', params: actionParams },
+        ],
+    });
+    return { VERSION: '0', COMMAND: res.command };
 }
 
 function abiArgumentError(param, value, descriptor) {
@@ -403,22 +431,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     // DEPOSIT first: the contract checks its balance rose when the call runs.
     async function composeBatchParams() {
-        const res = await messaging.buildBatchCommand({
+        return buildExecuteBatchParams({
+            messaging,
             chainId,
-            subActions: [
-                {
-                    action: 'DEPOSIT',
-                    params: {
-                        VERSION: '0',
-                        CONTRACT_ACTION_INDEX: String(contractActionIndex),
-                        TICK: depositTick.trim().toUpperCase(),
-                        QUANTITY: depositQuantity.trim(),
-                    },
-                },
-                { action: 'EXECUTE', params: actionParams },
-            ],
+            contractActionIndex,
+            depositTick,
+            depositQuantity,
+            actionParams,
         });
-        return { VERSION: '0', COMMAND: res.command };
     }
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
@@ -512,7 +532,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // ABI lane derivations. Params are positional on the wire, so a blank
     // middle value would silently shift later args after the empty-filter in
     // paramsArray; the lane therefore requires every declared param filled
-    // before Preview enables.
+    // before the action enables.
     const abiActive = Boolean(contractAbi) && !manualMode;
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
     const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
@@ -561,6 +581,66 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         if (paramsArray.length > 0) p.PARAMS = paramsArray;
         return p;
     }, [contractActionIndex, method, paramsArray]);
+    const executeQuoteInputsValid = useMemo(() => {
+        if (!fromAddress?.address || !/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) return false;
+        if (!method.trim() || method.includes('|') || method.includes(';')) return false;
+        if (actionTextSafetyError(method, 'Method')) return false;
+        if (abiActive && abiArgumentErrors.some(Boolean)) return false;
+        if (!abiActive && paramsText.trim()) {
+            const manualParts = paramsText.split('|').map((part) => part.trim());
+            if (manualParts.some((part) => part === '')) return false;
+        }
+        if (paramsArray.some((param) => actionTextSafetyError(param, 'Parameter') || param.includes(';'))) {
+            return false;
+        }
+        if (hasDeposit) {
+            const quantity = depositQuantity.trim();
+            if (!depositTick.trim() || !isPositiveDecimal(quantity)) return false;
+            if (tokenAmountPrecisionError(quantity, {
+                divisibility: depositDivisibility,
+                tick: depositTick,
+                noun: 'Deposit amount',
+            })) return false;
+            if (depositBalance != null && compareDecimalStrings(quantity, depositBalance) === 1) return false;
+        }
+        return true;
+    }, [fromAddress?.address, contractActionIndex, method, abiActive, abiArgumentErrors,
+        paramsText, paramsArray, hasDeposit, depositQuantity, depositTick, depositDivisibility,
+        depositBalance]);
+    const [quoteBatchParams, setQuoteBatchParams] = useState(null);
+    useEffect(() => {
+        let cancelled = false;
+        setQuoteBatchParams(null);
+        if (!executeQuoteInputsValid || !hasDeposit
+            || typeof messaging.quoteProtocolFee !== 'function') return () => { cancelled = true; };
+        buildExecuteBatchParams({
+            messaging,
+            chainId,
+            contractActionIndex,
+            depositTick,
+            depositQuantity,
+            actionParams,
+        }).then((params) => {
+            if (!cancelled) setQuoteBatchParams(params);
+        }).catch(() => {
+            if (!cancelled) setQuoteBatchParams(null);
+        });
+        return () => { cancelled = true; };
+    }, [executeQuoteInputsValid, hasDeposit, messaging, chainId, contractActionIndex,
+        depositTick, depositQuantity, actionParams]);
+    const executeQuoteActionData = useMemo(() => {
+        if (!executeQuoteInputsValid) return null;
+        if (hasDeposit) return quoteBatchParams
+            ? { action: 'BATCH', params: quoteBatchParams }
+            : null;
+        return { action: 'EXECUTE', params: actionParams };
+    }, [executeQuoteInputsValid, hasDeposit, quoteBatchParams, actionParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: executeQuoteActionData,
+    });
 
     function handleReview(event) {
         event.preventDefault();
@@ -985,6 +1065,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
+                lockNetwork
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -1003,18 +1084,22 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.ContractIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? t('execute.callContract') : t('common.preview')}
+                    {t('execute.callContract')}
                 </Button>
             )}
         >
             <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
+            {/* The target contract pins the network, so the field is single-option. */}
+            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label={t('execute.caller')}
+                    help={t('execute.callerHelp')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -1027,7 +1112,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 <>
                     <Select
                         label={t('execute.method')}
-                        hint={abiSpec ? [abiSpec.summary, abiSpec.view ? '(declared read-only)' : null].filter(Boolean).join(' ') || undefined : undefined}
+                        help={(abiSpec ? [abiSpec.summary, abiSpec.view ? '(declared read-only)' : null].filter(Boolean).join(' ') : '') || t(
+                            'execute.methodHelp'
+                        )}
                         value={method}
                         onChange={(e) => selectAbiMethod(e.target.value)}
                     >
@@ -1039,6 +1126,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         <div key={`${method}:${p.name}`} className={contractStyles.abiField}>
                             <Input
                                 label={`${p.name} (${p.type})`}
+                                help={p.description || p.summary || t('execute.paramHelp', { name: p.name, type: p.type })}
                                 placeholder={abiPlaceholder(p.type)}
                                 inputMode={p.type === 'number' || p.type === 'amount' ? 'decimal' : undefined}
                                 value={abiParamValues[i] || ''}
@@ -1052,7 +1140,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             />
                         </div>
                     ))}
-                    <Button type="button" variant="ghost" onClick={() => setManualMode(true)}>
+                    <Button type="button" variant="ghost" icon={<Icon.PencilIcon />} onClick={() => setManualMode(true)}>
                         {t('execute.enterMethodManually')}
                     </Button>
                 </>
@@ -1060,7 +1148,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 <>
                     <Input
                         label={t('execute.method')}
-                        hint={t('execute.methodHint')}
+                        help={t('execute.methodHint')}
                         value={method}
                         onChange={(e) => { setMethod(e.target.value); setFormError(null); }}
                         autoComplete="off"
@@ -1069,8 +1157,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         spellCheck={false}
                     />
                     <Input
-                        label={t('execute.paramsOptional')}
-                        hint={t('execute.paramsHint')}
+                        label={t('execute.params')}
+                        optional
+                        help={t('execute.paramsHint')}
                         value={paramsText}
                         onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
                         className={contractStyles.monospaceInput}
@@ -1083,6 +1172,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         <Button
                             type="button"
                             variant="ghost"
+                            icon={<Icon.ContractIcon />}
                             onClick={() => {
                                 // Back to the declared-methods lane; reselect the
                                 // current method when the abi knows it, else the first.
@@ -1097,7 +1187,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 </>
             )}
             <TokenField
-                label={t('execute.depositOptional')}
+                label={t('execute.deposit')}
+                help={t('execute.depositTokenHelp')}
+                optional
                 value={depositTick && chainId ? { chainId, tick: depositTick } : null}
                 placeholder={t('execute.noDeposit')}
                 onOpenPicker={() => setTokenPickerOpen(true)}
@@ -1106,7 +1198,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 <>
                     <AmountField
                         label={t('execute.depositAmount')}
-                        hint={t('execute.depositHint', {
+                        help={t('execute.depositHint', {
                             contract: contractActionIndex,
                             chain: t('send.rbf.thisChain'),
                         })}
@@ -1140,8 +1232,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 </>
             ) : null}
 
-            {feeTiers ? (
+            <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -1149,9 +1242,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
-            ) : null}
-
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
+            ) : null}>
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
+            </FeesCard>
 
         </FormPage>,
     );

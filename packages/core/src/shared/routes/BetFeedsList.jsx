@@ -238,7 +238,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             ) : null)}
             toolbar={(
                 <div className={local.toolbarRow}>
-                    <div className={local.toolbarNetwork}>
+                    <div className={`${local.toolbarNetwork} ${local.toolbarControl}`}>
                         <NetworkField
                             value={chainId}
                             onChange={setChainId}

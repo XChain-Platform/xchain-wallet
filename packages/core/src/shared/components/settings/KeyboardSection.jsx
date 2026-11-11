@@ -22,7 +22,7 @@
 // read-only: they dispatch inside their route, not from the settings table.
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Button, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, Icon, SectionHeader } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
@@ -42,7 +42,9 @@ import '../../../i18n/locales/en/settings.js';
 
 // Each group is a region named by its SectionHeader. The space above a group
 // sits on the section, so the title and the rows under it keep their places.
-const GROUP = { ...STACK, marginTop: 'var(--xc-space-3)' };
+// The title sits the section header gap above its rows; inside the Settings
+// card the row gap is 0 (divider rows), so the rows stack in their own column.
+const GROUP = { ...STACK, gap: 'var(--xc-section-header-gap)', marginTop: 'var(--xc-space-3)' };
 const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const SHORTCUT_ROW = {
     ...ROW,
@@ -205,6 +207,7 @@ export function KeyboardSection() {
             {SHORTCUT_GROUPS.map((group, index) => (
                 <section key={group} style={GROUP} aria-labelledby={`${labelPrefix}-group-${index}`}>
                     <SectionHeader id={`${labelPrefix}-group-${index}`} title={group} />
+                    <div style={STACK}>
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
                         const availability = s.id === 'balances-pin' && settings.showPinAffordance !== true
@@ -220,7 +223,7 @@ export function KeyboardSection() {
                                 </span>
                                 <span style={ACTIONS}>
                                     {s.overridden ? (
-                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
+                                        <Button size="sm" variant="ghost" icon={<Icon.RefreshIcon />} onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
                                             {t('settings.keyboard.reset')}
                                         </Button>
                                     ) : null}
@@ -237,6 +240,7 @@ export function KeyboardSection() {
                                             <Button
                                                 size="sm"
                                                 variant="secondary"
+                                                icon={capturing ? <Icon.XIcon /> : <Icon.PencilIcon />}
                                                 aria-describedby={`${labelPrefix}-${s.id}`}
                                                 onClick={() => {
                                                     setStatus(null);
@@ -252,6 +256,7 @@ export function KeyboardSection() {
                             </div>
                         );
                     })}
+                    </div>
                 </section>
             ))}
             <section style={GROUP} aria-labelledby={`${labelPrefix}-group-defaults`}>
@@ -261,6 +266,7 @@ export function KeyboardSection() {
                     <Button
                         size="sm"
                         variant="secondary"
+                        icon={<Icon.RefreshIcon />}
                         onClick={resetAll}
                         disabled={Object.keys(overrides).length === 0}
                     >

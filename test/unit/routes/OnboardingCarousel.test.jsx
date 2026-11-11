@@ -94,7 +94,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expectSinglePageHeading('Frame A title');
 
         // Next -> frame B, then C.
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        const next = screen.getByRole('button', { name: 'Next' });
+        expect(next.className).toMatch(/success/);
+        expect(next.querySelector('svg')).not.toBeNull();
+        fireEvent.click(next);
         expect(screen.getByText('Frame B title')).toBeInTheDocument();
         expectSinglePageHeading('Frame B title');
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -104,6 +107,8 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         // Last frame: Next is replaced by Get started; there is no Next.
         expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
         const getStarted = screen.getByRole('button', { name: 'Get started' });
+        expect(getStarted.className).toMatch(/success/);
+        expect(getStarted.querySelector('svg')).not.toBeNull();
         fireEvent.click(getStarted);
         expect(onDone).toHaveBeenCalledTimes(1);
         expect(onDone).toHaveBeenCalledWith(true);
@@ -254,7 +259,10 @@ describe('OnboardingCarousel: reduced motion', () => {
             expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
             expect(intervalSpy).not.toHaveBeenCalled();
 
-            fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
+            const getStarted = screen.getByRole('button', { name: 'Get started' });
+            expect(getStarted.className).toMatch(/success/);
+            expect(getStarted.querySelector('svg')).not.toBeNull();
+            fireEvent.click(getStarted);
             expect(onDone).toHaveBeenCalledWith(true);
 
             const root = screen.getByTestId('onboarding-carousel');
@@ -349,7 +357,7 @@ describe('Onboarding: explainer gating', () => {
         expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
     });
 
-    it('keeps the fresh welcome hierarchy and full-width primary and secondary actions', () => {
+    it('keeps the fresh welcome hierarchy and full-width success and primary actions', () => {
         stubMatchMedia(false);
         acceptLicense();
         globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
@@ -360,8 +368,8 @@ describe('Onboarding: explainer gating', () => {
 
         const create = screen.getByRole('button', { name: 'Create new wallet' });
         const importWallet = screen.getByRole('button', { name: 'Import wallet' });
-        expect(create.className).toMatch(/primary/);
-        expect(importWallet.className).toMatch(/secondary/);
+        expect(create.className).toMatch(/success/);
+        expect(importWallet.className).toMatch(/primary/);
         expect(create.className).toMatch(/block/);
         expect(importWallet.className).toMatch(/block/);
         expect(create.className).toMatch(/md/);

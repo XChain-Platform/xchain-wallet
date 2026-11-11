@@ -297,7 +297,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the list form did not accept both addresses for this chain')
                 .toContainText('2 valid addresses');
 
-            await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+            await main.getByRole('button', { name: 'Publish list', exact: true }).click();
             await expectConfirmModal(page);
             const published = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(published.action)).toBe('LIST');

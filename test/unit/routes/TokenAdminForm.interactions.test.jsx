@@ -21,6 +21,9 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
+const ADMIN_ACTION_PATTERN = /^(Lock token|Update description|Transfer ownership|Update mint settings|Update callback settings|Update access lists|Update bridge settings)$/;
+const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
+
 function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
@@ -75,6 +78,29 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm review interaction safety', () => {
+    it('gives the Network, Token and Callback token fields a help tip', async () => {
+        mountAdmin('callback-settings', {}, '');
+        await screen.findByLabelText('From');
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About Token' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About Callback token' })).toBeTruthy();
+    });
+
+    it.each([
+        ['lock', 'Lock token'],
+        ['description', 'Update description'],
+        ['transfer', 'Transfer ownership'],
+        ['mint-settings', 'Update mint settings'],
+        ['callback-settings', 'Update callback settings'],
+        ['access-lists', 'Update access lists'],
+        ['bridge-settings', 'Update bridge settings'],
+    ])('names the watcher %s action %s', async (mode, label) => {
+        mountAdmin(mode);
+
+        expect(await screen.findByRole('button', { name: label })).toHaveAccessibleName(label);
+        expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+    });
+
     it('keeps a lowercase managed ticker exact in the composed admin action', async () => {
         const buildActionPsbtRequest = vi.fn().mockResolvedValue({
             psbtHex: '70736274ff00',
@@ -85,9 +111,12 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Exact ticker update' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
+        expect(await screen.findByText(
+            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        )).toBeInTheDocument();
         fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
 
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalled());
@@ -102,7 +131,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: '<b>markup</b>'.repeat(700) },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -124,7 +153,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('New owner address'), {
             target: { value: NEW_OWNER },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -151,7 +180,7 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This wallet does not own TOKEN.',
         );
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(adminAction()).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -170,7 +199,7 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(adminAction()).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -189,9 +218,9 @@ describe('TokenAdminForm review interaction safety', () => {
         const description = await screen.findByLabelText('Description');
         await waitFor(() => expect(description).toBeDisabled());
         expect(screen.getByRole('alert')).toHaveTextContent(
-            'The description for TOKEN is permanently locked and cannot be updated.',
+            'Description is permanently locked for TOKEN and cannot be updated.',
         );
-        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(adminAction()).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -202,7 +231,7 @@ describe('TokenAdminForm review interaction safety', () => {
             target: { value: 'safe\u202eunsafe' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(adminAction());
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Description cannot contain text-direction control characters.');
@@ -234,14 +263,14 @@ describe('TokenAdminForm review interaction safety', () => {
         mountAdmin('lock');
 
         fireEvent.click(await screen.findByLabelText('Max supply'));
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), {
             target: { value: 'LOCK' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(adminAction());
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
         expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
@@ -255,7 +284,7 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(screen.queryByText('Locking is permanent.')).toBeNull();
 
         fireEvent.click(screen.getByLabelText('Callback'));
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -289,7 +318,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(await screen.findByLabelText('Description'), {
             target: { value: 'Updated once' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         const review = await screen.findByRole('form', { name: 'Review description update' });
@@ -342,7 +371,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), {
             target: { value: '100' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(adminAction());
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Callback amount must be a whole number until the wallet confirms whether PENDING supports decimals.',
@@ -366,7 +395,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), {
             target: { value: '101' },
         });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
@@ -384,7 +413,7 @@ describe('Callback settings reads the holders again at Review', () => {
         await pickCallbackToken('PAY');
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '150' } });
-        const preview = screen.getByRole('button', { name: 'Preview' });
+        const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         beforeReview();
         fireEvent.click(preview);

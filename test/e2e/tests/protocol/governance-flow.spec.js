@@ -227,14 +227,16 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByRole('main').getByRole('button', { name: /^Governance token:/ }))
             .toBeVisible();
         await chooseGovernanceToken(page);
-        await page.getByLabel('Question (optional)').fill(POLL.question);
-        await page.getByLabel('Option 0').fill(POLL.options[0]);
-        await page.getByLabel('Option 1').fill(POLL.options[1]);
-        await page.getByLabel('Closes at block').fill('700100');
+        await page.getByLabel('Question', { exact: true }).fill(POLL.question);
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByLabel('Option 0', { exact: true }).fill(POLL.options[0]);
+        await page.getByLabel('Option 1', { exact: true }).fill(POLL.options[1]);
+        // Exact, so the field's 'About ...' help tip (U57) is not matched too.
+        await page.getByLabel('Closes at block', { exact: true }).fill('700100');
         await page.getByRole('button', { name: 'Advanced (gates + deposit)' }).click();
-        await page.getByLabel('Creation deposit (optional)').fill(DEPOSIT);
+        await page.getByLabel('Creation deposit (XCHAIN)', { exact: true }).fill(DEPOSIT);
         await expectScreen(page, `${viewport.name} create poll`, 'Create poll');
-        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        await page.getByRole('main').getByRole('button', { name: 'Create poll', exact: true }).click();
 
         await expectReviewAtTop(page, 'Review poll');
         const pollReview = page.getByRole('form', { name: 'Review poll' });
@@ -248,9 +250,9 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByRole('main').getByRole('button', { name: /^Governance token:/ }))
             .toBeVisible();
         await chooseGovernanceToken(page);
-        await page.getByLabel('Delegate to address').fill(DELEGATE_ADDRESS);
+        await page.getByLabel('Delegate to address', { exact: true }).fill(DELEGATE_ADDRESS);
         await expectScreen(page, `${viewport.name} delegate vote`, 'Delegate votes');
-        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        await page.getByRole('main').getByRole('button', { name: 'Delegate votes', exact: true }).click();
 
         await expectReviewAtTop(page, 'Review delegate votes');
         const delegateReview = page.getByRole('form', { name: 'Review delegate votes' });

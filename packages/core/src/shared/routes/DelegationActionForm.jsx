@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -79,6 +80,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const variant = screenVariantFor(shell);
     const isDelegate = mode === 'delegate';
     const verb = isDelegate ? 'Delegate signing key' : 'Revoke delegation';
+    // Named-action icon for the submit in every label it takes (U63).
+    const verbIcon = isDelegate ? <Icon.KeyIcon /> : <Icon.TrashIcon />;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -461,7 +464,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -481,6 +484,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={isWatcherMode || isHwSource ? <Icon.SignIcon /> : verbIcon}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -527,9 +531,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -585,6 +587,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -602,24 +605,16 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
                     loading={actionConfirm.composing}
+                    icon={verbIcon}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {singleEncode ? verb : 'Preview'}
+                    {singleEncode ? verb : `Review ${verb.toLowerCase()}`}
                 </Button>
             )}
         >
-            <details>
-                <summary>How signing-key delegation works</summary>
-                <p className={styles.hint}>
-                    {isDelegate
-                        ? 'The selected Ed25519 key can sign hub actions for this address without moving its stake. Revoke it later from staking details.'
-                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
-                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
-                </p>
-            </details>
-            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
+            <NetworkField label="Network" help="The chain the staked address is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -634,9 +629,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
             <Input
                 label={isDelegate ? 'New signing pubkey' : 'Signing pubkey to revoke'}
-                hint={isDelegate
-                    ? '64-character hex-encoded Ed25519 public key. Replaces any currently-active delegation for this address.'
-                    : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
+                help={isDelegate
+                    ? 'The 64-character hex Ed25519 public key that can sign hub actions for this address without moving its stake. It replaces any currently active delegation; revoke it later from staking details.'
+                    : 'The 64-character hex Ed25519 public key to stop signing hub actions for this address. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
+                hint={isWatcherMode ? 'Watch-only mode creates an unsigned transaction and cannot sign it.' : undefined}
                 value={pubkey}
                 onChange={(e) => {
                     pubkeyPrefilledRef.current = false;
@@ -652,6 +648,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

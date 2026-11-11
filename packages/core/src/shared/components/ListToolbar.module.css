@@ -1,5 +1,7 @@
-/* Search and filters share one row, wrapping when the window is too narrow
-   for them side by side. Every control takes an equal share. */
+/* The search box and the filters share one row at every width: the search box
+   takes the leftover space and shrinks, each filter keeps its own width at the
+   end. The row wraps only when the filters plus a usable search box (the
+   search basis below) cannot fit. */
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -8,11 +10,18 @@
     width: 100%;
 }
 
-.field {
-    flex: 1 1 12rem;
+.search {
+    flex: 1 1 9rem;
     min-width: 0;
 }
 
-.field > div {
+.filter {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-inline-size: 100%;
+}
+
+.search > div,
+.filter > div {
     margin-bottom: 0;
 }

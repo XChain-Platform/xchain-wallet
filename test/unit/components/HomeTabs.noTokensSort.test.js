@@ -102,33 +102,40 @@ describe('Home Tokens sorting', () => {
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
     });
 
-    it('keeps Tokens in value order despite a saved name sort', () => {
+    it('keeps Tokens in saved name order', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
         mount();
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
 
         expect(renderedKeys()).toEqual([
-            'bitcoin-mainnet:ZED',
-            'bitcoin-mainnet:BETA',
             'bitcoin-mainnet:AAA',
+            'bitcoin-mainnet:BETA',
+            'bitcoin-mainnet:ZED',
         ]);
     });
 
-    it('keeps the saved sort select working on Coins', () => {
+    it('applies the saved sort choice across coin and token lists', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
         mount();
 
-        const sort = screen.getByRole('combobox', { name: 'Sort balances' });
-        expect(sort).toHaveValue('name');
+        fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
+        expect(screen.getByRole('radio', { name: 'Name' })).toBeChecked();
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'bitcoin-mainnet:BTC',
         ]);
 
-        fireEvent.change(sort, { target: { value: 'value' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'Value' }));
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:BTC',
             'litecoin-mainnet:LTC',
+        ]);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(renderedKeys()).toEqual([
+            'bitcoin-mainnet:ZED',
+            'bitcoin-mainnet:BETA',
+            'bitcoin-mainnet:AAA',
         ]);
     });
 });

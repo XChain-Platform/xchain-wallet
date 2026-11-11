@@ -67,6 +67,28 @@
         border: 0;
         border-radius: 0;
     }
+
+    /* A form opened inside a card (a Settings section's inline form) shares
+       that card instead of drawing its wide form card inside it. */
+    .card .formCard:not(.cardless) {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    /* A group that opts out of nested flattening keeps its cards inside
+       the wide form card too (Link's Action 1 and Action 2 cards). One more
+       attribute selector outweighs the flattening rule above. */
+    .formCard:not(.cardless) [data-xc-preserve-nested-cards] .card {
+        padding: var(--xc-card-pad);
+        background: var(--xc-card-bg);
+        border: var(--xc-card-border);
+        border-radius: var(--xc-card-radius);
+    }
 }
 
 /* A card list (data-xc-menu-list="cards", the actions menu) is a list of

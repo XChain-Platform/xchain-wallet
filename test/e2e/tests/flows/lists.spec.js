@@ -220,7 +220,8 @@ async function chooseBitcoin(page) {
     await expect(network).toBeVisible();
     if (!/Bitcoin/.test(await network.getAttribute('aria-label'))) {
         await network.click();
-        await page.getByRole('option', { name: /^Bitcoin\b/ }).click();
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: /^Select Bitcoin\b/ }).click();
     }
 }
 
@@ -244,9 +245,9 @@ for (const viewport of VIEWPORTS) {
         await expectListScreen(page, 'Create list', 'Create list');
         await chooseBitcoin(page);
         await page.getByLabel('Addresses', { exact: true }).fill(LIST_MEMBER);
-        await page.getByLabel('Name (optional)', { exact: true }).fill('Conference guests');
-        await page.getByLabel('Description (optional)', { exact: true }).fill('People to meet in Seattle');
-        await page.getByLabel('Memo (optional)', { exact: true }).fill('create-review');
+        await page.getByLabel('Name', { exact: true }).fill('Conference guests');
+        await page.getByLabel('Description', { exact: true }).fill('People to meet in Seattle');
+        await page.getByLabel('Memo', { exact: true }).fill('create-review');
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Create list' })
             .getByRole('button', { name: 'Publish list', exact: true }).click();
@@ -268,10 +269,10 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByRole('form', { name: 'Edit list' })).toBeVisible();
         await expectListScreen(page, 'Edit list', 'Fork list');
         await page.getByRole('checkbox', { name: LIST_MEMBER, exact: true }).uncheck();
-        await page.getByLabel('Memo (optional)', { exact: true }).fill('fork-review');
+        await page.getByLabel('Memo', { exact: true }).fill('fork-review');
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Edit list' })
-            .getByRole('button', { name: 'Review', exact: true }).click();
+            .getByRole('button', { name: 'Publish edit', exact: true }).click();
         await expectListScreen(page, 'Review list edit', 'Fork list review');
         await expectReviewAtTop(page, 'Fork list review');
         const forkReview = page.getByRole('form', { name: 'Review list edit' });
@@ -286,14 +287,14 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByRole('button', { name: 'Rename list', exact: true })).toBeVisible();
         await expectListScreen(page, 'Address list', 'List detail before rename');
         await page.getByRole('button', { name: 'Rename list', exact: true }).click();
-        await expect(page.getByLabel('Name (empty means unchanged)', { exact: true })).toBeVisible();
+        await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
         await expectListScreen(page, 'Rename list', 'Rename list');
-        await page.getByLabel('Name (empty means unchanged)', { exact: true }).fill('Pacific trip');
-        await page.getByLabel('Description (empty means unchanged)', { exact: true }).fill('Updated travel contacts');
-        await page.getByLabel('Memo (optional)', { exact: true }).fill('rename-review');
+        await page.getByLabel('Name', { exact: true }).fill('Pacific trip');
+        await page.getByLabel('Description', { exact: true }).fill('Updated travel contacts');
+        await page.getByLabel('Memo', { exact: true }).fill('rename-review');
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Rename list' })
-            .getByRole('button', { name: 'Review', exact: true }).click();
+            .getByRole('button', { name: 'Rename list', exact: true }).click();
         await expectReview(page, 'Rename list review', [
             `Rename list #${LIST_INDEX}`, 'Pacific trip', 'Updated travel contacts', 'rename-review',
         ]);
@@ -306,11 +307,11 @@ for (const viewport of VIEWPORTS) {
         await page.getByRole('button', { name: 'Share list', exact: true }).click();
         await expect(page.getByLabel('Type SHARE to confirm', { exact: true })).toBeVisible();
         await expectListScreen(page, 'Share list', 'Share list');
-        await page.getByLabel('Memo (optional)', { exact: true }).fill('share-review');
+        await page.getByLabel('Memo', { exact: true }).fill('share-review');
         await page.getByLabel('Type SHARE to confirm', { exact: true }).fill('SHARE');
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Share list' })
-            .getByRole('button', { name: 'Review', exact: true }).click();
+            .getByRole('button', { name: 'Share list', exact: true }).click();
         await expectReview(page, 'Share list review', [
             `Share list #${LIST_INDEX}`, 'share-review',
         ]);
@@ -321,14 +322,14 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByRole('button', { name: 'Transfer list', exact: true })).toBeVisible();
         await expectListScreen(page, 'Address list', 'List detail before transfer');
         await page.getByRole('button', { name: 'Transfer list', exact: true }).click();
-        await expect(page.getByLabel('Destination', { exact: true })).toBeVisible();
+        await expect(page.getByLabel('New owner', { exact: true })).toBeVisible();
         await expectListScreen(page, 'Transfer list', 'Transfer list');
-        await page.getByLabel('Destination', { exact: true }).fill(TRANSFER_DESTINATION);
-        await page.getByLabel('Memo (optional)', { exact: true }).fill('transfer-review');
+        await page.getByLabel('New owner', { exact: true }).fill(TRANSFER_DESTINATION);
+        await page.getByLabel('Memo', { exact: true }).fill('transfer-review');
         await page.getByLabel('Type TRANSFER to confirm', { exact: true }).fill('TRANSFER');
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Transfer list' })
-            .getByRole('button', { name: 'Review', exact: true }).click();
+            .getByRole('button', { name: 'Transfer list', exact: true }).click();
         await expectReview(page, 'Transfer list review', [
             `Transfer list #${LIST_INDEX}`, TRANSFER_DESTINATION, 'transfer-review',
         ]);

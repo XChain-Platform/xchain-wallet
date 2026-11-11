@@ -76,9 +76,11 @@ export const MAX_TICKER_LENGTH = 250;
  */
 const SEGMENT_RE = /^[A-Za-z0-9~!@#$%&*()_+\-={}[\]:<>?]+$/;
 
-/** The hint both authoring surfaces show under their ticker field. */
-export const TICKER_HINT =
-    'Letters, numbers or symbols, up to 250 characters. Case is kept exactly as typed.';
+/** The help both authoring surfaces show from their ticker field's label tip. */
+export const TICKER_HELP = 'Letters, numbers or symbols. Case is kept exactly as typed.';
+
+/** The length limit both authoring surfaces show under their ticker field. */
+export const TICKER_LIMIT = `Up to ${MAX_TICKER_LENGTH} characters.`;
 
 /**
  * The reason `value` cannot be a new ticker, or null when it can.

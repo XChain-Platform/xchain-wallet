@@ -50,7 +50,9 @@ function fractionDigits(amount) {
  * Pads a plain decimal amount with trailing zeros to the asset's decimal
  * places ("1" at 8 reads "1.00000000"). Display only: the caller keeps the
  * amount it passed. Empty, non-decimal or already full amounts come back as
- * given, and a limit of zero or null pads nothing.
+ * given. A zero limit removes only a trailing decimal separator; a real
+ * fractional value stays intact for precision validation. A null limit pads
+ * nothing.
  *
  * @param {string} amount
  * @param {number | null} limit
@@ -58,6 +60,7 @@ function fractionDigits(amount) {
  */
 export function padToDecimals(amount, limit) {
     const text = amount == null ? '' : String(amount);
+    if (limit === 0 && /^\d+\.$/.test(text)) return text.slice(0, -1);
     if (!limit || !/^\d*\.?\d*$/.test(text) || !/\d/.test(text)) return text;
     const digits = fractionDigits(text);
     if (digits >= limit) return text;
@@ -111,11 +114,14 @@ export function syncAmountActionsRoom(wrap, input, actions) {
  * @param {boolean} [props.maxBusy] the Max amount is being priced (a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
+ * @param {import('react').ReactNode} [props.help]         contextual help shown from the label-row InfoTip
  * @param {string} [props.error]                          caller-supplied validation error, forwarded to Input
  * @param {string} [props.id]                             id forwarded to the amount input
  * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
  * @param {'sm' | 'md' | 'lg'} [props.size]                  control size, forwarded to the amount Input and inline Max Button. Defaults to 'md'.
  * @param {boolean} [props.disabled]                         holds the input and its Max while the form is busy (composing)
+ * @param {boolean} [props.optional]                         shows the shared Optional pill on the field label
+ * @param {'true' | 'false'} [props.aria-required]        overrides the requirement assistive technology hears, for a field whose optional state is shown elsewhere (a section header)
  */
 export function AmountField({
     id,
@@ -127,6 +133,7 @@ export function AmountField({
     fiatRate = null,
     fiatCurrency = 'USD',
     amountInputMode = 'coin',
+    help,
     hint,
     error,
     divisibility,
@@ -139,6 +146,8 @@ export function AmountField({
     maxBusy = false,
     balanceText,
     disabled = false,
+    optional = false,
+    'aria-required': ariaRequired,
 }) {
     const [inputError, setInputError] = useState('');
     const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -165,7 +174,10 @@ export function AmountField({
     const hasBalanceText = balanceText !== null
         && balanceText !== undefined
         && balanceText !== false;
-    const parsedDivisibility = Number(divisibility);
+    const hasDivisibility = divisibility !== null
+        && divisibility !== undefined
+        && String(divisibility).trim() !== '';
+    const parsedDivisibility = hasDivisibility ? Number(divisibility) : Number.NaN;
     const decimalLimit = !isFiat && Number.isInteger(parsedDivisibility) && parsedDivisibility >= 0
         ? parsedDivisibility
         : null;
@@ -186,12 +198,19 @@ export function AmountField({
     // The parent learns when its stored amount turns finer than the asset
     // allows (a new asset, a restored draft) and when that clears, so its own
     // submit gate matches the error the field shows.
+    const previousDecimalLimit = useRef(decimalLimit);
     const reportedPrecisionError = useRef('');
     useEffect(() => {
-        if (storedPrecisionError === reportedPrecisionError.current) return;
+        const precisionChanged = previousDecimalLimit.current !== decimalLimit;
+        previousDecimalLimit.current = decimalLimit;
+        if (precisionChanged) {
+            setEditingAt(NOT_EDITING);
+            setInputError('');
+        }
+        if (!precisionChanged && storedPrecisionError === reportedPrecisionError.current) return;
         reportedPrecisionError.current = storedPrecisionError;
         onValidationError?.(storedPrecisionError || null);
-    }, [storedPrecisionError]);
+    }, [decimalLimit, storedPrecisionError]);
 
     const handleChange = (event) => {
         setEditingAt(decimalLimit);
@@ -282,6 +301,9 @@ export function AmountField({
                     size={size}
                     id={id}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
+                    optional={optional}
+                    aria-required={ariaRequired}
+                    help={help}
                     hint={hint}
                     error={inputError || storedPrecisionError || error}
                     inputMode="decimal"
@@ -290,7 +312,11 @@ export function AmountField({
                     onBlur={() => setEditingAt(NOT_EDITING)}
                     disabled={disabled || undefined}
                     autoComplete="off"
-                    placeholder="0.00"
+                    placeholder={decimalLimit === null
+                        ? '0.00'
+                        : decimalLimit === 0
+                            ? '0'
+                            : `0.${'0'.repeat(decimalLimit)}`}
                     style={{
                         paddingInlineEnd: actionsEndRoom,
                         '--amount-end-room': actionsEndRoom,
@@ -301,7 +327,7 @@ export function AmountField({
                     size={size}
                     ref={maxRef}
                     className={styles.maxAction}
-                    icon={null}
+                    icon={<Icon.MaxIcon />}
                     onClick={() => {
                         if (!onMax) return;
                         setInputError('');

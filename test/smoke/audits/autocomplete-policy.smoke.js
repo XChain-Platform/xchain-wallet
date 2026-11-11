@@ -56,7 +56,7 @@ assert.match(
 );
 assert.match(
     locked,
-    /name="password"[\s\S]{0,300}?autoComplete="current-password"/,
+    /name="password"[\s\S]{0,420}?autoComplete="current-password"/,
     'unlock uses current-password',
 );
 

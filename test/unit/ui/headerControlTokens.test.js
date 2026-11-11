@@ -20,7 +20,7 @@ describe('header control sizing tokens', () => {
         'NetworkStatusIndicator',
         'HeaderActionMenu',
         'TotalBalanceHero',
-        'HomeTabs',
+        'HomeListFilterMenu',
     ].map((name) => [name, readCss(name)]));
 
     it('uses the medium control scale for header actions and select triggers', () => {
@@ -29,7 +29,8 @@ describe('header control sizing tokens', () => {
             'HeaderSettingsButton',
             'PlatformSwitcher',
             'NetworkStatusIndicator',
-            'HomeTabs',
+            // U72: the Home list's sort select became the filter-menu trigger.
+            'HomeListFilterMenu',
         ]) {
             expect(css[name], name).toContain('var(--xc-control-h-md)');
             expect(css[name], name).toContain('var(--xc-control-radius)');

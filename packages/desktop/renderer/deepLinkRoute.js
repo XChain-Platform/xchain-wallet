@@ -20,6 +20,7 @@ import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUr
 import { resolvePaymentChain } from '../../core/src/uri/paymentChain.js';
 import { isValidAddressForChain } from '../../core/src/shared/utils/addressValidation.js';
 import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
+import { parseMultisigSessionLink } from '../../core/src/uri/multisigSessionLink.js';
 
 const COIN_SCHEMES = Object.freeze({
     bitcoin: { coin: 'bitcoin', tick: 'BTC' },
@@ -83,6 +84,15 @@ export function deepLinkRoute(raw, chainRegistry) {
     const colon = normalized.indexOf(':');
     const scheme = colon > 0 ? normalized.slice(0, colon).toLowerCase() : '';
     const coinScheme = COIN_SCHEMES[scheme];
+
+    if (normalized.toLowerCase().startsWith('xchain://multisig-sign')) {
+        try {
+            parseMultisigSessionLink(normalized);
+            return { view: 'multisig-sign', initialLink: normalized };
+        } catch {
+            return invalidRoute();
+        }
+    }
 
     if (coinScheme) {
         try {

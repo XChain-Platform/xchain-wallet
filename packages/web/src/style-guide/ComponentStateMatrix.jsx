@@ -34,6 +34,8 @@ const componentSizes = {
     ChoiceControl: FIXED_SIZE,
     Switch: FIXED_SIZE,
     Input: FIELD_SIZES,
+    FieldIconButton: FIXED_SIZE,
+    OptionalPill: FIXED_SIZE,
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
     RadioGroup: FIXED_SIZE,
@@ -50,6 +52,7 @@ const componentSizes = {
     QrScanner: FIXED_SIZE,
     ChainPicker: ALL_SIZES,
     NetworkField: FIELD_SIZES,
+    NetworkPicker: FIXED_SIZE,
     Skeleton: ALL_SIZES,
     InfoTip: FIXED_SIZE,
     Icon: ALL_SIZES,
@@ -141,11 +144,15 @@ function ComponentPreview({ name, size, state }) {
     case 'Switch':
         return <UI.Switch label="Price alerts" description="Notify when a target is reached." checked={state !== 'error'} onChange={noop} disabled={disabled} />;
     case 'Input':
-        return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} />;
+        return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan amount" disabled={disabled} />} />;
+    case 'FieldIconButton':
+        return <UI.Input aria-label="Address" fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan address" disabled={disabled} />} />;
+    case 'OptionalPill':
+        return <UI.OptionalPill />;
     case 'Select':
         return <UI.Select label="Network" size={nativeSize} defaultValue="btc" disabled={disabled} error={error}><option value="btc">Bitcoin</option></UI.Select>;
     case 'Textarea':
-        return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} />;
+        return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan message" disabled={disabled} />} />;
     case 'RadioGroup':
         return (
             <UI.RadioGroup
@@ -186,6 +193,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.ChainPicker label="Network" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'NetworkField':
         return <UI.NetworkField value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
+    case 'NetworkPicker':
+        return <UI.NetworkField label="Open network picker" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} />;
     case 'Skeleton':
         return <UI.Skeleton shape="card" width={{ sm: 96, md: 128, lg: 160 }[size]} height={{ sm: 48, md: 64, lg: 80 }[size]} />;
     case 'InfoTip':

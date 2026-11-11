@@ -53,6 +53,18 @@ describe('<TokenField>', () => {
         expect(screen.getByRole('button', { name: 'Select a token' })).toBeInTheDocument();
     });
 
+    it('shows the shared optional pill without adding it to the accessible name', () => {
+        const { container } = render(
+            <TokenField label="Deposit" optional value={null} onOpenPicker={() => {}} />,
+        );
+        const button = screen.getByRole('button', { name: 'Deposit: Select a token' });
+        const pill = container.querySelector('[data-optional-pill]');
+
+        expect(pill).toHaveTextContent('Optional');
+        expect(button.getAttribute('aria-describedby')?.split(' ')).toContain(pill.id);
+        expect(button).not.toHaveAttribute('aria-required');
+    });
+
     it('blocks opening while disabled and associates its error message', () => {
         const onOpenPicker = vi.fn();
         render(
@@ -74,5 +86,33 @@ describe('<TokenField>', () => {
         expect(screen.getByRole('alert')).toHaveAttribute('id', 'fee-token-error');
         expect(screen.getByRole('alert')).toHaveTextContent('Choose a fee token.');
         expect(onOpenPicker).not.toHaveBeenCalled();
+    });
+
+    it('draws the label help tip beside the label when help is given', () => {
+        render(
+            <TokenField
+                label="Callback token"
+                help="The token each holder receives when the callback runs."
+                value={null}
+                onOpenPicker={() => {}}
+            />,
+        );
+        const tip = screen.getByRole('button', { name: 'About Callback token' });
+        expect(tip.parentElement.closest('div').textContent).toContain('Callback token');
+        fireEvent.click(tip);
+        expect(screen.getByText('The token each holder receives when the callback runs.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Callback token: Select a token' })).toBeInTheDocument();
+    });
+
+    it('shows the Optional pill and the help tip together', () => {
+        render(<TokenField label="Token" optional help="Pick a token." value={null} onOpenPicker={() => {}} />);
+        expect(screen.getByText('Optional')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
+    });
+
+    it('keeps the plain label and no tip when help is not given', () => {
+        render(<TokenField value={null} onOpenPicker={() => {}} />);
+        expect(screen.getByText('Token')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^About / })).toBeNull();
     });
 });

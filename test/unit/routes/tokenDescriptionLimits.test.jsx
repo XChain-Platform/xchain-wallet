@@ -99,8 +99,8 @@ describe('IssueTokenForm description rules', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'OWNED' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), { target: { value: description } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Token description'), { target: { value: description } });
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
         return composeForConfirm;
     }
@@ -183,13 +183,13 @@ describe('collectible image URL', () => {
     it('keeps a javascript: link out of the collectible wizard', async () => {
         const composeForConfirm = await submitCollectible('javascript:alert(1)');
         expect(await screen.findByRole('alert')).toHaveTextContent('Image URL must use http, https, ipfs, or ar.');
-        expect(screen.queryByRole('button', { name: 'Continue to confirmation' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('lets an https image through to the review step', async () => {
         await submitCollectible('https://example.com/art.png');
-        expect(await screen.findByRole('button', { name: 'Continue to confirmation' })).toBeTruthy();
+        expect(await screen.findByRole('button', { name: 'Issue token' })).toBeTruthy();
     });
 });
 
@@ -210,10 +210,10 @@ describe('supply ceiling', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'BIGGER' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000000000000000000001' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000000000000000000001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Max supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -231,7 +231,7 @@ describe('supply ceiling', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Supply cannot be more than');
-        expect(screen.queryByRole('button', { name: 'Continue to confirmation' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });

@@ -280,13 +280,13 @@ describe('Create dispenser field validation', () => {
         fireEvent.change(give, { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.click(screen.getByRole('button', { name: /Advanced options/ }));
-        fireEvent.change(screen.getByLabelText('Priced in fiat (optional)'), {
+        fireEvent.change(screen.getByLabelText('Priced in fiat'), {
             target: { value: 'USD' },
         });
         fireEvent.change(screen.getByLabelText(/^Fiat amount/), {
             target: { value: '12.345' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create dispenser' }));
 
         const precision = await screen.findByText(
             'Fiat amount can have at most 2 decimal places, like 12.34 or 3.',
@@ -302,18 +302,18 @@ describe('Contacts field validation', () => {
         await screen.findByText('No contacts yet');
         fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const emptyName = await screen.findByText('Name is required.');
         expectPlainCopy(emptyName);
 
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const whitespaceName = await screen.findByText('Name is required.');
         expectPlainCopy(whitespaceName);
 
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: '   ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const emptyAddress = await screen.findByText('At least one address entry is required.');
         expectPlainCopy(emptyAddress);
         expect(messaging.saveContact).not.toHaveBeenCalled();

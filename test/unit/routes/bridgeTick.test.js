@@ -77,10 +77,10 @@ describe('bridgeLegFor', () => {
             .toEqual({ version: '4', leg: 'burn', fixedDestination: 'DOGE', origin: 'DOGE' });
     });
 
-    it('refuses a subasset with a reason, rather than composing a doomed lock', () => {
+    it('refuses a subtoken with a reason, rather than composing a doomed lock', () => {
         const leg = bridgeLegFor({ tick: 'PEPE.CASH', sourceCoin: 'BTC' });
         expect(leg.version).toBeNull();
-        expect(leg.reason).toContain('Subassets cannot be bridged yet');
+        expect(leg.reason).toContain('Subtokens cannot be bridged yet');
     });
 
     it('refuses a native tick whose rooted copy would pass the tick length limit', () => {

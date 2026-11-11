@@ -57,51 +57,55 @@ import { tickerReferenceError } from './tickerGrammar.js';
  * so a hint that shouts the wire name stacks two vocabularies on one
  * control ("Max supply" over "Freezes MAX_SUPPLY"). Keep the hint in the
  * label's words; a unit guard pins it. MINT is the one protocol COMMAND
- * name the wallet shows users (the Mint feature), so its hint may say it;
- * token pausing is "Pause token" on screen, so that lock says "Pausing".
+ * name the wallet shows users (the Mint feature), so its hint may say it,
+ * and the owner's MINT_SUPPLY route is named the same way;
+ * token pausing is "Pause token" on screen, so that lock says "Pause".
+ *
+ * The Issue form's lock rows read their label and text from here by
+ * `field`, so every lock screen shows one wording.
  */
 export const LOCK_FLAGS = [
     {
         key: 'max_supply',
         field: 'LOCK_MAX_SUPPLY',
         label: 'Max supply',
-        hint: 'Freezes the maximum supply. The cap can never be raised again.',
+        hint: 'No one can raise the supply cap',
     },
     {
         key: 'max_mint',
         field: 'LOCK_MAX_MINT',
         label: 'Max mint per transaction',
-        hint: 'Freezes the per-transaction mint cap. It can never change again.',
+        hint: 'That limit never changes',
     },
     {
         key: 'mint',
         field: 'LOCK_MINT',
         label: 'Minting',
-        hint: 'Permanently disables the MINT command. No one will ever be able to mint this token again.',
+        hint: 'Blocks the public MINT',
     },
     {
         key: 'mint_supply',
         field: 'LOCK_MINT_SUPPLY',
-        label: 'Mint supply now',
-        hint: 'Permanently disables minting supply through a token update. The owner can never mint additional supply that way again.',
+        label: 'Mint supply',
+        hint: "Blocks the owner's MINT_SUPPLY through ISSUE",
     },
     {
         key: 'description',
         field: 'LOCK_DESCRIPTION',
         label: 'Description',
-        hint: 'Freezes the token description. The token metadata can never be edited again.',
+        hint: 'Description can never change',
     },
     {
         key: 'sleep',
         field: 'LOCK_SLEEP',
-        label: 'Pausing',
-        hint: 'Permanently removes the ability to pause or resume this token.',
+        label: 'Pause',
+        hint: 'The token can never be paused',
     },
     {
         key: 'callback',
         field: 'LOCK_CALLBACK',
         label: 'Callback',
-        hint: 'No one can ever run a callback on this token again, and its block, token and amount never change.',
+        hint: 'No one can ever run a callback on this token again, and its block, token and amount never change',
     },
 ];
 

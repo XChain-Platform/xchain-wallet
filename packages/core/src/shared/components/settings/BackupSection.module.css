@@ -97,3 +97,17 @@
         display: none !important;
     }
 }
+
+/* The row's button keeps a token-sized gap above and below it, so the row
+   grows around the button and its edge never meets the divider under the row. */
+.rowAction {
+    margin-block: var(--xc-space-1);
+}
+
+/* Inside the Settings page card the shared nested-card rule (.card .card)
+   zeroes each action row's padding, so a row title sat right under the
+   divider above it (U33). The doubled class outranks that rule and gives
+   every Backup row its block inset back. */
+.rows.rows > [data-settings-row] {
+    padding-block: var(--xc-space-2);
+}

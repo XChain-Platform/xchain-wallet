@@ -109,6 +109,7 @@ function OperatorPublisherModeView({
 
     return (
         <PublisherForm
+            chainId={chainId}
             open={open}
             onToggle={() => setOpen((shown) => !shown)}
             feed={feed}
@@ -254,6 +255,7 @@ function publisherResultPanel(result, clearResult) {
 }
 
 function PublisherForm({
+    chainId,
     open, onToggle, feed, feedLoading, feedError, feedActionIndex, onFeedActionIndex,
     sourceLoading, sourceError, coinTicker, fee, submission,
 }) {
@@ -292,7 +294,7 @@ function PublisherForm({
                         value={submission.value}
                         onValue={submission.setValue}
                     />
-                    <PublisherControls coinTicker={coinTicker} fee={fee} submission={submission} lastTxid={lastTxid} />
+                    <PublisherControls chainId={chainId} coinTicker={coinTicker} fee={fee} submission={submission} lastTxid={lastTxid} />
                 </form>
             ) : null}
         </section>
@@ -321,7 +323,7 @@ function PublisherFields({
             />
             <Input
                 label={t('home.tabs.value')}
-                hint={t('components.operatorPublisherMode.theFeedValueToPublish')}
+                help={t('components.operatorPublisherMode.theFeedValueToPublish')}
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
                 inputMode="decimal"
@@ -338,12 +340,13 @@ function PublisherFields({
     );
 }
 
-function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
+function PublisherControls({ chainId, coinTicker, fee, submission, lastTxid }) {
     const busy = submission.submitting || submission.ownerLane.composing;
     return (
         <>
             {fee.tiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={fee.tiers}

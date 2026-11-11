@@ -215,6 +215,7 @@
     color: var(--xc-text-inverted);
     text-transform: uppercase;
     box-shadow: var(--xc-shadow-sm);
+    /* raw-color-ok: the pill keeps one fixed green gradient in every theme; its end stop only matches the light success fill (U97) by value. */
     background: linear-gradient(180deg, #22c55e, #16a34a);
 }
 

@@ -92,7 +92,7 @@ function openAdvanced() {
 
 function submit() {
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    const confirm = screen.queryByRole('button', { name: 'Continue to confirmation' });
+    const confirm = screen.queryByRole('button', { name: 'Issue token' });
     if (confirm) fireEvent.click(confirm);
 }
 
@@ -111,9 +111,9 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
 
     it.each([
         ['Copies per mint', 'Infinity', 'Copies per mint must be a positive number.'],
-        ['Limit per address (optional)', 'many', 'Limit per address must be a positive number'],
-        ['Minting opens at block (optional)', '10.5', 'Minting start must be a whole block number.'],
-        ['Minting closes at block (optional)', 'later', 'Minting close must be a whole block number.'],
+        ['Limit per address', 'many', 'Limit per address must be a positive number'],
+        ['Minting opens at block', '10.5', 'Minting start must be a whole block number.'],
+        ['Minting closes at block', 'later', 'Minting close must be a whole block number.'],
     ])('rejects malformed edition text in %s', async (label, value, message) => {
         mountWizard();
         await driveToEditionDetails();
@@ -127,7 +127,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
     it('rejects an edition address limit below its per-mint amount', async () => {
         mountWizard();
         await driveToEditionDetails();
-        fireEvent.change(screen.getByLabelText('Limit per address (optional)'), {
+        fireEvent.change(screen.getByLabelText('Limit per address'), {
             target: { value: '5' },
         });
 
@@ -139,8 +139,8 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
     });
 
     it.each([
-        'Transfer ownership to (optional)',
-        'Send the initial mint to (optional)',
+        'Transfer ownership to',
+        'Send the initial mint to',
     ])('rejects an invalid %s address before composing', async (label) => {
         mountWizard();
         await driveToCustomDetails();
@@ -162,7 +162,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         await driveToCustomDetails();
         const toggle = screen.getByRole('button', { name: /Advanced settings/i });
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        expect(screen.queryByLabelText('Callback token (optional)')).toBeNull();
+        expect(screen.queryByLabelText('Callback token')).toBeNull();
     });
 
     it('carries locks and a callback into ONE ISSUE v0 compose', async () => {
@@ -173,10 +173,11 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         // compare against (the form must not block while it is null).
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        // Exact match: "Description (optional)" is the free-text field,
-        // "Description" on its own is the lock-matrix row.
-        fireEvent.click(screen.getByLabelText(/^Description$/));
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        // Description names both the free-text field and the lock-matrix row.
+        fireEvent.click(screen.getByLabelText(/^Description$/, {
+            selector: 'input[type="checkbox"]',
+        }));
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'xchain' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2.5' } });
@@ -212,7 +213,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
@@ -229,7 +230,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard();
         await driveToCustomDetails();
         openAdvanced();
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
 
@@ -247,7 +248,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'GHOST' },
         });
         fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '0.5' } });
@@ -267,17 +268,17 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard();
         await driveToCustomDetails();
         openAdvanced();
-        fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
+        fireEvent.change(screen.getByLabelText('Callback token'), {
             target: { value: 'XCHAIN' },
         });
         // Collapse the panel, then submit: the error names a field the
         // user cannot see, so the panel must come back open.
         fireEvent.click(screen.getByRole('button', { name: /Hide advanced settings/i }));
-        expect(screen.queryByLabelText('Callback token (optional)')).toBeNull();
+        expect(screen.queryByLabelText('Callback token')).toBeNull();
 
         submit();
         await screen.findByText(/all three/i);
-        expect(screen.getByLabelText('Callback token (optional)')).toBeTruthy();
+        expect(screen.getByLabelText('Callback token')).toBeTruthy();
     });
 
     it('does not offer two controls for one lock field', async () => {
@@ -297,7 +298,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         expect(mintRow.disabled).toBe(true);
 
         // An unrelated flag stays freely checkable.
-        const sleepRow = screen.getByLabelText(/^Pausing$/);
+        const sleepRow = screen.getByLabelText(/^Pause$/);
         expect(sleepRow.disabled).toBe(false);
     });
 });

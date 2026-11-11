@@ -286,7 +286,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            oracle = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            oracle = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
             expect(oracle, `the create form names a ${REGTEST_COIN} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -363,7 +363,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            punter = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            punter = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
             expect(punter, 'the wallet now signs as some other address').not.toBe(oracle);
 
             await fundAddress(punter, FUNDING);
@@ -393,7 +393,7 @@ test.describe('BET deadline race', () => {
 
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await main.getByLabel('Your oracle address').inputValue(),
+            expect(await main.getByLabel('Your oracle address', { exact: true }).inputValue(),
                 'the form signs with the funded oracle address').toBe(oracle);
 
             const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
@@ -401,16 +401,16 @@ test.describe('BET deadline race', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Deadline race ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill(OUTCOME.label);
-            await main.getByLabel('Outcome 1').fill(OUTCOME_OTHER);
+            await main.getByLabel('What is being bet on', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
+            await main.getByLabel('Outcome 0', { exact: true }).fill(OUTCOME.label);
+            await main.getByLabel('Outcome 1', { exact: true }).fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(deadlineSec));
+            await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
 
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await approveConfirm(page);
 
             const until = Date.now() + 180_000;
@@ -455,7 +455,7 @@ test.describe('BET deadline race', () => {
             // well as on demand, so anything slotted in between can put the
             // wallet's own call back on the cold path.
             await warmBet(punter, feedIndex, true);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
 
             // The dry run must not be REFUSING here. A confirm that is already
             // failing would make the degradation below unobservable.

@@ -37,6 +37,13 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
     screenVariantFor: () => 'full',
 }));
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => React.createElement(
+        'button',
+        { type: 'button', onClick: () => onPick(LOCAL_ADDRESS) },
+        'Pick local address',
+    ),
+}));
 
 const { MultisigCreate } = await import(
     '../../../packages/core/src/shared/routes/MultisigCreate.jsx');
@@ -48,7 +55,7 @@ const { MultisigSigningSession } = await import(
 const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
 const WALLET_ID = 'wallet-1';
 const CHAIN_ID = 'bitcoin-testnet';
-const PSBT_HEX = '70736274ff';
+const PSBT_HEX = '';
 const MSG_HASH = 'ab'.repeat(32);
 // A broadcast reply counts only as a 64-hex txid matching the finalized one.
 const TXID = 'e7'.repeat(32);
@@ -100,10 +107,22 @@ function makeHarness() {
         txid: TXID,
     }));
     const broadcastTx = vi.fn(async () => ({ txid: TXID }));
+    const getUTXOs = vi.fn(async () => ({
+        utxos: FINALIZED.prevouts.map((prevout) => ({
+            txid: prevout.prevTxHash,
+            vout: prevout.prevTxIndex,
+            value: prevout.value,
+            scriptPubKey: prevout.scriptPubKeyHex,
+        })),
+    }));
     const sdkRegistry = {
         get: vi.fn(() => ({
-            wallet: { finalizeMultisigPsbt, decomposePsbt: () => ({ inputs: FINALIZED.prevouts }) },
-            encoder: { broadcastTx },
+            wallet: {
+                finalizeMultisigPsbt,
+                decomposePsbt: () => ({ inputs: FINALIZED.prevouts }),
+                getBitcoinNetwork: () => ({ bech32: 'bc', pubKeyHash: 0, scriptHash: 5 }),
+            },
+            encoder: { broadcastTx, getUTXOs },
         })),
     };
     return {
@@ -158,15 +177,14 @@ describe('multisig jsdom flow', () => {
         };
 
         render(<MultisigCreate walletId={WALLET_ID} onBack={() => {}} />);
-        await screen.findByLabelText(/Use one of this wallet's addresses/i);
+        await screen.findByLabelText("Use one of this wallet's addresses");
         fireEvent.click(screen.getByRole('button', { name: /Add cosigner/i }));
-        fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), {
-            target: { value: LOCAL_ADDRESS.id },
-        });
+        fireEvent.click(screen.getByRole('button', { name: "Choose one of this wallet's addresses" }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick local address' }));
         await waitFor(() => expect(screen.getAllByLabelText(/Master fingerprint/i)[0])
             .toHaveValue(LOCAL.fingerprint));
         await fillExternalRows();
-        fireEvent.click(screen.getByRole('button', { name: 'Review multisig' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create multisig' }));
         expect(await screen.findByText(/2-of-3 SegWit/i)).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
         expect(await screen.findByText('Multisig configured')).toBeTruthy();
@@ -184,12 +202,13 @@ describe('multisig jsdom flow', () => {
             <MultisigCosignerShare
                 walletId={WALLET_ID}
                 addresses={[LOCAL_ADDRESS]}
+                chainId={CHAIN_ID}
                 networkKind="testnet"
+                addressId={LOCAL_ADDRESS.id}
+                onAddressChange={() => {}}
+                onOpenAddressPicker={() => {}}
             />,
         );
-        fireEvent.change(screen.getByLabelText('Address to share'), {
-            target: { value: LOCAL_ADDRESS.id },
-        });
         await waitFor(() => expect(toDataURL).toHaveBeenCalled());
         const shared = JSON.parse(toDataURL.mock.calls.at(-1)[0]);
         expect(shared).toEqual({
@@ -243,6 +262,7 @@ describe('multisig jsdom flow', () => {
         await screen.findByLabelText('Multisig signing progress');
         fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
         const sessionRef = {
+            chainId: session.chainId,
             scheme: session.scheme,
             threshold: session.threshold,
             cosignerPubkeys: session.cosignerPubkeys,
@@ -296,7 +316,7 @@ describe('multisig jsdom flow', () => {
             threshold: 2,
             cosignerPubkeys: [LOCAL.pubkey, BOB.pubkey, CAROL.pubkey],
             msgHash: MSG_HASH,
-            psbtHex: PSBT_HEX,
+            psbtHex: '70736274ff',
             actionSummary: 'Send from watcher',
             nonces: [],
             aggNonce: null,

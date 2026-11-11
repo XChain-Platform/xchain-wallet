@@ -65,11 +65,26 @@
 }
 
 .ballotForm,
+.ballotLabelRow,
+.ballotOptions,
 .splitOptionRow,
 .splitOptionInput,
 .optionRow,
 .optionLabel {
     min-width: 0;
+}
+
+.ballotLabelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.ballotOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-2);
 }
 
 .splitOptionRow {

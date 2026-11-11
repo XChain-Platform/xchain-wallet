@@ -24,6 +24,10 @@ const LABELS = ['24h', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'All'];
 const MAINNET_CHAIN = 'bitcoin-mainnet';
 const ROWS = [{ kind: 'native', chainId: MAINNET_CHAIN, tick: 'BTC', quantity: '50000000', divisibility: 8, fiatRate: 80000 }];
 const SPARKLINE = Array.from({ length: 168 }, (_, i) => 70000 + i * 50);
+const HISTORY_DAILY = Array.from({ length: 366 }, (_, index) => [
+    Date.now() - (365 - index) * 86_400_000,
+    60_000 + index * 10,
+]);
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -56,13 +60,16 @@ function selectedLabel(tablist) {
 function mountPortfolio(walletId) {
     const messaging = {
         getSettings: vi.fn(async () => ({})),
-        getNativePricesRequest: vi.fn(async () => ({ prices: { [MAINNET_CHAIN]: { sparkline: SPARKLINE } } })),
+        getNativePricesRequest: vi.fn(async () => ({
+            prices: { [MAINNET_CHAIN]: { sparkline: SPARKLINE, historyDaily: HISTORY_DAILY } },
+        })),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <PortfolioChart rows={ROWS} walletId={walletId} />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
 function mountNativeDetail(walletId) {
@@ -75,6 +82,7 @@ function mountNativeDetail(walletId) {
                     marketCapFiat: 1200000000,
                     change24hPct: 1.5,
                     sparkline: SPARKLINE,
+                    historyDaily: HISTORY_DAILY,
                     fetchedAt: Date.now(),
                 },
             },
@@ -95,6 +103,7 @@ function mountNativeDetail(walletId) {
             />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
 describe('PortfolioChart range list', () => {
@@ -106,21 +115,24 @@ describe('PortfolioChart range list', () => {
         expect(selectedLabel(tablist)).toBe('1W');
     });
 
-    it('offers every range on the demo wallet, opening on 1M', async () => {
+    it('offers every range on the demo wallet, opening on 1W', async () => {
         markDemoWallet('demo-wallet-1');
         mountPortfolio('demo-wallet-1');
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         expect(tabLabels(tablist)).toEqual(LABELS);
-        expect(selectedLabel(tablist)).toBe('1M');
+        expect(selectedLabel(tablist)).toBe('1W');
     });
 
-    it('says a real wallet has no history for a range beyond its recorded week and keeps the tabs', async () => {
-        mountPortfolio('real-wallet-1');
+    it('draws a real wallet daily range and keeps the tabs', async () => {
+        const messaging = mountPortfolio('real-wallet-1');
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         fireEvent.click(screen.getByRole('tab', { name: '1Y' }));
-        expect(await screen.findByText(/No price history/)).toBeTruthy();
-        expect(document.querySelector('svg polyline')).toBeNull();
+        expect(await screen.findByRole('img', { name: /Range 1Y/ })).toBeTruthy();
+        expect(screen.queryByText(/No price history/)).toBeNull();
+        expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: [MAINNET_CHAIN], includeHistory: true, fiatCurrency: 'USD',
+        });
         expect(tabLabels(screen.getByRole('tablist', { name: 'Chart range' }))).toEqual(LABELS);
     });
 });
@@ -133,19 +145,23 @@ describe('TokenDetail range list', () => {
         expect(selectedLabel(tablist)).toBe('1W');
     });
 
-    it('offers every range on the demo wallet, opening on 1M', async () => {
+    it('offers every range on the demo wallet, opening on 1W', async () => {
         markDemoWallet('demo-wallet-1');
         mountNativeDetail('demo-wallet-1');
         const tablist = await screen.findByRole('tablist', { name: 'Chart range' });
         expect(tabLabels(tablist)).toEqual(LABELS);
-        expect(selectedLabel(tablist)).toBe('1M');
+        expect(selectedLabel(tablist)).toBe('1W');
     });
 
-    it('keeps the tabs when a real wallet picks a range with no recorded history', async () => {
-        mountNativeDetail('real-wallet-1');
+    it('draws daily history when a real wallet picks a longer range', async () => {
+        const messaging = mountNativeDetail('real-wallet-1');
         await screen.findByLabelText('1W price chart');
         fireEvent.click(screen.getByRole('tab', { name: '3M' }));
-        expect(await screen.findByText('No price history yet')).toBeTruthy();
+        expect(await screen.findByLabelText('3M price chart')).toBeTruthy();
+        expect(screen.queryByText('No price history yet')).toBeNull();
+        expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: [MAINNET_CHAIN], includeSparkline: false, includeHistory: true, fiatCurrency: 'USD',
+        });
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         expect(tabLabels(tablist)).toEqual(LABELS);
         expect(selectedLabel(tablist)).toBe('3M');

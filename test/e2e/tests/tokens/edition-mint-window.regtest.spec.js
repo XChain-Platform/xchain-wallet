@@ -399,12 +399,12 @@ async function onboardAndCreateEdition(page, {
     await main.getByLabel('Edition size').fill(String(EDITION));
     await main.getByLabel('Copies per mint').fill(String(PER_TX));
     await main.getByLabel('Image URL').fill(IMAGE_URL);
-    await main.getByLabel('Limit per address (optional)').fill(String(PER_ADDRESS));
+    await main.getByLabel('Limit per address', { exact: true }).fill(String(PER_ADDRESS));
     if (startBlock !== null) {
-        await main.getByLabel('Minting opens at block (optional)').fill(String(startBlock));
+        await main.getByLabel('Minting opens at block', { exact: true }).fill(String(startBlock));
     }
     if (stopBlock !== null) {
-        await main.getByLabel('Minting closes at block (optional)').fill(String(stopBlock));
+        await main.getByLabel('Minting closes at block', { exact: true }).fill(String(stopBlock));
     }
     await submitTokenWizard(page);
 

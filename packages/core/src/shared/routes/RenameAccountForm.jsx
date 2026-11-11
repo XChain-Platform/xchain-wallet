@@ -9,10 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/accountPicker.js';
-import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameAccount.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -123,14 +122,16 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             label={t('accountPicker.renameTitle')}
             onSubmit={handleSubmit}
             actions={(
-                <Button type="submit" variant="primary" disabled={saveDisabled}>
-                    {t('history.contact.save')}
+                <Button type="submit" variant="primary" disabled={saveDisabled} icon={<Icon.PencilIcon />}>
+                    {t('accountPicker.renameTitle')}
                 </Button>
             )}
         >
             <Input
                 ref={nameRef}
                 label={t('renameAccount.name')}
+                help={t('renameAccount.nameHelp')}
+                maxLength={NAME_MAX_LENGTH}
                 value={name}
                 onChange={(e) => {
                     const nextName = e.target.value;

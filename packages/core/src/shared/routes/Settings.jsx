@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, PageNoticeHostContext, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -32,6 +32,7 @@ import { WantReachabilityNotice } from '../components/hideReachabilityNotice.js'
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import { readBalanceCache } from '../utils/balanceCache.js';
 import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/desktopUpdate.js';
 import '../../i18n/locales/en/importWallet.js';
@@ -199,6 +200,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
     updates: [row('Check for updates', 'new version upgrade latest release')],
     about: [
         row('Version', 'app release'),
+        row('Balances updated', 'balance refresh sync time'),
         row('Build identifier', 'build commit revision'),
         row('Platform', 'shell operating system'),
         row('Update channel', 'release channel'),
@@ -267,11 +269,17 @@ export function Settings({
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
     const [siteSearchTerms, setSiteSearchTerms] = useState('');
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
+    const [tokenPickerScreen, setTokenPickerScreen] = useState(null);
     const desktopUpdate = useDesktopUpdateCheck();
     const sectionOpenerRefs = useRef(new Map());
     const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
 
     const { settings } = useSettings();
+    const balancesFetchedAt = readBalanceCache(
+        activeWallet?.id,
+        activeAccount?.id,
+        normalizeActiveNetwork(settings?.activeNetwork),
+    )?.fetchedAt ?? null;
 
     const closeSubpage = useCallback(() => {
         pendingFocusRestore.current = subpageId;
@@ -494,7 +502,10 @@ export function Settings({
             keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
             Component: NotificationsSection,
-            props: { walletId: activeWallet?.id },
+            props: {
+                walletId: activeWallet?.id,
+                onTokenPickerScreenChange: setTokenPickerScreen,
+            },
         },
         {
             id: 'connected-sites',
@@ -552,12 +563,13 @@ export function Settings({
             id: 'about',
             title: t('routes.addressList.about'),
             description: t('settings.page.viewVersionLicenseBuildVerification'),
-            keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
+            keywords: 'about version balances updated refresh sync time update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
             Component: AboutSection,
+            props: { balancesFetchedAt },
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -612,22 +624,30 @@ export function Settings({
                 />
             );
             return (
-                <Screen
-                    variant={variant}
-                    header={subpageHeader}
-                    scrollKey={section.id}
-                    restoreScroll={false}
-                >
-                    <WantReachabilityNotice active={section.id === 'network-endpoints'} />
-                    <SettingsPageTemplate view="subpage" sectionId={section.id}>
-                        <SettingsSearchHighlight target={searchTarget}>
-                            <SectionComponent
-                                key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
-                                {...(section.props || {})}
-                            />
-                        </SettingsSearchHighlight>
-                    </SettingsPageTemplate>
-                </Screen>
+                <>
+                    {tokenPickerScreen}
+                    <div
+                        hidden={Boolean(tokenPickerScreen)}
+                        style={tokenPickerScreen ? undefined : { display: 'contents' }}
+                    >
+                        <Screen
+                            variant={variant}
+                            header={subpageHeader}
+                            scrollKey={section.id}
+                            restoreScroll={false}
+                        >
+                            <WantReachabilityNotice active={section.id === 'network-endpoints'} />
+                            <SettingsPageTemplate view="subpage" sectionId={section.id}>
+                                <SettingsSearchHighlight target={searchTarget}>
+                                    <SectionComponent
+                                        key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
+                                        {...(section.props || {})}
+                                    />
+                                </SettingsSearchHighlight>
+                            </SettingsPageTemplate>
+                        </Screen>
+                    </div>
+                </>
             );
         }
         // Fallback for stale subpageId: return to list
@@ -639,11 +659,17 @@ export function Settings({
     const header = <PageHeader onBack={onBack} title={t('home.settings')} />;
 
     return (
-        // A route-wide key restored the last visit's offset and reopened
-        // Settings part way down (clamped to whatever height had rendered by
-        // then, so not even where the user left it). See settingsVisits.
-        <Screen variant={variant} header={header} scrollKey={listScrollKey}>
-            <SettingsPageTemplate
+        <>
+            {tokenPickerScreen}
+            <div
+                hidden={Boolean(tokenPickerScreen)}
+                style={tokenPickerScreen ? undefined : { display: 'contents' }}
+            >
+                {/* A route-wide key restored the last visit's offset and reopened
+                    Settings part way down (clamped to whatever height had rendered by
+                    then, so not even where the user left it). See settingsVisits. */}
+                <Screen variant={variant} header={header} scrollKey={listScrollKey}>
+                    <SettingsPageTemplate
                 view="list"
                 notices={desktopUpdate.message ? (
                     <StatusMessage variant={desktopUpdate.variant}>{desktopUpdate.message}</StatusMessage>
@@ -706,7 +732,6 @@ export function Settings({
                                 key={section.id}
                                 title={section.title}
                                 description={section.description}
-                                preserveNestedCards={section.id === 'notifications'}
                             >
                                 <SettingsSearchHighlight target={matchedRow?.target || null}>
                                     <Component {...panelProps} />
@@ -725,25 +750,38 @@ export function Settings({
                     );
                 })}
                 </div>
-            </SettingsPageTemplate>
-        </Screen>
+                    </SettingsPageTemplate>
+                </Screen>
+            </div>
+        </>
     );
 }
 
-function SettingsPageTemplate({ view, children, sectionId, ...props }) {
+function SettingsPageTemplate({ view, children, sectionId, notices, ...props }) {
+    const [noticeHost, setNoticeHost] = useState(null);
     return (
         <ListPage
             className={settingsStyles.page}
             data-settings-layout="responsive"
             data-settings-page-template={view}
             {...props}
+            notices={(
+                <>
+                    {notices}
+                    {/* Notices raised by the forms inside the section card land
+                        here, above the card, after the page's own notices. */}
+                    <div ref={setNoticeHost} style={{ display: 'contents' }} data-page-notice-host="" />
+                </>
+            )}
         >
-            <div
-                className={settingsStyles.settingsSurface}
-                data-settings-section={sectionId || undefined}
-            >
-                {children}
-            </div>
+            <PageNoticeHostContext.Provider value={noticeHost}>
+                <div
+                    className={settingsStyles.settingsSurface}
+                    data-settings-section={sectionId || undefined}
+                >
+                    {children}
+                </div>
+            </PageNoticeHostContext.Provider>
         </ListPage>
     );
 }
@@ -987,10 +1025,9 @@ function UpdateCheckPanel({ updateCheck }) {
     );
 }
 
-function PanelBlock({ title, description, preserveNestedCards = false, children }) {
+function PanelBlock({ title, description, children }) {
     return (
         <div
-            data-xc-preserve-nested-cards={preserveNestedCards ? '' : undefined}
             style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-settings-row-gap)' }}
         >
             <SectionHeader

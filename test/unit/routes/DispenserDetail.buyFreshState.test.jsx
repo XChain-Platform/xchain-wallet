@@ -110,7 +110,7 @@ describe('dispenser buy re-reads the dispenser before composing', () => {
     it('stops when the escrow fell below the fills asked for', async () => {
         const messaging = mount();
         await settle();
-        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
         messaging.getDispenserByActionIndex.mockResolvedValue({
             ...OPEN, state: { status: 'open', give_remaining: '200' },
         });

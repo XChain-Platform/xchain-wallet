@@ -26,7 +26,7 @@ import {
     UNDO_SEND_SECONDS_MAX,
     UNDO_SEND_SECONDS_MIN,
 } from '../../../schemas/settings.js';
-import { Input } from '@xchain-wallet/core/ui';
+import { InfoTip, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
@@ -60,7 +60,13 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_TITLE}>{t('settings.undoSend.durationLabel')}</span>
+                <span style={ROW_TITLE}>
+                    {t('settings.undoSend.durationLabel')}{' '}
+                    <InfoTip
+                        aria={t('settings.help.safety.holdDurationLabel')}
+                        label={t('settings.help.safety.holdDuration')}
+                    />
+                </span>
                 <div data-settings-control="">
                     <Input
                         key={seconds}

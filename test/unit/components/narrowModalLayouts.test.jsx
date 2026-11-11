@@ -75,6 +75,7 @@ describe('320x568 modal inventory', () => {
         ].sort()).toEqual([
             'AlertsOverlay.jsx',
             'GatedFileViewer.jsx',
+            'NetworkPicker.jsx',
             'OverlaySurface.jsx',
         ]);
     });

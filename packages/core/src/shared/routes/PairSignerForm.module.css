@@ -32,7 +32,6 @@
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
-    gap: var(--xc-space-3);
     text-align: start;
     cursor: pointer;
     color: var(--xc-text);
@@ -44,11 +43,22 @@
     border: 0;
     border-radius: 0;
     background: transparent;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--xc-space-3);
+    padding-block: var(--xc-space-3);
+    padding-inline: var(--xc-space-3);
     text-align: start;
+}
+
+/* Button places non-text children in its label span. That span, rather than
+   the button itself, owns the logo-to-copy row and its spacing. */
+.vendorCard > span {
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: row;
+    gap: var(--xc-space-3);
+    justify-content: flex-start;
+    text-align: start;
+    width: 100%;
 }
 
 .vendorCard:hover:not(:disabled) {

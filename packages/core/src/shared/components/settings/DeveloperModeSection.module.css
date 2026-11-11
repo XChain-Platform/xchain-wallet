@@ -53,3 +53,9 @@
 .startAction {
     align-self: flex-start;
 }
+
+@media (max-width: 480px) {
+    .toolAction {
+        margin-block: var(--xc-space-1);
+    }
+}

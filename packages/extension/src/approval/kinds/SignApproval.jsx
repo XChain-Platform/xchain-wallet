@@ -1007,7 +1007,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         ref={inputRef}
                         type="password"
                         label={t('common.password')}
-                        hint={t('extension.sign.passwordHint')}
+                        help={t('extension.sign.passwordHint')}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);

@@ -158,8 +158,10 @@ assert.ok(
 assert.ok(
     /abiArgumentErrors\.find\(Boolean\)/.test(formSrc)
         && /disabled=\{actionConfirm\.composing\}/.test(formSrc),
-    'Preview stays available so declared-param validation can show plain copy before compose',
+    'Call contract stays available so declared-param validation can show plain copy before compose',
 );
+assert.ok(/\bCall contract\b/.test(formSrc),
+    'ExecuteContractForm labels the primary action Call contract in every wallet mode');
 assert.ok(
     /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),
     'both lane-toggle affordances exist (abi is self-declared; manual stays available)',

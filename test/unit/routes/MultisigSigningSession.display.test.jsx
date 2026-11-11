@@ -10,24 +10,31 @@
 
 import { readFileSync } from 'node:fs';
 import React from 'react';
+import { sha256 } from '@noble/hashes/sha2';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
+    buildMultisigSessionLink,
     buildReplyEnvelope,
+    decodeMultisigEnvelope,
+    decodeXcwChunks,
     encodeMultisigEnvelope,
     encodeXcwChunks,
     fingerprintSessionRef,
 } from '../../../packages/core/src/uri/index.js';
+import { buildUnsignedMultisigSpend } from '../../../packages/core/src/flows/multisigSpend.js';
 
 let messaging;
+const clipboardMocks = vi.hoisted(() => ({ copyText: vi.fn() }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
     screenVariantFor: () => 'full',
 }));
+vi.mock('../../../packages/core/src/shared/clipboard.js', () => clipboardMocks);
 
 const { isAutoLockHeld } = await import('../../../packages/core/src/shared/hooks/autoLockGuard.js');
-const { MultisigSigningSession } = await import(
+const { MultisigSigningSession, buildSessionEnvelope } = await import(
     '../../../packages/core/src/shared/routes/MultisigSigningSession.jsx');
 
 const PK_A = `02${'11'.repeat(32)}`;
@@ -91,15 +98,122 @@ beforeEach(() => {
         cancelMultisigSigningSession: vi.fn().mockResolvedValue(undefined),
         finalizeMultisigSigningSession: vi.fn().mockResolvedValue(undefined),
         signMultisigLocally: vi.fn().mockResolvedValue(undefined),
+        importMultisigSigningRequest: vi.fn().mockResolvedValue({ sessionId: 'session-1', created: true }),
     };
+    clipboardMocks.copyText.mockResolvedValue({ ok: true, native: false });
+    Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: undefined });
 });
 
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: undefined });
+});
+
+describe('MultisigSigningSession signing links', () => {
+    it('exports a link containing the same envelope as the QR frames', async () => {
+        await mountAndOpen(session());
+        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+
+        const link = screen.getByLabelText('Signing link').value;
+        const frames = screen.getByLabelText('Signing data to copy').value.split('\n');
+        const envelope = decodeMultisigEnvelope(decodeXcwChunks(frames).psbt);
+        expect(link).toBe(buildMultisigSessionLink(envelope));
+    });
+
+    it('copies through the shared non-sensitive clipboard helper', async () => {
+        await mountAndOpen(session());
+        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        const link = screen.getByLabelText('Signing link').value;
+        fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+        await waitFor(() => expect(clipboardMocks.copyText).toHaveBeenCalledWith(link));
+        expect(await screen.findByText('Signing link copied.')).toBeTruthy();
+    });
+
+    it('shows Share only when a share sheet exists and passes it the link', async () => {
+        const share = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: share });
+        await mountAndOpen(session());
+        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        const link = screen.getByLabelText('Signing link').value;
+        fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+        await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: link })));
+    });
+
+    it('hides Share when the shell has no share sheet', async () => {
+        await mountAndOpen(session());
+        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+    });
+
+    it('silently ignores a cancelled share sheet', async () => {
+        const share = vi.fn().mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
+        Object.defineProperty(globalThis.navigator, 'share', { configurable: true, value: share });
+        await mountAndOpen(session());
+        fireEvent.click(screen.getByRole('button', { name: 'Export signing request' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+        await waitFor(() => expect(share).toHaveBeenCalledOnce());
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('imports a pasted signing link and opens the returned session', async () => {
+        const activeSession = session();
+        messaging.listMultisigSigningSessions.mockResolvedValue([activeSession]);
+        messaging.getMultisigSigningSession.mockResolvedValue(activeSession);
+        const envelope = buildSessionEnvelope(activeSession);
+        const link = buildMultisigSessionLink(envelope);
+        render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+
+        fireEvent.change(await screen.findByLabelText('Signing link to open'), { target: { value: link } });
+        fireEvent.click(screen.getByRole('button', { name: 'Open signing link' }));
+
+        await waitFor(() => expect(messaging.importMultisigSigningRequest).toHaveBeenCalledWith({
+            walletId: 'wallet-1',
+            envelope,
+        }));
+        expect(await screen.findByLabelText('Multisig signing progress')).toBeTruthy();
+    });
+
+    it('imports initialLink on mount and shows a plain bad-link error', async () => {
+        messaging.listMultisigSigningSessions.mockResolvedValue([]);
+        render(<MultisigSigningSession
+            walletId="wallet-1"
+            onBack={() => {}}
+            initialLink="not a signing link"
+        />);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This isn\'t a valid multisig signing link.',
+        );
+        expect(messaging.importMultisigSigningRequest).not.toHaveBeenCalled();
+    });
 });
 
 describe('MultisigSigningSession contribution display', () => {
+    it('shows decoded payment, change, and fee before the sharing controls', async () => {
+        const script = `52${[PK_A, PK_B, PK_C].map((key) => `21${key}`).join('')}53ae`;
+        const scriptBytes = Uint8Array.from(script.match(/../g).map((byte) => Number.parseInt(byte, 16)));
+        const inputScript = `0020${Buffer.from(sha256(scriptBytes)).toString('hex')}`;
+        const { psbtHex } = buildUnsignedMultisigSpend({
+            scheme: 'p2wsh-multisig',
+            script,
+            utxo: { txid: '99'.repeat(32), vout: 1, value: 100000n, scriptPubKeyHex: inputScript },
+            outputs: [
+                { value: 90000n, scriptPubKeyHex: `76a914${'44'.repeat(20)}88ac` },
+                { value: 5000n, scriptPubKeyHex: inputScript },
+            ],
+        });
+        await mountAndOpen(session({ psbtHex }));
+
+        const summary = screen.getByTestId('multisig-spend-summary');
+        expect(summary).toHaveTextContent('0.0009 BTC');
+        expect(summary).toHaveTextContent('Change back to this multisig');
+        expect(summary).toHaveTextContent('Network fee: 0.00005 BTC');
+    });
+
     it('wraps every cosigner public key inside the page', async () => {
         await mountAndOpen(session({ signatures: [signature(PK_A)] }));
         const keys = [
@@ -168,6 +282,7 @@ describe('MultisigSigningSession reply transport', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Import cosigner reply' }));
 
         const otherRef = {
+            chainId: activeSession.chainId,
             scheme: activeSession.scheme,
             threshold: activeSession.threshold,
             cosignerPubkeys: activeSession.cosignerPubkeys,
@@ -217,6 +332,7 @@ describe('MultisigSigningSession reply transport', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Import partial signature' }));
 
         const activeRef = {
+            chainId: activeSession.chainId,
             scheme: activeSession.scheme,
             threshold: activeSession.threshold,
             cosignerPubkeys: activeSession.cosignerPubkeys,

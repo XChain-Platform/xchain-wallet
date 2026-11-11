@@ -77,8 +77,9 @@ for (const shell of [
 // ---- ManageToken + ActionsMenu + shell wiring ----
 const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');
 assert.match(manage, /onPauseToken/, 'ManageToken pause entry');
-assert.match(manage, /sleepState\.paused \? 'Resume token' : 'Pause token'/, 'pause label follows state');
-assert.match(manage, /sleepState\.paused \? \(/, 'paused badge present');
+// The smoke runner reads source with t('key') swapped for its English text; a direct run reads the keys.
+assert.match(manage, /label: sleepState\.paused \? (?:'Resume token'|t\('routes\.manageToken\.resumeToken'\)) : (?:'Pause token'|t\('routes\.manageToken\.pauseToken'\))/, 'pause label follows state');
+assert.match(manage, /Icon: sleepState\.paused \? Icon\.UnlockIcon : Icon\.PauseIcon/, 'pause icon follows state');
 assert.match(manage, /interpretSleep/, 'ManageToken reads pause state');
 
 for (const shell of [

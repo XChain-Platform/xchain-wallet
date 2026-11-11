@@ -136,9 +136,8 @@ describe('Send Max quote agreement', () => {
         await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).toBeEnabled());
         fireEvent.click(screen.getByLabelText('Coin control enabled'));
         fireEvent.click(screen.getByLabelText(/1 BTC/));
-        fireEvent.change(screen.getByLabelText('Change address'), {
-            target: { value: 'change-1' },
-        });
+        fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+        fireEvent.click(await screen.findByRole('button', { name: new RegExp(CHANGE) }));
 
         await useMax();
         await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));

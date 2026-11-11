@@ -43,6 +43,65 @@ export function rawActivityAmount(raw) {
     return raw?.amount ?? raw?.AMOUNT ?? raw?.quantity ?? raw?.QUANTITY ?? '';
 }
 
+function firstPresent(raw, fields) {
+    for (const field of fields) {
+        const value = raw?.[field];
+        if (value != null && String(value).trim() !== '') return value;
+    }
+    return '';
+}
+
+function activityAmountDescriptor(entry) {
+    const raw = entry?.raw || {};
+    const action = String(entry?.action || '').toUpperCase();
+
+    if (action === 'ORDER' || action === 'SWAP') {
+        const amount = firstPresent(raw, ['give_amount', 'GIVE_AMOUNT']);
+        if (amount !== '') return { raw: amount, baseUnits: false, qualifier: '' };
+        const quantity = firstPresent(raw, ['give_quantity', 'GIVE_QUANTITY']);
+        if (quantity !== '') return { raw: quantity, baseUnits: true, qualifier: '' };
+        return null;
+    }
+
+    if (action === 'DIVIDEND') {
+        const total = firstPresent(raw, [
+            'total_paid', 'TOTAL_PAID', 'total_amount', 'TOTAL_AMOUNT', 'debit', 'DEBIT',
+        ]);
+        if (total !== '') return { raw: total, baseUnits: false, qualifier: '' };
+        const perUnit = firstPresent(raw, ['amount', 'AMOUNT']);
+        if (perUnit !== '') return { raw: perUnit, baseUnits: false, qualifier: 'per unit' };
+        const perUnitQuantity = firstPresent(raw, ['quantity_per_unit', 'QUANTITY_PER_UNIT']);
+        if (perUnitQuantity !== '') return { raw: perUnitQuantity, baseUnits: true, qualifier: 'per unit' };
+        return null;
+    }
+
+    const amount = rawActivityAmount(raw);
+    if (amount === '') return null;
+    return { raw: amount, baseUnits: action !== 'SEND', qualifier: '' };
+}
+
+/** The ticker whose amount the row shows. */
+export function activityRowTick(entry) {
+    const raw = entry?.raw || {};
+    const action = String(entry?.action || '').toUpperCase();
+    if (action === 'ORDER' || action === 'SWAP') {
+        return String(firstPresent(raw, [
+            'give_tick', 'GIVE_TICK', 'give_asset', 'GIVE_ASSET', 'give_coin', 'GIVE_COIN',
+        ]) || '');
+    }
+    if (action === 'DIVIDEND') {
+        return String(firstPresent(raw, [
+            'dividend_tick', 'DIVIDEND_TICK', 'dividend_asset', 'DIVIDEND_ASSET',
+        ]) || '');
+    }
+    return String(firstPresent(raw, ['tick', 'TICK', 'token', 'TOKEN']) || '');
+}
+
+/** Extra copy needed to keep a rate from reading as a total payment. */
+export function activityRowAmountQualifier(entry) {
+    return activityAmountDescriptor(entry)?.qualifier || '';
+}
+
 /**
  * The formatted amount of an activity row, without the ticker, or '' when
  * the record carries none. A SEND record carries a whole-unit decimal amount
@@ -54,9 +113,10 @@ export function rawActivityAmount(raw) {
  * @returns {string}
  */
 export function activityRowAmount(entry, { divisibility, direction = null } = {}) {
-    const rawAmount = rawActivityAmount(entry?.raw);
-    if (!rawAmount) return '';
-    const isSend = String(entry?.action || '').toUpperCase() === 'SEND';
-    const amount = isSend ? String(rawAmount) : formatBaseUnits(rawAmount, divisibility);
+    const descriptor = activityAmountDescriptor(entry);
+    if (!descriptor) return '';
+    const amount = descriptor.baseUnits
+        ? formatBaseUnits(descriptor.raw, divisibility)
+        : String(descriptor.raw);
     return amount ? formatHistoryAmount(amount, direction) : '';
 }

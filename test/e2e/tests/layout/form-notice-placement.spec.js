@@ -44,6 +44,7 @@ const WIDE_MIN = 600;
 
 const ONLY = process.env.FORM_NOTICE_ONLY ? new RegExp(process.env.FORM_NOTICE_ONLY, 'i') : null;
 
+// Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
 const ALL_FORMS = [
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive'), trigger: receiveAmountError, fieldError: true },
@@ -90,9 +91,9 @@ const ALL_FORMS = [
         open: (page) => settingsForm(page, 'This wallet', 'Change…'),
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Current wallet password').fill('e2epassword1234');
+            await main.getByLabel('Current wallet password', { exact: true }).fill('e2epassword1234');
             await main.getByLabel('New wallet password', { exact: true }).fill('e2enewpassword5678');
-            await main.getByLabel('Confirm new wallet password').fill('e2enewpassword5678');
+            await main.getByLabel('Confirm new wallet password', { exact: true }).fill('e2enewpassword5678');
             await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
@@ -109,7 +110,7 @@ const ALL_FORMS = [
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Confirm wallet password').fill('e2epassword1234');
+            await main.getByLabel('Confirm wallet password', { exact: true }).fill('e2epassword1234');
             await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
@@ -126,8 +127,8 @@ const ALL_FORMS = [
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
-            const name = await main.getByLabel('Confirm wallet name').getAttribute('placeholder');
-            await main.getByLabel('Confirm wallet name').fill(name);
+            const name = await main.getByLabel('Confirm wallet name', { exact: true }).getAttribute('placeholder');
+            await main.getByLabel('Confirm wallet name', { exact: true }).fill(name);
             await main.getByRole('button', { name: 'Remove wallet', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
@@ -138,8 +139,8 @@ const ALL_FORMS = [
         open: (page) => settingsSubpage(page, 'Connected sites'),
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Sign-throttle burst (max requests per window)').fill('5');
-            await main.getByRole('button', { name: 'Apply', exact: true }).click();
+            await main.getByLabel('Sign-throttle burst (max requests per window)', { exact: true }).fill('5');
+            await main.getByRole('button', { name: 'Apply throttle', exact: true }).click();
         },
     },
     {
@@ -165,7 +166,7 @@ const ALL_FORMS = [
             await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
         },
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: 'Publish', exact: true }).last().click();
+            await page.getByRole('main').getByRole('button', { name: 'Publish labels', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
@@ -180,7 +181,7 @@ const ALL_FORMS = [
         trigger: async (page) => {
             const main = page.getByRole('main');
             await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
-            await main.getByRole('button', { name: 'Check', exact: true }).click();
+            await main.getByRole('button', { name: 'Check for contacts', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
@@ -204,7 +205,8 @@ const ALL_FORMS = [
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Custom network descriptor JSON').fill('{ not json');
+            // Exact, so the field's 'About ...' help tip (U57) is not matched too.
+            await main.getByLabel('Custom network descriptor JSON', { exact: true }).fill('{ not json');
             await main.getByRole('button', { name: 'Add network', exact: true }).click();
         },
         close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).last().click(),
@@ -218,8 +220,8 @@ const ALL_FORMS = [
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel(/activation password$/).first().fill('e2epassword1234');
-            await main.getByRole('button', { name: 'Activate', exact: true }).click();
+            await main.getByLabel('Bitcoin activation password', { exact: true }).fill('e2epassword1234');
+            await main.getByRole('button', { name: /^Activate / }).click();
         },
     },
     // A native amount under the dust floor is a note under the amount field, not a notice.
@@ -256,7 +258,8 @@ const ALL_FORMS = [
         },
         fieldNote: /for another\s+network/,
     },
-    // A union states what it follows from the moment it opens.
+    // U57 moves static explanatory lines into field help tips, so this layout
+    // check does not require the former in-page Union notice.
     {
         label: 'Union list',
         open: async (page) => {
@@ -264,7 +267,6 @@ const ALL_FORMS = [
             await page.getByRole('main').getByRole('button', { name: 'Create union list', exact: true }).click();
         },
         trigger: async () => {},
-        notice: /A union follows each member/,
     },
     // Coin on both sides is a state of the whole order, so it is a notice above the card.
     {
@@ -410,7 +412,7 @@ async function submitEmpty(page) {
 
 /** Receive has no submit; an amount it cannot read shows its field error under the field, not a notice. */
 async function receiveAmountError(page) {
-    const amount = page.getByRole('main').getByLabel(/amount/i).first();
+    const amount = page.getByRole('main').getByRole('textbox', { name: /amount/i }).first();
     if (await amount.count() === 0) return;
     await amount.fill('0.123456789012345');
     await amount.press('Tab');
@@ -432,7 +434,7 @@ async function sendDustAmount(page) {
 
 /** Create multisig reports a key it cannot read once a field is edited. */
 async function multisigComposeError(page) {
-    const key = page.getByRole('main').getByLabel(/Public key/).first();
+    const key = page.getByRole('main').getByRole('textbox', { name: /Public key/ }).first();
     await key.fill('zz');
     await key.press('Tab');
 }

@@ -33,6 +33,8 @@
 // All three consumers read `entry.raw`, which is why this is one normalization
 // at ingestion rather than a patch in each of them.
 
+import { compareMergedEntries } from './pendingHistory.js';
+
 /**
  * An explorer history row with its `details` fields lifted alongside the row's
  * own, so a reader can ask for `tick` and get one.
@@ -116,7 +118,8 @@ function compareActionIndex(a, b) {
 /**
  * The newest entries of a wallet's history, at most `limit` of them. An action
  * read once per own address (a send between two of the wallet's addresses)
- * lists once. Order is newest first by time, then block, then action index.
+ * lists once. Pending entries lead, then entries order newest first by their
+ * own time; same-chain ties use block and action order.
  *
  * @param {any[] | null | undefined} entries  normalized history entries
  * @param {number} [limit]
@@ -133,10 +136,11 @@ export function recentActivityEntries(entries, limit = RECENT_ACTIVITY_LIMIT) {
         seen.add(id);
         unique.push(entry);
     }
-    unique.sort((a, b) => (
-        (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)
-        || (Number(b.blockIndex) || 0) - (Number(a.blockIndex) || 0)
-        || compareActionIndex(b.actionIndex, a.actionIndex)
-    ));
+    unique.sort((a, b) => {
+        const mergedOrder = compareMergedEntries(a, b);
+        if (mergedOrder) return mergedOrder;
+        if (a.chainId !== b.chainId) return 0;
+        return compareActionIndex(b.actionIndex, a.actionIndex);
+    });
     return unique.slice(0, Math.max(0, limit));
 }

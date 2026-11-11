@@ -115,7 +115,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         }, 'unstake');
 
         expect(await screen.findByText('12 XCHAIN available')).toBeInTheDocument();
-        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
+        expect(screen.getByLabelText(/Signing public key/, { selector: 'input, select' })).toHaveValue(activeKey);
     });
 
     it('refuses an unstake before activation and names the unlock height', async () => {
@@ -132,7 +132,7 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         }, 'unstake');
 
         expect(await screen.findByText('0 XCHAIN available')).toBeInTheDocument();
-        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(lockedKey);
+        expect(screen.getByLabelText(/Signing public key/, { selector: 'input, select' })).toHaveValue(lockedKey);
         fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
 
         expect(await screen.findByText('This stake cannot be unstaked until block 1,106.')).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe('StakingActionForm network picker', () => {
         for (const mode of ['unstake', 'claim-rewards']) {
             mountForm({ getAddressesByChain: vi.fn().mockResolvedValue(held) }, mode);
             fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
-            const offered = screen.getAllByRole('option').map((o) => o.textContent);
+            const offered = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
             expect(offered.some((t) => /Litecoin|Dogecoin/.test(t)), mode).toBe(false);
             expect(offered.some((t) => /Bitcoin/.test(t)), mode).toBe(true);
             cleanup();

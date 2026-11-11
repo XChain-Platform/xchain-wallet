@@ -15,6 +15,8 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'components.durationSlider.blocksHelp':
+        'Enter a custom number of blocks for this pause or lock.',
     // Copy moved out of JSX literals by the i18n sweep.
     'components.placeOrderPanel.itWaitsInTheQueued':
         "It waits in the queued-transactions banner until you broadcast it from there, and the wallet reminds you when the network is back, so don't place it again.",
@@ -42,8 +44,6 @@ const messages = {
     'components.placeOrderPanel.price': 'Price',
     'components.placeOrderPanel.expiration': 'Expiration',
     'components.placeOrderPanel.settlementAddress': 'Settlement address',
-    'components.placeOrderPanel.watcherModeBuildsAnUnsigned':
-        'Watcher mode builds an unsigned transaction for your Signer-mode wallet.',
     'components.placeOrderPanel.placeOrder2': 'Place order',
     'components.placeOrderPanel.loadingWalletBalances': 'Loading wallet balances…',
     'components.placeOrderPanel.orderSide': 'Order side',
@@ -68,7 +68,8 @@ const messages = {
         'Auto-pay is unavailable in watch-only mode; you will be notified when a match needs payment.',
     'components.placeOrderPanel.autoPayIsUnavailableFor':
         'Auto-pay is unavailable for hardware signers (unattended signing needs a software key); you will be notified when a match needs payment.',
-    'components.tickItemsEditor.tokensOnePerLine': 'Tokens (one per line)',
+    'components.tickItemsEditor.tokens': 'Tokens',
+    'components.tickItemsEditor.tokensHelp': 'Put one token per line.',
     'components.tickItemsEditor.tick1Tick2': 'TICK1\nTICK2',
     'components.tickItemsEditor.addFromTokenPicker': 'Add from token picker',
     'components.tickItemsEditor.tokenOrder': 'Token order',
@@ -174,7 +175,7 @@ const messages = {
     'components.watcherResultPanel.unsignedTransactionReadyForSigning':
         'Unsigned transaction, ready for signing',
     'components.watcherResultPanel.takeThisTransactionToYour':
-        'Take this transaction to your Signer-mode wallet. Paste the code, or scan the animated QR. Signing authorizes this transaction only, so verify its details again on the signer. Then paste the signed transaction into a Normal-mode wallet to broadcast.',
+        'Take this transaction to your offline signer. Paste the code, or scan the animated QR. Signing authorizes this transaction only, so verify its details again on the signer. Then paste the signed transaction into a Normal-mode wallet to broadcast.',
     'components.watcherResultPanel.encoding': 'Encoding',
     'components.watcherResultPanel.unsignedTransactionHex': 'Unsigned transaction (code)',
     'components.watcherResultPanel.unsignedTransactionHex2': 'Unsigned transaction code',
@@ -242,7 +243,7 @@ const messages = {
         'The feed value to publish. The previous value clears on success; the next value is one keystroke away.',
     'components.operatorPublisherMode.loadingSourceAddress': 'Loading source address…',
     'components.operatorPublisherMode.watcherModeBuildsAnUnsigned':
-        'Watcher mode builds an unsigned transaction for a Signer-mode wallet.',
+        'Watcher mode prepares the transaction for your offline signer.',
     'components.operatorPublisherMode.lastPublishedTxid': 'Last published transaction ID:',
     'components.operatorPublisherMode.publishValue': 'Publish value',
     'components.operatorPublisherMode.loadingFeed': 'Loading the most recent feed for this address.',
@@ -297,8 +298,11 @@ const messages = {
     'components.collectiblesView.openDetails': 'Open {value} details',
     'components.priceAlertForm.direction': 'Direction',
     'components.priceAlertForm.targetPrice': 'Target price',
-    'components.priceAlertForm.saveChanges': 'Save changes',
-    'components.priceAlertForm.addAlert': 'Add alert',
+    'components.priceAlertForm.savePriceAlert': 'Add alert',
+    'components.priceAlertForm.chooseAsset': 'Choose a coin or token',
+    'components.priceAlertForm.chooseHeldToken': 'Choose a held token',
+    'components.priceAlertForm.currentPrice': 'Current: {price}',
+    'components.priceAlertForm.noMarketPrice': '{tick} has no market price yet. A price alert needs one.',
     'components.priceAlertForm.isAlready': 'is already',
     'components.priceAlertForm.above': 'above',
     'components.priceAlertForm.below': 'below',
@@ -354,6 +358,7 @@ const messages = {
     'components.portfolioChart.loadingPriceHistory': 'Loading price history…',
     'components.portfolioChart.portfolioPerformanceChart': 'Portfolio performance chart',
     'components.portfolioChart.noPriceHistoryForThis': 'No price history for this range yet.',
+    'components.portfolioChart.missingCoins': 'Leaves out {coins}: no price history for this range.',
     'components.preflightPanel.preFlightUnavailableProceedingIs':
         'Pre-flight unavailable; proceeding is at your discretion.',
     'components.preflightPanel.signAnyway': 'Sign anyway',
@@ -412,10 +417,10 @@ const messages = {
         ' · {count, plural, one {# duplicate ignored} other {# duplicates ignored}}',
     'components.networkFilter.networkCount': '{count, plural, one {# network} other {# networks}}',
     'components.networkFilterDropdown.filterByNetworkAll': 'Filter by network: All networks, {count, plural, one {# network} other {# networks}}',
+    'components.networkFilterDropdown.filterByNetworkNamed': 'Filter by network: {name}',
     'components.totalBalanceHero.refreshPortfolio': 'Refresh portfolio',
     'components.totalBalanceHero.refreshingPortfolio': 'Refreshing portfolio',
-    'components.totalBalanceHero.hideFilters': 'Hide filters',
-    'components.totalBalanceHero.showFilters': 'Show filters',
+    'components.totalBalanceHero.showIn': 'Show in {unit}',
     'components.totalBalanceHero.hideChart': 'Hide chart',
     'components.totalBalanceHero.showChart': 'Show chart',
     'components.totalBalanceHero.showBalance': 'Show balance',

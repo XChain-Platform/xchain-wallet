@@ -17,6 +17,7 @@ import {
     FeeSelector,
     FormPage,
     FormSection,
+    Icon,
     Input,
     ListPage,
     NetworkField,
@@ -41,6 +42,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { AmountField } from '../components/AmountField.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     estimateNativeSendFee,
@@ -60,12 +62,14 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     compareDecimalStrings,
     formatWithThousands,
+    subtractDecimalStrings,
     sumDecimalStrings,
     tokenAmountPrecisionError,
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -207,6 +211,14 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     });
     const governanceTokenInfo = useTokenInfo({ chainId, tick, skip: !tick.trim() });
     const xchainTokenInfo = useTokenInfo({ chainId, tick: 'XCHAIN' });
+    const maxXchainAfter = (otherAmount) => {
+        if (xchainBalance == null) return null;
+        const other = /^\d+(?:\.\d+)?$/.test(otherAmount.trim()) ? otherAmount.trim() : '0';
+        const remaining = subtractDecimalStrings(xchainBalance, other);
+        return remaining !== null && compareDecimalStrings(remaining, '0') === -1 ? '0' : remaining;
+    };
+    const maxDeposit = maxXchainAfter(gasEscrow);
+    const maxGasEscrow = maxXchainAfter(deposit);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -596,7 +608,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onCreated || onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onCreated || onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -612,13 +624,11 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
-                    <>
-                        <Button type="button" variant="ghost" onClick={() => { setSubmitError(null); setStage('form'); }} disabled={stage === 'submitting'}>Back</Button>
-                        <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                            {isWatcherMode ? 'Create unsigned transaction: poll' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: create poll` : 'Create poll'}
-                        </Button>
-                    </>
+                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                        icon={isHwSource ? <Icon.SignIcon /> : <Icon.PlusIcon />}
+                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                        {isWatcherMode ? 'Create unsigned transaction: poll' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: create poll` : 'Create poll'}
+                    </Button>
                 )}
             >
                 <p className={styles.summary}>Create a {tick} governance poll closing at block {endBlock}.</p>
@@ -684,7 +694,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     </dd>
                 </dl>
                 {isWatcherMode ? (
-                    <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -736,6 +746,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -769,15 +780,16 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Create poll' : 'Preview'}
+                    Create poll
                 </Button>
             )}
         >
             <FormSection title="Poll details">
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <NetworkField help="The chain the poll is recorded on. Your From address and the fee are on this network, and the governance token must live on it." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that creates and pays for this poll. It must hold some of the governance token."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -789,11 +801,13 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
             <TokenField
                 label="Governance token"
+                help="The token whose holders can vote on this poll."
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
 
-            <Textarea label="Question (optional)" hint="What the poll is asking holders to decide."
+            <Textarea label="Question" optional
+                help="What this poll asks governance-token holders to decide."
                 value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} />
 
             </FormSection>
@@ -803,7 +817,8 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 {options.map((opt, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
                         <div style={{ flex: 1 }}>
-                            <Input label={`Option ${i}`} value={opt} onChange={(e) => setOptionAt(i, e.target.value)} autoComplete="off" />
+                            <Input label={`Option ${i}`} help="A choice voters can select. Option labels cannot contain commas."
+                                value={opt} onChange={(e) => setOptionAt(i, e.target.value)} autoComplete="off" />
                         </div>
                         {options.length > 2 ? (
                             <Button type="button" variant="ghost" onClick={() => removeOption(i)}>Remove</Button>
@@ -813,22 +828,22 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 <Button type="button" variant="ghost" onClick={addOption}>Add option</Button>
             </div>
 
-            <Input label="Closes at block" hint={endBlockEstimate
-                ? `A future block height. Estimated close: ${endBlockEstimate}.`
-                : 'A future block height. Voting is accepted up to and including this block.'}
+            <Input label="Closes at block"
+                help="A future block height. Voting is accepted up to and including this block."
+                hint={endBlockEstimate ? `Estimated close: ${endBlockEstimate}.` : undefined}
                 value={endBlock} onChange={(e) => setEndBlock(e.target.value)} inputMode="numeric" autoComplete="off" />
 
             <Select label="Tally mode" value={tallyMode} onChange={(e) => setTallyMode(e.target.value)}
-                hint="Approval: full weight on each chosen option. Split: weight divided by your per-option shares.">
+                help="Approval: full weight on each chosen option. Split: weight divided by your per-option shares.">
                 {TALLY_MODES.map((m) => <option key={m} value={m}>{TALLY_MODE_LABEL[m] || m}</option>)}
             </Select>
 
             <Select label="Weight mode" value={weightMode} onChange={(e) => setWeightMode(e.target.value)}
-                hint={WEIGHT_MODE_HINT[weightMode]}>
+                help={WEIGHT_MODE_HINT[weightMode]}>
                 {WEIGHT_MODES.map((m) => <option key={m} value={m}>{WEIGHT_MODE_LABEL[m] || m}</option>)}
             </Select>
 
-            <Input label="Max selections" hint="How many options one ballot may list (1 = single choice)."
+            <Input label="Max selections" help="How many options one ballot may list (1 = single choice)."
                 value={maxSelections} onChange={(e) => setMaxSelections(e.target.value)} inputMode="numeric" autoComplete="off" />
 
             <Button type="button" variant="ghost" onClick={() => setShowAdvanced((v) => !v)}>
@@ -836,50 +851,57 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             </Button>
             {showAdvanced ? (
                 <>
-                    <Input label="Quorum (optional)" hint="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
+                    <Input label="Quorum" optional help="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
                         value={quorum} onChange={(e) => setQuorum(e.target.value)} inputMode="decimal" autoComplete="off" />
-                    <Input label="Minimum voters (optional)" hint="Minimum distinct qualifying voters."
+                    <Input label="Minimum voters" optional help="Minimum distinct qualifying voters."
                         value={minVoters} onChange={(e) => setMinVoters(e.target.value)} inputMode="numeric" autoComplete="off" />
-                    <Input label="Minimum vote balance (optional)" hint="A voter counts toward the participation gate only if they hold at least this much. Required for quadratic weighting."
+                    <Input label="Minimum vote balance" optional help="A voter counts toward the participation gate only if they hold at least this much. Required for quadratic weighting."
                         value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} inputMode="decimal" autoComplete="off" />
-                    <Input label="Early-decide threshold (optional)" hint="Fraction of supply an option must reach to close the poll early."
+                    <Input label="Early-decide threshold" optional help="Fraction of supply an option must reach to close the poll early."
                         value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} inputMode="decimal" autoComplete="off" />
-                    <Input label="Creation deposit (optional)" hint="A GAS deposit held while the poll runs as anti-spam: returned when the poll closes, kept if too few people vote."
-                        value={deposit} onChange={(e) => setDeposit(e.target.value)} inputMode="decimal" autoComplete="off" />
+                    <AmountField label="Creation deposit" optional tick="XCHAIN"
+                        help="XCHAIN held while the poll runs as anti-spam. It is returned when the poll closes and kept if too few people vote."
+                        amount={deposit} divisibility={xchainTokenInfo?.divisibility}
+                        onAmountFieldChange={setDeposit}
+                        onMax={maxDeposit === null ? undefined : () => setDeposit(maxDeposit)}
+                        maxDisabled={maxDeposit === null}
+                        balanceText={xchainBalance == null ? undefined : `${formatWithThousands(xchainBalance)} XCHAIN available`} />
                 </>
             ) : null}
 
-            <Button type="button" variant="ghost" onClick={() => setShowBinding((v) => !v)}>
+            <Button type="button" variant="ghost"
+                icon={showBinding ? <Icon.EyeOffIcon /> : <Icon.ContractIcon />}
+                onClick={() => setShowBinding((v) => !v)}>
                 {showBinding ? 'Hide binding poll' : 'Binding poll (run a contract on the result)'}
             </Button>
             {showBinding ? (
                 <>
-                    <p className={styles.hint}>
-                        A binding poll doesn&rsquo;t just record an opinion: when it
-                        finishes, the network calls a contract with the result. Use it to
-                        release funds or change a setting automatically. Leave the contract
-                        blank to keep this poll advisory.
-                    </p>
-                    <Input label="Contract to call (optional)" hint="The contract's number, shown on its page in the explorer."
+                    <Input label="Contract to call" optional
+                        help="The contract's number, shown on its explorer page. When a binding poll finishes, the network calls this contract with the result; leave it blank to keep the poll advisory."
                         value={callbackContract} onChange={(e) => setCallbackContract(e.target.value)} inputMode="numeric" autoComplete="off" />
                     {isBinding ? (
                         <>
-                            <Input label="Method to run" hint="The method name on that contract, e.g. releaseFunds."
+                            <Input label="Method to run" help="The method name on that contract, e.g. releaseFunds."
                                 value={callbackMethod} onChange={(e) => setCallbackMethod(e.target.value)} autoComplete="off" />
                             <Select label="When to call it" value={callbackOn} onChange={(e) => setCallbackOn(e.target.value)}
-                                hint="Only on a pass runs the contract when the poll wins its vote. On every result also runs it when the poll fails its turnout gate.">
+                                help="Only on a pass runs the contract when the poll wins its vote. On every result also runs it when the poll fails its turnout gate.">
                                 {CALLBACK_ON_VALUES.map((v) => (
                                     <option key={v} value={v}>
                                         {v === 'pass' ? 'Only when the poll passes' : 'On every result'}
                                     </option>
                                 ))}
                             </Select>
-                            <Input label="Extra arguments (optional)" hint='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
+                            <Input label="Extra arguments" optional help='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
                                 value={callbackParams} onChange={(e) => setCallbackParams(e.target.value)} autoComplete="off" />
-                            <Input label="Escrow to fund the call (optional)" hint="GAS locked at creation to pay for running the contract; released when the poll finishes."
-                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} inputMode="decimal" autoComplete="off" />
+                            <AmountField label="Escrow to fund the call" optional tick="XCHAIN"
+                                help="XCHAIN locked at creation to pay for running the contract and released when the poll finishes."
+                                amount={gasEscrow} divisibility={xchainTokenInfo?.divisibility}
+                                onAmountFieldChange={setGasEscrow}
+                                onMax={maxGasEscrow === null ? undefined : () => setGasEscrow(maxGasEscrow)}
+                                maxDisabled={maxGasEscrow === null}
+                                balanceText={xchainBalance == null ? undefined : `${formatWithThousands(xchainBalance)} XCHAIN available`} />
                             {timelockActive ? (
-                                <Input label="Delay before the call runs (optional)" hint="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
+                                <Input label="Delay before the call runs" optional help="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
                                     value={callbackDelayBlocks} onChange={(e) => setCallbackDelayBlocks(e.target.value)} inputMode="numeric" autoComplete="off" />
                             ) : (
                                 <p className={styles.hint}>
@@ -909,6 +931,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

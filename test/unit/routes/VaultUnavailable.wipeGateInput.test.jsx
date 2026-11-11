@@ -39,7 +39,7 @@ function openGate(props) {
     renderScreen(props);
     fireEvent.click(screen.getByText(/restore from recovery phrase or backup/i));
     return {
-        field: screen.getByLabelText(/type wipe to confirm/i),
+        field: screen.getByLabelText(/type wipe to confirm/i, { selector: 'input' }),
         confirm: screen.getByRole('button', { name: /remove damaged data/i }),
     };
 }

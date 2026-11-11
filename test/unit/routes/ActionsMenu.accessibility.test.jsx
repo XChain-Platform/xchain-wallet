@@ -122,8 +122,10 @@ describe('ActionsMenu navigation semantics', () => {
         expect(screen.getByText('Sign transaction')).toBeTruthy();
     });
 
-    it('keeps developer tools and multisig signing out of the catalogue', () => {
+    it('keeps developer tools out of the catalogue and lists Multisig signing', () => {
         const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
-        expect(ids).not.toEqual(expect.arrayContaining(['parallel', 'advanced', 'multisig-sign']));
+        expect(ids).not.toContain('parallel');
+        expect(ids).not.toContain('advanced');
+        expect(ids).toContain('multisig-sign');
     });
 });

@@ -53,7 +53,7 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 /**
- * Watcher-mode messaging: Preview opens the local review and the build call
+ * Watcher-mode messaging: Publish price opens the local review and the build call
  * returns `built`, so the done stage shows that result.
  */
 function messagingFor({ getAddressesByChain, built = { txid: 'oracle-txid' } } = {}) {
@@ -97,7 +97,7 @@ async function step(fn) {
 async function publish(utils) {
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: 'PEPECASH' } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value: '0.05' } }));
-    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
     const build = utils.getByRole('button', { name: 'Create unsigned transaction' });
     await step(() => fireEvent.submit(build.closest('form')));
 }

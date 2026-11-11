@@ -33,14 +33,19 @@ test('a search typed in the Send picker does not filter the Home Tokens tab', as
 test('a Home token filter that matches nothing clears from the empty state', async ({ page }) => {
     await createWallet(page);
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Balance actions' }).click();
-    await main.getByRole('menuitemcheckbox', { name: 'Show filters' }).click();
-    await main.getByRole('searchbox', { name: 'Search tokens by name' }).fill('ZZNOSUCHTICK');
+    // Token search lives in the list header's Filter and sort menu (U72).
+    const filterButton = main.getByRole('button', { name: 'Filter and sort' });
+    const search = main.getByRole('dialog', { name: 'Filter and sort' })
+        .getByRole('searchbox', { name: 'Search tokens by name' });
     await main.getByRole('tab', { name: 'Tokens' }).click();
+    await filterButton.click();
+    await search.fill('ZZNOSUCHTICK');
+    await page.keyboard.press('Escape');
     await expect(main.getByText('No matching tokens')).toBeVisible();
     await expect(main.getByText(/top toolbar/)).toHaveCount(0);
 
     await main.getByRole('button', { name: 'Clear filter' }).click();
     await expect(main.getByText('No matching tokens')).toHaveCount(0);
-    await expect(main.getByRole('searchbox', { name: 'Search tokens by name' })).toHaveValue('');
+    await filterButton.click();
+    await expect(search).toHaveValue('');
 });

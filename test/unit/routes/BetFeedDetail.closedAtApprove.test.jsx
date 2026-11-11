@@ -100,8 +100,8 @@ function mount(messaging) {
 
 async function openReview() {
     fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
-    fireEvent.change(screen.getByLabelText(/Stake/), { target: { value: '30' } });
-    const review = screen.getByRole('button', { name: /Review bet/ });
+    fireEvent.change(screen.getByLabelText(/^Stake/), { target: { value: '30' } });
+    const review = screen.getByRole('button', { name: /Place bet/ });
     await waitFor(() => expect(review).not.toBeDisabled());
     fireEvent.click(review);
     return waitFor(() => {

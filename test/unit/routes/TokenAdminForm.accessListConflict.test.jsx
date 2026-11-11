@@ -64,7 +64,7 @@ describe('TokenAdminForm access lists', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: /Choose block-list/ }));
         fireEvent.click(await screen.findByText(/Address list #42/));
-        const preview = await screen.findByRole('button', { name: 'Preview' });
+        const preview = await screen.findByRole('button', { name: 'Update access lists' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 

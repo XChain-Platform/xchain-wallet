@@ -44,15 +44,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    FieldIconButton,
     FieldNote,
+    AddressField,
     Screen,
     Button,
     Input,
-    Select,
     Textarea,
     ChainBadge,
     AddressText,
-    ChainPicker,
+    NetworkField,
     CopyButton,
     StatusMessage,
     QrScanner,
@@ -81,8 +82,10 @@ import {
 } from '../../registry/coinTicker.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import artifactStyles from './PsbtSignForm.module.css';
 import { decodeBbqrPsbt, parseBbqrFrame } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
@@ -439,31 +442,18 @@ export function normalizePsbtFile(content) {
  */
 function ArtifactBlock({ label, copyLabel, value, testId }) {
     return (
-        <div>
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 4,
-            }}>
-                <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                    {label}
-                </span>
-                <CopyButton value={value} label={copyLabel} />
-            </div>
+        <div className={artifactStyles.artifact}>
+            <span className={artifactStyles.artifactLabel}>{label}</span>
             <pre
                 data-testid={testId}
-                style={{
-                    background: 'var(--xc-surface)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-md)',
-                    padding: 'var(--xc-space-2)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    fontSize: 'var(--xc-text-xs)',
-                    fontFamily: 'var(--xc-font-mono)',
-                }}
-            >{value}</pre>
+                className={artifactStyles.artifactBox}
+                dir="ltr"
+            >
+                <span className={artifactStyles.artifactCopy}>
+                    <CopyButton value={value} label={copyLabel} iconOnly />
+                </span>
+                <span>{value}</span>
+            </pre>
         </div>
     );
 }
@@ -492,6 +482,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [addressId, setAddressId] = useState(/** @type {string | null} */ (null));
+    const [signingAddressPickerOpen, setSigningAddressPickerOpen] = useState(false);
     // Seeded from `initialPsbt` at mount. The user still reviews the
     // decoded action and types their password, so a scanned transaction is a
     // proposal in the box, never a signature - which is why prefilling it is
@@ -779,7 +770,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return;
         }
         const own = addrs.filter((a) => a.role !== 'dispenser');
-        setAddressId(preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id);
+        setAddressId((currentId) => (
+            addrs.some((address) => address.id === currentId)
+                ? currentId
+                : (preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id)
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     // Re-parse whenever the user pastes a fresh blob OR switches chains
@@ -848,6 +843,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         () => addressOptions.find((a) => a.id === addressId) || null,
         [addressOptions, addressId],
     );
+
+    const changeNetwork = (nextChainId) => {
+        setChainId(nextChainId);
+        if (error) setError(null);
+    };
 
     const ownAddressSet = useMemo(
         () => new Set(addressOptions.map((a) => a.address)),
@@ -1074,7 +1074,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <ListPage>
                     <StatusMessage variant="status">
                         This watch-only wallet cannot sign transactions. Move the unsigned
-                        transaction to a Signer-mode wallet to sign it.
+                        transaction to your offline signer to sign it.
                     </StatusMessage>
                 </ListPage>
             </Screen>
@@ -1088,6 +1088,29 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <StatusMessage variant="error">{loadError}</StatusMessage>
                 </ListPage>
             </Screen>
+        );
+    }
+
+    if (signingAddressPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Signing address"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={changeNetwork}
+                unavailableReason={(address, addressChainId) => (
+                    (addressesByChain?.[addressChainId] || []).some((record) => record.id === address.id)
+                        ? null
+                        : 'This address cannot sign on this network.'
+                )}
+                onPick={(address) => {
+                    setAddressId(address.id);
+                    if (error) setError(null);
+                    setSigningAddressPickerOpen(false);
+                }}
+                onBack={() => setSigningAddressPickerOpen(false)}
+            />
         );
     }
 
@@ -1188,7 +1211,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     {broadcastState !== 'broadcast' && broadcastState !== 'queued' ? (
                         <Button
-                            variant="primary"
+                            variant="success"
                             block
                             disabled={!signedTxHex || broadcastState === 'broadcasting'}
                             loading={broadcastState === 'broadcasting'}
@@ -1231,7 +1254,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         </Button>
                     ) : null}
                     <Button
-                        variant="ghost"
+                        variant={broadcastState === 'broadcast' || broadcastState === 'queued'
+                            ? 'success'
+                            : 'ghost'}
                         block
                         onClick={() => {
                             setSignedPsbtHex(null);
@@ -1377,9 +1402,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             label="Sign transaction"
             onSubmit={handleSubmit}
             actions={(
+                // An explicit icon: FormPage re-maps an action's children, which
+                // drops the label-derived icon of any button it does not promote.
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.SignIcon />}
                     loading={busy}
                     disabled={
                         busy
@@ -1402,30 +1430,27 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             )}
         >
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <ChainPicker
+                <NetworkField
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     value={chainId || ''}
-                    onChange={(nextChainId) => {
-                        setChainId(nextChainId);
-                        if (error) setError(null);
-                    }}
+                    onChange={changeNetwork}
                     label="Network"
-                    hideNetworkKind
+                    help="The network whose rules are used to read the unsigned transaction. The signing address must belong to this network."
                 />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <Select
+                <AddressField
                     id="psbt-sign-address"
                     label="Signing address"
-                    value={addressId || ''}
-                    onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
-                    aria-label="Signing address"
-                >
-                    {addressOptions.map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
-                    ))}
-                </Select>
+                    help="Choose the wallet address whose keys will sign this transaction. It must hold the inputs being signed because only the keys controlling an input can authorize spending it."
+                    icon="addresses"
+                    value={selectedAddress?.address || ''}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSigningAddressPickerOpen(true)}
+                    iconLabel="Choose signing address"
+                />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <div
@@ -1443,17 +1468,17 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <Textarea
                         id="psbt-sign-paste"
                         label="Unsigned transaction code"
+                        help="A PSBT is a partially signed Bitcoin transaction. Paste PSBT hex starting with 70736274ff, base64 starting with cHNid, scan the code, or drop a .psbt file."
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
                         placeholder="Paste the transaction code (it starts with 70736274ff or cHNid), or drop a .psbt file"
                         rows={6}
                         aria-label="Unsigned transaction code"
-                        labelAction={(
-                            <Button
-                                variant="ghost"
-                                size="sm"
+                        fieldAction={(
+                            <FieldIconButton
                                 icon={<Icon.ScanIcon />}
-                                aria-label={scannerOpen ? 'Close scanner' : 'Scan transaction'}
+                                label={scannerOpen ? 'Close scanner' : 'Scan transaction'}
+                                aria-pressed={scannerOpen}
                                 onClick={() => { setScannerOpen((open) => !open); if (error) setError(null); }}
                                 disabled={busy}
                             />
@@ -1480,7 +1505,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         variant="error"
                         testId="psbt-sign-paste-error"
                         action={pasted && !psbtHex && !error ? (
-                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => { setPasted(''); setError(null); }}>
+                            <Button type="button" variant="link" size="sm" onClick={() => { setPasted(''); setError(null); }}>
                                 Clear
                             </Button>
                         ) : null}
@@ -1492,6 +1517,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <Button
                         variant="ghost"
                         size="sm"
+                        icon={<Icon.UploadIcon />}
                         onClick={drop.openFilePicker}
                         disabled={busy}
                     >
@@ -1539,13 +1565,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     />
                 </div>
             ) : signerReady ? (
-                // Withdraw the "ready to sign" claim while panic mode
-                // has signing frozen.
-                <SigningReadyNote>
-                    <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-                    </p>
-                </SigningReadyNote>
+                // State a self-armed freeze without exposing a duress-armed freeze.
+                <SigningReadyNote />
             ) : (
                 <PanicPasswordGate>
                     <Input

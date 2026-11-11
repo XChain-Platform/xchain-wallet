@@ -59,7 +59,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'issue',
         handler: 'onIssue',
         label: 'Issue token',
-        description: 'Create a new token with full control over all settings.',
+        description: 'Choose a template for a new token, including full custom settings.',
     },
     {
         id: 'mint',
@@ -229,6 +229,12 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Set up a shared wallet that requires multiple people to approve each payment. Bitcoin only at launch.',
     },
     {
+        id: 'multisig-sign',
+        handler: 'onMultisigSign',
+        label: 'Multisig signing',
+        description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
+    },
+    {
         id: 'governance-polls',
         handler: 'onVoteGovernance',
         label: 'Governance',
@@ -318,7 +324,7 @@ export const ACTION_GROUPS = Object.freeze([
         id: 'shared-control',
         label: 'Communities and shared wallets',
         entryIds: Object.freeze([
-            'multisig-create', 'governance-polls',
+            'multisig-create', 'multisig-sign', 'governance-polls',
             'bet-markets', 'cosigner-accounts',
         ]),
     },

@@ -387,7 +387,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat (optional)').selectOption(FIAT);
+            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(FIAT);
             // Mode B: no fiat amount at all. The oracle prices the token; the
             // dispenser only names whose quote to use.
             await main.getByLabel(/^Oracle address/).fill(oracle);

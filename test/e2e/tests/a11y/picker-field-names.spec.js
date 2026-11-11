@@ -10,9 +10,10 @@
 
 // Every chip-style picker must announce WHICH field it is.
 //
-// ChainPicker, IconSelect and TokenField all render their label as a plain
-// <span> beside a <button>, so the label is visible but not ASSOCIATED. Without
-// an explicit accessible name the button announces only its current selection:
+// ChainPicker, IconSelect, NetworkField and TokenField all render their label
+// as a plain <span> beside a <button>, so the label is visible but not
+// ASSOCIATED. Without an explicit accessible name the button announces only
+// its current selection:
 // "Bitcoin · regtest, button", which says nothing about the question it answers.
 //
 // The unit tests next door pin each component in isolation. This one exists
@@ -59,21 +60,26 @@ async function gotoPalette(page, title, heading = title, form = heading) {
         .toBeVisible({ timeout: 30_000 });
 }
 
+// A picker trigger opens a listbox (ChainPicker, IconSelect) or, for a
+// Network field, the full network-picker screen (NetworkField, ruling U59).
+const PICKER_TRIGGERS = 'button[aria-haspopup="listbox"], button[aria-haspopup="dialog"]';
+
 /**
- * Every chip-style picker on the current screen, as {name} rows.
+ * Every chip-style picker in the named form, as {name} rows.
  *
  * Found by the popup role rather than by class: these triggers are the buttons
- * that open a listbox, which is precisely the set that has to name its field.
+ * that open a choice of values, which is precisely the set that has to name its
+ * field. Scoped to the form so header menus and dialogs are not counted.
  */
-async function pickers(page) {
-    const buttons = page.locator('button[aria-haspopup="listbox"]');
+async function pickers(page, form) {
+    const buttons = page.getByRole('form', { name: form, exact: true }).locator(PICKER_TRIGGERS);
     await expect(buttons.first()).toBeVisible({ timeout: 30_000 });
     return readNames(buttons);
 }
 
-/** The same, but returns [] on a screen that mounts none. */
-async function pickersIfAny(page) {
-    const buttons = page.locator('button[aria-haspopup="listbox"]');
+/** The same, but returns [] on a form that mounts none. */
+async function pickersIfAny(page, form) {
+    const buttons = page.getByRole('form', { name: form, exact: true }).locator(PICKER_TRIGGERS);
     if (await buttons.count() === 0) return [];
     return readNames(buttons);
 }
@@ -90,7 +96,7 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         await createWallet(page, { password: PASSWORD });
         await gotoPalette(page, 'Cross-chain swap');
 
-        const found = await pickers(page);
+        const found = await pickers(page, 'Cross-chain swap');
         const names = found.map((p) => p.name);
 
         // The specific pair this defect was found for. Before the fix both of
@@ -110,7 +116,7 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         expect(give).not.toBe(get);
     });
 
-    test('no listbox picker anywhere announces only its selection', async ({ page }) => {
+    test('no picker anywhere announces only its selection', async ({ page }) => {
         await createWallet(page, { password: PASSWORD });
 
         // Routes are CANDIDATES, not requirements. Not every money-moving form
@@ -134,7 +140,7 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
 
         for (const [route, heading, form] of routes) {
             await gotoPalette(page, route, heading, form);
-            for (const { name } of await pickersIfAny(page)) {
+            for (const { name } of await pickersIfAny(page, form)) {
                 checked.push(`${route}: ${name}`);
                 // The contract: "<field>: <selection>". A name with no colon is
                 // a name made of the selection alone, which is the defect.
@@ -148,7 +154,7 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
 
         // Without this the loop above passes on a build where every picker
         // vanished, or where the locator stopped matching.
-        expect(checked.length, 'no listbox picker was found on any route, so this asserted nothing')
+        expect(checked.length, 'no picker was found on any route, so this asserted nothing')
             .toBeGreaterThan(0);
         // eslint-disable-next-line no-console
         console.log(`picker names checked:\n  ${checked.join('\n  ')}`);

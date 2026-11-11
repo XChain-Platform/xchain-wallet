@@ -596,15 +596,21 @@ async function mountActionForm(Form, { walletMode } = {}) {
 async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
     const { utils, calls } = await mountActionForm(Form, { walletMode });
 
-    // Preview -> review stage.
+    const actionLabel = Form === MintForm ? 'Mint' : 'Destroy';
+
+    // Action -> review stage.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(utils.getByRole('button', { name: actionLabel }));
         await drainMicrotasks();
     });
 
+    expect(utils.getByText(
+        'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+    )).toBeTruthy();
+
     // Typed-confirmation gate (DestroyForm), if present.
     if (confirm) {
-        const field = utils.queryByLabelText(/type .* to confirm/i);
+        const field = utils.queryByLabelText(/type .* to confirm/i, { selector: 'input' });
         if (field) {
             await domAct(async () => {
                 fireEvent.change(field, { target: { value: confirm } });
@@ -640,7 +646,7 @@ async function driveActionFormThroughConfirmModal(Form, { actionLabel, confirm }
 
     // Typed-confirmation gate inside the modal (DestroyForm).
     if (confirm) {
-        const field = utils.queryByLabelText(/type .* to confirm/i);
+        const field = utils.queryByLabelText(/type .* to confirm/i, { selector: 'input' });
         if (field) {
             await domAct(async () => {
                 fireEvent.change(field, { target: { value: confirm } });

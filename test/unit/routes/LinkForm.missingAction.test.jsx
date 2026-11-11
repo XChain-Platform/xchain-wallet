@@ -43,12 +43,12 @@ describe('LinkForm with an action number the explorer does not hold', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
         await waitFor(() => expect(screen.getByRole('alert'))
-            .toHaveTextContent('No action was found on the network A at that number.'));
+            .toHaveTextContent('No action was found for Action 1 at that number.'));
         expect(screen.getByText('No action was found at that number.')).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/HTTP 404|\/api\/action/);
     });

@@ -96,8 +96,8 @@ function mountFork({ name, listRead = 'available', walletMode = 'watcher', getAc
 }
 
 async function openFirstReview() {
-    fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 }
 
 afterEach(() => {
@@ -132,7 +132,7 @@ describe('ListForkForm list names', () => {
         mountFork({ listRead: 'failed' });
 
         expect(await screen.findByText(/Couldn't load list #2700/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish edit' })).toBeNull();
     });
 
     it('neutralizes bidi controls in a named review label', async () => {

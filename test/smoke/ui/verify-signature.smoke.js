@@ -52,7 +52,7 @@ const desktopAppSrc = readFileSync(
 
 assert.match(formSrc, /export function VerifySignatureForm/, 'exports VerifySignatureForm');
 assert.match(formSrc, /messaging\.verifyMessageRequest/, 'calls verifyMessageRequest');
-assert.match(formSrc, /<ChainPicker/, 'has chain picker');
+assert.match(formSrc, /<NetworkField/, 'has the NetworkField chain picker (U59)');
 // Live registry read (useSupportedChains) rather than a once-memoised
 // supportedChains() snapshot, so a synced descriptor reaches the picker.
 assert.match(formSrc, /useSupportedChains\(chainRegistry\)/, 'chains come from the live registry, not wallet');

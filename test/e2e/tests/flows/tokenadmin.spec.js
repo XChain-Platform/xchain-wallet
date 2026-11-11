@@ -66,7 +66,10 @@ async function expectAlignedControlRows(page, label) {
             '[role="switch"]',
         ].join(',');
         // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
-        const controls = [...Array.from(main.querySelectorAll(selector)).filter((el) => !el.closest('[aria-hidden="true"]'))].map((element) => {
+        // Skip the "?" help tip on a field label (U57): it is part of the label, held to
+        // the tap minimum rather than a control height, not a control in a row.
+        const isHelpTip = (el) => el.tagName === 'BUTTON' && el.textContent.trim() === '?';
+        const controls = [...Array.from(main.querySelectorAll(selector)).filter((el) => !el.closest('[aria-hidden="true"]') && !isHelpTip(el))].map((element) => {
             const rect = element.getBoundingClientRect();
             const style = getComputedStyle(element);
             return {
@@ -207,18 +210,37 @@ for (const viewport of VIEWPORTS) {
         const issueTick = `FLOW${run}`;
 
         await test.step('Issue token', async () => {
+            // Issue token opens the template wizard; its Custom template is the
+            // full Issue token form (ruling U79).
             await gotoPalette(page, 'Issue token');
+            await expectScreenLayout(page, 'Issue a token', `${viewport.name} token templates`);
+            const main = page.getByRole('main');
+            await main.getByRole('button', { name: /^Custom\b/ }).click();
             await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token`);
 
-            const main = page.getByRole('main');
-            await main.getByLabel('Ticker').fill(issueTick);
-            await main.getByLabel('Supply', { exact: true }).fill('1000');
-            await main.getByLabel('Initial mint (optional)').fill('250');
-            await main.getByLabel('Max mint per transaction (optional)').fill('50');
-            await main.getByLabel('Description (optional)').fill('Responsive token admin fixture');
+            // Optional fields sit in collapsed sections under Ticker (ruling U80),
+            // and each label carries a help tip button named after it, so fields
+            // are found by role.
+            const field = (name) => main.getByRole('textbox', { name, exact: true });
+            const openSection = async (title) => {
+                const header = main.getByRole('button', { name: new RegExp(`^${title}\\b`) });
+                // Supply starts open; the other sections start closed.
+                if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
+                await expect(header).toHaveAttribute('aria-expanded', 'true');
+            };
+            await field('Ticker').fill(issueTick);
+            await openSection('Supply');
+            await field('Max supply').fill('1000');
+            await field('Initial mint').fill('250');
+            await openSection('Public minting');
+            await field('Max per transaction').fill('50');
+            await openSection('Description');
+            await field('Token description').fill('Responsive token admin fixture');
+            await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token with sections open`);
             await page.waitForTimeout(450);
             await scrollFormToBottom(page);
-            await main.getByRole('button', { name: 'Preview', exact: true }).click();
+            // With a supply set the main button reads Issue token (ruling U80).
+            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
             await expectReview(page, {
                 heading: 'Review issue',
@@ -248,7 +270,7 @@ for (const viewport of VIEWPORTS) {
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Amount/ }).fill('25');
             await scrollFormToBottom(page);
-            await main.getByRole('button', { name: 'Preview', exact: true }).click();
+            await main.getByRole('button', { name: 'Mint', exact: true }).click();
 
             await expectReview(page, {
                 heading: 'Review mint',
@@ -271,8 +293,8 @@ for (const viewport of VIEWPORTS) {
 
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Per-unit amount/ }).fill('0.0001');
-            await main.getByLabel('Memo (optional)').fill('Quarterly payout');
-            const preview = main.getByRole('button', { name: 'Preview', exact: true });
+            await main.getByLabel('Memo', { exact: true }).fill('Quarterly payout');
+            const preview = main.getByRole('button', { name: 'Pay dividend', exact: true });
             await expect(preview).toBeEnabled();
             await scrollFormToBottom(page);
             await preview.click();
@@ -293,16 +315,16 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('Destroy from Manage token', async () => {
             await openManagedToken(page);
-            // A holder who is not the issuer sees Dispenser, Dividends and Airdrop
-            // first, so Destroy sits under More.
-            await page.getByRole('main').getByRole('button', { name: 'More', exact: true }).click();
-            await page.getByRole('main').getByRole('menuitem', { name: 'Destroy', exact: true }).click();
+            // Manage token's Actions tab is one icon grid of every action, Destroy
+            // included, with no More menu (ruling U78).
+            await expect(page.getByRole('tab', { name: 'Actions' })).toHaveAttribute('aria-selected', 'true');
+            await page.getByRole('main').getByRole('button', { name: 'Destroy', exact: true }).click();
             await expectScreenLayout(page, 'Destroy', `${viewport.name} Destroy`);
 
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Amount/ }).fill('2');
             await scrollFormToBottom(page);
-            await main.getByRole('button', { name: 'Preview', exact: true }).click();
+            await main.getByRole('button', { name: 'Destroy', exact: true }).click();
 
             await expectReview(page, {
                 heading: 'Review destroy',

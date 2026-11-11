@@ -212,6 +212,13 @@
     margin-inline-start: var(--xc-space-2);
 }
 
+/* The pin shares a visual row with the selectable asset control (U07). Keep
+   the compact action paint while matching the row control's type size. The
+   doubled class outranks the Button size class whatever order modules load. */
+.pinBtn.pinBtn {
+    --xc-button-font-size: var(--xc-control-font-md);
+}
+
 
 .rowPinned {
     background: var(--xc-bg-muted-soft, var(--xc-bg-muted));

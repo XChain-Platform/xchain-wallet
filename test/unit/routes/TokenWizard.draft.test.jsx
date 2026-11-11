@@ -93,7 +93,7 @@ describe('TokenWizard draft', () => {
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'DRAFTY' } });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '4200' } });
         fireEvent.click(screen.getByRole('switch', { name: /Divisible/ }));
-        fireEvent.change(screen.getByLabelText('Description (optional)'), { target: { value: 'kept' } });
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'kept' } });
 
         await waitFor(() => {
             expect(stored()?.values).toMatchObject({
@@ -117,7 +117,7 @@ describe('TokenWizard draft', () => {
         expect(screen.getByLabelText('Token name (ticker)')).toHaveValue('DRAFTY');
         expect(screen.getByLabelText('Supply')).toHaveValue('4200');
         expect(screen.getByRole('switch', { name: /Divisible/ })).toBeChecked();
-        expect(screen.getByLabelText('Description (optional)')).toHaveValue('kept');
+        expect(screen.getByLabelText('Description')).toHaveValue('kept');
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.issueToken).not.toHaveBeenCalled();

@@ -510,7 +510,7 @@ describe('412px protocol detail layouts', () => {
         const outcomeAction = screen.getByRole('button', { name: outcome });
         expect(outcomeAction.style.whiteSpace).toBe('normal');
         expect(outcomeAction.style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'Review bet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Place bet' })).toBeTruthy();
     });
 
     it('keeps long swap terms, large amounts, and review actions visible', async () => {
@@ -537,13 +537,13 @@ describe('412px protocol detail layouts', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         fireEvent.change(screen.getByLabelText(`Give amount (${LONG_TICK})`), { target: { value: LARGE_AMOUNT } });
         fireEvent.change(screen.getByLabelText(`Get amount (${LONG_GET_TICK})`), { target: { value: LARGE_AMOUNT } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         expect(await screen.findByRole('form', { name: 'Review swap' })).toBeTruthy();
         expectCompactCanvas(view.container);
         expectWrappingValue(detailValue('Give amount'), `${LARGE_AMOUNT} ${LONG_TICK}`);
         expectWrappingValue(detailValue('Get amount'), `${LARGE_AMOUNT} ${LONG_GET_TICK}`);
         expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create unsigned swap transaction' })).toBeTruthy();
     });
 });

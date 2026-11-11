@@ -73,9 +73,9 @@ function mount(Component, props, messaging = messagingWith()) {
 }
 
 describe('primary actions explain missing form input', () => {
-    it('BetFeedDetail asks for an outcome when Review bet is pressed', async () => {
+    it('BetFeedDetail asks for an outcome when Place bet is pressed', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
-        const action = await screen.findByRole('button', { name: 'Review bet' });
+        const action = await screen.findByRole('button', { name: 'Place bet' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -91,7 +91,7 @@ describe('primary actions explain missing form input', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose oracle address' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick unavailable address' }));
-        const action = screen.getByRole('button', { name: 'Review market' });
+        const action = screen.getByRole('button', { name: 'Open market' });
         expect(action).toBeEnabled();
         fireEvent.click(action);
 

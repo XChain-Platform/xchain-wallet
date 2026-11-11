@@ -109,7 +109,7 @@ async function openReview() {
 }
 
 async function approve() {
-    fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+    fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
     const button = screen.getByTestId('confirm-approve');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);

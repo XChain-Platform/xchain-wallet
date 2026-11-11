@@ -89,7 +89,6 @@ const REUSED_KEYS = new Set([
     'send.saveRecipient.saving',
     'send.title',
     'send.txid',
-    'send.walletUnlocked',
     'settings.network.label',
     'shell.markets.back',
     'shell.markets.selectAsset',

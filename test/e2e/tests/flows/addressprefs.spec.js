@@ -94,13 +94,20 @@ async function expectScreenLayout(page, heading, label) {
                 top: box.top,
                 center: (box.top + box.bottom) / 2,
                 bottom: box.bottom,
+                left: box.left,
+                right: box.right,
                 height: box.height,
             });
         }
 
-        controls.sort((a, b) => a.center - b.center);
+        // A button drawn inside a field box (the From address picker, U53) is
+        // part of that field, not a second control on its line.
+        const lineControls = controls.filter((control) => !controls.some((field) => field !== control
+            && field.left <= control.left && field.right >= control.right
+            && field.top <= control.top && field.bottom >= control.bottom));
+        lineControls.sort((a, b) => a.center - b.center);
         const lines = [];
-        for (const control of controls) {
+        for (const control of lineControls) {
             const line = lines.find((entry) => entry.controls.some((item) => (
                 Math.abs(item.top - control.top) <= 2
                 || Math.abs(item.center - control.center) <= 2
@@ -185,7 +192,7 @@ for (const viewport of VIEWPORTS) {
             await expectScreenLayout(page, 'View address', 'address detail');
 
             const label = page.getByRole('textbox', { name: 'Address label' });
-            const save = page.getByRole('button', { name: 'Save', exact: true });
+            const save = page.getByRole('button', { name: 'Save label', exact: true });
             await label.fill(LABEL);
             await save.click();
             await expect(save).toBeDisabled();
@@ -205,9 +212,9 @@ for (const viewport of VIEWPORTS) {
             await main.getByRole('radio', {
                 name: 'Anyone may open a dispenser funded by this address',
             }).check();
-            await main.getByLabel('Memo (optional)').fill(MEMO);
+            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
 
             await expectScreenLayout(page, 'Review preferences', 'preferences review');
             expect(

@@ -209,7 +209,8 @@ describe('Home keeps balance loading, failure, and loaded-zero states distinct',
         await settle();
 
         expect(onScreen()).toContain('Fund your wallet');
-        expect(onScreen()).toMatch(/Updated just now/);
+        // U72: the balance box shows no "Updated ..." line; Settings, About does.
+        expect(onScreen()).not.toMatch(/Updated just now/);
         expect(onScreen()).not.toContain("Couldn't load balances");
     });
 });

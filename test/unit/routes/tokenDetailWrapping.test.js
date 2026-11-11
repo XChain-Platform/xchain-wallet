@@ -21,11 +21,11 @@ describe('token detail long labels', () => {
         expect(rule).toMatch(/text-overflow:\s*ellipsis/);
     });
 
-    it('allows ManageToken tickers and subasset names to wrap', () => {
-        const hero = manageCss.match(/\.heroTick\s*\{[^}]*\}/s)?.[0] || '';
-        const subasset = manageCss.match(/\.subassetItem\s*\{[^}]*\}/s)?.[0] || '';
+    it('allows the ManageToken name and description to wrap', () => {
+        const hero = manageCss.match(/\.approvedHeroName\s*\{[^}]*\}/s)?.[0] || '';
+        const description = manageCss.match(/\.approvedHeroDescription\s*\{[^}]*\}/s)?.[0] || '';
         expect(hero).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(subasset).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(description).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
     it('lets the price stats wrap instead of cutting a value to an ellipsis', () => {

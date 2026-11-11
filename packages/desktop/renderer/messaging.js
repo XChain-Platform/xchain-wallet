@@ -383,6 +383,16 @@ export function requoteNativeFee(opts) {
 }
 
 /**
+ * Price a draft action's protocol fee for display before review.
+ *
+ * @param {{ chainId: string, source?: string, actionData: { action: string, params: object } }} opts
+ * @returns {Promise<object|null>} an sdk.quoteNativeFee answer when available
+ */
+export function quoteProtocolFee(opts) {
+    return /** @type {any} */ (sendMessage('action.quoteProtocolFee', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: generic watcher-mode encode-only helper
  * for the non-Send action surface.
  * @param {object} opts
@@ -1224,6 +1234,16 @@ export function startMultisigSigningSession(req) {
     return /** @type {any} */ (sendMessage('multisigSign.start', req));
 }
 
+/** @param {object} req */
+export function startMultisigSend(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.startSend', req));
+}
+
+/** @param {{ walletId: string, envelope: object }} req */
+export function importMultisigSigningRequest(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.importRequest', req));
+}
+
 /** @param {{ sessionId: string }} req */
 export function getMultisigSigningSession(req) {
     return /** @type {any} */ (sendMessage('multisigSign.get', req));
@@ -1753,7 +1773,7 @@ export function getAirdropRecipients(req) {
  * settings.privacy.priceDataEnabled; returns `{ disabled: true }` when
  * the user has opted out.
  *
- * @param {{ chainIds: string[], includeSparkline?: boolean }} opts
+ * @param {{ chainIds: string[], includeSparkline?: boolean, includeHistory?: boolean }} opts
  */
 export function getNativePricesRequest(opts) {
     return /** @type {any} */ (sendMessage('prices.native', opts));

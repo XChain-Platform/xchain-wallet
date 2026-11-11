@@ -6,10 +6,21 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { FeeSelector } from '../../../packages/core/src/ui/FeeSelector.jsx';
+import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import {
     registerLocale,
     setLocale,
 } from '../../../packages/core/src/i18n/index.js';
+
+vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
+    useSettings: () => ({ settings: { fiatCurrency: 'USD' } }),
+}));
+
+vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
+    useFeeFiat: ({ chainId }) => ({
+        formatNativeFee: () => chainId === 'bitcoin-mainnet' ? '~$0.42' : null,
+    }),
+}));
 
 const TIERS = {
     unit: 'sat/vB',
@@ -17,6 +28,11 @@ const TIERS = {
     normal: { rate: '2 sat/vB', rateValue: 2, coinAmount: '0.00000200', etaMinutes: 10, vsize: 100 },
     fast: { rate: '3 sat/vB', rateValue: 3, coinAmount: '0.00000300', etaMinutes: 2, vsize: 100 },
 };
+
+// The wallet shell provides messaging; the price and settings hooks are mocked above.
+function InShell({ children }) {
+    return <MessagingContext.Provider value={{ messaging: {} }}>{children}</MessagingContext.Provider>;
+}
 
 beforeAll(() => {
     registerLocale('de-DE', {});
@@ -31,18 +47,19 @@ describe('<FeeSelector>', () => {
     it('renders an accessible preset slider and formatted estimate', () => {
         render(
             <FeeSelector
+                chainId="bitcoin-mainnet"
                 tiers={TIERS}
                 value={{ mode: 'normal' }}
                 onChange={() => {}}
                 label="Fee priority"
                 coinTicker="BTC"
-                formatFiat={() => '$0.12'}
             />,
+            { wrapper: InShell },
         );
         const slider = screen.getByRole('slider', { name: 'Network fee' });
         expect(slider).toHaveAttribute('aria-valuetext', 'Normal: 0.00000200 · ~10 min');
         expect(screen.getByRole('status')).toHaveTextContent('0.00000200 BTC');
-        expect(screen.getByRole('status')).toHaveTextContent('$0.12');
+        expect(screen.getByRole('status')).toHaveTextContent('~$0.42');
         expect(screen.getByRole('button', { name: 'Fee priority help' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Edit exact fee amount' }))
             .toHaveAttribute('title', 'Select to edit the exact fee');
@@ -153,10 +170,81 @@ describe('<FeeSelector>', () => {
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
-    it('renders an unavailable state without a slider', () => {
-        render(<FeeSelector tiers={null} value={{ mode: 'normal' }} onChange={() => {}} label="Fee" />);
-        expect(screen.getByText('Fee estimate unavailable for this network.')).toBeInTheDocument();
+    it('opens on Custom with the chain unit when no estimate exists', () => {
+        const onChange = vi.fn();
+        const props = {
+            chainId: 'dogecoin-mainnet',
+            tiers: null,
+            value: { mode: 'normal' },
+            onChange,
+            label: 'Fee',
+        };
+        const { rerender } = render(<FeeSelector {...props} />);
+        expect(screen.queryByText(/Fee estimate unavailable/)).not.toBeInTheDocument();
         expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Custom fee rate (DOGE/kB)')).toBeInTheDocument();
+        expect(screen.getByText('DOGE/kB')).toBeInTheDocument();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith({ mode: 'custom', customRate: undefined });
+
+        rerender(<FeeSelector {...props} />);
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows fiat for tier and Custom fees only on mainnet', () => {
+        const { rerender } = render(
+            <FeeSelector
+                chainId="bitcoin-mainnet"
+                tiers={TIERS}
+                value={{ mode: 'normal' }}
+                onChange={() => {}}
+            />,
+            { wrapper: InShell },
+        );
+        expect(screen.getByText('~$0.42')).toBeInTheDocument();
+
+        rerender(
+            <FeeSelector
+                chainId="bitcoin-mainnet"
+                tiers={TIERS}
+                value={{ mode: 'custom', customRate: 4 }}
+                customEstimate={{ rateValue: 4, coinAmount: '0.00000400', vsize: 100 }}
+                onChange={() => {}}
+            />,
+        );
+        expect(screen.getByText('~$0.42')).toBeInTheDocument();
+
+        for (const chainId of ['bitcoin-testnet', 'bitcoin-regtest']) {
+            rerender(
+                <FeeSelector
+                    chainId={chainId}
+                    tiers={TIERS}
+                    value={{ mode: 'normal' }}
+                    onChange={() => {}}
+                />,
+            );
+            expect(screen.queryByText('~$0.42')).not.toBeInTheDocument();
+        }
+    });
+
+    it('shows no fiat and does not throw outside the wallet shell', () => {
+        render(
+            <FeeSelector
+                chainId="bitcoin-mainnet"
+                tiers={TIERS}
+                value={{ mode: 'normal' }}
+                onChange={() => {}}
+                coinTicker="BTC"
+            />,
+        );
+        expect(screen.getByRole('status')).toHaveTextContent('0.00000200 BTC');
+        expect(screen.queryByText('~$0.42')).not.toBeInTheDocument();
+    });
+
+    it('renders bare without a settings provider or chain id', () => {
+        render(<FeeSelector tiers={TIERS} value={{ mode: 'normal' }} onChange={() => {}} />);
+        expect(screen.getByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
+        expect(screen.queryByText('~$0.42')).not.toBeInTheDocument();
     });
 
     it('removes custom controls and disables all choices when configured', () => {

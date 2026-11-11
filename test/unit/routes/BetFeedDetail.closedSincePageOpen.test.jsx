@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The market page reads its market once, at open. A market that closed or was
-// cancelled while the page sat open still showed the bet form, and Review bet
+// cancelled while the page sat open still showed the bet form, and Place bet
 // composed a bet against it: with pre-flight off or local nothing warned, and
 // the bet paid the miner fee and the protocol fee and joined no pool.
 
@@ -84,8 +84,8 @@ async function reviewBet(messaging) {
     });
     const yes = utils.getByRole('button', { name: 'Yes' });
     await domAct(async () => { yes.click(); await drain(); });
-    fireEvent.change(utils.getByLabelText(/Stake/), { target: { value: '30' } });
-    const review = utils.getByRole('button', { name: /Review bet/ });
+    fireEvent.change(utils.getByLabelText(/^Stake/), { target: { value: '30' } });
+    const review = utils.getByRole('button', { name: /Place bet/ });
     await domAct(async () => { review.click(); await drain(); });
     return utils;
 }
@@ -97,7 +97,7 @@ describe('Market page: a market that closed since the page opened', () => {
         expect(calls.compose).toBe(0);
         const alert = utils.container.querySelector('[role="alert"]');
         expect(alert?.textContent).toMatch(/no longer takes bets.*Nothing was sent/);
-        expect(utils.queryByRole('button', { name: /Review bet/ })).toBeNull();
+        expect(utils.queryByRole('button', { name: /Place bet/ })).toBeNull();
     });
 
     it('refuses a cancelled market too', async () => {

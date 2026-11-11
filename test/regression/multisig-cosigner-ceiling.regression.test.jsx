@@ -122,6 +122,6 @@ describe('regression/multisig-cosigner-ceiling', () => {
             fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'p2wsh-multisig' } });
         });
         expect(screen.getByText(/supports at most 16 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review multisig' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create multisig' }).disabled).toBe(true);
     });
 });

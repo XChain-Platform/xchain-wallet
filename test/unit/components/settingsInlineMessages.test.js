@@ -52,7 +52,9 @@ describe('settings inline messages', () => {
         expect(display).toMatch(/Saved network filters<\/span>\s*<\/div>/);
         expect(display).toMatch(/saved filters too\.<\/span>\s*<\/div>/);
         const region = withEnglishCopy(readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8'));
-        expect(region).toMatch(/not asset balances\.<\/span>\s*<\/div>/);
+        // U57: the fiat currency explanation moved into the label tip, so no static line sits under it.
+        expect(region).not.toMatch(/not asset balances/);
+        expect(region.match(/<InfoTip\b/g)).toHaveLength(2);
     });
 
     it('shows a settings load failure as the shared load error, not a bare paragraph', () => {

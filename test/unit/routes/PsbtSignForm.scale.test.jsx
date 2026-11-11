@@ -49,7 +49,7 @@ describe('PSBT paste at scale', () => {
         const messaging = new Proxy(target, { get: (v, p) => (p in v ? v[p] : vi.fn().mockResolvedValue({})) });
         render(<MessagingProvider shell="web" messaging={messaging}><PsbtSignForm walletId="w" onBack={() => {}} /></MessagingProvider>);
         await screen.findByRole('button', { name: /Network: Bitcoin/ });
-        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: '70736274ff01020304' } });
+        fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: '70736274ff01020304' } });
         await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(n), { timeout: 20000 });
         fireEvent.click(screen.getByRole('button', { name: 'Sign transaction' }));
         await waitFor(() => expect(screen.getAllByText(/Approve|Sign/).length).toBeGreaterThan(0), { timeout: 20000 });

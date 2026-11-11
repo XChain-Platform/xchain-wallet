@@ -139,7 +139,13 @@ async function step(fn) {
 }
 
 async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin } = {}) {
-    if (coin) await step(() => fireEvent.change(utils.getByLabelText(/^Priced token network/), { target: { value: coin } }));
+    if (coin) {
+        // The priced token's network is the standard network field: open its
+        // picker screen and take the row for that coin's chain.
+        const chainName = { BTC: 'Bitcoin', LTC: 'Litecoin', DOGE: 'Dogecoin' }[coin];
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Priced token network:/ })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${chainName}\\b`) })));
+    }
     await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } }));
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } }));
     if (fee) await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } }));
@@ -204,7 +210,7 @@ describe('OracleForm publishes through the confirm lane', () => {
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {
         const { utils, calls } = await mountForm({ settings: { walletMode: 'watcher' } });
         await fill(utils);
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
 
         expect(calls.find((c) => c.method === 'buildActionPsbtRequest').args.actionData.action).toBe('PRICE');
@@ -216,7 +222,7 @@ describe('OracleForm review shows the decoder rows', () => {
     it('lists the memo and the fee as a percent on the watcher review', async () => {
         const { utils } = await mountForm({ settings: { walletMode: 'watcher' } });
         await fill(utils, { fee: '0.01', memo: 'wallet QA oracle test' });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
 
         expect(utils.getByText('Memo')).toBeTruthy();
         expect(utils.getByText('wallet QA oracle test')).toBeTruthy();
@@ -250,7 +256,7 @@ describe('OracleForm review shows the decoder rows', () => {
     it('keeps price and fee precision in review exactly as they are built', async () => {
         const { utils, calls } = await mountForm({ settings: { walletMode: 'watcher' } });
         await fill(utils, { value: '0.05000000', fee: '0.010000000000000000' });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
 
         expect(utils.getByText('0.05000000 USD')).toBeTruthy();
         expect(utils.getByText(/0\.010000000000000000 \(1% of a dispenser's projected proceeds\)/)).toBeTruthy();
@@ -277,7 +283,7 @@ describe('OracleForm review exits', () => {
     it('Back returns from watcher review with every draft value kept', async () => {
         const { utils } = await mountForm({ settings: { walletMode: 'watcher' } });
         await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '0.01', memo: 'keep this' });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Preview' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Publish price' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
 
         expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');

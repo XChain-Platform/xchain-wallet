@@ -212,6 +212,7 @@
    row so four tiles share one line at 320 px, and stops at its fixed size on
    wide screens instead of stretching to the row width. */
 .quickActions {
+    position: relative;
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 88px);
@@ -284,6 +285,13 @@
     height: var(--xc-icon-sm);
 }
 
+.moreInfoEmpty {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;
@@ -327,11 +335,22 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-height: 72px;
+    block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2));
+    min-block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2));
 }
 
-.officialBannerSlot {
-    min-height: 38px;
+.marketHistoryMessage {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+}
+
+.descriptionValue {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: end;
+    white-space: pre-wrap;
 }
 
 .supplyCard {
@@ -495,14 +514,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-}
-
-.descriptionBody {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    white-space: pre-wrap;
-    word-break: break-word;
 }
 
 .metaBlock {
@@ -908,13 +919,6 @@
     margin: 0;
     color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
-}
-
-/* Project names inside the "Official token" success message, shown when the
-   token is on a project registry's current roster (assetInfo.projects). */
-
-.officialBannerProject {
-    font-weight: 600;
 }
 
 /* Engines disagree on whether gradients survive forced-colors mode, so pin

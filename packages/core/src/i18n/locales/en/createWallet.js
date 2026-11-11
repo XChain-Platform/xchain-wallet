@@ -24,13 +24,19 @@ const messages = {
     'createWallet.staleWindowNotice': 'The recovery phrase shown in this window was not saved, because another window created a wallet. Write down nothing from this window.',
     'createWallet.verifyRecoveryPhrase': 'Verify recovery phrase',
     'createWallet.word': 'Word {p}',
+    'createWallet.wordHelp': 'Word number {p} of the recovery phrase you just wrote down, typed exactly as written.',
     'createWallet.step2Of3': 'Step 2 of 3',
     'createWallet.copyingIsDisabledToKeep':
         'Copying is disabled to keep your recovery phrase out of shared clipboards.',
     'createWallet.iHaveSavedMyRecovery': 'I have saved my recovery phrase safely.',
     'createWallet.step1Of3': 'Step 1 of 3',
-    'createWallet.atLeastCharactersUseA':
-        'At least {MIN_PASSWORD_LENGTH} characters. Use a unique password; longer is stronger.',
+    'createWallet.walletNameHelp': 'The name this wallet shows under on this device. You can rename it later.',
+    'createWallet.passwordAdvice':
+        'Unlocks this wallet on this device. At least {MIN_PASSWORD_LENGTH} characters; use a unique password, and longer is stronger.',
+    'createWallet.confirmPasswordHelp': 'Type the same password again so a typo never locks you out.',
+    'createWallet.recoveryPhraseLengthHelp':
+        'How many words your recovery phrase has. Both are secure; 12 words are quicker to write down and check.',
+    'createWallet.confirmPassphraseHelp': 'Type the extra passphrase again. It must match exactly, capitals and spaces included.',
     'createWallet.useABip39PassphraseAdvanced': 'Use an extra passphrase (advanced)',
     'createWallet.thisExtraSecretCombinesWith':
         'This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device.',

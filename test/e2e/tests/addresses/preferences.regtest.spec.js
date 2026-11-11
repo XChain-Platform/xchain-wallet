@@ -60,8 +60,8 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await main.getByRole('radio', {
                 name: 'Anyone may open a dispenser funded by this address',
             }).check();
-            await main.getByLabel('Memo (optional)').fill(MEMO);
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
+            await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
 
             await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
             await expect(main).toContainText('Memo required on incoming sends - CHANGED');

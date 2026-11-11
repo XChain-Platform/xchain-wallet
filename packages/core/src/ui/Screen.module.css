@@ -81,6 +81,10 @@
     padding: var(--xc-page-top) var(--xc-page-gutter);
     overflow-y: auto;
     overflow-x: hidden;
+    /* A press could make native anchoring move a phone list under the pointer.
+       Screen.jsx and keyboardViewport.js restore scroll and reveal focus
+       explicitly, so route scrolling does not rely on native anchoring. */
+    overflow-anchor: none;
     scroll-padding-block: var(--xc-space-3);
 }
 

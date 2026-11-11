@@ -71,7 +71,10 @@ describe('CreateWallet security options', () => {
         expect(screen.getByRole('radio', { name: /^12 words/ })).toBeChecked();
         expect(screen.getByText('Recommended: secure and easier to back up')).toBeTruthy();
         expect(screen.getByText('Extra entropy, twice as many words to store')).toBeTruthy();
-        expect(screen.getByText(/Use a unique password; longer is stronger/)).toBeTruthy();
+        expect(document.getElementById('create-password-hint')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('At least 8 characters; use a unique password, and longer is stronger.');
+        fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
 
         fireEvent.click(screen.getByRole('radio', { name: /^24 words/ }));
         fillPasswords();
@@ -255,10 +258,8 @@ describe('MnemonicGrid narrow layout', () => {
         expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
-        expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
-        expect(importCss).toMatch(/\.mnemonicHeader\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s);
-        // The label header is its own form child, so it pulls back to the shared label gap.
-        expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*margin-bottom:\s*calc\(var\(--xc-label-gap\) - var\(--xc-form-gap\)\);/s);
+        // Import's field header keeps the U57 help tip and label together without overflowing.
+        expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;[^}]*min-width:\s*0;/s);
         expect(importCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         // The import lane switcher is the kit Tabs bar: it fills the row and
         // scrolls its tabs instead of letting them push the screen wider.

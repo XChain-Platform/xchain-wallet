@@ -48,16 +48,19 @@ const web = join(wsRoot, 'packages', 'web');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const formPath = join(sharedRoutes, 'IssueTokenForm.jsx');
+const locksPath = join(sharedRoutes, 'issueLocks.js');
 const cssPath = join(sharedRoutes, 'IssueTokenForm.module.css');
 const menuPath = join(sharedRoutes, 'ActionsMenu.jsx');
 const menuCssPath = join(sharedRoutes, 'ActionsMenu.module.css');
 
 assert.ok(existsSync(formPath), 'IssueTokenForm.jsx exists');
+assert.ok(existsSync(locksPath), 'issueLocks.js exists');
 assert.ok(existsSync(cssPath), 'IssueTokenForm.module.css exists');
 assert.ok(existsSync(menuPath), 'ActionsMenu.jsx exists');
 assert.ok(existsSync(menuCssPath), 'ActionsMenu.module.css exists');
 
 const src = readFileSync(formPath, 'utf8');
+const locksSrc = readFileSync(locksPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 const menuSrc = readFileSync(menuPath, 'utf8');
 
@@ -140,9 +143,16 @@ assert.ok(
     !/TICK:\s*ticker\.trim\(\)\.toUpperCase\(\)/.test(src),
     'IssueTokenForm does not uppercase the ticker on the wire',
 );
+// U80: an empty supply reserves the ticker (the button reads Reserve
+// ticker), and zero max supply is the indexer's uncapped sentinel, so only
+// a malformed max supply is refused.
 assert.ok(
-    /Supply must be a positive number/.test(src),
-    'IssueTokenForm rejects zero/empty supply',
+    /Max supply must be zero or a positive number/.test(src),
+    'IssueTokenForm refuses a malformed max supply',
+);
+assert.ok(
+    /Reserve ticker|issue\.reserveTicker/.test(src),
+    'IssueTokenForm offers Reserve ticker when no supply is set',
 );
 
 // --- 6. Params composer: ISSUE v0 shape ------------------------------
@@ -173,19 +183,21 @@ assert.ok(
     'composer sets MINT_SUPPLY from the initial-mint field, defaulting to supply',
 );
 assert.ok(
-    /Initial mint cannot be more than the supply/.test(src),
+    /Initial mint cannot be more than the max supply/.test(src),
     'IssueTokenForm rejects an initial mint above the cap before it costs a fee',
 );
 assert.ok(
     /divisible\s*\?\s*'8'\s*:\s*'0'/.test(src),
     'composer maps divisible → DECIMALS 8 / 0',
 );
-assert.ok(
-    /p\.LOCK_MAX_SUPPLY\s*=\s*'1'/.test(src)
-        && /p\.LOCK_MINT\s*=\s*'1'/.test(src)
-        && /p\.LOCK_MINT_SUPPLY\s*=\s*'1'/.test(src),
-    'composer sets LOCK_MAX_SUPPLY + LOCK_MINT + LOCK_MINT_SUPPLY when lockSupply is true',
-);
+// U80: seven independent lock switches, each composing its own field; the
+// combined "lock supply" option and the bridge lock are gone from this form.
+assert.ok(src.includes("import { ISSUE_LOCKS } from './issueLocks.js'"), 'IssueTokenForm imports the shared Issue lock list');
+for (const field of ['LOCK_MAX_SUPPLY', 'LOCK_MAX_MINT', 'LOCK_MINT', 'LOCK_MINT_SUPPLY', 'LOCK_DESCRIPTION', 'LOCK_SLEEP', 'LOCK_CALLBACK']) {
+    assert.ok(locksSrc.includes(`'${field}'`), `the Locks section composes ${field}`);
+}
+assert.ok(/p\[lock\.field\]\s*=\s*'1'/.test(src), 'composer sets each switched-on lock field to 1');
+assert.ok(!locksSrc.includes('LOCK_BRIDGE'), 'the bridge lock stays off the Issue form');
 assert.ok(
     /p\.TRANSFER\s*=\s*transferTo/.test(src),
     'composer sets TRANSFER from transferTo',

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, CopyButton, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
@@ -188,7 +188,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     </dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -202,7 +202,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     private key is stored here and nothing can be signed from it.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -237,7 +237,8 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </ul>
                 <div className={styles.actions}>
                     <Button
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.ForwardIcon />}
                         onClick={() => setStage('password')}
                     >
                         I understand, continue
@@ -256,7 +257,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 <FormPage
                     onSubmit={handleSubmit}
                     status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-                    intro="Confirm your wallet password. The key stays hidden until you tap to reveal it."
                     actions={(
                         <Button
                             type="submit"
@@ -272,7 +272,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                         ref={passwordRef}
                         type="password"
                         label="Wallet password"
-                        hint="Required every time you view a private key."
+                        help="Confirm your wallet password every time you view a private key. The key stays hidden until you tap to reveal it."
                         value={password}
                         onChange={(event) => {
                             setPassword(event.target.value);
@@ -310,7 +310,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     <Button
                         type="button"
                         variant="secondary"
-                        icon={null}
+                        icon={<Icon.EyeIcon />}
                         style={{ flex: 1 }}
                         onClick={() => setRevealed(true)}
                     >
@@ -346,7 +346,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </span>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={leaveScreen}>Done</Button>
+                <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveScreen}>Done</Button>
             </div>
         </>,
     );

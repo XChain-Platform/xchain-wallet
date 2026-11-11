@@ -49,7 +49,8 @@
 
 .marketSelectorChevron {
     flex: 0 0 auto;
-    font-size: 1.5rem;
+    display: inline-flex;
+    align-items: center;
     line-height: 1;
     color: var(--xc-text-muted);
 }

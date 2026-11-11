@@ -55,8 +55,6 @@ const messages = {
     'send.review.createUnsigned': 'Create transaction for signing',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}',
-    'send.memoCount':
-        '{used, number} / {max, number} {used, plural, one {byte} other {bytes}}',
     'send.advanced.label': 'Advanced send choices',
     'send.advanced.none': 'None',
     'send.advanced.feeBumping': 'Fee bumping',
@@ -86,11 +84,8 @@ const messages = {
     'send.review.details': 'Details ({count})',
     'send.device.trezor': 'Trezor',
     'send.device.ledger': 'Ledger',
-    'send.watcherMode':
-        'Watch-only mode creates a transaction without signing or sending it. Move it to your signer wallet to sign, then to a normal wallet to send.',
     'send.watcherHardware':
         "This address is paired with {device}, but a watch-only wallet can't sign. Pair the same {device} with your signer wallet to sign the transaction.",
-    'send.walletUnlocked': 'Wallet unlocked. No password needed.',
     'send.useMax': 'Use max',
     'send.fromAddress': 'From address',
     'send.draft.restore': 'Restore',
@@ -99,6 +94,8 @@ const messages = {
     'send.draft.discard': 'Discard',
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
+    'send.source.multisigTitle': 'Multisig {threshold} of {count}',
+    'send.source.unavailable': 'Address unavailable',
     'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
     'send.source.otherNetwork':
         'This payment link is for {network}, not the network this wallet is on. Switch networks in Settings to open it there.',
@@ -107,9 +104,14 @@ const messages = {
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
     'send.destination.placeholder': 'Enter an address or name…',
+    'send.destination.help':
+        'The address or contact that receives this payment. Check the address carefully; a sent payment is final.',
+    'send.amount.help':
+        'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
+    'send.saveRecipient.nameHelp': 'The name used for this recipient in your contacts.',
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
@@ -130,6 +132,8 @@ const messages = {
     'send.recipient.removeLabel': 'Remove recipient {number}',
     'send.recipient.addressLabel': 'Recipient {number} address',
     'send.recipient.tokenLabel': 'Recipient {number} token',
+    'send.recipient.tokenHelp':
+        'The token this recipient receives. Pick any token you hold on the chosen network.',
     'send.recipient.amountLabel': 'Recipient {number} amount',
     'send.recipient.selectToken': 'Select token for recipient {number}',
     'send.recipient.differentToken': 'Different token per recipient',
@@ -155,6 +159,8 @@ const messages = {
     'send.networkFee': 'Network fee',
     'send.advanced': 'Advanced',
     'send.memo': 'Memo',
+    'send.memo.help':
+        'The memo is stored with this token send on chain and is readable by anyone, up to 250 characters.',
     'send.paymentRequestMessage': 'Payment request message:',
     'send.rbf.label': 'Allow a higher network fee later',
     'send.rbf.helpLabel': 'Learn about changing the network fee',

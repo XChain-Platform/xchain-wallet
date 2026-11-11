@@ -228,7 +228,9 @@ describe('one page message per route state', () => {
         // Without a degraded shell notice, Manage token can show its empty
         // price-history result beside the listings read error. Neither is a
         // duplicate reachability notice.
-        const limit = id === 'manage-token' && state === 'error' ? 2 : 1;
+        // Token detail keeps its chart on the page (U76), so its empty
+        // price-history result can stand beside the details read error too.
+        const limit = (id === 'manage-token' || id === 'token-detail') && state === 'error' ? 2 : 1;
         // Zero is fine (a page still loading); two is a stack.
         expect(messages.length, `${id} in ${state}: ${messages.join(' | ')}`).toBeLessThanOrEqual(limit);
     }, 60_000);

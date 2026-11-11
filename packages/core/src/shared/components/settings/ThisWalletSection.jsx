@@ -17,7 +17,9 @@ import {
     CopyButton,
     FormPage,
     FormSection,
+    Icon,
     Input,
+    PageNotice as Status,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
@@ -30,7 +32,7 @@ import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../../flows/duressPassphrase.js';
-import { SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
+import { SettingsActionRow, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
@@ -204,6 +206,7 @@ export function ThisWalletSection({
                 label={t('settings.thisWallet.wallet')}
                 hint={activeWallet.name}
                 actionLabel={onOpenWalletPicker ? t('settings.thisWallet.switchRename') : null}
+                actionIcon={<Icon.SwapIcon />}
                 onClick={onOpenWalletPicker}
                 disabled={removing}
             />
@@ -213,6 +216,7 @@ export function ThisWalletSection({
                     label={t('walletDetails.upgradeRecovery')}
                     hint={t('settings.thisWallet.thisWalletUsesAnOlder')}
                     actionLabel={onOpenWalletPicker ? t('settings.thisWallet.openWallets') : null}
+                    actionIcon={<Icon.ForwardIcon />}
                     onClick={onOpenWalletPicker}
                     disabled={removing}
                 />
@@ -227,6 +231,7 @@ export function ThisWalletSection({
                     label={t('settings.thisWallet.extendedPublicKeys')}
                     hint={t('settings.thisWallet.exportAccountLevelPublicKeys')}
                     actionLabel={t('history.export.open')}
+                    actionIcon={<Icon.DownloadIcon />}
                     onClick={() => { setExportStage('password'); setExportError(null); }}
                 />
             ) : (
@@ -259,7 +264,7 @@ export function ThisWalletSection({
                     <Button
                         variant="danger"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.TrashIcon />}
                         onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
                     >
                         {t('settings.thisWallet.remove')}
@@ -398,6 +403,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                 label={t('send.gated.passwordLabel')}
                 hint={t('settings.thisWallet.changeThePasswordThatProtects')}
                 actionLabel={t('settings.thisWallet.change')}
+                actionIcon={<Icon.KeyIcon />}
                 onClick={() => setOpen(true)}
                 disabled={disabled}
             />
@@ -416,7 +422,8 @@ function ChangePasswordRow({ walletId, disabled }) {
         : fieldError('confirm');
 
     return (
-        <SettingsInlineForm error={error && error.field === null ? error.text : null} onCancel={close} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={close} cancelDisabled={busy}>
+            <Status text={error && error.field === null ? error.text : null} tone="error" />
             <FormPage onSubmit={submit} sectioned label={t('settings.thisWallet.changeWalletPassword')} aria-busy={busy}>
                 <FormSection
                     title={t('settings.thisWallet.changeWalletPassword')}
@@ -430,6 +437,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                         value={currentPassword}
                         onChange={update(setCurrentPassword)}
                         aria-label={t('settings.thisWallet.currentWalletPassword')}
+                        help={t('settings.thisWallet.currentPasswordHelp')}
                         autoComplete="current-password"
                         autoFocus
                         disabled={busy}
@@ -443,6 +451,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                         value={newPassword}
                         onChange={update(setNewPassword)}
                         aria-label={t('settings.thisWallet.newWalletPassword')}
+                        help={t('settings.thisWallet.newPasswordHelp')}
                         autoComplete="new-password"
                         disabled={busy}
                         error={fieldError('new')}
@@ -455,16 +464,17 @@ function ChangePasswordRow({ walletId, disabled }) {
                         value={confirmation}
                         onChange={update(setConfirmation)}
                         aria-label={t('settings.thisWallet.confirmNewWalletPassword')}
+                        help={t('settings.thisWallet.confirmNewPasswordHelp')}
                         autoComplete="new-password"
                         disabled={busy}
                         error={confirmError}
                         errorKey={confirmation}
                     />
                     <div className={styles.actions}>
-                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={close} disabled={busy}>
+                        <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={close} disabled={busy}>
                             {t('common.cancel')}
                         </Button>
-                        <Button type="submit" size="sm" icon={null} disabled={busy}>
+                        <Button type="submit" variant="success" size="sm" icon={<Icon.KeyIcon />} disabled={busy}>
                             {busy ? t('settings.thisWallet.changingPassword') : t('settings.thisWallet.changePassword')}
                         </Button>
                     </div>
@@ -486,7 +496,8 @@ function PublicKeyExport({
     onClose,
 }) {
     return (
-        <SettingsInlineForm error={stage === 'password' ? error : null} onCancel={onClose} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onClose} cancelDisabled={busy}>
+            <Status text={stage === 'password' ? error : null} tone="error" />
             {stage === 'password' ? (
                 <FormPage
                     onSubmit={onSubmit}
@@ -505,16 +516,17 @@ function PublicKeyExport({
                             value={password}
                             onChange={(event) => onPasswordChange(event.target.value)}
                             placeholder={t('send.gated.passwordLabel')}
+                            help={t('settings.thisWallet.exportPasswordHelp')}
                             autoComplete="current-password"
                             autoFocus
                             disabled={busy}
                         />
                         <div className={styles.actions}>
-                            <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose} disabled={busy}>
+                            <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onClose} disabled={busy}>
                                 {t('common.cancel')}
                             </Button>
-                            <Button type="submit" size="sm" icon={null} disabled={busy}>
-                                {busy ? t('settings.backup.exporting') : t('settings.thisWallet.showPublicKeys')}
+                            <Button type="submit" variant="success" size="sm" icon={<Icon.DownloadIcon />} disabled={busy}>
+                                {busy ? t('settings.backup.exporting') : t('settings.thisWallet.exportKeys')}
                             </Button>
                         </div>
                     </FormSection>
@@ -549,7 +561,7 @@ function PublicKeyExport({
                             </FormSection>
                         ))}
                         <div className={styles.actions}>
-                            <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>{t('common.done')}</Button>
+                            <Button type="button" variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onClose}>{t('common.done')}</Button>
                         </div>
                     </>
                 </FormSection>
@@ -558,7 +570,7 @@ function PublicKeyExport({
     );
 }
 
-function Row({ label, hint, actionLabel, onClick, disabled = false }) {
+function Row({ label, hint, actionLabel, actionIcon, onClick, disabled = false }) {
     return (
         <SettingsActionRow label={label} hint={hint}>
             {actionLabel && onClick ? (
@@ -566,7 +578,7 @@ function Row({ label, hint, actionLabel, onClick, disabled = false }) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    icon={null}
+                    icon={actionIcon}
                     onClick={onClick}
                     disabled={disabled}
                 >
@@ -582,7 +594,8 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     // Require the exact wallet name so accidental destructive clicks stay disabled.
     const matches = typed === walletName;
     return (
-        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error} tone="error" />
             <FormSection
                 title={t('settings.thisWallet.remove2', { walletName })}
                 description={(
@@ -605,19 +618,21 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                         if (event.key === 'Enter' && matches && !busy) onConfirm();
                     }}
                     placeholder={walletName}
+                    label={t('settings.thisWallet.confirmWalletName')}
+                    help={t('settings.thisWallet.removeNameHelp')}
                     aria-label={t('settings.thisWallet.confirmWalletName')}
                     autoFocus
                     disabled={busy}
                 />
                 <div className={styles.actions}>
-                    <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
+                    <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>
                         {t('common.cancel')}
                     </Button>
                     <Button
                         type="button"
                         variant="danger"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.TrashIcon />}
                         onClick={onConfirm}
                         disabled={!matches || busy}
                     >

@@ -31,8 +31,8 @@ describe('flat composite surfaces', () => {
     });
 
     it('uses one outer surface for composite detail screens', () => {
-        expect(route('ManageToken.jsx')).toMatch(/className=\{styles\.surface\}/);
-        expect(route('ManageToken.module.css')).toMatch(/\.surface\s*\{[^}]*composes:\s*card/s);
+        expect(route('ManageToken.jsx')).toMatch(/className=\{styles\.approvedDetailsCard\}/);
+        expect(route('ManageToken.module.css')).toMatch(/\.approvedDetailsCard\s*\{[^}]*composes:\s*card/s);
         expect(route('Settings.jsx')).toMatch(/className=\{settingsStyles\.settingsList\}/);
         expect(route('Settings.module.css')).toMatch(/\.settingsList\s*\{[^}]*composes:\s*flush/s);
         expect(route('AddressList.module.css')).toMatch(/\.tabPanel\s*\{[^}]*composes:\s*card/s);
@@ -45,7 +45,7 @@ describe('flat composite surfaces', () => {
 
     it('preserves already-flat form sections and empty states', () => {
         expect(route('SweepForm.jsx')).toMatch(/<FormPage[\s\S]*sectioned[\s\S]*<FormSection title="What to sweep">/);
-        expect(route('ParallelComposer.jsx')).toMatch(/function RowEditor[\s\S]*<FormSection title=\{`Row \$\{index \+ 1\}`\}>/);
+        expect(route('ParallelComposer.jsx')).toMatch(/function RowEditor[\s\S]*<FormSection[\s\S]*title=\{`Row \$\{index \+ 1\}`\}/);
         expect(route('UnionListForm.jsx')).toMatch(/className=\{styles\.flatFieldset\}[\s\S]*<EmptyState/);
     });
 });

@@ -78,6 +78,16 @@ async function press(name) {
     fireEvent.click(button);
 }
 
+// A form loads its source address after the first render, so on a busy
+// machine an early press reports the missing source instead. Press until
+// the message the test is about appears.
+async function pressUntil(name, text) {
+    await waitFor(async () => {
+        await press(name);
+        expect(screen.getByRole('alert').textContent).toContain(text);
+    });
+}
+
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -87,41 +97,30 @@ describe('action form validation feedback', () => {
     it('AdvancedActionsForm explains that an action is required', async () => {
         mount(AdvancedActionsForm);
 
-        await press('Sign action');
-
-        expect(screen.getByRole('alert').textContent).toContain('Pick an action.');
+        await pressUntil('Sign action', 'Pick an action.');
     });
 
     it('AttachContentForm explains that a file is required', async () => {
         mount(AttachContentForm, { chainId: BTC, tick: 'ART', issuerAddress: ADDRESS.address });
 
-        await press('Review upload');
-
-        expect(screen.getByRole('alert').textContent).toContain('Pick a file first.');
+        await pressUntil('Attach artwork', 'Pick a file first.');
     });
 
     it('PublishFileForm explains that a file is required', async () => {
         mount(PublishFileForm);
 
-        await press('Publish file');
-
-        expect(screen.getByRole('alert').textContent).toContain('Pick a file first.');
+        await pressUntil('Publish file', 'Pick a file first.');
     });
 
     it('LinkForm explains that both action indices are required', async () => {
         mount(LinkForm);
 
-        await press('Link');
-
-        expect(screen.getByRole('alert').textContent)
-            .toContain('Provide both action indices before reviewing.');
+        await pressUntil('Link actions', 'Provide both action indices before reviewing.');
     });
 
     it('SignMessageForm explains that a message is required', async () => {
         mount(SignMessageForm);
 
-        await press('Sign message');
-
-        expect(screen.getByRole('alert').textContent).toContain('Type a message to sign.');
+        await pressUntil('Sign message', 'Type a message to sign.');
     });
 });

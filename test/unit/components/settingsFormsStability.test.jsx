@@ -187,7 +187,9 @@ describe('settings form validation', () => {
         const languageRow = screen.getByLabelText('Language').closest('[data-settings-control]').parentElement;
         expect(languageRow.style.flexWrap).toBe('wrap');
         expect(screen.queryByText(/language used for wallet navigation/)).toBeNull();
-        expect(screen.getByText('Changes estimates, not asset balances.')).toBeTruthy();
+        // U57: the currency effect is explained from the label tip, not a static line.
+        expect(screen.queryByText('Changes estimates, not asset balances.')).toBeNull();
+        expect(screen.getByRole('button', { name: 'About the fiat currency setting' })).toBeTruthy();
     });
 
     it('offers pseudo-RTL only while developer mode is enabled', () => {
@@ -284,7 +286,6 @@ describe('settings form validation', () => {
         expect(error).toHaveTextContent(/whole number of sats/);
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
-        expect(input.getAttribute('aria-describedby').split(' ')).toContain('test-send-threshold-hint');
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
@@ -321,7 +322,8 @@ describe('settings form validation', () => {
         render(<SafetySection />);
 
         const input = screen.getByLabelText('Test-send warning threshold (sats)');
-        const hint = document.getElementById(input.getAttribute('aria-describedby'));
+        fireEvent.click(screen.getByRole('button', { name: 'About the new-recipient test-send warning' }));
+        const hint = screen.getByText(/native-coin sends above this amount/i);
         expect(hint.textContent).toMatch(/native-coin sends above this amount/i);
         expect(hint.textContent).toMatch(/outside your contacts and send history/i);
         expect(hint.textContent).toMatch(/0 to turn this warning off/i);

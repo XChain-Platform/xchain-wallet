@@ -54,9 +54,9 @@ describe('AddressPreferencesForm memo delimiters', () => {
     for (const value of ['pay|1', 'a;b', ' x|y;z ']) {
         it(`Review refuses the memo ${JSON.stringify(value)}`, async () => {
             const target = mountForm();
-            const memo = await screen.findByLabelText(/^Memo \(optional\)/);
+            const memo = await screen.findByLabelText(/^Memo$/);
             fireEvent.change(memo, { target: { value } });
-            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
 
             expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeTruthy();
             expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
@@ -67,9 +67,9 @@ describe('AddressPreferencesForm memo delimiters', () => {
 
     it('Review accepts a plain unicode memo and shows it', async () => {
         mountForm();
-        const memo = await screen.findByLabelText(/^Memo \(optional\)/);
+        const memo = await screen.findByLabelText(/^Memo$/);
         fireEvent.change(memo, { target: { value: 'café 🚀' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
 
         expect(await screen.findByRole('form', { name: 'Review preferences' })).toBeTruthy();
         expect(screen.getByText('café 🚀')).toBeTruthy();

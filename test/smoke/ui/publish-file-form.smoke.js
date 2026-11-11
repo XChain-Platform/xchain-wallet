@@ -29,8 +29,8 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
 // ---- The form itself ----------------------------------------------------
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'PublishFileForm.jsx');
-assert.match(form, /value="public"/, 'Public mode option present');
-assert.match(form, /value="gated"/, 'Encrypted mode option present');
+assert.match(form, /value: 'public'/, 'Public mode option present');
+assert.match(form, /value: 'gated'/, 'Encrypted mode option present');
 assert.match(form, /useState\(\/\*\* @type \{'public' \| 'gated'\} \*\/ \('public'\)\)/,
     'Public is the default mode');
 assert.match(form, /getOwnedTokens/, 'gate picker enumerates OWNED ticks only (issuer-only rule)');

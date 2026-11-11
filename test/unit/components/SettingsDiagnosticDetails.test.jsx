@@ -239,7 +239,7 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Activate…' }));
         const password = await screen.findByLabelText('Bitcoin Regtest activation password');
         fireEvent.change(password, { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
 
         expect(await screen.findByText('Activated. Derived 1 address.')).toBeTruthy();
         const summary = screen.getByText('Accounts not changed (1)');

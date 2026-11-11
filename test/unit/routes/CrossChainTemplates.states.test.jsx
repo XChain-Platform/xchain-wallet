@@ -61,6 +61,7 @@ describe('CrossChainTemplates states', () => {
 
         expect((await screen.findAllByRole('button', { name: 'Use template' })).length)
             .toBeGreaterThan(0);
+        expect(document.body).not.toHaveTextContent(/Persona:/);
     });
 
     it('shows wallet load failures as errors', async () => {

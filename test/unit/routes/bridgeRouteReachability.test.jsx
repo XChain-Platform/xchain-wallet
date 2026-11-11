@@ -307,16 +307,14 @@ describe('P19: Manage Token offers the bridge row', () => {
         expect(onBridgeSettings).toHaveBeenCalledTimes(1);
     });
 
-    it('is gated like the other issuer-only rows: absent for a non-issuer', async () => {
+    it('is gated like the other issuer-only rows: disabled for a non-issuer', async () => {
         await renderManage({
             addresses: ['bcrt1qsomeoneelse'],
             onBridgeSettings: vi.fn(),
         });
-        // The owner gate resolves after its own fetch, so wait for the banner
-        // it raises rather than reading the grid the instant info arrives.
         await waitFor(() => {
-            expect(screen.getByText(/hold the token's issuer address/i)).toBeTruthy();
+            expect(bridgeRow()).toBeDisabled();
         });
-        expect(bridgeRow()).toBeNull();
+        expect(screen.queryByText(/hold the token's issuer address/i)).toBeNull();
     });
 });

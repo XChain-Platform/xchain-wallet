@@ -77,7 +77,7 @@ describe('Dividend holder completeness', () => {
     it('refuses a total-sized list containing a duplicate holder address', async () => {
         const messaging = mountDividend();
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: /Dividend token/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Dividend token:/i }));
         await flushTimers();
         const token = Array.from(document.querySelectorAll('button'))
             .find((button) => (button.textContent || '').includes('XCHAIN'));

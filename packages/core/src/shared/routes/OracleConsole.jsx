@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormNotice, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -341,7 +341,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             </>
         ) : null} toolbar={(
-            <Button type="button" variant="ghost" size="sm" disabled={refreshing} onClick={() => load(true)}>
+            <Button type="button" variant="ghost" size="sm" icon={<Icon.RefreshIcon />} disabled={refreshing} onClick={() => load(true)}>
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>
@@ -438,19 +438,16 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         <Button variant="danger" size="md" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
                                     ) : null}
                                     {canResolve ? (
-                                        <Button variant="primary" size="md" onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
+                                        <Button variant="primary" size="md" icon={<Icon.CheckIcon />} onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
                                     ) : null}
                                 </div>
                             ) : null}
 
                             {isActive && active.mode === 'edit' ? (
                                 <div className={consoleStyles.inlineForm}>
-                                    <p className={styles.hint}>
-                                        Leave a field blank to keep its current list, enter 0 to detach it, or enter
-                                        a list action index to replace it. Changes affect future bets only.
-                                    </p>
                                     <Input
                                         label="New allow-list index"
+                                        help="The action number of the address list whose members may bet. Leave it blank to keep the current list, or enter 0 to remove it. Changes affect future bets only."
                                         value={allowList}
                                         placeholder={f.allow_list ? `Current: ${f.allow_list}` : 'No current allow list'}
                                         onChange={(e) => setAllowList(e.target.value)}
@@ -458,6 +455,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     />
                                     <Input
                                         label="New block-list index"
+                                        help="The action number of the address list whose members may not bet. Leave it blank to keep the current list, or enter 0 to remove it. Changes affect future bets only."
                                         value={blockList}
                                         placeholder={f.block_list ? `Current: ${f.block_list}` : 'No current block list'}
                                         onChange={(e) => setBlockList(e.target.value)}
@@ -467,7 +465,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
                                     <Button
-                                        variant="primary"
+                                        variant="success"
+                                        icon={<Icon.PencilIcon />}
                                         loading={actionConfirm.composing || watcherBuilding}
                                         disabled={watcherBuilding || demoGuard.blocked || (!allowList.trim() && !blockList.trim())}
                                         onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
@@ -476,18 +475,21 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             blockList: blockList.trim(),
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review list edit'}
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Update lists'}
                                     </Button>
                                 </div>
                             ) : null}
 
                             {isActive && active.mode === 'resolve' ? (
                                 <div className={consoleStyles.inlineForm}>
-                                    <div className={styles.hint}>Which outcome actually happened?</div>
+                                    <div id={`winning-outcome-${key}`} className={consoleStyles.groupLabel}>
+                                        Which outcome actually happened?
+                                        <InfoTip label="Publishing the result pays the market out: everyone backing this outcome splits the pot and everyone else loses their stake. It cannot be undone or corrected." />
+                                    </div>
                                     {/* Same colour-only selection as the place-bet picker, and worse
                                         consequences: this choice pays the whole pot out one way and
                                         cannot be undone. The selected outcome has to be announced. */}
-                                    <div role="group" aria-label="Winning outcome" className={consoleStyles.outcomeRow}>
+                                    <div role="group" aria-label="Winning outcome" aria-describedby={`winning-outcome-${key}`} className={consoleStyles.outcomeRow}>
                                         {labels.map((l, i) => {
                                             const outcomeText = safeOutcomeLabel(l) || `Outcome ${i}`;
                                             return (
@@ -495,6 +497,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                                     key={i}
                                                     variant={outcome === i ? 'primary' : 'ghost'}
                                                     size="md"
+                                                    icon={<Icon.CheckIcon />}
                                                     aria-pressed={outcome === i}
                                                     onClick={() => setOutcome(i)}
                                                 >
@@ -506,19 +509,16 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
-                                    <p className={styles.hint}>
-                                        This pays the market out. Everyone backing this outcome splits the pot and
-                                        everyone else loses their stake. It cannot be undone or corrected.
-                                    </p>
                                     <Button
-                                        variant="primary"
+                                        variant="success"
+                                        icon={<Icon.CheckIcon />}
                                         loading={actionConfirm.composing || watcherBuilding}
                                         disabled={watcherBuilding || demoGuard.blocked || outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
                                             feedActionIndex: f.action_index, outcome, outcomes: labels,
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review resolve'}
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Publish result'}
                                     </Button>
                                 </div>
                             ) : null}
@@ -528,19 +528,20 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
-                                    <p className={styles.hint}>
+                                    <FormNotice variant="warning">
                                         Every open bet is refunded in full and the market is over. This is the honest
                                         exit for an event that was postponed or never happened.
-                                    </p>
+                                    </FormNotice>
                                     <Button
                                         variant="danger"
+                                        icon={<Icon.XIcon />}
                                         loading={actionConfirm.composing || watcherBuilding}
                                         disabled={watcherBuilding || demoGuard.blocked}
                                         onClick={() => runOracleAction(f, 'cancelMarketParams', submitCancel, {
                                             feedActionIndex: f.action_index,
                                         })}
                                     >
-                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review cancel'}
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Cancel market'}
                                     </Button>
                                 </div>
                             ) : null}

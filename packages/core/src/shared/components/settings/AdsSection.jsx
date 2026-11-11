@@ -64,6 +64,7 @@ function DonationAddressField({ chainId, descriptor, displayName, role, disabled
         <>
             <Select
                 label={t('settings.ads.donationRecipient')}
+                help={t('settings.help.ads.donateTo')}
                 aria-label={t('settings.ads.donationRecipientFor', { displayName })}
                 value={role}
                 disabled={disabled}
@@ -83,6 +84,7 @@ function DonationAddressField({ chainId, descriptor, displayName, role, disabled
             {configured ? (
                 <Input
                     label={t('settings.ads.donationAddress')}
+                    help={t('settings.help.ads.donationAddress')}
                     readOnly
                     autoComplete="off"
                     value={donationAddressForDescriptor(descriptor, role)}
@@ -92,6 +94,7 @@ function DonationAddressField({ chainId, descriptor, displayName, role, disabled
             ) : (
                 <Input
                     label={t('settings.ads.donationAddress')}
+                    help={t('settings.help.ads.donationAddress')}
                     readOnly
                     autoComplete="off"
                     value={t('settings.ads.notAvailableYet')}
@@ -108,13 +111,14 @@ function DonationAddressField({ chainId, descriptor, displayName, role, disabled
  * release default again (§36.6); anything that is not a whole number snaps
  * back to the current value.
  */
-function AmountField({ label, ariaLabel, current, disabled, onCommit, hint, tip, describedBy }) {
+function AmountField({ label, help, ariaLabel, current, disabled, onCommit, hint, tip, describedBy }) {
     const ownHintId = useId();
     const hintId = hint ? ownHintId : describedBy;
     return (
         <div>
             <Input
                 label={label}
+                help={help}
                 type="text"
                 inputMode="numeric"
                 enterKeyHint="done"
@@ -231,10 +235,12 @@ export function AdsSection() {
                 const displayName = descriptor?.displayName || chainId;
                 return (
                     <div key={chainId} className={styles.chain} data-settings-row="">
-                        <h3 className={styles.chainName}>{displayName}</h3>
+                        {/* Donations opens as its own page under the h1 title, so each chain is the next level down. */}
+                        <h2 className={styles.chainName}>{displayName}</h2>
 
                         <AmountField
                             label={`${t('settings.ads.setAsidePerOutgoingTransaction')}${perTxIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}`}
+                            help={t('settings.help.ads.perTransaction')}
                             ariaLabel={t('settings.ads.perTransactionAmount', { displayName })}
                             current={resolved.perTxAmountSats}
                             disabled={!settings.ads.enabled}
@@ -243,6 +249,7 @@ export function AdsSection() {
 
                         <AmountField
                             label={`${t('settings.ads.sendDonationWhenPendingReaches')}${triggerIsDefault ? t('settings.ads.default') : t('settings.ads.custom')}`}
+                            help={t('settings.help.ads.threshold')}
                             ariaLabel={t('settings.ads.triggerThreshold', { displayName })}
                             current={resolved.triggerAmountSats}
                             disabled={!settings.ads.enabled}

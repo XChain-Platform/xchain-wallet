@@ -68,12 +68,6 @@
     overflow-wrap: anywhere;
 }
 
-.successTxidRow {
-    display: flex;
-    align-items: stretch;
-    gap: var(--xc-space-2);
-}
-
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);

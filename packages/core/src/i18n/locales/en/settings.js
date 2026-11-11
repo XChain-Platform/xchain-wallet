@@ -28,8 +28,10 @@ const messages = {
         "This build can't hold sends. The preference is saved for a build that supports it.",
     'settings.undoSend.hintAvailable':
         "When enabled, holds each signed send for the duration below so you can cancel it before broadcast. A duration of 0 doesn't hold sends.",
-    'settings.undoSend.durationLabel': 'Hold duration in seconds (0 disables)',
+    'settings.undoSend.durationLabel': 'Hold duration (seconds)',
     'settings.undoSend.durationAriaLabel': 'Send hold duration in seconds',
+    'settings.about.balancesUpdated': 'Balances updated',
+    'settings.about.balancesNotUpdated': 'not yet',
 
     // Copy moved out of JSX literals by the i18n sweep.
     'settings.backup.yourLabelsAndContactsAre':
@@ -60,9 +62,7 @@ const messages = {
         "Looks for labels and contacts you published earlier on the selected network and merges anything found into this wallet, without erasing what's already here.",
     'settings.backup.check': 'Check…',
     'settings.backup.labelsChangedSinceTheLast': 'Labels changed since the last publish',
-    'settings.backup.publish': 'Publish…',
     'settings.backup.revealing': 'Revealing…',
-    'settings.backup.reveal': 'Reveal',
     'settings.backup.yourRecoveryPhrase': 'Your recovery phrase',
     'settings.backup.wallet': 'Wallet:',
     'settings.backup.hideRecoveryPhrase': 'Hide recovery phrase',
@@ -130,7 +130,6 @@ const messages = {
     'settings.backup.discoveryName': 'Discovery name',
     'settings.backup.restoreChain': 'Restore network',
     'settings.backup.checking': 'Checking…',
-    'settings.backup.check2': 'Check',
     'settings.developer.developerModeSettings': 'Developer mode settings',
     'settings.developer.developerOptions': 'Developer options',
     'settings.developer.tools': 'Developer tools',
@@ -196,8 +195,6 @@ const messages = {
     'settings.developer.chainsYouAddHereAppear': 'Networks you add here appear in this list.',
     'settings.developer.removeCustomChain': 'Remove custom network {value}',
     'settings.developer.customChainDescriptorJson': 'Custom network descriptor JSON',
-    'settings.developer.pasteAFullChaindescriptorJson':
-        'Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).',
     'settings.developer.adding': 'Adding…',
     'settings.developer.addChain': 'Add network',
     'settings.developer.addCustomChain': 'Add custom network…',
@@ -220,7 +217,6 @@ const messages = {
     'settings.display.showHideButtonOnRows': 'Show hide button on rows',
     'settings.display.watchedTokens': 'Watched tokens ({length})',
     'settings.display.tokenToWatch': 'Token to watch',
-    'settings.display.tokenChain': 'Token network',
     'settings.display.tokenTicker': 'Token ticker',
     'settings.display.watchToken': 'Watch token',
     'settings.display.removeWatchedToken': 'Remove watched token {key}',
@@ -278,12 +274,7 @@ const messages = {
     'settings.connectedSites.windowSeconds': 'Window (seconds)',
     'settings.connectedSites.signThrottleWindowInSeconds': 'Sign-throttle window in seconds',
     'settings.connectedSites.applying': 'Applying…',
-    'settings.connectedSites.apply': 'Apply',
     'settings.connectedSites.blockedSites': 'Blocked sites',
-    'settings.connectedSites.blockPatternLead': 'Use',
-    'settings.connectedSites.exampleCom': '*.example.com',
-    'settings.connectedSites.blockPatternJoin': 'with',
-    'settings.connectedSites.exampleCom2': 'example.com',
     'settings.connectedSites.noBlockedSites': 'No blocked sites',
     'settings.connectedSites.sitesYouBlockAppearHere': 'Sites you block appear here.',
     'settings.connectedSites.unblock': 'Unblock',
@@ -319,7 +310,6 @@ const messages = {
     'settings.thisWallet.changingPassword': 'Changing password…',
     'settings.thisWallet.changePassword': 'Change password',
     'settings.thisWallet.confirmWalletPassword': 'Confirm wallet password',
-    'settings.thisWallet.showPublicKeys': 'Show public keys',
     'settings.thisWallet.qrCodeForExtendedPublic': 'QR code for {chainId} extended public key',
     'settings.thisWallet.copyExtendedPublicKey': 'Copy extended public key',
     'settings.thisWallet.remove2': 'Remove {walletName}?',
@@ -363,6 +353,7 @@ const messages = {
     'settings.notifications.triggered': ' · triggered',
     'settings.notifications.reArm': 'Re-arm',
     'settings.notifications.editPriceAlert': 'Edit {coinLabelForChainValue} price alert',
+    'settings.notifications.removePriceAlert': 'Remove {coinLabelForChainValue} price alert',
     'settings.notifications.deletePriceAlert': 'Delete {coinLabelForChainValue} price alert',
     'settings.notifications.delete': 'Delete',
     'settings.privacy.torRouting': 'Tor routing',
@@ -397,12 +388,8 @@ const messages = {
     'settings.privacy.restoreThePrivacyControlsAbove': 'Restore the privacy controls above to their defaults.',
     'settings.privacy.enterAWholeNumberFrom': 'Enter a whole number from {min} to {max}.',
     'settings.privacy.clipboardAutoClear': 'Clipboard auto-clear',
-    'settings.privacy.setTo0ToKeep':
-        'Set to 0 to keep them until they are replaced; otherwise, clear sensitive clipboard copies after this many seconds.',
     'settings.privacy.clipboardAutoClearSeconds': 'Clipboard auto-clear seconds',
     'settings.privacy.formDraftRetention': 'Form draft retention',
-    'settings.privacy.keepInProgressSendAnd':
-        'Keep in-progress send and sign-message fields through a tab close or wallet lock until the retention window expires, or disable persistence and clear saved drafts on the next form load by selecting "Off."',
     'settings.privacy.off': 'Off',
     'settings.privacy.24Hours': '24 hours',
     'settings.about.aSelfCustodialWalletFor':
@@ -479,8 +466,6 @@ const messages = {
     'settings.duress.configuredEnteringThisPassphraseOn':
         'Configured. Entering this passphrase on the unlock screen will silently arm panic mode while showing a normal-looking wrong-password message.',
     'settings.duress.setDuressPassphrase': 'Set duress passphrase',
-    'settings.duress.pickAPassphraseThatIs':
-        "Pick a passphrase that isn't your real wallet password. Entering it on the unlock screen will silently arm panic mode (24-hour signing freeze) and surface the same UI a wrong password produces.",
     'settings.duress.confirmPassphrase': 'Confirm passphrase',
     'settings.duress.confirmDuressPassphrase': 'Confirm duress passphrase',
     'settings.duress.aSecondPasswordThatIf':
@@ -494,8 +479,6 @@ const messages = {
     'settings.safety.neverUntilAppCloses': 'Never (until the app closes)',
     'settings.safety.minutesCustom': '{autolockMinutes} minutes (custom)',
     'settings.safety.newRecipientTestSendWarning': 'New-recipient test-send warning (sats)',
-    'settings.safety.forNativeCoinSendsAbove':
-        'For native-coin sends above this amount to a recipient outside your contacts and send history. Enter 0 to turn this warning off.',
     'settings.safety.0NoWarning': '0 = no warning',
     'settings.safety.testSendWarningThresholdSats': 'Test-send warning threshold (sats)',
     'settings.safety.lookalikeAddressWarnings': 'Lookalike address warnings',
@@ -519,6 +502,11 @@ const messages = {
     'settings.connectedSites.blockTitle': 'Block {origin}?',
     'settings.connectedSites.blockMessage': 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
     'settings.connectedSites.blockSite': 'Block site',
+    'settings.connectedSites.blockOrigin': 'Block origin',
+    'settings.connectedSites.siteToBlockHelp': 'Enter an origin such as https://example.com, or *.example.com to block every subdomain too. A blocked site can\'t connect or ask you to sign until you unblock it.',
+    'settings.connectedSites.burstHelp': 'How many sign requests one site may send inside the window. The wallet rejects the rest until the window ends.',
+    'settings.connectedSites.windowSecondsHelp': 'The length of the throttle window in seconds. Each site\'s request count resets when it ends.',
+    'settings.connectedSites.applyThrottle': 'Apply throttle',
     'settings.connectedSites.clearHistoryTitle': 'Clear site block history?',
     'settings.connectedSites.clearHistoryMessage': 'This permanently deletes the record of sites you blocked or unblocked.',
     'settings.connectedSites.permNever': 'Never allow',
@@ -550,7 +538,6 @@ const messages = {
     'settings.languageRegion.language': 'Language',
     'settings.languageRegion.languageUnavailable': "This language can't load right now. Check the connection and pick it again.",
     'settings.languageRegion.fiatCurrency': 'Fiat currency',
-    'settings.languageRegion.showEstimatedWalletValuesIn': 'Changes estimates, not asset balances.',
     'settings.languageRegion.currencyNotSupported': "{currency} isn't supported. Values are shown in USD.",
     'settings.languageRegion.searchByCodeOrName': 'Search by code or name',
     'settings.languageRegion.supportedFiatCurrencies': 'Supported fiat currencies',
@@ -566,7 +553,7 @@ const messages = {
     'settings.fees.allowFeeBumpReplaceBy2': '{displayName} allow fee bump (Replace-by-Fee)',
     'settings.fees.keepThisOnSoYou':
         'Keep this on so you can raise the fee later to speed up a stuck send on this network.',
-    'settings.fees.feeBumpingIsNotSupported': "Fee bumping isn't supported on {displayName}.",
+    'settings.fees.feeBumpingIsNotSupported': "Fee bumping isn't supported on this network.",
     'settings.fees.rateGreaterThanZero': 'Enter a custom fee rate greater than zero.',
     'settings.fees.rateAtLeast': 'Enter a rate of at least {rate} {unit}.',
     'settings.fees.rateNoHigherThan': 'Enter a rate no higher than {rate} {unit}.',
@@ -582,11 +569,11 @@ const messages = {
         'Freeze all signing for 24 hours? Balances and history remain readable, and you can deactivate the freeze from this setting.',
     'settings.panic.confirm24HourFreeze': 'Confirm 24-hour freeze',
     'settings.panic.panicMode': 'Panic mode',
-    'settings.panic.notSaved': 'Panic mode is on, but it couldn\'t be saved.',
+    'settings.panic.notSaved': "Panic mode is on, but it couldn't be saved.",
     'settings.panic.notSavedDetail':
         'Signing is frozen for now. The freeze ends if the browser or app restarts, so turn panic mode on again after a restart.',
-    'settings.panic.couldNotTurnOff': 'Panic mode couldn\'t be turned off.',
-    'settings.panic.couldNotTurnOffDetail': 'The change couldn\'t be saved, so signing stays frozen. Try again.',
+    'settings.panic.couldNotTurnOff': "Panic mode couldn't be turned off.",
+    'settings.panic.couldNotTurnOffDetail': "The change couldn't be saved, so signing stays frozen. Try again.",
     'settings.panic.activateToFreezeAllSigning':
         'Activate to freeze ALL signing for 24 hours. Balances and history stay readable; new sends, multisig contributions, and message signatures will refuse until the timer expires or you deactivate.',
     'settings.contacts.contactsInThisWallet': 'Contacts in this wallet',
@@ -766,6 +753,82 @@ const messages = {
     'settings.thisWallet.accountPath': 'Account path: {path}',
     'settings.developer.explorer': '{id} · explorer {value}:{value2}',
     'settings.endpoints.default': 'Default',
+    'settings.thisWallet.exportKeys': 'Export keys',
+    'settings.thisWallet.currentPasswordHelp': 'The password you use to unlock this wallet today. It proves the change is yours.',
+    'settings.thisWallet.newPasswordHelp': 'The password that protects this wallet from now on. Pick one you don\'t use elsewhere.',
+    'settings.thisWallet.confirmNewPasswordHelp': 'Type the new password again so a typo doesn\'t lock you out.',
+    'settings.thisWallet.exportPasswordHelp': 'Your wallet password. The wallet needs it to read the account keys before showing them.',
+    'settings.thisWallet.removeNameHelp': 'Type the wallet name exactly as shown to turn on the Remove wallet button.',
+    'settings.display.tokenHelp': "The token's ticker on that network. Watched tokens stay in Balances even at zero.",
+    // --- settings help tips: language & region, network, fees ---
+    'settings.help.langRegion.languageLabel': 'About the language setting',
+    'settings.help.langRegion.language': 'The language the wallet uses for its screens, buttons and messages. It changes at once and is saved for the next launch.',
+    'settings.help.langRegion.fiatCurrencyLabel': 'About the fiat currency setting',
+    'settings.help.langRegion.fiatCurrency': 'The currency used for estimated values, prices and fee estimates. It changes only how values are shown, never the coins or tokens you hold.',
+    'settings.help.network.networkLabel': 'About the network setting',
+    'settings.help.network.network': 'Mainnet uses real funds. Testnet uses free test coins with no value. Regtest is a local developer network, offered in Developer mode. Switching reloads the wallet on the network you pick.',
+    // --- settings help tips: developer mode ---
+    'settings.help.developer.activationPassword':
+        'The wallet password used to derive the first {displayName} address for each software account when this network is activated.',
+    'settings.help.developer.minerUrl':
+        'The local regtest miner endpoint that receives this request for test coins.',
+    'settings.help.developer.faucetAmount':
+        'The amount of test {coinTicker} the regtest miner sends to the active account.',
+    'settings.help.developer.customChainDescriptor':
+        'Paste the complete ChainDescriptor JSON for the custom network, including its identifiers, address rules, fee strategy, supported actions, services and donation address.',
+    // --- settings help tips: privacy, wallet mode ---
+    'settings.help.privacy.clipboardAutoClearLabel': 'About clipboard auto-clear',
+    'settings.help.privacy.clipboardAutoClear': 'How many seconds an address, phrase or other sensitive value you copy stays on the clipboard before the wallet clears it. Set 0 to keep copies until something else replaces them.',
+    'settings.help.privacy.formDraftRetentionLabel': 'About form draft retention',
+    'settings.help.privacy.formDraftRetention': 'How long half-filled send and sign-message forms are kept through a tab close or wallet lock. Choose Off to stop keeping drafts; saved drafts are cleared the next time a form opens.',
+    'settings.help.walletMode.transactionHandling': 'Whether this device signs and broadcasts (Normal), only watches balances and builds unsigned transactions (Watcher), or only signs transactions built on a watcher, offline (Signer).',
+    // --- settings help tips: safety ---
+    'settings.help.safety.autoLockLabel': 'About auto-lock timeout',
+    'settings.help.safety.autoLock': 'How long the wallet can sit idle before it locks and asks for your password again. A shorter time protects you better if you leave the device unattended.',
+    'settings.help.safety.testSendLabel': 'About the new-recipient test-send warning',
+    'settings.help.safety.testSend': 'For native-coin sends above this amount to a recipient outside your contacts and send history, the wallet suggests sending a small test amount first. Enter 0 to turn this warning off.',
+    'settings.help.safety.holdDurationLabel': 'About hold duration',
+    'settings.help.safety.holdDuration': "How many seconds a signed send waits before it's broadcast, so you can cancel it. Enter 0 to send at once without holding.",
+    'settings.help.safety.currentPassword': "Your current wallet password. It's checked before the duress passphrase is saved, and it's never stored.",
+    'settings.help.safety.duressPassphrase': "Pick a passphrase that isn't your real wallet password. Entering it on the unlock screen silently arms panic mode (24-hour signing freeze) and shows the same screen a wrong password produces.",
+    'settings.help.safety.confirmDuressPassphrase': 'Type the same duress passphrase again to be sure it was entered as intended.',
+    'settings.safety.savePassphrase': 'Save passphrase',
+    'settings.safety.enableBiometric': 'Enable biometric unlock',
+    'settings.safety.reEnrolBiometric': 'Re-enrol biometric unlock',
+    // --- settings help tips: backup ---
+    'settings.help.backup.exportPassword': "The password that encrypts the backup file. Whoever opens the file needs it, and it can't be recovered if you lose it, so choose one you will remember. It doesn't have to match your wallet password.",
+    'settings.help.backup.exportConfirm': "Type the same backup password again so a typing slip doesn't lock you out of the file.",
+    'settings.help.backup.revealPassword': "Your wallet password. It's checked on this device before the recovery phrase is decrypted and shown, so anyone holding the unlocked wallet can't read the phrase without it.",
+    'settings.help.backup.testPhrase': "The recovery phrase from your paper or file backup. It's compared with this wallet on this device only, never saved, and never leaves the screen you typed it on.",
+    'settings.help.backup.testFormat': 'How the phrase you are testing was made. Pick Standard for nearly every wallet, or Counterwallet legacy if the phrase came from the old Counterwallet app.',
+    'settings.help.backup.testGap': 'How many addresses on each network to derive from the phrase and compare with this wallet, from 1 to 100. Raise it if you have used many addresses.',
+    'settings.help.backup.testPassphrase': 'The extra 25th word set when this wallet was created, if any. Leave it empty when you never set one; a wrong or missing passphrase makes every address differ.',
+    'settings.help.backup.publishChain': 'The network that carries the encrypted label transaction. Publishing spends a small fee on this network, and you check for the backup on the same network later.',
+    'settings.help.backup.publishPassword': 'Your wallet password. It unlocks the key that encrypts and signs the label transaction for this publish only.',
+    'settings.help.backup.restoreChain': 'The network to search for a label backup you published earlier. Pick the network you published on.',
+    'settings.help.backup.restorePassword': 'Your wallet password. It derives the key that decrypts any backup found; nothing is deleted from this device, only missing contacts and labels are added.',
+    'settings.help.backup.pointerAddress': 'The https address where you uploaded the encrypted backup file. The QR holds only this address and the wallet name, never the file or its password.',
+    'settings.help.backup.exportBackup': 'Export backup',
+    'settings.help.backup.revealPhrase': 'Reveal phrase',
+    'settings.help.backup.publishLabels': 'Publish labels',
+    'settings.help.backup.checkForContacts': 'Check for contacts',
+    'settings.help.backup.pointerAddressLabel': 'Backup file address',
+    // --- settings help tips: network endpoints ---
+    'settings.help.endpoints.explorerUrl': 'The explorer this wallet reads balances, history and token data from on this network. Leave it empty to use the default.',
+    'settings.help.endpoints.encoderUrl': 'The encoder this wallet asks to build XChain actions into transactions on this network. Leave it empty to use the default.',
+    'settings.help.endpoints.hubUrl': 'The hub this wallet reads network settings and fee schedules from. Leave it empty to use the default; a network that ships without a hub keeps it empty.',
+    'settings.help.endpoints.saveEndpoints': 'Save endpoints',
+    'settings.help.endpoints.savingEndpoints': 'Saving endpoints…',
+    // --- settings help tips: notifications ---
+    'settings.help.notifications.quietStart': 'The time of day when notifications go quiet. Alerts that arrive after this time are dropped, not saved for later.',
+    'settings.help.notifications.quietEnd': 'The time of day when notifications start again. Set it earlier than the start time to run the quiet window past midnight.',
+    'settings.help.notifications.soundHelpLabel': 'About the {label} sound',
+    'settings.help.notifications.soundHelp': 'The sound that plays with {label} notifications. Choose No sound to keep this kind silent.',
+    // --- settings help tips: automatic donation system ---
+    'settings.help.ads.perTransaction': 'How many sats are set aside from each outgoing transaction on this network. Nothing is sent yet: set-asides add up until they reach the amount below. Leave it empty to follow the release default.',
+    'settings.help.ads.threshold': "When the set-aside total on this network reaches this many sats, it's sent as one donation with your next transaction. Leave it empty to follow the release default.",
+    'settings.help.ads.donateTo': "Which published donation address on this network receives your donations. Addresses not published yet are listed but can't be picked.",
+    'settings.help.ads.donationAddress': "The address your donations on this network are sent to, read from the network registry. It can't be edited here.",
 };
 
 addEnglish(messages);

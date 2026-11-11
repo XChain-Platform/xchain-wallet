@@ -29,4 +29,16 @@ describe('form card flattening', () => {
         expect(base[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
         expect(base[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
     });
+
+    it('keeps a preserved nested card inside the wide form card (Link action cards)', () => {
+        const rule = media.match(/\.formCard:not\(\.cardless\) \[data-xc-preserve-nested-cards\] \.card\s*\{([^}]*)\}/);
+        expect(rule).not.toBeNull();
+        expect(rule[1]).toMatch(/padding:\s*var\(--xc-card-pad\)/);
+        expect(rule[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
+        expect(rule[1]).toMatch(/border:\s*var\(--xc-card-border\)/);
+        expect(rule[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
+        // It comes after the flattening rule in the same block and outweighs it.
+        expect(media.indexOf('[data-xc-preserve-nested-cards]'))
+            .toBeGreaterThan(media.search(/\.formCard:not\(\.cardless\) \.card\s*\{/));
+    });
 });

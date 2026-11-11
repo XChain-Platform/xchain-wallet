@@ -83,11 +83,11 @@ describe('ContactsList version conflict retry', () => {
         await openDetail(messaging);
         fireEvent.click(within(screen.getByRole('group', { name: 'Contact actions' })).getByRole('button', { name: 'Edit' }));
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Alice B' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update contact' }));
         expect(await screen.findByText(CONFLICT)).toBeTruthy();
         expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt).toBe(OLD_VERSION);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update contact' }));
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledTimes(2));
         expect(messaging.saveContact.mock.calls[1][0].expectedUpdatedAt).toBe(NEW_VERSION);
         expect(messaging.saveContact.mock.calls[1][0].record.name).toBe('Alice B');
@@ -101,11 +101,11 @@ describe('ContactsList version conflict retry', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
         const dialog = await screen.findByRole('dialog');
         fireEvent.change(within(dialog).getByLabelText('Address'), { target: { value: ADDRESS_B } });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Add address' }));
         expect(await within(dialog).findByText(CONFLICT)).toBeTruthy();
         expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt).toBe(OLD_VERSION);
 
-        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' }));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add address' }));
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledTimes(2));
         expect(messaging.saveContact.mock.calls[1][0].expectedUpdatedAt).toBe(NEW_VERSION);
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -154,7 +154,7 @@ describe('ContactsList response ordering', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
         fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice current' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update contact' }));
 
         await screen.findByRole('heading', { name: 'View Contact' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -185,7 +185,7 @@ describe('ContactsList duplicate submission', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS_A } });
-        const form = screen.getByRole('button', { name: 'Save' }).closest('form');
+        const form = screen.getByRole('button', { name: 'Create contact' }).closest('form');
 
         act(() => {
             form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));

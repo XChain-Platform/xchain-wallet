@@ -50,13 +50,14 @@ for (const shell of [['web', 'src'], ['desktop', 'renderer'], ['extension', 'src
 
 // ---- form ----
 const form = core('shared', 'routes', 'AddressPreferencesForm.jsx');
-assert.match(form, /getAddressPreferences\(\{ chainId, address \}\)/, 'form reads current values');
+assert.match(form, /getAddressPreferences\(\{ chainId, address: editedAddress \}\)/, 'form reads current values');
 assert.match(form, /handleReview/, 'form has a review gate');
 assert.match(form, /Could not re-check the current on-chain values/, 'review is blocked without a fresh re-fetch (stale-read rail)');
 assert.match(form, /reviewBaseline/, 'review compares against the re-fetched baseline');
 assert.match(form, /CHANGED/, 'review marks changed rows');
 assert.match(form, /unchanged/, 'review shows unchanged rows being re-written too');
-assert.match(form, /<NativeFeeToggle/, 'PC-51 toggle mounted');
+assert.doesNotMatch(form, /NativeFeeToggle/, 'ADDRESS shows no protocol-fee toggle');
+assert.match(form, /nativeFeeForFeelessAction/, 'ADDRESS keeps the chain-required flag');
 assert.match(form, /ResultScreen/, 'watcher encode-only lane');
 assert.match(
     form,

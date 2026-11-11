@@ -139,7 +139,7 @@ async function fillAirdrop(page) {
     await token.click();
 
     await main.getByRole('textbox', { name: /^Per-recipient amount/ }).fill('7');
-    await main.getByLabel('Recipients').fill(RECIPIENTS.join('\n'));
+    await main.getByLabel('Recipients', { exact: true }).fill(RECIPIENTS.join('\n'));
     await expect(main).toContainText('3 valid addresses');
     await expect(main).toContainText('total ~21 XCHAINGOV');
     return main;
@@ -158,13 +158,13 @@ async function fillBatch(page) {
     const step = (number) => main.getByRole('region', { name: `Step ${number}`, exact: true });
 
     await expect(main.getByRole('form', { name: 'Batch composer' })).toBeVisible({ timeout: 30_000 });
-    // The Batch composer's Network field is a ChainPicker (a popover listbox),
-    // not a native select, so it is driven by its trigger and an option.
+    // The Batch composer's Network field opens the full-screen picker.
     const network = main.getByRole('button', { name: /^Network:/ });
     await expect(network).toBeVisible({ timeout: 30_000 });
     if (!((await network.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await network.click();
-        await main.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: /^Select Bitcoin\b/ }).first().click();
     }
     await expect(network).toHaveAttribute('aria-label', /Bitcoin/);
 

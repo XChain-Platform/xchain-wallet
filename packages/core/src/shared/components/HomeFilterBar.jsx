@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// HomeFilterBar keeps the token query and network filter visible together
-// directly above the Home asset tabs.
+// HomeFilterBar keeps the token query and network filter together wherever
+// Home presents its list controls, including the compact header popover.
 
 import { Icon, Input } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
@@ -18,6 +18,7 @@ import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
+ * @param {'menu'} [props.variant]                 stacks both controls inside the Home list popover
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {string[]} props.coinFamilies                     ordered coin family list (e.g. ['bitcoin','litecoin','dogecoin'])
  * @param {string} props.networkFilter                      'all' or a coin id
@@ -26,6 +27,7 @@ import { t } from '../../i18n/index.js';
  * @param {(query: string) => void} props.onTokenQueryChange
  */
 export function HomeFilterBar({
+    variant,
     chainRegistry,
     coinFamilies,
     networkFilter,
@@ -34,7 +36,7 @@ export function HomeFilterBar({
     onTokenQueryChange,
 }) {
     return (
-        <div className={styles.bar}>
+        <div className={`${styles.bar} ${variant === 'menu' ? styles.menu : ''}`}>
             <div className={styles.searchWrap}>
                 <span className={styles.searchIcon} aria-hidden="true">
                     <Icon.SearchIcon />

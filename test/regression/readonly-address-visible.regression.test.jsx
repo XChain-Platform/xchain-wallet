@@ -72,8 +72,8 @@ describe('regression/read-only-address-visible', () => {
         const label = document.querySelector(`label[for="${input.id}"]`);
         expect(input).toHaveClass(inputStyles.input);
         expect(overlay).toHaveClass(addressFieldStyles.readOnlyValue);
-        expect(label.parentElement).toContainElement(icon);
-        expect(input.parentElement).not.toContainElement(icon);
+        expect(label).not.toContainElement(icon);
+        expect(input.parentElement).toContainElement(icon);
 
         const inputRule = ruleBody(inputCss, '.controlHitArea > .input');
         expect(inputRule).toMatch(/position:\s*relative/);
@@ -81,6 +81,9 @@ describe('regression/read-only-address-visible', () => {
         const overlayRule = ruleBody(addressFieldCss, '.readOnlyValue');
         expect(overlayRule).toMatch(/position:\s*absolute/);
         expect(zIndexOf(overlayRule)).toBeGreaterThan(inputZIndex);
+        const actionRule = ruleBody(inputCss, '.controlActions');
+        expect(actionRule).toMatch(/position:\s*absolute/);
+        expect(zIndexOf(actionRule)).toBeGreaterThan(zIndexOf(overlayRule));
 
         expect(overlay).toHaveTextContent('bc1qso…acking');
         // The overlay is visual only: the input already exposes the full

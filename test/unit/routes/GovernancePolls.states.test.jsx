@@ -3,14 +3,17 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
+const pollCss = readFileSync('packages/core/src/shared/routes/GovernancePolls.module.css', 'utf8');
 
 function pending() {
     return new Promise(() => {});
@@ -91,5 +94,54 @@ describe('GovernancePolls states', () => {
         fireEvent.click(screen.getByRole('button', { name: /Ship the release/ }));
         expect(onOpenPoll).toHaveBeenCalledWith(CHAIN, 11);
         expect(screen.getByRole('button', { name: 'Create poll' })).toBeInTheDocument();
+    });
+
+    it('renders polls as one flush list with governance icons and ruled actions', async () => {
+        mount({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            governancePolls: vi.fn().mockResolvedValue({
+                data: [
+                    {
+                        action_index: 11,
+                        tick: 'VOTE',
+                        question: 'Ship the release?',
+                        poll_status: 'open',
+                        end_block: 500,
+                    },
+                    {
+                        action_index: 12,
+                        tick: 'VOTE',
+                        question: 'Fund the next milestone?',
+                        poll_status: 'finalized',
+                        end_block: 750,
+                    },
+                ],
+            }),
+        });
+
+        await screen.findByText('Ship the release?');
+        const list = screen.getByRole('list');
+        expect(list.tagName).toBe('UL');
+        expect(pollCss).toMatch(/\.pollList\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
+        expect(pollCss).toMatch(/\.pollList > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s);
+        const pollCardRule = pollCss.match(/\.pollCard\s*\{([^}]*)\}/s)?.[1];
+        expect(pollCardRule).not.toContain('composes: card');
+        const items = screen.getAllByRole('listitem');
+        expect(items).toHaveLength(2);
+        for (const item of items) {
+            const row = item.querySelector('button');
+            expect(row).not.toBeNull();
+            expect(item.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+        }
+
+        const create = screen.getByRole('button', { name: 'Create poll' });
+        expect(create).toHaveClass(buttonStyles.success);
+        expect(create.querySelector('svg')).not.toBeNull();
+        expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
+
+        const delegate = screen.getByRole('button', { name: 'Delegate votes' });
+        expect(delegate).toHaveClass(buttonStyles.secondary);
+        expect(delegate).not.toHaveClass(buttonStyles.success);
+        expect(delegate.querySelector('svg')).not.toBeNull();
     });
 });

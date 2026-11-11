@@ -60,4 +60,10 @@ describe('BetFeedsList market rows', () => {
         expect(source).toMatch(/<ListRow\s+type="button"\s+onClick=\{\(\) => onOpenMarket\(chainId, id\)\}\s+className=\{local\.marketCard\}/);
         expect(css).toMatch(/\.marketCard \{[^}]*composes: card from '\.\.\/\.\.\/ui\/Card\.module\.css';/s);
     });
+
+    it('lets the phone tab underline span the full toolbar row', () => {
+        const css = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.module.css'), 'utf8');
+
+        expect(css).toMatch(/@media \(max-width: 420px\) \{[\s\S]*?\.toolbarActions \{[^}]*flex: 1 1 100%;[^}]*width: 100%;[^}]*\}/);
+    });
 });

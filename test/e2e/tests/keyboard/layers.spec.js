@@ -210,7 +210,8 @@ test.describe('keyboard focus on wide layouts at 1440x900', () => {
 
     test('the Receive address picker opened by keyboard puts focus on its heading', async ({ page }) => {
         await gotoSection(page, 'Receive');
-        const opener = page.getByRole('button', { name: /address/i }).first();
+        // By name: the field's 'About ...' help tip (U57) also mentions the address.
+        const opener = page.getByRole('button', { name: 'Choose receive address', exact: true });
         await opener.focus();
         await page.keyboard.press('Enter');
         const heading = page.getByRole('heading', { level: 1, name: 'Choose a receive address' });

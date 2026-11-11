@@ -23,21 +23,35 @@ import { freezeMotion } from './wallet.js';
 
 export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-// The accent/success/warning/muted-text contrast debt this suite
-// used to quarantine is fixed in tokens.css (default light theme darkened
-// to clear AA). No exceptions remain - every color-contrast finding fails
-// the build now.
+// The accent, success, warning and muted-text tokens in tokens.css clear AA
+// in the default light theme, so this suite quarantines none of them. One exception remains, by ruling: U97 keeps the main action
+// green (light theme success fill) at #16A34A with white text, 3.3:1. Only
+// that exact pair is dropped; every other color-contrast finding fails.
+const RULED_CONTRAST_PAIRS = [{ fg: '#ffffff', bg: '#16a34a', ruling: 'U97' }];
 
 function contrastPair(node) {
     const data = node.any?.[0]?.data || {};
     return { fg: data.fgColor, bg: data.bgColor, ratio: data.contrastRatio };
 }
 
+function isRuledContrast(node) {
+    const { fg, bg } = contrastPair(node);
+    return RULED_CONTRAST_PAIRS.some((pair) => pair.fg === String(fg).toLowerCase()
+        && pair.bg === String(bg).toLowerCase());
+}
+
+/** Drops the color-contrast nodes a ruling accepts, and any rule left with no nodes. */
+export function withoutRuledContrast(violations) {
+    return violations
+        .map((v) => (v.id === 'color-contrast' ? { ...v, nodes: v.nodes.filter((n) => !isRuledContrast(n)) } : v))
+        .filter((v) => v.nodes.length > 0);
+}
+
 export async function violationsFor(page) {
     // Settle the paint first: a scan racing a fade-in reads blended colors.
     await freezeMotion(page);
     const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-    return results.violations;
+    return withoutRuledContrast(results.violations);
 }
 
 export async function scan(page, label) {

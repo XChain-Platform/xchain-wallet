@@ -37,6 +37,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MigrateToBip39 } from '../../../packages/core/src/shared/routes/MigrateToBip39.jsx';
 import { getBackupVerifiedAt } from '../../../packages/core/src/flows/backupReminder.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 afterEach(() => {
     cleanup();
@@ -70,6 +71,8 @@ function renderMigration(messaging = makeMessaging()) {
         </MessagingProvider>,
     );
     expectOnlyPageTitle('Upgrade to a standard recovery phrase');
+    expectOnlySuccessAction('Continue');
+    expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
     return { messaging, onBack, onMigrated, onSweepChain };
 }
 
@@ -78,8 +81,29 @@ function expectOnlyPageTitle(name) {
     expect(screen.getAllByRole('heading')).toHaveLength(1);
 }
 
+function expectOnlySuccessAction(name) {
+    const action = screen.getByRole('button', { name });
+    expect(action).toHaveClass(buttonStyles.success);
+    expect(action.querySelector('svg')).not.toBeNull();
+    expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
+}
+
+function expectNoBodyBackAction() {
+    expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to phrase' })).toBeNull();
+}
+
+function expectFieldHelp(label, copy) {
+    const trigger = screen.getByRole('button', { name: `About ${label}` });
+    fireEvent.focus(trigger);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(copy);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+}
+
 async function reachBackup(context, { name } = {}) {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expectOnlySuccessAction('Generate recovery phrase');
     if (name !== undefined) fireEvent.change(screen.getByLabelText('New wallet name'), { target: { value: name } });
     fireEvent.change(screen.getByLabelText('Password'), {
         target: { value: 'password1' },
@@ -96,6 +120,8 @@ async function reachBackup(context, { name } = {}) {
     const phrase = screen.getByRole('list', { name: 'Recovery phrase' });
     expect(within(phrase).getAllByRole('listitem')).toHaveLength(12);
     expect(within(phrase).getByText('about')).toBeTruthy();
+    expectOnlySuccessAction('Verify recovery phrase');
+    expectNoBodyBackAction();
     expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();
     expect(context.messaging.getAddressesByChain).not.toHaveBeenCalled();
 }
@@ -106,6 +132,8 @@ async function reachVerify(context, options) {
     fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
     expectOnlyPageTitle('Verify your written copy');
+    expectOnlySuccessAction('Create BIP39 wallet');
+    expectNoBodyBackAction();
 }
 
 function answerQuiz({ wrongFirst = false } = {}) {
@@ -119,6 +147,46 @@ function answerQuiz({ wrongFirst = false } = {}) {
 }
 
 describe('MigrateToBip39 safety and completion', () => {
+    it('uses field tips, a name counter, and header-only back navigation', async () => {
+        const context = renderMigration();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expectOnlySuccessAction('Generate recovery phrase');
+
+        const nameInput = screen.getByLabelText('New wallet name');
+        expect(nameInput).toHaveAttribute('maxLength', '64');
+        expect(screen.getByText(`${nameInput.value.length} / 64`)).toBeTruthy();
+        expectFieldHelp('New wallet name', 'Names the new BIP39 wallet in wallet lists on this device.');
+        expectFieldHelp('Password', 'Encrypts the new wallet on this device. Use at least 8 characters.');
+        expectFieldHelp('Confirm password', 'Type the same password again to confirm the new wallet password.');
+        expect(screen.queryByText('At least 8 characters.')).toBeNull();
+
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Generate recovery phrase' }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Write down your recovery phrase' })).toBeTruthy();
+        expectOnlySuccessAction('Verify recovery phrase');
+        expectNoBodyBackAction();
+
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
+        expectOnlySuccessAction('Create BIP39 wallet');
+        expectNoBodyBackAction();
+        for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
+            const label = input.labels[0].textContent;
+            expectFieldHelp(label, `Type ${label.toLowerCase()} of the new recovery phrase you just wrote down.`);
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Write down your recovery phrase' })).toBeTruthy();
+        expectOnlySuccessAction('Verify recovery phrase');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Set up new wallet' })).toBeTruthy();
+        expectOnlySuccessAction('Generate recovery phrase');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(context.onBack).toHaveBeenCalledTimes(1);
+    });
+
     it('names the new wallet by its default when the name field is cleared or blank', async () => {
         const context = renderMigration();
         await reachVerify(context, { name: '   ' });
@@ -188,6 +256,13 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(getBackupVerifiedAt('wallet-new')).not.toBeNull();
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
 
+        expectOnlySuccessAction('Finish');
+        expect(screen.getByRole('button', { name: 'Finish' }).querySelector('svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Dismiss list' }).querySelector('svg')).not.toBeNull();
+        for (const reviewButton of screen.getAllByRole('button', { name: 'Review sweep' })) {
+            expect(reviewButton.querySelector('svg')).not.toBeNull();
+        }
+
         fireEvent.click(screen.getByRole('button', { name: 'Review sweep' }));
         expect(context.onSweepChain).toHaveBeenCalledWith({
             legacyWalletId: 'wallet-old',
@@ -235,10 +310,10 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(await screen.findByText(/does not match your recovery phrase/)).toBeTruthy();
         expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();
         expect(getBackupVerifiedAt('wallet-new')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
         expect(await screen.findByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByRole('button', { name: 'Generate recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
@@ -261,7 +336,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Vault is locked.');
         expect(screen.getByText('Verify your written copy')).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
         expect(screen.getByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));

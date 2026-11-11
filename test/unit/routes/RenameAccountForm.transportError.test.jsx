@@ -58,7 +58,7 @@ describe('RenameAccountForm transport failures', () => {
         const input = screen.getByLabelText('Account name');
         fireEvent.change(input, { target: { value: 'Retried account' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
 
         expect(await screen.findAllByText('Failed to rename account.')).toHaveLength(1);
         expect(screen.queryByText(failure.message)).toBeNull();
@@ -72,7 +72,7 @@ describe('RenameAccountForm transport failures', () => {
         const input = screen.getByLabelText('Account name');
         fireEvent.change(input, { target: { value: 'Reserved account' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename account' }));
 
         expect(await screen.findAllByText(failure.message)).toHaveLength(1);
         expect(input.value).toBe('Reserved account');

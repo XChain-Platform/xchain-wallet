@@ -72,14 +72,21 @@ const change = async (utils, label, value) => {
 };
 
 async function fillOrder(utils) {
-    await change(utils, 'Give token', 'AAA');
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Give token:/ }));
+        await drain();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /Select give token/ }));
+        await drain();
+    });
     await change(utils, /^Give amount/, '1');
     await change(utils, 'Get token', 'BBB');
     await change(utils, /^Get amount/, '1');
 }
 
 async function fillSwap(utils) {
-    for (const name of [/Give token/, /Get token/]) {
+    for (const name of [/^Give token:/, /^Get token:/]) {
         await domAct(async () => {
             fireEvent.click(utils.getAllByRole('button', { name }).find((b) => b.getAttribute('aria-label') || true));
             await drain();
@@ -94,7 +101,7 @@ async function fillSwap(utils) {
 }
 
 const MEMOS = [
-    ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+    ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
     // The shared action-text refusal answers first, before the memo's own check.
     ['a bidirectional override', 'pay ‮txt.exe', /Memo cannot contain text-direction control characters/],
     ['a tab', 'a\tb', /Memo cannot contain control characters/],
@@ -102,7 +109,7 @@ const MEMOS = [
 
 describe.each([
     ['CrossChainOrderForm', CrossChainOrderForm, fillOrder, 'Place order'],
-    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Review'],
+    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Create cross-chain swap'],
 ])('%s memo', (_name, Form, fill, submitName) => {
     it.each(MEMOS)('refuses a memo %s before composing', async (_label, memo, message) => {
         const { utils, composeForConfirm } = await mount(Form);

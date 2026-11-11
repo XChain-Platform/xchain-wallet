@@ -1,3 +1,16 @@
 .endpointCard {
     composes: card from '../../../ui/Card.module.css';
 }
+
+/* Inside the Settings page card the shared nested-card rule (.card .card)
+   flattens each chain's card to no padding and no border, so one chain's
+   Hub URL field ran straight into the next chain's title (U33). The tripled
+   class outranks that rule: every group keeps a block inset and a divider
+   between it and the one above. */
+.groups.groups.groups > * {
+    padding-block: var(--xc-space-3);
+}
+
+.groups.groups.groups > * + * {
+    border-block-start: 1px solid var(--xc-border);
+}

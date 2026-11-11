@@ -55,7 +55,7 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
     broadcastAction = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: props.walletMode || 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         composeForConfirm,
@@ -110,9 +110,19 @@ afterEach(() => {
 });
 
 describe('BroadcastForm plain message flow', () => {
+    it('names the watcher action and explains offline signing', async () => {
+        mountForm('bitcoin-mainnet', ADDRESSES, { walletMode: 'watcher' });
+        await fill('watcher broadcast');
+        submit();
+
+        expect(await screen.findByRole('button', { name: 'Broadcast' })).toBeTruthy();
+        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeTruthy();
+    });
+
     it('renders only the format 0 authoring fields', async () => {
         mountForm();
 
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
         const message = await screen.findByLabelText('Message');
         expect(message.tagName).toBe('TEXTAREA');
         expect(message).toHaveAttribute('required');
@@ -213,5 +223,19 @@ describe('BroadcastForm fee fields', () => {
         expect(screen.queryByText(/Protocol fee is paid in LTC/)).toBeNull();
         expect(screen.queryByText(/The fee is sent on-chain and isn't refunded/)).toBeNull();
         expect(screen.queryByText('Protocol fees are paid in LTC')).toBeNull();
+    });
+});
+
+describe('BroadcastForm field help tips', () => {
+    it('gives From and Message a help tip written for this form', async () => {
+        mountForm();
+        await screen.findByLabelText('Message');
+
+        const fromTip = screen.getByRole('button', { name: 'About From' });
+        expect(document.getElementById(fromTip.getAttribute('aria-describedby')).textContent)
+            .toBe('The address that signs and pays for this message. The message is recorded on-chain as coming from this address.');
+        const messageTip = screen.getByRole('button', { name: 'About Message' });
+        expect(document.getElementById(messageTip.getAttribute('aria-describedby')).textContent)
+            .toBe('Plain text recorded on-chain with this transaction. Anyone can read it, and it cannot be edited or removed later.');
     });
 });

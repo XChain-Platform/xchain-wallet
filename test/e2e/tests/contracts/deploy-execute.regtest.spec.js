@@ -114,7 +114,7 @@ async function approveConfirm(page) {
 
 async function gotoDeployForm(page) {
     await openPaletteCommand(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Publish contract' });
+    const deploy = page.getByRole('button', { name: 'Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(page.getByRole('main').getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
@@ -179,7 +179,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
     // `xchain-sdk/formatSelector.js` correctly refuses. Both are fixed and
     // this spec is their regression proof:
     //
-    //   DEPLOY / NAME. The `Name (optional)` input rode into the action
+    //   DEPLOY / NAME. The `Name` input enters the action
     //   params; it was a screen-local label and has since been removed
     //   outright (CONTRACT_META_REQUIRED: the name is the contract's own
     //   `meta.name`, read off the source and recorded by the chain). This
@@ -251,7 +251,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
             // No Name field any more: the form shows what the chain is about
             // to record, parsed read-only out of the pasted source.
-            await expect(main.getByLabel('Name (optional)'),
+            await expect(main.getByLabel('Name', { exact: true }),
                 'the deploy form carries no on-device Name field').toHaveCount(0);
             await main.getByLabel('Code source').fill(CONTRACT_SOURCE);
             const identity = main.locator('dl[aria-label="Contract identity"]');

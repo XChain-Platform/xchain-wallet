@@ -238,6 +238,7 @@ const {
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
     startMultisigSigningSession,
+    startMultisigSend,
     getMultisigSigningSession,
     listMultisigSigningSessions,
     cancelMultisigSigningSession,
@@ -246,6 +247,7 @@ const {
     aggregateMultisigSession,
     finalizeMultisigSigningSession,
     signMultisigLocally,
+    importMultisigSigningRequest,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -3322,6 +3324,34 @@ export function createBackgroundHost(deps) {
         return flows.explorerFreshScope(sdk, () => sdk.quoteNativeFee(actionString, { source: req?.source }));
     });
 
+    // Price the draft action for display while the form is being edited. This
+    // uses the SDK's normal cached reads because only the Approve-time guard
+    // needs a fresh-scoped quote, and this preview never signs or spends.
+    host.register('action.quoteProtocolFee', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.quoteProtocolFee: chainId is required');
+        }
+        const actionData = req?.actionData;
+        if (!actionData || typeof actionData !== 'object' || Array.isArray(actionData)
+            || typeof actionData.action !== 'string' || !actionData.action) {
+            throw new Error('action.quoteProtocolFee: actionData.action is required');
+        }
+        if (!actionData.params || typeof actionData.params !== 'object' || Array.isArray(actionData.params)) {
+            throw new Error('action.quoteProtocolFee: actionData.params is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.quoteNativeFee !== 'function') return null;
+        try {
+            return await sdk.quoteNativeFee(
+                { action: actionData.action, params: actionData.params },
+                { source: req.source },
+            );
+        } catch {
+            return null;
+        }
+    });
+
     // Run sdk.preflight HOST-side (the SDK, its explorer endpoint,
     // and Tier-2 state all live here) and return the serializable report. The
     // popup's AbortController cannot cross the boundary; a superseded report
@@ -5686,6 +5716,14 @@ export function createBackgroundHost(deps) {
         return startMultisigSigningSession({ ...req, vault });
     });
 
+    host.register('multisigSign.startSend', async (req, { vault, sdkRegistry }) => {
+        return startMultisigSend({ ...req, vault, sdkRegistry });
+    });
+
+    host.register('multisigSign.importRequest', async (req, { vault, sdkRegistry }) => {
+        return importMultisigSigningRequest({ ...req, vault, sdkRegistry });
+    });
+
     host.register('multisigSign.get', async (req, { vault }) => {
         return getMultisigSigningSession({ ...req, vault });
     });
@@ -6217,6 +6255,7 @@ export function createBackgroundHost(deps) {
                 chainIds: Array.isArray(req?.chainIds) ? req.chainIds : [],
                 fiatCurrency,
                 includeSparkline: Boolean(req?.includeSparkline),
+                includeHistory: Boolean(req?.includeHistory),
             });
         } catch (err) {
             return { error: err?.message ? String(err.message) : String(err) };

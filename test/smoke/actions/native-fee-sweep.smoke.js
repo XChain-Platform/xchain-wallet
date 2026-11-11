@@ -8,12 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the PC-51 sweep: every quotable authoring form mounts the shared
-// NativeFeeToggle through the useNativeFee hook and threads the flag into its
-// flow, and every quotable flow forwards it into submitAction's encoderOpts.
-// Guards the "one form forgot one lane" regression class the hook exists to
-// prevent, and pins the NativeFeeToggle doc to the quotable-set rule (the
-// stale ISSUE/ORDER/SWAP/DISPENSER-only claim must not come back).
+// Smoke for native-fee policy adoption: fee-bearing forms offer the shared
+// control, while fee-free forms keep only any chain-required submit flag.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -26,14 +22,12 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const routes = (f) => read('packages', 'core', 'src', 'shared', 'routes', f);
 const flows = (f) => read('packages', 'core', 'src', 'flows', f);
 
-// ---- forms newly threaded by the sweep: toggle mounted via the hook, flag
-// present in every payload it builds ----
+// ---- fee-bearing forms: toggle mounted via the hook, flag present in every
+// payload they build ----
 const SWEEP_FORMS = [
     'CreateOrderForm.jsx', 'DividendForm.jsx', 'AirdropForm.jsx',
     'ListCreateForm.jsx', 'ListForkForm.jsx',
-    'DestroyForm.jsx', 'LinkForm.jsx', 'SleepForm.jsx',
-    'PublishFileForm.jsx', 'AttachContentForm.jsx', 'OracleForm.jsx',
-    'CallbackForm.jsx', 'SweepForm.jsx', 'TokenAdminForm.jsx',
+    'CallbackForm.jsx', 'SweepForm.jsx',
     // Added 2026-08-01. It was on NEITHER list, so this smoke passed
     // while the one authoring surface for an ownership sale composed ORDER and
     // DISPENSER with no fee output at all: on LTC/DOGE the transaction
@@ -54,12 +48,26 @@ for (const f of SWEEP_FORMS) {
     assert.match(src, /\{\.\.\.nativeFee\.toggleProps\}/, `${f} spreads the whole toggleProps`);
 }
 
-// BROADCAST has no protocol-fee control in its message-only form, but still
-// carries the mandatory native fee mode on chains where the protocol requires it.
-const broadcastForm = routes('BroadcastForm.jsx');
-assert.match(broadcastForm, /import \{ useNativeFee \}/, 'BroadcastForm uses the useNativeFee hook');
-assert.doesNotMatch(broadcastForm, /<NativeFeeToggle/, 'BroadcastForm shows only the network fee selector');
-assert.match(broadcastForm, /payFeeInNativeCoin: nativeFee\.flag/, 'BroadcastForm threads nativeFee.flag into its payloads');
+const FEELESS_FORMS = [
+    'AddressPreferencesForm.jsx', 'AttachContentForm.jsx', 'BroadcastForm.jsx',
+    'DestroyForm.jsx', 'LinkForm.jsx', 'OracleForm.jsx',
+    'PublishFileForm.jsx', 'SleepForm.jsx', 'TokenAdminForm.jsx',
+];
+for (const f of FEELESS_FORMS) {
+    const src = routes(f);
+    assert.match(src, /nativeFeeForFeelessAction/, `${f} derives the chain-required flag`);
+    assert.doesNotMatch(src, /useNativeFee/, `${f} does not mount interactive fee state`);
+    assert.doesNotMatch(src, /NativeFeeToggle/, `${f} shows only the Network fee field`);
+    assert.match(src, /payFeeInNativeCoin: nativeFee\.flag/, `${f} threads nativeFee.flag into its payloads`);
+}
+
+// MINT is protocol-fee-free on every chain, including chains that require a
+// native fee for priced actions. It must not derive or send a native-fee flag.
+const mint = routes('MintForm.jsx');
+assert.doesNotMatch(mint, /nativeFeeForFeelessAction/, 'MintForm does not derive a native-fee flag');
+assert.doesNotMatch(mint, /useNativeFee/, 'MintForm does not mount interactive fee state');
+assert.doesNotMatch(mint, /NativeFeeToggle/, 'MintForm does not render a native-fee toggle');
+assert.doesNotMatch(mint, /payFeeInNativeCoin/, 'MintForm does not send a native-fee flag');
 
 // ---- pre-PC-51 toggle forms migrated onto the shared hook ----
 const MIGRATED = [
@@ -68,8 +76,6 @@ const MIGRATED = [
     ['routes', 'AdvancedActionsForm.jsx'],
     ['components', 'PlaceOrderPanel.jsx'],
 ];
-// MintForm left this list under U81: MINT is free, so it mounts no hook.
-assert.doesNotMatch(routes('MintForm.jsx'), /useNativeFee/, 'MintForm mounts no native-fee hook (MINT is free)');
 for (const [dir, f] of MIGRATED) {
     const src = read('packages', 'core', 'src', 'shared', dir, f);
     assert.match(src, /useNativeFee\(/, `${f} state comes from useNativeFee`);
@@ -89,7 +95,6 @@ for (const [dir, f] of MIGRATED) {
 // coin output required)` after paying a real miner fee.
 const HOOK_CALLERS = [
     ...SWEEP_FORMS.map((f) => ['routes', f]),
-    ['routes', 'BroadcastForm.jsx'],
     ...MIGRATED,
 ];
 for (const [dir, f] of HOOK_CALLERS) {

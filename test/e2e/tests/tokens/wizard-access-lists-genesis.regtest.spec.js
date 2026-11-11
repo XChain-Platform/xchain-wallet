@@ -49,7 +49,7 @@ async function publishAddressList(page, member) {
     await main.getByLabel('List type').selectOption('2');
     await main.getByLabel('Addresses', { exact: true }).fill(member);
     await expect(main).toContainText('1 valid address');
-    await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
 
     const action = await waitForValidAction(await approveAndReadTxid(page, 'the address list'));
     expect(action.action).toBe('LIST');

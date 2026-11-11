@@ -65,19 +65,19 @@ async function fill({ supply, initialMint, owner, holder }) {
     fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'Charlie_Lee' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: supply } });
     if (initialMint !== undefined) {
-        fireEvent.change(screen.getByLabelText('Initial mint (optional)'), {
+        fireEvent.change(screen.getByLabelText('Initial mint'), {
             target: { value: initialMint },
         });
     }
     if (owner !== undefined) {
-        fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), {
+        fireEvent.change(screen.getByLabelText('New owner address'), {
             target: { value: owner },
         });
     }
     if (holder !== undefined) {
-        fireEvent.change(screen.getByLabelText('Send the initial mint to (optional)'), {
+        fireEvent.change(screen.getByLabelText('Send initial mint to'), {
             target: { value: holder },
         });
     }

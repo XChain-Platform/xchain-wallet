@@ -11,6 +11,8 @@ const routeModules = import.meta.glob([
     '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
     '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
     '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+    // The token wizard template icons are a module beside TokenWizard.jsx, not a route.
+    '!../../../packages/core/src/shared/routes/tokenWizardIcons.jsx',
     '!../../../packages/core/src/shared/routes/ResumeConfirm.jsx',
 ]);
 
@@ -88,6 +90,7 @@ const ROUTES_RENDERED_BY_AXE = [
     'MintForm',
     'MultisigCosignerShare',
     'MultisigCreate',
+    'MultisigSendForm',
     'MultisigSigningSession',
     'MyBets',
     'MyLists',

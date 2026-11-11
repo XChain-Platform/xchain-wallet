@@ -23,7 +23,9 @@
 // The search input keeps focus while the palette is active, so the arrow keys
 // drive an `aria-activedescendant` selection rather than roving DOM focus.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    useEffect, useLayoutEffect, useMemo, useRef, useState,
+} from 'react';
 import { Button, Icon } from '../../ui/index.js';
 import { categoryLabel } from './commandRegistry.js';
 import { filterCommands } from './fuzzyMatch.js';
@@ -76,13 +78,16 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         return freeform.length ? [...freeform, ...base] : base;
     }, [commands, query, parseQuery, recentCommandIds]);
 
-    // Reset to a clean slate every time the palette opens, and focus the
-    // input. Without the reset a re-open shows the previous query + stale
-    // selection for a frame.
-    useEffect(() => {
+    // Reset before paint so input arriving as the palette appears cannot be
+    // overwritten by a later effect. Re-opens still start from a clean slate.
+    useLayoutEffect(() => {
         if (!open) return;
         setQuery('');
         setActiveIndex(0);
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
         // Focus after paint so the input exists in the DOM.
         const id = requestAnimationFrame(() => inputRef.current?.focus());
         return () => cancelAnimationFrame(id);

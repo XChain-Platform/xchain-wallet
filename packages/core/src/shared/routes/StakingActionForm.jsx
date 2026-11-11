@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
@@ -129,6 +130,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     const variant = screenVariantFor(shell);
     const isUnstake = mode === 'unstake';
     const verb = isUnstake ? 'Unstake' : 'Claim rewards';
+    // Named-action icon for the submit in every label it takes (U63).
+    const verbIcon = isUnstake ? <Icon.UnlinkIcon /> : <Icon.StakeIcon />;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -729,7 +732,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                     <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -754,6 +757,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                     <Button
                         type="submit"
                         variant="primary"
+                        icon={isWatcherMode || isHwSource ? <Icon.SignIcon /> : verbIcon}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -812,9 +816,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -872,6 +874,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -891,21 +894,22 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
                     loading={actionConfirm.composing}
+                    icon={verbIcon}
                     disabled={!fromAddress || actionConfirm.composing || !totalKnown}
                 >
-                    {singleEncode ? verb : 'Preview'}
+                    {singleEncode ? verb : `Review ${verb.toLowerCase()}`}
                 </Button>
             )}
         >
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The chain your stake is on. Only networks that support staking are listed, and the From address and the fee are on the network you pick."
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -921,6 +925,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
 
             <AmountField
                 label="Amount"
+                help={isUnstake
+                    ? 'The amount you choose enters the cooldown and returns after it; anything left stays staked under the signing public key below.'
+                    : 'Claimed rewards land in your balance, and rewards keep accruing after the claim. Any amount you leave unclaimed stays pending.'}
                 amount={effectiveAmount}
                 fiatAmount={fiatAmount}
                 tick="XCHAIN"
@@ -947,15 +954,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
 
             {isUnstake ? (
                 <>
-                    <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
-                        The amount you choose enters the cooldown and returns after it; anything left stays staked under the signing public key below.
-                    </p>
                     {stakedKeys.length > 1 ? (
                         <Select
                             label="Staked signing public key"
                             value={stakedKeys.includes(signingPubkey) ? signingPubkey : ''}
                             onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
-                            hint="This address has stakes under more than one signing public key. Choose which one to unstake."
+                            help="This address has stakes under more than one signing public key. Choose which one to unstake."
                         >
                             {stakedKeys.map((k) => (
                                 <option key={k} value={k}>{`${k.slice(0, 10)}…${k.slice(-8)}`}</option>
@@ -964,7 +968,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                     ) : null}
                     <Input
                         label="Signing public key"
-                        hint={stakedKeys.length > 0
+                        help={stakedKeys.length > 0
                             ? 'Filled in from your stake; edit only if you staked with a different key.'
                             : '64-character hex-encoded Ed25519 public key (the same one used to stake).'}
                         value={signingPubkey}
@@ -975,14 +979,11 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                         spellCheck={false}
                     />
                 </>
-            ) : (
-                <p style={{ fontSize: '0.9rem', color: 'var(--xc-text-muted)' }}>
-                    Claimed rewards land in your balance, and rewards continue to accrue after the claim. Any amount you leave unclaimed stays pending.
-                </p>
-            )}
+            ) : null}
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

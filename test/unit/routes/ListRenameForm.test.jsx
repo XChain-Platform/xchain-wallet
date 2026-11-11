@@ -114,10 +114,10 @@ afterEach(() => {
 describe('ListRenameForm', () => {
     it('refuses a malformed list reference before review', async () => {
         const messaging = mount({ actionIndex: '0' });
-        fireEvent.change(await screen.findByLabelText('Name (empty means unchanged)'), {
+        fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: 'Treasury' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -144,15 +144,15 @@ describe('ListRenameForm', () => {
             sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
             chainId: CHAIN,
         });
-        expect(screen.getByLabelText('Name (empty means unchanged)').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Name').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Rename list' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('shows UTF-8 length and semicolon errors for the name', async () => {
         mount();
-        const name = await screen.findByLabelText('Name (empty means unchanged)');
+        const name = await screen.findByLabelText('Name');
 
         fireEvent.change(name, { target: { value: '🙂'.repeat(16) } });
         expect(screen.getByText('64 / 64 bytes')).toBeTruthy();
@@ -166,11 +166,11 @@ describe('ListRenameForm', () => {
 
     it('sets both fields to the clear sentinel', async () => {
         const messaging = mount();
-        await screen.findByLabelText('Name (empty means unchanged)');
+        await screen.findByLabelText('Name');
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear name' }));
         fireEvent.click(screen.getByRole('button', { name: 'Clear description' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({
@@ -184,9 +184,9 @@ describe('ListRenameForm', () => {
 
     it('refuses review when both metadata fields are empty', async () => {
         const messaging = mount();
-        await screen.findByLabelText('Name (empty means unchanged)');
+        await screen.findByLabelText('Name');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         expect(await screen.findByText(/no change/i)).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -201,7 +201,7 @@ describe('ListRenameForm', () => {
         ['local', { lists: [] }, false],
     ])('shows the edit-fee note only for a %s list', async (_case, shared, expected) => {
         mount({ shared });
-        await screen.findByLabelText('Name (empty means unchanged)');
+        await screen.findByLabelText('Name');
 
         const note = screen.queryByText(/shared-list edit fee/i);
         expect(Boolean(note)).toBe(expected);
@@ -216,16 +216,16 @@ describe('ListRenameForm', () => {
 
     it('hands the owner lane exactly the format 5 rename parameters', async () => {
         const messaging = mount();
-        fireEvent.change(await screen.findByLabelText('Name (empty means unchanged)'), {
+        fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: ' Treasury ' },
         });
-        fireEvent.change(screen.getByLabelText('Description (empty means unchanged)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: ' Quarterly holdings ' },
         });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: ' quarterly ' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0]).toMatchObject({

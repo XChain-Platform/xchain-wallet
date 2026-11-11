@@ -115,7 +115,7 @@ describe('pair a partner wallet', () => {
         const importMnemonic = vi.fn(async () => ({ wallet: { id: 'w-1' } }));
         mount(<PairPartnerWallet />, { importMnemonic });
         fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fireEvent.change(screen.getByLabelText(/Shared recovery phrase/i), { target: { value: PHRASE } });
+        fireEvent.change(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' }), { target: { value: PHRASE } });
         setPasswords(/^Password for this device$/i, /Confirm password/i, DURESS);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));

@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Home's Activity tab opens straight on its rows, with no intro sentence,
-// and ends with one full-width primary "See all activity" button that opens
-// History. The demo wallet's Activity tab ends the same way.
+// and ends with one full-width success "See all activity" button that opens
+// History. Empty activity ends with the same button.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -110,15 +110,19 @@ function expectTrailingSeeAll(panel, onHistory) {
     const button = screen.getByRole('button', { name: 'See all activity' });
     expect(panel.lastElementChild).toBe(button);
     expect(button.classList.contains(buttonStyles.block)).toBe(true);
-    expect(button.classList.contains(buttonStyles.primary)).toBe(true);
+    expect(button.classList.contains(buttonStyles.success)).toBe(true);
+    expect(button.classList.contains(buttonStyles.primary)).toBe(false);
     expect(button.classList.contains(buttonStyles.link)).toBe(false);
-    expect(button.querySelector('svg')).not.toBeNull();
+    const icon = button.querySelector('svg');
+    expect(icon).not.toBeNull();
+    expect(icon.querySelectorAll('path')).toHaveLength(3);
+    expect(icon.querySelector('path')?.getAttribute('d')).toBe('M3 12a9 9 0 1 0 3-6.7');
     fireEvent.click(button);
     expect(onHistory).toHaveBeenCalledTimes(1);
 }
 
 describe('Home Activity tab See all activity', () => {
-    it('ends a real wallet\'s rows with a full-width primary button and no intro note', () => {
+    it('ends a real wallet\'s rows with a full-width success button and no intro note', () => {
         const onHistory = vi.fn();
         const panel = renderActivity({
             balances: {},
@@ -132,8 +136,28 @@ describe('Home Activity tab See all activity', () => {
     it('ends the demo wallet\'s rows with the same button', () => {
         markDemoWallet('demo-wallet');
         const onHistory = vi.fn();
-        const panel = renderActivity({ balances: demoBalances, walletId: 'demo-wallet', onHistory });
+        const panel = renderActivity({
+            balances: demoBalances,
+            walletId: 'demo-wallet',
+            recentActivity: [entry(1), entry(2)],
+            onHistory,
+        });
         expectTrailingSeeAll(panel, onHistory);
+    });
+
+    it('shows the same success button under the empty state', () => {
+        const onHistory = vi.fn();
+        const panel = renderActivity({
+            balances: {},
+            walletId: 'wallet-real',
+            recentActivity: [],
+            onHistory,
+        });
+        expect(screen.getByText('No activity yet')).toBeTruthy();
+        const button = screen.getByRole('button', { name: 'See all activity' });
+        expect(panel.lastElementChild).toBe(button);
+        expect(button.classList.contains(buttonStyles.success)).toBe(true);
+        expect(button.querySelector('svg')).not.toBeNull();
     });
 
     it('renders no button without an onHistory handler', () => {
@@ -145,7 +169,7 @@ describe('Home Activity tab See all activity', () => {
 
     it('renders no button on the demo list without an onHistory handler', () => {
         markDemoWallet('demo-wallet');
-        renderActivity({ balances: demoBalances, walletId: 'demo-wallet' });
+        renderActivity({ balances: demoBalances, walletId: 'demo-wallet', recentActivity: [entry(1)] });
         expect(document.querySelector('[data-activity-row]')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
     });

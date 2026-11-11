@@ -1,0 +1,138 @@
+/*
+ * Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+.root {
+    display: grid;
+    gap: var(--xc-space-3);
+}
+
+.selector {
+    min-width: 0;
+}
+
+.card {
+    composes: card from '../../ui/Card.module.css';
+    display: grid;
+}
+
+.row {
+    display: grid;
+    padding-block: var(--xc-space-3);
+    border-block-end: 1px solid var(--xc-border);
+}
+
+.row:first-child {
+    padding-block-start: 0;
+}
+
+.row:last-child {
+    padding-block-end: 0;
+    border-block-end: 0;
+}
+
+.rowMain {
+    display: grid;
+    grid-template-areas: 'label figures';
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    align-items: baseline;
+    column-gap: var(--xc-space-3);
+}
+
+.rowMainWithControl {
+    --xc-fees-control-size: 44px;
+    grid-template-areas: 'label figures control';
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
+    align-items: center;
+    min-block-size: var(--xc-fees-control-size);
+}
+
+.label,
+.figures {
+    min-width: 0;
+}
+
+.label {
+    grid-area: label;
+    color: var(--xc-text-muted);
+}
+
+.labelWithHelp,
+.figures {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.protocolHelp {
+    block-size: var(--xc-fees-control-size);
+}
+
+.protocolHelp > button {
+    block-size: var(--xc-fees-control-size);
+    min-block-size: var(--xc-fees-control-size);
+}
+
+.figures {
+    grid-area: figures;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+}
+
+.fiat {
+    color: var(--xc-text-muted);
+}
+
+.control {
+    grid-area: control;
+    align-self: center;
+}
+
+.protocolSwitch {
+    gap: 0;
+}
+
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.total {
+    font-weight: 600;
+}
+
+.total .label {
+    color: var(--xc-text);
+}
+
+@media (max-width: 400px) {
+    .rowMainWithControl {
+        grid-template-areas:
+            'label control'
+            'figures control';
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: var(--xc-space-1);
+    }
+
+    .rowMainWithControl .figures {
+        justify-content: flex-start;
+        text-align: start;
+    }
+}

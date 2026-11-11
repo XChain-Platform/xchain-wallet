@@ -64,13 +64,13 @@ describe('a contract abi that answers after the user typed a call', () => {
         const reply = deferred();
         mount(reply);
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'alice|7' } });
+        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'alice|7' } });
 
         reply.resolve({ data: { abi: ABI } });
         await flush();
 
         expect(screen.getByLabelText('Method')).toHaveValue('transfer');
-        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue('alice|7');
+        expect(screen.getByLabelText('Arguments')).toHaveValue('alice|7');
         expect(screen.getByRole('button', { name: 'Use declared methods' })).toBeInTheDocument();
     });
 
@@ -78,8 +78,8 @@ describe('a contract abi that answers after the user typed a call', () => {
         const reply = deferred();
         mount(reply);
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'alice|7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'alice|7' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
         await screen.findByRole('heading', { name: 'Review contract call' });
 
         reply.resolve({ data: { abi: ABI } });

@@ -92,7 +92,7 @@ afterEach(() => {
 describe('UnionListForm', () => {
     it('explains that a member list is required when Review is pressed empty', async () => {
         const messaging = mount();
-        const review = await screen.findByRole('button', { name: 'Review' });
+        const review = await screen.findByRole('button', { name: 'Create union list' });
 
         expect(review.disabled).toBe(false);
         fireEvent.click(review);
@@ -155,8 +155,8 @@ describe('UnionListForm', () => {
     it('composes format 0 type 3 and submits it through createList', async () => {
         const messaging = mount();
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'combined' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'combined' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create union list' }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const request = messaging.composeForConfirm.mock.calls[0][0];
@@ -188,7 +188,7 @@ describe('UnionListForm', () => {
 
         expect(screen.getByText(`Estimated merged membership: ${memberCount.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText('The estimated merged membership is over 10,000.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
     });
 
     it.each([
@@ -204,7 +204,7 @@ describe('UnionListForm', () => {
         });
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByRole('checkbox', { name: 'Token list #101' }).disabled).toBe(true);
-        expect(screen.getByLabelText('Memo (optional)').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Memo').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Create union list' }).disabled).toBe(true);
     });
 });

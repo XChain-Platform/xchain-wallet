@@ -17,8 +17,10 @@ import {
     FormNotice,
     Button,
     Input,
+    Textarea,
     ChainBadge,
-    ChainPicker,
+    NetworkField,
+    OptionalPill,
     AddressText,
     Icon,
     StatusMessage,
@@ -44,6 +46,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
+import { AmountField } from '../components/AmountField.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -52,12 +55,13 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { ISSUE_LOCKS } from './issueLocks.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import { MAX_TICKER_LENGTH, TICKER_HELP, tickerGrammarError } from '../utils/tickerGrammar.js';
 import {
-    MAX_ISSUE_TEXT_LENGTH,
     issueDescriptionError,
     issueSupplyLimitError,
 } from '../utils/issueFieldValidation.js';
@@ -65,6 +69,7 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -80,9 +85,63 @@ import '../../i18n/locales/en/send.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+const INITIAL_OPEN_SECTIONS = {
+    supply: true,
+    publicMinting: false,
+    description: false,
+    locks: false,
+    lists: false,
+    ownership: false,
+};
+
+function OptionalSection({
+    id,
+    title,
+    summary,
+    icon: SectionIcon,
+    irreversible = false,
+    open,
+    onToggle,
+    children,
+}) {
+    const panelId = `issue-section-${id}`;
+    return (
+        <section className={styles.optionalSection}>
+            <Button
+                type="button"
+                variant="rowAction"
+                icon={null}
+                className={styles.sectionHeader}
+                aria-expanded={open}
+                aria-controls={panelId}
+                onClick={onToggle}
+            >
+                <span className={styles.sectionIcon} aria-hidden="true"><SectionIcon /></span>
+                <span className={styles.sectionTitle}>{title}</span>
+                <OptionalPill />
+                {irreversible ? (
+                    <span className={styles.irreversibleTag}>{t('issue.irreversible')}</span>
+                ) : null}
+                {!open ? <span className={styles.sectionSummary}>{summary}</span> : null}
+                <span
+                    className={`${styles.sectionChevron} ${open ? `${styles.sectionChevronOpen} ${styles.sectionChevronTrailing}` : ''}`}
+                    aria-hidden="true"
+                >
+                    <Icon.ChevronDownIcon />
+                </span>
+            </Button>
+            <div id={panelId} className={styles.sectionBody} hidden={!open}>
+                {children}
+            </div>
+        </section>
+    );
+}
+
 // How long the ticker availability lookup may run before the form stops
 // waiting on it and lets composition judge the name.
 const TICKER_LOOKUP_TIMEOUT_MS = 8000;
+// A new token starts with eight decimal places; the draft check compares to it.
+const DIVISIBLE_DEFAULT = true;
 
 function isPositiveDecimal(value) {
     const text = String(value || '').trim();
@@ -160,9 +219,23 @@ export function IssueTokenForm({ walletId, onBack }) {
     // per-tx cap" (xchain-indexer src/actions/mint.js) - matching the Mint
     // settings panel (TokenAdminForm.jsx mode='mint-settings') left blank.
     const [maxMint, setMaxMint] = useState('');
-    const [divisible, setDivisible] = useState(false);
+    const [mintAddressMax, setMintAddressMax] = useState('');
+    const [mintStartBlock, setMintStartBlock] = useState('');
+    const [mintStopBlock, setMintStopBlock] = useState('');
+    const [divisible, setDivisible] = useState(DIVISIBLE_DEFAULT);
+    // The field error each amount field reports while it is edited (a refused
+    // keystroke, or a stored value finer than Divisible allows), keyed by field.
+    // Submit refuses while any is set, so a shown error never composes.
+    const [amountInputErrors, setAmountInputErrors] = useState(
+        /** @type {{ supply?: string | null, initialMint?: string | null, maxMint?: string | null, mintAddressMax?: string | null }} */ ({}),
+    );
+    // Decimal places every amount field and the ISSUE DECIMALS follow.
+    const amountDecimals = divisible ? 8 : 0;
     const [description, setDescription] = useState('');
-    const [lockSupply, setLockSupply] = useState(false);
+    const [locks, setLocks] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const [allowList, setAllowList] = useState('');
+    const [blockList, setBlockList] = useState('');
+    const [openSections, setOpenSections] = useState(INITIAL_OPEN_SECTIONS);
     // ISSUE v0 carries two separate destinations, and a form that offers only
     // the first reads as if it moved both: TRANSFER hands away the token's
     // issuer rights, TRANSFER_SUPPLY says where the initial mint lands. The
@@ -190,6 +263,19 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Reveal the field that needs attention when validation stops submission.
+    useEffect(() => {
+        if (!formError) return;
+        let section;
+        if (/supply|initial mint/i.test(formError)) section = 'supply';
+        else if (/max mint|mint per address|start block|stop block/i.test(formError)) section = 'publicMinting';
+        else if (/description/i.test(formError)) section = 'description';
+        else if (/lock/i.test(formError)) section = 'locks';
+        else if (/allow list|block list/i.test(formError)) section = 'lists';
+        else if (/ownership|destination|sending the initial mint/i.test(formError)) section = 'ownership';
+        if (section) setOpenSections((current) => ({ ...current, [section]: true }));
+    }, [formError]);
 
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
@@ -221,9 +307,19 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.supply === 'string') setSupply(v.supply);
         if (typeof v.initialMint === 'string') setInitialMint(v.initialMint);
         if (typeof v.maxMint === 'string') setMaxMint(v.maxMint);
+        if (typeof v.mintAddressMax === 'string') setMintAddressMax(v.mintAddressMax);
+        if (typeof v.mintStartBlock === 'string') setMintStartBlock(v.mintStartBlock);
+        if (typeof v.mintStopBlock === 'string') setMintStopBlock(v.mintStopBlock);
         if (typeof v.divisible === 'boolean') setDivisible(v.divisible);
         if (typeof v.description === 'string') setDescription(v.description);
-        if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
+        if (v.locks && typeof v.locks === 'object') setLocks(v.locks);
+        else if (v.lockSupply === true) {
+            // Preserve the three flags represented by the former combined
+            // lock when an unfinished draft predates the split controls.
+            setLocks({ maxSupply: true, minting: true, mintSupply: true });
+        }
+        if (typeof v.allowList === 'string') setAllowList(v.allowList);
+        if (typeof v.blockList === 'string') setBlockList(v.blockList);
         if (typeof v.transferTo === 'string') setTransferTo(v.transferTo);
         if (typeof v.transferSupplyTo === 'string') setTransferSupplyTo(v.transferSupplyTo);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
@@ -234,11 +330,19 @@ export function IssueTokenForm({ walletId, onBack }) {
         setDraftPending(true);
     }, [draft]);
     const hasRealInput = useMemo(() => (
-        [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password]
+        [
+            ticker, supply, initialMint, maxMint, mintAddressMax, mintStartBlock,
+            mintStopBlock, description, allowList, blockList, transferTo,
+            transferSupplyTo, password,
+        ]
             .some((value) => String(value || '').trim().length > 0)
-        || divisible
-        || lockSupply
-    ), [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password, divisible, lockSupply]);
+        || divisible !== DIVISIBLE_DEFAULT
+        || Object.values(locks).some(Boolean)
+    ), [
+        ticker, supply, initialMint, maxMint, mintAddressMax, mintStartBlock,
+        mintStopBlock, description, allowList, blockList, transferTo,
+        transferSupplyTo, password, divisible, locks,
+    ]);
     // The network, source and fee switch fill themselves in, so only what the
     // user typed or turned on makes a draft. A draft of defaults would come
     // back as a Restore banner, and the form holds its autosave while that
@@ -250,13 +354,15 @@ export function IssueTokenForm({ walletId, onBack }) {
             return;
         }
         draft.save({
-            chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-            description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
+            chainId, fromAddressId, ticker, supply, initialMint, maxMint, mintAddressMax,
+            mintStartBlock, mintStopBlock, divisible, description, locks, allowList,
+            blockList, transferTo, transferSupplyTo, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft, hasRealInput,
-        chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-        description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
+        chainId, fromAddressId, ticker, supply, initialMint, maxMint, mintAddressMax,
+        mintStartBlock, mintStopBlock, divisible, description, locks, allowList,
+        blockList, transferTo, transferSupplyTo, payFeeInNativeCoin,
     ]);
     const leaveGuard = useFormLeaveGuard({
         dirty: stage !== 'done' && hasRealInput,
@@ -328,12 +434,13 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+    const feeFiatFormatters = useFeeFiat({
         chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
     });
+    const { formatNativeFee, formatProtocolFee } = feeFiatFormatters;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -442,8 +549,9 @@ export function IssueTokenForm({ walletId, onBack }) {
             TICK: ticker.trim(),
         };
         p.DECIMALS = divisible ? '8' : '0';
-        if (supply) {
-            const s = String(supply).trim();
+        const s = String(supply).trim();
+        const wantsMint = String(initialMint).trim();
+        if (isPositiveDecimal(s)) {
             p.MAX_SUPPLY = s;
             // MAX_SUPPLY is the cap, MINT_SUPPLY is how much of it
             // exists the moment the token is created. Deriving both from the
@@ -454,27 +562,203 @@ export function IssueTokenForm({ walletId, onBack }) {
             // the difference mintable later. A 0 omits MINT_SUPPLY entirely,
             // the fair-mint shape (see TokenWizard's `edition` template): the
             // cap is declared at issuance with nothing minted yet.
-            const wantsMint = String(initialMint).trim();
             const mint = wantsMint === '' ? s : wantsMint;
-            if (Number(mint) > 0) p.MINT_SUPPLY = mint;
+            if (isPositiveDecimal(mint)) p.MINT_SUPPLY = mint;
+        } else if (isPositiveDecimal(wantsMint)) {
+            // An ISSUE may mint without declaring a cap. The indexer stores
+            // omitted MAX_SUPPLY as the uncapped sentinel, so an initial-only
+            // supply is valid and remains uncapped.
+            p.MINT_SUPPLY = wantsMint;
         }
         if (maxMint.trim()) p.MAX_MINT = maxMint.trim();
+        if (mintAddressMax.trim()) p.MINT_ADDRESS_MAX = mintAddressMax.trim();
+        if (mintStartBlock.trim()) p.MINT_START_BLOCK = mintStartBlock.trim();
+        if (mintStopBlock.trim()) p.MINT_STOP_BLOCK = mintStopBlock.trim();
         if (description) p.DESCRIPTION = description.trim();
-        if (lockSupply) {
-            p.LOCK_MAX_SUPPLY = '1';
-            p.LOCK_MINT = '1';
-            // The issuer's own MINT_SUPPLY is a third inflation path that
-            // LOCK_MINT does not close; the wizard's meme and collectible
-            // templates write it for the same reason.
-            p.LOCK_MINT_SUPPLY = '1';
+        for (const lock of ISSUE_LOCKS) {
+            if (locks[lock.key]) p[lock.field] = '1';
         }
+        if (allowList.trim()) p.ALLOW_LIST = allowList.trim();
+        if (blockList.trim()) p.BLOCK_LIST = blockList.trim();
         if (transferTo.trim()) p.TRANSFER = transferTo.trim();
         // Only meaningful beside a MINT_SUPPLY: with nothing minted at issuance
         // there is nothing to deliver, and the indexer would ignore the field.
         // The submit check refuses that pairing before it gets here.
         if (transferSupplyTo.trim() && p.MINT_SUPPLY) p.TRANSFER_SUPPLY = transferSupplyTo.trim();
         return p;
-    }, [ticker, supply, initialMint, maxMint, divisible, description, lockSupply, transferTo, transferSupplyTo]);
+    }, [
+        ticker, supply, initialMint, maxMint, mintAddressMax, mintStartBlock,
+        mintStopBlock, divisible, description, locks, allowList, blockList,
+        transferTo, transferSupplyTo,
+    ]);
+
+    // Every input check review runs, as one answer: { error } to show, { queue }
+    // while the ticker lookup is still settling (review waits for it), or null
+    // when review may open. The live Fees card quote reads the same answer, so
+    // it prices exactly the ISSUE review would accept.
+    function issueInputsCheck() {
+        if (!chainId || !fromAddress) {
+            return { error: 'Pick a source address first.' };
+        }
+        // Same grammar module as the wizard, so the two authoring
+        // surfaces cannot drift apart on what a ticker may be called. It covers
+        // the empty case too, which is why the separate blank check went with it.
+        const tickerError = tickerGrammarError(ticker);
+        if (tickerError) {
+            return { error: tickerError };
+        }
+        const descriptionError = actionTextSafetyError(description, 'Description')
+            || issueDescriptionError(description);
+        if (descriptionError) {
+            return { error: descriptionError };
+        }
+        const checkedTicker = ticker.trim();
+        if (tickerLookupSupported
+            && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
+            return { queue: true };
+        }
+        if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
+            return { error: t('issue.tickerTaken', { ticker: checkedTicker }) };
+        }
+        const supplyText = supply.trim();
+        if (supplyText && !isNonNegativeDecimal(supplyText)) {
+            return { error: 'Max supply must be zero or a positive number.' };
+        }
+        if (isPositiveDecimal(supplyText) && !hasAmountPrecision(supplyText, amountDecimals)) {
+            return { error: divisible
+                ? 'Max supply can have at most 8 decimal places.'
+                : 'Max supply must be a whole number for an indivisible token.' };
+        }
+        const supplyLimitError = isPositiveDecimal(supplyText)
+            ? issueSupplyLimitError(supplyText, 'Max supply')
+            : null;
+        if (supplyLimitError) {
+            return { error: supplyLimitError };
+        }
+        // An initial mint above the cap is rejected outright by the
+        // indexer (issue.js), which costs the user the fee and the token, so
+        // it is caught here rather than at broadcast.
+        const mintText = initialMint.trim();
+        if (mintText) {
+            if (!isNonNegativeDecimal(mintText)) {
+                return { error: 'Initial mint must be zero or a positive number.' };
+            }
+            if (isPositiveDecimal(mintText) && !hasAmountPrecision(mintText, amountDecimals)) {
+                return { error: divisible
+                    ? 'Initial mint can have at most 8 decimal places.'
+                    : 'Initial mint must be a whole number for an indivisible token.' };
+            }
+            if (isPositiveDecimal(supplyText)
+                && compareDecimalStrings(mintText, supplyText) === 1) {
+                return { error: 'Initial mint cannot be more than the max supply.' };
+            }
+        }
+        const maxMintText = maxMint.trim();
+        if (maxMintText) {
+            if (!isPositiveDecimal(maxMintText)) {
+                return { error: 'Max mint per transaction must be a positive number, or left blank for no limit.' };
+            }
+            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
+                return { error: divisible
+                    ? 'Max mint per transaction can have at most 8 decimal places.'
+                    : 'Max mint per transaction must be a whole number for an indivisible token.' };
+            }
+            const maxMintLimitError = issueSupplyLimitError(
+                maxMintText,
+                'Max mint per transaction',
+            );
+            if (maxMintLimitError) {
+                return { error: maxMintLimitError };
+            }
+        }
+        const mintAddressMaxText = mintAddressMax.trim();
+        if (mintAddressMaxText) {
+            if (!isPositiveDecimal(mintAddressMaxText)) {
+                return { error: 'Max mint per address must be a positive number, or left blank for no limit.' };
+            }
+            if (!hasAmountPrecision(mintAddressMaxText, amountDecimals)) {
+                return { error: divisible
+                    ? 'Max mint per address can have at most 8 decimal places.'
+                    : 'Max mint per address must be a whole number for an indivisible token.' };
+            }
+            const addressLimitError = issueSupplyLimitError(
+                mintAddressMaxText,
+                'Max mint per address',
+            );
+            if (addressLimitError) {
+                return { error: addressLimitError };
+            }
+            if (maxMintText && compareDecimalStrings(mintAddressMaxText, maxMintText) === -1) {
+                return { error: 'Max mint per address cannot be less than max mint per transaction.' };
+            }
+        }
+        for (const [value, label] of [
+            [mintStartBlock.trim(), 'Start block'],
+            [mintStopBlock.trim(), 'Stop block'],
+        ]) {
+            if (value && !/^\d+$/.test(value)) {
+                return { error: `${label} must be a whole block height.` };
+            }
+        }
+        if (mintStartBlock.trim() && mintStopBlock.trim()
+            && compareDecimalStrings(mintStopBlock.trim(), mintStartBlock.trim()) === -1) {
+            return { error: 'Stop block cannot be before start block.' };
+        }
+        for (const [value, label] of [
+            [allowList.trim(), 'Allow list'],
+            [blockList.trim(), 'Block list'],
+        ]) {
+            if (value && (!/^\d+$/.test(value) || compareDecimalStrings(value, '0') !== 1)) {
+                return { error: `${label} must be a positive list action index.` };
+            }
+        }
+        if (locks.maxSupply && !isPositiveDecimal(supplyText)) {
+            return { error: 'Max supply needs a positive cap before it can be locked.' };
+        }
+        // A field still showing its own error holds the last valid value, not
+        // the text the user sees refused; composing that value would issue
+        // something other than what the field says.
+        const fieldRefusal = [
+            ['supply', 'Max supply', 'must be zero or a positive number.'],
+            ['initialMint', 'Initial mint', 'must be zero or a positive number.'],
+            ['maxMint', 'Max mint per transaction', 'must be a positive number, or left blank for no limit.'],
+            ['mintAddressMax', 'Max mint per address', 'must be a positive number, or left blank for no limit.'],
+        ].find(([key]) => amountInputErrors[key]);
+        if (fieldRefusal) {
+            const [key, label, invalidText] = fieldRefusal;
+            if (!/decimal places/.test(String(amountInputErrors[key]))) return { error: `${label} ${invalidText}` };
+            return {
+                error: divisible
+                    ? `${label} can have at most 8 decimal places.`
+                    : `${label} must be a whole number for an indivisible token.`,
+            };
+        }
+        if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
+            return { error: 'Transfer ownership address is not valid for the active network.' };
+        }
+        if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
+            return { error: 'Initial mint destination is not valid for the active network.' };
+        }
+        // A supply destination with no initial mint would be silently dropped
+        // by the chain; say so instead of composing a transaction that does
+        // less than the form showed.
+        if (transferSupplyTo.trim() && !actionParams.MINT_SUPPLY) {
+            return { error: 'Sending the initial mint somewhere needs an initial mint above 0.' };
+        }
+        return null;
+    }
+
+    const issueInputsReady = issueInputsCheck() === null;
+    const quoteActionData = useMemo(
+        () => (issueInputsReady ? { action: 'ISSUE', params: actionParams } : null),
+        [issueInputsReady, actionParams],
+    );
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     // What is left mintable after the initial mint, as a display string, or
     // null when the pair is blank/invalid/fully minted (nothing to say).
@@ -503,107 +787,16 @@ export function IssueTokenForm({ walletId, onBack }) {
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         setValidationAttempt((attempt) => attempt + 1);
-        if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
-            return;
-        }
-        // Same grammar module as the wizard, so the two authoring
-        // surfaces cannot drift apart on what a ticker may be called. It covers
-        // the empty case too, which is why the separate blank check went with it.
-        const tickerError = tickerGrammarError(ticker);
-        if (tickerError) {
-            setFormError(tickerError);
-            return;
-        }
-        const descriptionError = actionTextSafetyError(description, 'Description')
-            || issueDescriptionError(description);
-        if (descriptionError) {
-            setFormError(descriptionError);
-            return;
-        }
-        const checkedTicker = ticker.trim();
-        if (tickerLookupSupported
-            && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
+        const inputsCheck = issueInputsCheck();
+        if (inputsCheck?.queue) {
             // A submit that lands inside the debounce or the lookup is held
             // and replayed when the check settles, rather than refused.
             setFormError(null);
             setReviewQueued(true);
             return;
         }
-        if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
-            setFormError(t('issue.tickerTaken', { ticker: checkedTicker }));
-            return;
-        }
-        if (!isPositiveDecimal(supply)) {
-            setFormError('Supply must be a positive number.');
-            return;
-        }
-        const amountDecimals = divisible ? 8 : 0;
-        if (!hasAmountPrecision(supply, amountDecimals)) {
-            setFormError(divisible
-                ? 'Supply can have at most 8 decimal places.'
-                : 'Supply must be a whole number for an indivisible token.');
-            return;
-        }
-        const supplyLimitError = issueSupplyLimitError(supply);
-        if (supplyLimitError) {
-            setFormError(supplyLimitError);
-            return;
-        }
-        // An initial mint above the cap is rejected outright by the
-        // indexer (issue.js), which costs the user the fee and the token, so
-        // it is caught here rather than at broadcast.
-        const mintText = initialMint.trim();
-        if (mintText) {
-            if (!isNonNegativeDecimal(mintText)) {
-                setFormError('Initial mint must be zero or a positive number.');
-                return;
-            }
-            if (!hasAmountPrecision(mintText, amountDecimals)) {
-                setFormError(divisible
-                    ? 'Initial mint can have at most 8 decimal places.'
-                    : 'Initial mint must be a whole number for an indivisible token.');
-                return;
-            }
-            if (compareDecimalStrings(mintText, supply.trim()) === 1) {
-                setFormError('Initial mint cannot be more than the supply.');
-                return;
-            }
-            // Minting nothing on a token that can never mint leaves a token
-            // with no supply and no way to ever create any.
-            if (compareDecimalStrings(mintText, '0') === 0 && lockSupply) {
-                setFormError(
-                    'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
-                );
-                return;
-            }
-        }
-        const maxMintText = maxMint.trim();
-        if (maxMintText) {
-            if (!isPositiveDecimal(maxMintText)) {
-                setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
-                return;
-            }
-            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
-                setFormError(divisible
-                    ? 'Max mint per transaction can have at most 8 decimal places.'
-                    : 'Max mint per transaction must be a whole number for an indivisible token.');
-                return;
-            }
-        }
-        if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
-            setFormError('Transfer ownership address is not valid for the active network.');
-            return;
-        }
-        if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
-            setFormError('Initial mint destination is not valid for the active network.');
-            return;
-        }
-        // A supply destination with no initial mint would be silently dropped
-        // by the chain; say so instead of composing a transaction that does
-        // less than the form showed.
-        if (transferSupplyTo.trim() && mintText === '0') {
-            setFormError('Sending the initial mint somewhere needs an initial mint above 0.');
+        if (inputsCheck) {
+            setFormError(inputsCheck.error);
             return;
         }
         setFormError(null);
@@ -965,6 +1158,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -1003,11 +1197,23 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     let issueErrorTarget;
     if (/ticker/i.test(formError || '')) issueErrorTarget = { id: 'issue-ticker', label: 'Ticker' };
-    else if (/^Supply /i.test(formError || '')) issueErrorTarget = { id: 'issue-supply', label: 'Supply' };
+    else if (/^Max supply /i.test(formError || '')) issueErrorTarget = { id: 'issue-supply', label: 'Max supply' };
     else if (/initial mint/i.test(formError || '') && !/destination|Sending the initial mint/i.test(formError || '')) {
         issueErrorTarget = { id: 'issue-initial-mint', label: 'Initial mint' };
+    } else if (/Max mint per address/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-mint-address-max', label: 'Max per address' };
     } else if (/Max mint/i.test(formError || '')) {
         issueErrorTarget = { id: 'issue-max-mint', label: 'Max mint per transaction' };
+    } else if (/Start block/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-mint-start-block', label: 'Start block' };
+    } else if (/Stop block/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-mint-stop-block', label: 'Stop block' };
+    } else if (/Allow list/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-allow-list', label: 'Allow list' };
+    } else if (/Block list/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-block-list', label: 'Block list' };
+    } else if (/Description/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-description', label: 'Description' };
     } else if (/Transfer ownership/i.test(formError || '')) {
         issueErrorTarget = { id: 'issue-transfer-owner', label: 'Transfer ownership to' };
     } else if (/Initial mint destination|Sending the initial mint/i.test(formError || '')) {
@@ -1016,26 +1222,41 @@ export function IssueTokenForm({ walletId, onBack }) {
     const issueErrors = formError
         ? [{ ...issueErrorTarget, message: formError }]
         : [];
-
+    const hasSupply = isPositiveDecimal(supply) || isPositiveDecimal(initialMint);
+    const supplySummary = (() => {
+        const parts = [];
+        if (isPositiveDecimal(supply)) parts.push(`${supply.trim()} max`);
+        if (isPositiveDecimal(initialMint)) parts.push(`${initialMint.trim()} minted`);
+        else if (isPositiveDecimal(supply)) parts.push(`${supply.trim()} minted`);
+        return parts.length ? parts.join(', ') : t('issue.summary.notSet');
+    })();
+    const mintingSetCount = [maxMint, mintAddressMax, mintStartBlock, mintStopBlock]
+        .filter((value) => String(value).trim()).length;
+    const lockCount = ISSUE_LOCKS.filter((lock) => locks[lock.key]).length;
+    const toggleSection = (section) => {
+        setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+    };
     return wrap(
         <FormPage
             demoGuard={demoGuard}
             label={t('issue.title')}
+            cardless
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={[<FormErrorSummary key="errors" errors={issueErrors} focusKey={validationAttempt} />, draftBanner]}
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={hasSupply ? <Icon.TokenIcon /> : <Icon.PlusIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
+                    disabled={!fromAddress || !ticker.trim() || actionConfirm.composing}
                 >
-                    {singleEncode ? t('issue.title') : t('common.preview')}
+                    {hasSupply ? t('issue.title') : t('issue.reserveTicker')}
                 </Button>
             )}
         >
-            <ChainPicker disabled={composing} label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <NetworkField disabled={composing} label={t('settings.network.label')} help={t('issue.networkHelp')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
@@ -1043,10 +1264,12 @@ export function IssueTokenForm({ walletId, onBack }) {
                     label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
+                    help={t('issue.fromHelp')}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
                     iconLabel={t('send.source.choose')}
+                    aria-required="false"
                 />
             ) : (
                 <FormNotice variant="error">
@@ -1057,8 +1280,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             <Input
                 disabled={composing}
                 id="issue-ticker"
-                label={t('issue.ticker')}
-                hint={TICKER_HINT}
+                label={<>{t('issue.ticker')} <span className={styles.requiredTag}>{t('issue.required')}</span></>}
+                aria-label={t('issue.ticker')}
+                required
+                help={TICKER_HELP}
+                maxLength={MAX_TICKER_LENGTH}
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value)}
                 autoCapitalize="off"
@@ -1069,120 +1295,270 @@ export function IssueTokenForm({ walletId, onBack }) {
                     ? t('issue.tickerTaken', { ticker: ticker.trim() })
                     : undefined}
             />
-            <Input
-                disabled={composing}
-                id="issue-supply"
-                label={t('issue.supply')}
-                hint={t('issue.supplyHint')}
-                inputMode="decimal"
-                value={supply}
-                onChange={(e) => setSupply(e.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                disabled={composing}
-                id="issue-initial-mint"
-                label={t('issue.initialMintOptional')}
-                hint={mintHeadroom
-                    ? t('issue.initialMintHeadroom', { amount: mintHeadroom })
-                    : t('issue.initialMintHint')}
-                inputMode="decimal"
-                value={initialMint}
-                onChange={(e) => setInitialMint(e.target.value)}
-                autoComplete="off"
-            />
-            <Input
-                disabled={composing}
-                id="issue-max-mint"
-                label={t('issue.maxMintOptional')}
-                hint={t('issue.maxMintHint')}
-                inputMode="decimal"
-                value={maxMint}
-                onChange={(e) => setMaxMint(e.target.value)}
-                autoComplete="off"
-            />
-            <Switch
-                disabled={composing}
-                label={t('issue.divisible')}
-                checked={divisible}
-                onChange={(e) => setDivisible(e.target.checked)}
-            />
-            <Input
-                disabled={composing}
-                label={t('issue.descriptionOptional')}
-                hint={t('issue.descriptionHint')}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                autoComplete="off"
-                maxLength={MAX_ISSUE_TEXT_LENGTH}
-            />
-            <Switch
-                disabled={composing}
-                label={t('issue.lockSupply')}
-                checked={lockSupply}
-                onChange={(e) => setLockSupply(e.target.checked)}
-            />
-            {lockSupply && mintHeadroom ? (
-                // Locking minting alongside a partial initial mint strands the
-                // remainder forever: the cap says one thing, the token can only
-                // ever hold another. Say so before the fee is spent.
-                <FormNotice variant="status">
-                    {t('issue.lockSupplyWarning', { amount: mintHeadroom })}
-                </FormNotice>
-            ) : null}
-            {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
-                section 7). NOT set here, and the panel says so rather than
-                offering boxes that would silently do nothing: format 0 carries
-                no BRIDGE_CHAINS, MIN_DEPTH or LOCK_BRIDGE field, so the opt-in
-                is a separate owner-only action on an existing row. What belongs
-                on THIS screen is the one decision that is irreversible from
-                here: binding an address list to the token shuts the bridge door
-                for good in milestone 1. It is the shared warning notice, shown at
-                the top of the form with the others, not a box of its own inside
-                the form card. */}
-            <FormNotice variant="warning" role={null}>
-                {`${t('issue.bridgingHint')} ${t('issue.boundListHint')}`}
-            </FormNotice>
-            <AddressField
-                disabled={composing}
-                id="issue-transfer-owner"
-                label={t('issue.transferOwnershipOptional')}
-                icon="contacts"
-                hint={t('issue.transferOwnershipHint')}
-                value={transferTo}
-                onChange={(e) => setTransferTo(e.target.value)}
-                onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
-            />
-            <AddressField
-                disabled={composing}
-                id="issue-transfer-supply"
-                label={t('issue.sendInitialMintOptional')}
-                icon="contacts"
-                hint={t('issue.sendInitialMintHint')}
-                value={transferSupplyTo}
-                onChange={(e) => setTransferSupplyTo(e.target.value)}
-                onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
-            />
+            <div className={styles.optionalSections} data-xc-preserve-nested-cards>
+                <OptionalSection
+                    id="supply"
+                    title={t('issue.supply')}
+                    summary={supplySummary}
+                    icon={Icon.TokenIcon}
+                    open={openSections.supply}
+                    onToggle={() => toggleSection('supply')}
+                >
+                    {/* Amount fields at the precision Divisible sets: 8 places on, whole
+                        numbers off. Switching it re-formats the stored value at once and
+                        a value finer than the new precision shows its field error. */}
+                    <AmountField
+                        disabled={composing}
+                        id="issue-supply"
+                        aria-required="false"
+                        label={t('issue.maxSupply')}
+                        help={t('issue.supplyHint')}
+                        amount={supply}
+                        divisibility={amountDecimals}
+                        onAmountFieldChange={(rawValue) => setSupply(String(rawValue).replace(/,/g, ''))}
+                        onValidationError={(message) => setAmountInputErrors((prev) => ({ ...prev, supply: message }))}
+                    />
+                    <AmountField
+                        disabled={composing}
+                        id="issue-initial-mint"
+                        aria-required="false"
+                        label={t('issue.initialMint')}
+                        help={t('issue.initialMintHint')}
+                        hint={mintHeadroom
+                            ? t('issue.initialMintHeadroom', { amount: mintHeadroom })
+                            : undefined}
+                        amount={initialMint}
+                        divisibility={amountDecimals}
+                        onAmountFieldChange={(rawValue) => setInitialMint(String(rawValue).replace(/,/g, ''))}
+                        onValidationError={(message) => setAmountInputErrors((prev) => ({ ...prev, initialMint: message }))}
+                        onMax={() => setInitialMint(supply.trim())}
+                        maxDisabled={composing || !isPositiveDecimal(supply)}
+                    />
+                    <Switch
+                        disabled={composing}
+                        label={t('issue.divisible')}
+                        checked={divisible}
+                        onChange={(event) => setDivisible(event.target.checked)}
+                    />
+                    <AddressField
+                        disabled={composing}
+                        id="issue-transfer-supply"
+                        label={t('issue.sendInitialMint')}
+                        icon="contacts"
+                        help={t('issue.sendInitialMintHint')}
+                        value={transferSupplyTo}
+                        onChange={(e) => setTransferSupplyTo(e.target.value)}
+                        onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
+                        aria-required="false"
+                    />
+                </OptionalSection>
 
-            <FeeSelector
-                disabled={composing}
-                key={chainId}
-                label={t('send.networkFee')}
-                coinTicker={coinTicker}
-                formatFiat={formatNativeFee}
-                tiers={feeTiers}
-                value={feePick}
-                onChange={setFeePick}
-                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-            />
+                <OptionalSection
+                    id="public-minting"
+                    title={t('issue.section.publicMinting')}
+                    summary={mintingSetCount
+                        ? t('issue.summary.setCount', { count: mintingSetCount })
+                        : t('issue.summary.notSet')}
+                    icon={Icon.MintIcon}
+                    open={openSections.publicMinting}
+                    onToggle={() => toggleSection('publicMinting')}
+                >
+                    <AmountField
+                        disabled={composing}
+                        id="issue-max-mint"
+                        aria-required="false"
+                        label={t('issue.maxMint')}
+                        help={t('issue.maxMintHelp')}
+                        amount={maxMint}
+                        divisibility={amountDecimals}
+                        onAmountFieldChange={(rawValue) => setMaxMint(String(rawValue).replace(/,/g, ''))}
+                        onValidationError={(message) => setAmountInputErrors((prev) => ({ ...prev, maxMint: message }))}
+                        onMax={() => setMaxMint(supply.trim())}
+                        maxDisabled={composing || !isPositiveDecimal(supply)}
+                    />
+                    <AmountField
+                        disabled={composing}
+                        id="issue-mint-address-max"
+                        aria-required="false"
+                        label={t('issue.mintAddressMax')}
+                        help={t('issue.mintAddressMaxHelp')}
+                        amount={mintAddressMax}
+                        divisibility={amountDecimals}
+                        onAmountFieldChange={(rawValue) => setMintAddressMax(String(rawValue).replace(/,/g, ''))}
+                        onValidationError={(message) => setAmountInputErrors((prev) => ({ ...prev, mintAddressMax: message }))}
+                        onMax={() => setMintAddressMax(supply.trim())}
+                        maxDisabled={composing || !isPositiveDecimal(supply)}
+                    />
+                    <Input
+                        disabled={composing}
+                        id="issue-mint-start-block"
+                        label={t('issue.mintStartBlock')}
+                        help={t('issue.mintStartBlockHelp')}
+                        inputMode="numeric"
+                        value={mintStartBlock}
+                        onChange={(e) => setMintStartBlock(e.target.value)}
+                        autoComplete="off"
+                        aria-required="false"
+                    />
+                    <Input
+                        disabled={composing}
+                        id="issue-mint-stop-block"
+                        label={t('issue.mintStopBlock')}
+                        help={t('issue.mintStopBlockHelp')}
+                        inputMode="numeric"
+                        value={mintStopBlock}
+                        onChange={(e) => setMintStopBlock(e.target.value)}
+                        autoComplete="off"
+                        aria-required="false"
+                    />
+                </OptionalSection>
 
-            <NativeFeeToggle
-                disabled={composing}
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
-                coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
-            />
+                <OptionalSection
+                    id="description"
+                    title={t('issue.section.description')}
+                    summary={description.trim()
+                        ? t('issue.summary.descriptionAdded')
+                        : t('issue.summary.notSet')}
+                    icon={Icon.PencilIcon}
+                    open={openSections.description}
+                    onToggle={() => toggleSection('description')}
+                >
+                    <Textarea
+                        disabled={composing}
+                        id="issue-description"
+                        aria-label={t('issue.descriptionAria')}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        autoComplete="off"
+                        rows={4}
+                        aria-required="false"
+                    />
+                </OptionalSection>
+
+                <OptionalSection
+                    id="locks"
+                    title={t('issue.section.locks')}
+                    summary={lockCount
+                        ? t(lockCount === 1 ? 'issue.summary.oneLockOn' : 'issue.summary.locksOn', {
+                            count: lockCount,
+                        })
+                        : t('issue.summary.notSet')}
+                    icon={Icon.LockIcon}
+                    irreversible
+                    open={openSections.locks}
+                    onToggle={() => toggleSection('locks')}
+                >
+                    <div className={styles.lockRows}>
+                        {ISSUE_LOCKS.map((lock) => {
+                            const checked = !!locks[lock.key];
+                            const StateIcon = checked ? Icon.LockIcon : Icon.UnlockIcon;
+                            return (
+                                <div className={styles.lockRow} key={lock.key}>
+                                    <span className={checked ? styles.lockIconOn : styles.lockIcon} aria-hidden="true">
+                                        <StateIcon />
+                                    </span>
+                                    <Switch
+                                        disabled={composing}
+                                        id={`issue-lock-${lock.key}`}
+                                        label={lock.label}
+                                        description={lock.description}
+                                        checked={checked}
+                                        onChange={(e) => setLocks((current) => ({
+                                            ...current,
+                                            [lock.key]: e.target.checked,
+                                        }))}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                </OptionalSection>
+
+                <OptionalSection
+                    id="lists"
+                    title={t('issue.section.lists')}
+                    summary={allowList.trim() || blockList.trim()
+                        ? t('issue.summary.set')
+                        : t('issue.summary.notSet')}
+                    icon={Icon.TokenListIcon}
+                    open={openSections.lists}
+                    onToggle={() => toggleSection('lists')}
+                >
+                    <Input
+                        disabled={composing}
+                        id="issue-allow-list"
+                        label={t('issue.allowList')}
+                        help={t('issue.allowListHelp')}
+                        inputMode="numeric"
+                        value={allowList}
+                        onChange={(e) => setAllowList(e.target.value)}
+                        autoComplete="off"
+                        aria-required="false"
+                    />
+                    <Input
+                        disabled={composing}
+                        id="issue-block-list"
+                        label={t('issue.blockList')}
+                        help={t('issue.blockListHelp')}
+                        inputMode="numeric"
+                        value={blockList}
+                        onChange={(e) => setBlockList(e.target.value)}
+                        autoComplete="off"
+                        aria-required="false"
+                    />
+                </OptionalSection>
+
+                <OptionalSection
+                    id="ownership"
+                    title={t('issue.section.ownership')}
+                    summary={transferTo.trim()
+                        ? t('issue.summary.newOwner')
+                        : t('issue.summary.notSet')}
+                    icon={Icon.UserIcon}
+                    open={openSections.ownership}
+                    onToggle={() => toggleSection('ownership')}
+                >
+                    <AddressField
+                        disabled={composing}
+                        id="issue-transfer-owner"
+                        label={t('issue.transferOwnership')}
+                        icon="contacts"
+                        help={t('issue.transferOwnershipHint')}
+                        value={transferTo}
+                        onChange={(e) => setTransferTo(e.target.value)}
+                        onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
+                        aria-required="false"
+                    />
+                </OptionalSection>
+            </div>
+
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={(
+                    <FeeSelector
+                        chainId={chainId}
+                        disabled={composing}
+                        key={chainId}
+                        label={t('send.networkFee')}
+                        coinTicker={coinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                )}
+                fiat={feeFiatFormatters}
+            >
+                <NativeFeeToggle
+                    disabled={composing}
+                    checked={payFeeInNativeCoin}
+                    onChange={setPayFeeInNativeCoin}
+                    coinTicker={coinTicker}
+                    mandatory={nativeFeeMandatory}
+                />
+            </FeesCard>
         </FormPage>,
     );
 }

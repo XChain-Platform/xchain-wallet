@@ -104,13 +104,13 @@ describe('Send advanced choices', () => {
         expect(screen.getAllByRole('checkbox', { checked: false })).toHaveLength(3);
     });
 
-    it('counts memo UTF-8 bytes and refuses the network-invalid length before compose', async () => {
+    it('counts memo UTF-16 units and refuses the network-invalid length before compose', async () => {
         const messaging = mount();
         await fillSend();
-        const memo = screen.getByLabelText('Memo (optional)');
-        fireEvent.change(memo, { target: { value: `${'é'.repeat(123)}📦a` } });
+        const memo = screen.getByLabelText('Memo');
+        fireEvent.change(memo, { target: { value: `${'😀'.repeat(125)}a` } });
 
-        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} bytes`, { exact: false }))
+        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH}`, { exact: false }))
             .toBeInTheDocument();
         expect(screen.getByText(/network accepts at most 250/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
@@ -121,9 +121,9 @@ describe('Send advanced choices', () => {
         const messaging = mount();
         await fillSend();
         const memo = 'café 📦';
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: memo } });
 
-        expect(screen.getByText(`10 / ${MAX_MEMO_LENGTH} bytes`, { exact: false }))
+        expect(screen.getByText(`7 / ${MAX_MEMO_LENGTH}`, { exact: false }))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
@@ -134,11 +134,12 @@ describe('Send advanced choices', () => {
     it('composes selected inputs and change, then repeats every advanced choice on review', async () => {
         const messaging = mount();
         await fillSend();
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'invoice 7' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'invoice 7' } });
         await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /0\.001 BTC/ }));
-        fireEvent.change(screen.getByLabelText('Change address'), { target: { value: 'change' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+        fireEvent.click(await screen.findByRole('button', { name: new RegExp(CHANGE) }));
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));

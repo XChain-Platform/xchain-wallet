@@ -50,6 +50,7 @@ import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/fl
 import { synthesizeDemoHistory } from '../../../packages/core/src/flows/demoFixtures.js';
 import { classifyEntryAction } from '../../../packages/core/src/shared/utils/historyFilter.js';
 import { actionDisplayLabel } from '../../../packages/core/src/shared/utils/actionDisplayLabel.js';
+import { normalizeHistoryRow } from '../../../packages/core/src/shared/utils/historyRow.js';
 
 const CHAINS = [
     { id: 'bitcoin-regtest', coin: 'bitcoin', tick: 'BTC', displayName: 'Bitcoin' },
@@ -106,12 +107,16 @@ describe('Home Activity labels for unbucketed actions', () => {
 
     it('a demo Activity row never reads "Other" and a contract call reads its own verb', async () => {
         markDemoWallet('demo-wallet');
+        const recentActivity = CHAINS.flatMap((chain) => synthesizeDemoHistory(chain.id, 'demo-address')
+            .map((row) => normalizeHistoryRow(row, { chainId: chain.id, address: 'demo-address' }))
+            .filter(Boolean));
         render(
             <HomeTabs
                 chainRegistry={chainRegistry}
                 balances={balancesFor('demo-address')}
                 walletId="demo-wallet"
                 networkFilter="all"
+                recentActivity={recentActivity}
             />,
         );
         await openActivity();

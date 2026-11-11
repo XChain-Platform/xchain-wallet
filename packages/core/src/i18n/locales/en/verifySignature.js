@@ -22,10 +22,15 @@ const messages = {
     'verifySignature.malformed': 'Malformed signature. Enter a base64-encoded signature.',
     'verifySignature.address': 'Address',
     'verifySignature.addressPlaceholder': 'The address that produced the signature',
+    'verifySignature.networkHelp':
+        "The network where the signer's address belongs. The signature is checked using that network's message rules.",
     'verifySignature.message': 'Message',
     'verifySignature.messagePlaceholder': 'The exact text that was signed',
     'verifySignature.signature': 'Signature',
     'verifySignature.signaturePlaceholder': 'Base64 signature blob',
+    'verifySignature.addressHelp': 'The address that produced the signature.',
+    'verifySignature.messageHelp': 'The exact text that was signed, character for character.',
+    'verifySignature.signatureHelp': 'The base64 signature the signer shared with you.',
     'verifySignature.verifying': 'Verifying…',
 };
 

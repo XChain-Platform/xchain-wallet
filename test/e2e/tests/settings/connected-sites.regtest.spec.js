@@ -142,7 +142,7 @@ async function blockEntry(page, entry) {
     await expect(field, 'the Connected Sites panel offers no way to block an origin')
         .toBeVisible({ timeout: 30_000 });
     await field.fill(entry);
-    const submit = page.getByRole('main').getByRole('button', { name: 'Block', exact: true });
+    const submit = page.getByRole('main').getByRole('button', { name: 'Block origin', exact: true });
     await expect(submit, 'the manual-block form has no Block button').toBeVisible({ timeout: 30_000 });
     await submit.click();
     const ask = page.getByRole('dialog', { name: `Block ${entry}?` });

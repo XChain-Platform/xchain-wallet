@@ -81,14 +81,14 @@ async function openPaletteRoute(page, query, option) {
 
 async function showHomeFilters(page) {
     await gotoSection(page, 'Home');
-    const search = page.getByRole('main').getByRole('searchbox', { name: 'Search tokens by name' });
-    if (await search.count() === 0) {
-        // Every width keeps the hero actions in the Balance actions menu.
-        const main = page.getByRole('main');
-        await main.getByRole('button', { name: 'Balance actions' }).click();
-        await page.getByRole('menuitemcheckbox', { name: 'Show filters' }).click();
+    // Token search and the network filter live in the list header's Filter
+    // and sort menu (U72).
+    const main = page.getByRole('main');
+    const panel = main.getByRole('dialog', { name: 'Filter and sort' });
+    if (await panel.count() === 0) {
+        await main.getByRole('button', { name: 'Filter and sort' }).click();
     }
-    return search;
+    return panel;
 }
 
 async function openSettingsSearch(page, query) {
@@ -113,20 +113,23 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
         await page.setViewportSize({ width, height: 900 });
         const main = page.getByRole('main');
 
-        await test.step(`${width}px / Home filter bar`, async () => {
-            const search = await showHomeFilters(page);
-            // The network filter is the Chip toggle, so this row holds the Chip to the search field.
-            await expectMatchingControlSizes(`Home filter bar at ${width}px`, [
-                ['token search', search],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+        await test.step(`${width}px / Home filter menu`, async () => {
+            const panel = await showHomeFilters(page);
+            // The menu stacks the token search over the network filter Chip;
+            // the two controls keep one height, radius and type size.
+            await expectMatchingControlSizes(`Home filter menu at ${width}px`, [
+                ['token search', panel.getByRole('searchbox', { name: 'Search tokens by name' })],
+                ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
             ]);
+            await page.keyboard.press('Escape');
+            await expect(panel).toBeHidden();
         });
 
         await test.step(`${width}px / Encrypted inbox`, async () => {
             await gotoSection(page, 'Messaging');
             await expectMatchingControlSizes(`Encrypted inbox at ${width}px`, [
                 ['conversation search', main.getByRole('searchbox', { name: 'Search conversations' })],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
             ]);
         });
 
@@ -134,7 +137,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await gotoSection(page, 'Dispensers');
             await expectMatchingControlSizes(`Your dispensers at ${width}px`, [
                 ['dispenser search', main.getByRole('searchbox', { name: 'Search dispensers' })],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
             ]);
         });
 
@@ -142,7 +145,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await gotoSection(page, 'Lists');
             await expectMatchingControlSizes(`Address lists at ${width}px`, [
                 ['list search', main.getByRole('searchbox', { name: 'Search lists' })],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
             ]);
         });
 
@@ -150,7 +153,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await openStaking(page);
             await expectMatchingControlSizes(`Staking at ${width}px`, [
                 ['position search', main.getByRole('searchbox', { name: 'Search staking positions' })],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
             ]);
         });
 
@@ -158,7 +161,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             await gotoSection(page, 'Contacts');
             await expectMatchingControlSizes(`Contacts at ${width}px`, [
                 ['contact search', main.getByRole('searchbox', { name: 'Search contacts' })],
-                ['network filter', main.getByRole('button', { name: 'Filter by network' })],
+                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
                 ['sort', main.getByRole('combobox', { name: 'Sort contacts' })],
             ]);
         });
@@ -194,7 +197,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             });
             await expectMatchingControlSizes(`Settings dApp permissions at ${width}px`, [
                 ['blocked origin', origin],
-                ['block', blockForm.getByRole('button', { name: 'Block', exact: true })],
+                ['block', blockForm.getByRole('button', { name: 'Block origin', exact: true })],
             ]);
         });
 

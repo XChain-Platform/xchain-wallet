@@ -14,11 +14,8 @@
 // The rendered behaviour is covered by the unit tests
 // (test/unit/shared/panicNotice.test.js and
 // test/unit/components/panicFreezeSurfacing.test.jsx). What this smoke pins
-// is the wiring: that Home and Send still mount the notice, and that no sign
-// screen goes back to hard-coding "Wallet unlocked. No password needed."
-// outside the <SigningReadyNote> guard. That is the exact regression the
-// original defect was: the information existed one screen away and was simply
-// never rendered where the user acts.
+// is the wiring: Home and Send mount the notice, and every sign screen renders
+// a bare <SigningReadyNote /> without unlocked-wallet readiness copy.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -68,11 +65,9 @@ assert.match(homeSrc, /<PanicFreezeNotice surface="home"/, 'Home mounts the free
 const sendSrc = read('shared', 'routes', 'Send.jsx');
 assert.match(sendSrc, /<PanicFreezeNotice\b[^>]*\bsurface="send"/, 'the Send form mounts the freeze notice');
 
-// --- no sign screen claims readiness outside the guard ------------------
+// --- sign screens render only panic status in the ready branch -----------
 
-// Every screen in the wallet that renders the unlocked note. Panic mode gates
-// submitWithSigner, signMessageFlow, signPsbtFlow and multisigSignLocally, so
-// message and PSBT screens are as wrong as the send confirm was.
+// Cover every screen whose ready branch can surface a signing freeze.
 const SIGN_SURFACES = [
     ['shared', 'components', 'SignCredentials.jsx'],
     ['shared', 'components', 'ActionConfirmScreen.jsx'],
@@ -84,9 +79,8 @@ const SIGN_SURFACES = [
 for (const parts of SIGN_SURFACES) {
     const src = read(...parts);
     const file = parts.join('/');
-    // The note is the literal sentence or its dictionary key (send.walletUnlocked).
-    assert.match(src, /No password needed|t\('send\.walletUnlocked'\)/, `${file} still has the unlocked note`);
-    assert.match(src, /<SigningReadyNote>/, `${file} guards the unlocked note with SigningReadyNote`);
+    assert.doesNotMatch(src, /No password needed|walletUnlocked/, `${file} shows no unlocked note`);
+    assert.match(src, /<SigningReadyNote\s*\/>/, `${file} renders a bare SigningReadyNote`);
     // The locked branch asks for a password the freeze would refuse, so every
     // sign password field sits inside the gate that states a self-armed freeze
     // in its place.

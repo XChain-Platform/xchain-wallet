@@ -168,13 +168,13 @@ export function nativeFeeErrorMessage(
  * protocolFeeRow already imports this module and a message that names the control has to
  * be unable to drift from it. Copying the sentence into either file is how "turn off
  * native-coin fee payment" ended up pointing at a checkbox labelled "Pay protocol fee in
- * BTC instead of XCHAIN".
+ * BTC".
  *
  * @param {string} [coinTicker]   BTC/LTC/DOGE; blank falls back to the generic phrasing
  * @returns {string}
  */
 export function nativeFeeToggleLabel(coinTicker) {
-    return `Pay protocol fee in ${coinTicker || 'the native coin'} instead of XCHAIN`;
+    return `Pay protocol fee in ${coinTicker || 'the native coin'}`;
 }
 
 /**

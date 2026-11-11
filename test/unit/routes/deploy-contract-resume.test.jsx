@@ -88,12 +88,12 @@ describe('DeployContractForm resuming an unfinished publish', () => {
         const utils = await resumed();
 
         const gas = utils.getByLabelText('Gas limit');
-        const constructor = utils.getByLabelText('Constructor params (optional)');
+        const constructor = utils.getByLabelText('Constructor params');
         expect(gas).toHaveValue('200000');
         expect(constructor).toHaveValue('alpha|beta');
         // The flow assembles from the record, so an edit here would change the
         // review and not the transaction.
-        for (const field of [gas, constructor, utils.getByLabelText('Cooldown blocks (optional)'), utils.getByLabelText('Slash destination (optional)')]) {
+        for (const field of [gas, constructor, utils.getByLabelText('Cooldown blocks'), utils.getByLabelText('Slash destination')]) {
             expect(field).toBeDisabled();
         }
     });
@@ -105,7 +105,7 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: 'typed' } });
+            fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: 'typed' } });
             await drain();
         });
         await domAct(async () => {
@@ -113,14 +113,14 @@ describe('DeployContractForm resuming an unfinished publish', () => {
             await drain();
         });
 
-        expect(utils.getByLabelText('Constructor params (optional)')).toHaveValue('');
+        expect(utils.getByLabelText('Constructor params')).toHaveValue('');
     });
 
     it('leaves the fields editable for a run with no stored plan', async () => {
         const utils = await resumed([pendingRecord({ assembleParams: undefined })]);
 
         expect(utils.getByLabelText('Gas limit')).not.toBeDisabled();
-        expect(utils.getByLabelText('Constructor params (optional)')).not.toBeDisabled();
+        expect(utils.getByLabelText('Constructor params')).not.toBeDisabled();
     });
 
     it('unlocks the fields once the run is discarded', async () => {
@@ -216,7 +216,7 @@ describe('DeployContractForm review of a chunked publish', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
             await drain();
         });
         return utils;

@@ -126,7 +126,7 @@ assert.ok(/setStage\('review'\)/.test(formSrc),
     "CoinpayForm transitions to 'review' before submitting");
 // The local review hands signing to the shared confirmation screen.
 assert.ok(
-    /ownerLane\.isWatcherMode[\s\S]*?'Create unsigned transaction'[\s\S]*?: 'Continue to confirmation'/.test(formSrc),
+    /ownerLane\.isWatcherMode[\s\S]*?'Create unsigned transaction'[\s\S]*?: `Pay \$\{amountLabel\}`/.test(formSrc),
     'CoinpayForm continues from local review to confirmation for signing wallets',
 );
 // handleSubmit must only be reachable from the review stage form.
@@ -139,8 +139,8 @@ assert.ok(/Network fee/.test(formSrc), 'CoinpayForm shows a Network fee row on r
 assert.ok(/estimateNativeSendFee/.test(formSrc), 'CoinpayForm imports estimateNativeSendFee');
 // Header title switches on review/submitting.
 assert.ok(/Review payment/.test(formSrc), "CoinpayForm header says 'Review payment' in review stage");
-// Form-stage primary button label is "Review".
-assert.ok(/>\s*Review\s*<\/Button>/.test(formSrc), "CoinpayForm form-stage button label is 'Review'");
+// Form-stage primary button label is "Pay order".
+assert.ok(/>\s*Pay order\s*<\/Button>/.test(formSrc), "CoinpayForm form-stage button label is 'Pay order'");
 
 // --- 4. Background host registrations ---------------------------------
 

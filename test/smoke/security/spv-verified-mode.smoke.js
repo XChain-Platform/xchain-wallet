@@ -63,8 +63,9 @@ for (const [label, src] of [['history list', historySrc], ['action detail', deta
         /settings\?\.verifyProofs !== false/.test(src),
         `${label}: gates on the verifyProofs setting`,
     );
+    // A demo wallet reads through the sample-data source, which is not live (U64).
     assert.ok(
-        /isDemoWallet\(walletId\)/.test(src),
+        /verifyProofs !== false\s*\n\s*&& source\.live/.test(src),
         `${label}: never badges a demo wallet, whose rows are synthesized`,
     );
 }

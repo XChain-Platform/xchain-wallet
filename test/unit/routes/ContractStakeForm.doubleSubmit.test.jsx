@@ -46,7 +46,7 @@ describe('ContractStakeForm submitted twice before the confirm page opens', () =
                 />
             </MessagingProvider>,
         );
-        const input = await screen.findByLabelText(/signing public key/i);
+        const input = await screen.findByLabelText(/signing public key/i, { selector: 'input' });
         await waitFor(() => expect(input.value).toBe(KEY));
         await screen.findByLabelText('From');
         const form = input.closest('form');

@@ -13,12 +13,13 @@ import { selectNamedToken } from '../../fixtures/crossChain.js';
 const BTC = { chainId: 'bitcoin-mainnet', chainLabel: 'Bitcoin' };
 
 async function pickNetwork(main, name, ticker) {
-    const trigger = main.getByRole('button', { name: /^Give and get network:/ });
+    const trigger = main.getByRole('button', { name: /^Network:/ });
     await expect(trigger).toBeVisible({ timeout: 30_000 });
-    if (await trigger.getAttribute('aria-label') === `Give and get network: ${name}`) return;
+    if (await trigger.getAttribute('aria-label') === `Network: ${name}`) return;
     await trigger.click();
-    await main.getByRole('option', { name: new RegExp(`^${name}\\s*${ticker}$`) }).click();
-    await expect(trigger).toHaveAttribute('aria-label', `Give and get network: ${name}`);
+    await trigger.page().getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: new RegExp(`^Select ${name}\\b`) }).click();
+    await expect(trigger).toHaveAttribute('aria-label', `Network: ${name}`);
 }
 
 test('refuses the same token on both sides and clears terms on a network change', async ({ page }) => {
@@ -32,9 +33,9 @@ test('refuses the same token on both sides and clears terms on a network change'
     await main.getByRole('textbox', { name: /^Give amount/ }).fill('1');
     await main.getByRole('textbox', { name: /^Get amount/ }).fill('2');
     await expect(main.getByText('Give and get tickers must differ.')).toBeVisible();
-    await main.getByRole('button', { name: 'Review', exact: true }).click();
+    await main.getByRole('button', { name: 'Create swap', exact: true }).click();
     await expect(page.getByTestId('action-intent')).toHaveCount(0);
-    await expect(main.getByRole('button', { name: 'Review', exact: true })).toBeEnabled();
+    await expect(main.getByRole('button', { name: 'Create swap', exact: true })).toBeEnabled();
 
     await selectNamedToken(page, 'Get token', { ...BTC, tick: 'XCP' });
     await expect(main.getByText('Give and get tickers must differ.')).toHaveCount(0);

@@ -12,7 +12,7 @@ import { ListToolbar } from '@xchain-wallet/core/shared/components/ListToolbar.j
 import { OfflineEmptyState } from '@xchain-wallet/core/shared/components/OfflineEmptyState.jsx';
 import { BalancesUncheckedState } from '@xchain-wallet/core/shared/components/BalancesUncheckedState.jsx';
 import { RelativeTime } from '@xchain-wallet/core/shared/components/RelativeTime.jsx';
-import { ActivityRow } from '@xchain-wallet/core/shared/components/ActivityRow.jsx';
+import { ActivityRow, actionIconForAction } from '@xchain-wallet/core/shared/components/ActivityRow.jsx';
 import { EntryRow } from '@xchain-wallet/core/shared/routes/HistoryEntryRow.jsx';
 import { HomeTabs } from '@xchain-wallet/core/shared/components/HomeTabs.jsx';
 import { LeftNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
@@ -56,7 +56,7 @@ export function PickerScreensSection() {
                 supersedes={<>Source: <code>OwnAddressPickerScreen.jsx</code>, <code>ListPickerScreen.jsx</code> in <code>shared/components</code>.</>}
             />
             <Markup>
-{`<OwnAddressPickerScreen walletId={walletId} accountId={accountId} chainId={chainId} onPick={pick} onBack={back} />
+{`<OwnAddressPickerScreen walletId={walletId} accountId={accountId} chainId={chainId} onChainChange={setChainId} onPick={pick} onBack={back} />
 <ListPickerScreen variant="small" messaging={messaging} chainId={chainId} addresses={addresses} filterType={1} onSelect={pick} onBack={back} />`}
             </Markup>
             <LiveExample label="OwnAddressPickerScreen" minHeight={420} padded={false}>
@@ -65,6 +65,7 @@ export function PickerScreensSection() {
                         walletId={PART_WALLET_ID}
                         accountId={PART_ACCOUNT_ID}
                         chainId={PART_CHAIN_ID}
+                        onChainChange={noop}
                         onPick={noop}
                         onBack={noop}
                     />
@@ -162,10 +163,10 @@ export function ActivityRowsSection() {
             id="activity-rows"
             title="Activity rows"
             tag="CANONICAL · ActivityRow / HistoryEntryRow / RelativeTime"
-            kicker="One row for one thing that happened: the asset mark, what it was, the amount, its status and how long ago. History and the Home activity tab draw it from the same component."
+            kicker="One row for one thing that happened: the asset mark, action and status, amount, block and time. History and the Home activity tab draw it from the same component."
         >
             <Guidance
-                what={<><code>ActivityRow</code> is a full-width button of asset mark, label with optional context, amount, status chip and relative time. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
+                what={<><code>ActivityRow</code> is a full-width button with three lines: action and status, amount, then block and relative time. Pending rows omit the block. <code>EntryRow</code> (HistoryEntryRow) maps a history entry onto it. <code>RelativeTime</code> renders the age as a live <code>time</code> element.</>}
                 when={<>Any list of past activity.</>}
                 whenNot={<>Balances (BalanceList) · people and addresses (ListRow).</>}
                 doRule={<>✓ Map every status to its label through <code>statusLabels</code></>}
@@ -173,12 +174,12 @@ export function ActivityRowsSection() {
                 supersedes={<>Source: <code>ActivityRow.jsx</code>, <code>RelativeTime.jsx</code>, <code>routes/HistoryEntryRow.jsx</code>.</>}
             />
             <Markup>
-{`<ActivityRow chainId="bitcoin-mainnet" tick="BTC" isNative label="Sent" amount="-0.01 BTC" status="confirmed" timestamp={ts} onClick={open} />`}
+{`<ActivityRow chainId="bitcoin-mainnet" tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={ts} onClick={open} />`}
             </Markup>
             <LiveExample label="ActivityRow: confirmed and pending">
                 <PartsExampleProvider>
-                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" context="To Savings" amount="-0.01 BTC" status="confirmed" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
-                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Received" amount="+0.002 BTC" status="pending" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
+                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Sent" actionIcon={actionIconForAction('send')} context="To Savings" amount="-0.01 BTC" status="confirmed" block="Block 123,456" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
+                    <ActivityRow chainId={PART_CHAIN_ID} tick="BTC" isNative label="Received" actionIcon={actionIconForAction('receive')} amount="+0.002 BTC" status="pending" timestamp={FIVE_MINUTES_AGO()} onClick={noop} />
                 </PartsExampleProvider>
             </LiveExample>
             <LiveExample label="HistoryEntryRow (EntryRow)">
@@ -191,6 +192,7 @@ export function ActivityRowsSection() {
                                 action: 'send',
                                 txHash: 'ab'.repeat(32),
                                 source: PART_ADDRESS,
+                                blockIndex: 123456,
                                 timestamp: FIVE_MINUTES_AGO(),
                                 status: 'confirmed',
                                 raw: {},

@@ -151,11 +151,11 @@ async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec 
         await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
     }
 
-    await main.getByLabel('What is being bet on').fill(label);
-    await main.getByLabel('Outcome 0').fill('Yes');
-    await main.getByLabel('Outcome 1').fill('No');
+    await main.getByLabel('What is being bet on', { exact: true }).fill(label);
+    await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
+    await main.getByLabel('Outcome 1', { exact: true }).fill('No');
     const now = await chainTime();
-    await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(now + deadlineOffsetSec));
+    await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(now + deadlineOffsetSec));
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     return main;
@@ -163,7 +163,7 @@ async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec 
 
 /** Submits and requires the named refusal, with no confirm screen behind it. */
 async function expectRefusal(page, main, expected, why) {
-    await main.getByRole('button', { name: 'Review market', exact: true }).click();
+    await main.getByRole('button', { name: 'Open market', exact: true }).click();
     await expect(page.getByRole('alert'), why).toContainText(expected, { timeout: 30_000 });
     // A refused market must not have composed anything to approve. The same
     // locator is proven to match in the immutability leg, so its absence here
@@ -202,7 +202,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address').inputValue();
+            oracle = await main.getByLabel('Your oracle address', { exact: true }).inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -222,7 +222,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
 
         await test.step('no title', async () => {
             const main = await openValidForm(page, { label: `${RUN_TAG} notitle` });
-            await main.getByLabel('What is being bet on').fill('');
+            await main.getByLabel('What is being bet on', { exact: true }).fill('');
             await expectRefusal(page, main, 'Give the market a question or title.',
                 'an untitled market was not refused');
         });
@@ -248,14 +248,14 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await expect(main.getByRole('button', { name: 'Remove', exact: true }),
                 'the form offers to remove an outcome below two')
                 .toHaveCount(0);
-            await main.getByLabel('Outcome 1').fill('');
+            await main.getByLabel('Outcome 1', { exact: true }).fill('');
             await expectRefusal(page, main, 'Fill in every outcome, or remove the empty one.',
                 'a one-outcome market was not refused');
         });
 
         await test.step('two outcomes with the same label', async () => {
             const main = await openValidForm(page, { label: `${RUN_TAG} dupes` });
-            await main.getByLabel('Outcome 1').fill('Yes');
+            await main.getByLabel('Outcome 1', { exact: true }).fill('Yes');
             await expectRefusal(page, main, 'Two outcomes have the same label.',
                 'a market with duplicate outcomes was not refused');
         });
@@ -266,7 +266,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // built from, so a label containing one is a corrupt encoding, and a
             // market is immutable once it is on the chain.
             const main = await openValidForm(page, { label: `${RUN_TAG} pipe` });
-            await main.getByLabel('Outcome 1').fill('No|Maybe');
+            await main.getByLabel('Outcome 1', { exact: true }).fill('No|Maybe');
             await expectRefusal(page, main,
                 'Outcome labels cannot contain a comma, a semicolon or a vertical bar.',
                 'an outcome label containing a vertical bar was not refused');
@@ -300,7 +300,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // confirm-modal locator, on the same page, DOES appear here.
             const label = `${RUN_TAG} live`;
             const main = await openValidForm(page, { label });
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await expect(page.getByTestId('confirm-modal'),
                 'a valid market did not reach the confirm screen, which would make every absence '
                 + 'assertion in this spec meaningless')
@@ -345,10 +345,10 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await expect(console_.getByRole('link', { name: /\bedit\b/i })).toHaveCount(0);
 
             await editLike.click();
-            await expect(console_.getByLabel('New allow-list index'),
+            await expect(console_.getByLabel('New allow-list index', { exact: true }),
                 '"Edit lists" did not open the list editor, so this is not the control it claims to be')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(console_.getByLabel('New block-list index')).toBeVisible();
+            await expect(console_.getByLabel('New block-list index', { exact: true })).toBeVisible();
             for (const term of ['What is being bet on', /^Outcome \d+$/, 'Betting closes']) {
                 await expect(console_.getByLabel(term),
                     `the list editor offers a "${term}" field, so it can change a market term`)

@@ -472,7 +472,24 @@ async function buildHost() {
     // and makes zero network calls when no alert is armed.
     if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
         const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+        // Token-ticker alerts need the token price source; a core build without
+        // the export leaves the watcher on native prices only. The privacy
+        // setting is read once per poll so the lookup sees the live value.
+        const tokenPriceDeps = typeof notificationsLib.createTokenPriceLookup === 'function'
+            ? {
+                getTokenPrices: async (req) => {
+                    const settings = await flowsLib.getSettings(vault);
+                    const allowed = settings?.privacy?.priceDataEnabled !== false;
+                    const lookup = notificationsLib.createTokenPriceLookup({
+                        chainRegistry,
+                        allowCoingeckoFallback: () => allowed,
+                    });
+                    return lookup(req);
+                },
+            }
+            : {};
         priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+            ...tokenPriceDeps,
             getNativePrices: ({ chainIds, fiatCurrency }) => priceOracle.getNativePrices({ chainIds, fiatCurrency }),
             listArmedAlerts: () => vault.priceAlerts.list(),
             getSettings: () => flowsLib.getSettings(vault),

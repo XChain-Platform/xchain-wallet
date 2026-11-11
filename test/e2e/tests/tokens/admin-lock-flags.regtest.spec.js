@@ -169,8 +169,8 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const locks = [
                 ['Max mint per transaction', 'LOCK_MAX_MINT'],
-                ['Mint supply now', 'LOCK_MINT_SUPPLY'],
-                ['Pausing', 'LOCK_SLEEP'],
+                ['Mint supply', 'LOCK_MINT_SUPPLY'],
+                ['Pause', 'LOCK_SLEEP'],
                 ['Callback', 'LOCK_CALLBACK'],
             ];
             for (const [label, field] of locks) {
@@ -221,10 +221,10 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(main.getByRole('alert').filter({ hasText: /Max mint per transaction is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('alert').filter({ hasText: /Minting supply now is permanently locked/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Mint supply is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByLabel('Max mint per transaction (optional)')).toBeDisabled();
-            await expect(main.getByLabel('Mint supply now (optional)')).toBeDisabled();
+            await expect(main.getByLabel('Max mint per transaction', { exact: true })).toBeDisabled();
+            await expect(main.getByLabel('Mint supply now', { exact: true })).toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
 
@@ -241,7 +241,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Callback settings refuses edits before composition', async () => {
             await openTokenAdmin(page, 'Callback settings');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /Callback settings are permanently locked/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Callback is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Callback token')).toBeDisabled();
             await expect(main.getByLabel('Payout per unit')).toBeDisabled();

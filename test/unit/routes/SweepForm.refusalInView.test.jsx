@@ -79,7 +79,7 @@ async function mountSweep() {
         container,
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
-        memo: () => labelledInput(container, 'Memo (optional)'),
+        memo: () => labelledInput(container, 'Memo'),
         category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
     };
     await waitFor(() => {

@@ -367,7 +367,7 @@ async function approveAction(utils) {
 // TokenField opens the shared TokenPicker screen; these two steps open it
 // and pick the row for `tick` out of the mocked wallet balances.
 const openTokenField = (label) => (utils) => {
-    fireEvent.click(utils.getByRole('button', { name: new RegExp(label, 'i') }));
+    fireEvent.click(utils.getByRole('button', { name: new RegExp(`^${label}`, 'i') }));
 };
 const pickToken = (tick) => (utils) => {
     const row = Array.from(utils.container.querySelectorAll('button'))
@@ -429,7 +429,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Issue token',
             fill: (utils) => {
                 setValue(utils, 'Ticker', 'JDOG');
-                setValue(utils, 'Supply', '1000');
+                fireEvent.change(utils.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
             },
         });
         expectSingleEncode(calls, {
@@ -528,10 +528,10 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     });
 
     it('DelegateVoteForm composes VOTE v3 and signs the prebuilt PSBT', async () => {
-        const { calls } = await driveThroughConfirm({
+        const { calls, utils } = await driveThroughConfirm({
             Form: DelegateVoteForm,
             props: { presetTick: 'JDOG' },
-            actionLabel: 'Review',
+            actionLabel: 'Delegate votes',
             fill: (utils) => setValue(utils, 'Delegate to address', VOTE_DELEGATE),
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
@@ -542,6 +542,10 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const submit = calls.find((c) => c.method === 'delegateVoteAction');
         expect(submit, 'delegateVoteAction dispatched on Approve').toBeTruthy();
         expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
+        // The result step's Done is its green main action with an icon (U63).
+        const done = utils.getByRole('button', { name: 'Done' });
+        expect(done.className).toMatch(/success/);
+        expect(done.querySelector('svg')).not.toBeNull();
     });
 
     it('ControllerBindForm composes the host-built bind action and signs the prebuilt PSBT', async () => {
@@ -707,7 +711,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DeployContractForm,
             props: {},
-            actionLabel: 'Publish',
+            actionLabel: 'Publish contract',
             fill: (utils) => {
                 const code = utils.container.querySelector('textarea');
                 if (!code) throw new Error('no contract-code textarea');
@@ -817,7 +821,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: TokenWizard,
             props: {},
             actionLabel: 'Review token',
-            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })),
+            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Issue token' })),
             steps: [
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Custom/ })),
                 (utils) => fireEvent.click(utils.getByRole('button', { name: 'Next' })),
@@ -874,7 +878,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Issue token' }));
             await drainMicrotasks();
         });
 
@@ -989,7 +993,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DispenserForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: 'Create',
+            actionLabel: 'Create dispenser',
             fill: (utils) => {
                 setValue(utils, /^Give amount/, '10');
                 setValue(utils, /^Escrow amount/, '100');
@@ -1007,7 +1011,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SwapForm,
             props: { initialChainId: CHAIN },
-            actionLabel: 'Review',
+            actionLabel: 'Create swap',
             steps: [
                 // Give and get must differ: SwapForm rejects a same-ticker pair.
                 openTokenField('Give token:'), pickToken('XCHAIN'),
@@ -1061,7 +1065,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             },
             steps: [
                 (utils) => fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'SEND' } }),
-                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review' })),
+                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Batch' })),
             ],
             actionLabel: 'Sign batch',
         });
@@ -1086,7 +1090,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
         for (const step of [
             (u) => fireEvent.change(u.getByLabelText('Action'), { target: { value: 'SEND' } }),
-            (u) => fireEvent.click(u.getByRole('button', { name: 'Review' })),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Batch' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
             await domAct(async () => { step(utils); await drainMicrotasks(); });
@@ -1106,12 +1110,12 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     getActionByIndex: () => Promise.resolve({ action: 'SEND', tick: 'JDOG', amount: '1' }),
                 },
             },
-            actionLabel: 'Link',
+            actionLabel: 'Link actions',
             steps: [
                 (utils) => {
-                    // Both side panels carry the same field label, so they are
-                    // addressed positionally: chain A first, chain B second.
-                    const [a, b] = utils.getAllByLabelText('Action to reference');
+                    // Both action cards carry the same field label, so they are
+                    // addressed positionally: Action 1 first, Action 2 second.
+                    const [a, b] = utils.getAllByLabelText('Action number');
                     fireEvent.change(a, { target: { value: '11' } });
                     fireEvent.change(b, { target: { value: '22' } });
                 },
@@ -1312,7 +1316,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
             name: 'DispenserForm',
             Form: DispenserForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: 'Create',
+            actionLabel: 'Create dispenser',
             fill: (utils) => {
                 setValue(utils, /^Give amount/, '10');
                 setValue(utils, /^Escrow amount/, '100');
@@ -1512,18 +1516,20 @@ const PROTOCOL_FAILURE_FORMS = [
         submitMethod: 'issueToken',
         fill: (u) => {
             setValue(u, 'Ticker', 'RETRYISSUE');
-            setValue(u, 'Supply', '1000');
+            fireEvent.change(u.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
         },
         expectValues: (u) => {
             expect(u.getByLabelText('Ticker').value).toBe('RETRYISSUE');
-            expect(u.getByLabelText('Supply').value).toBe('1000');
+            // The typed value survives the failure. A new token starts divisible (8
+            // places), so it reads padded once the field has blurred.
+            expect(u.getByRole('textbox', { name: 'Max supply' }).value).toMatch(/^1,000(?:\.0{8})?$/);
         },
     },
     {
         name: 'dispenser',
         Form: DispenserForm,
         props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-        actionLabel: 'Create',
+        actionLabel: 'Create dispenser',
         composeMethod: 'composeForConfirm',
         submitMethod: 'dispenserAction',
         fill: (u) => {
@@ -1552,14 +1558,15 @@ const PROTOCOL_FAILURE_FORMS = [
         expectValues: (u) => {
             expect(u.getByLabelText('Ticker').value).toBe('JDOG');
             expect(u.getByLabelText('Amount').value).toBe('5');
-            expect(u.getByLabelText('Amount (BTC)').value).toBe('0.01');
+            // Shown as typed while editing, padded to 8 decimals once not (U61).
+            expect(u.getByLabelText('Amount (BTC)').value).toMatch(/^0\.01(000000)?$/);
         },
     },
     {
         name: 'bet',
         Form: CreateBetFeedForm,
         props: { presetTick: 'JDOG' },
-        actionLabel: 'Review market',
+        actionLabel: 'Open market',
         composeMethod: 'composeBetForConfirm',
         submitMethod: 'createMarketAction',
         fill: (u) => {
@@ -1580,16 +1587,16 @@ const PROTOCOL_FAILURE_FORMS = [
         name: 'vote',
         Form: DelegateVoteForm,
         props: { presetTick: 'JDOG' },
-        actionLabel: 'Review',
+        actionLabel: 'Delegate votes',
         composeMethod: 'composeVoteForConfirm',
         submitMethod: 'delegateVoteAction',
         fill: (u) => {
             setValue(u, 'Delegate to address', VOTE_DELEGATE);
-            setValue(u, 'Memo (optional)', 'keep my vote');
+            setValue(u, 'Memo', 'keep my vote');
         },
         expectValues: (u) => {
             expect(u.getByLabelText('Delegate to address').value).toBe(VOTE_DELEGATE);
-            expect(u.getByLabelText('Memo (optional)').value).toBe('keep my vote');
+            expect(u.getByLabelText('Memo').value).toBe('keep my vote');
         },
     },
     {

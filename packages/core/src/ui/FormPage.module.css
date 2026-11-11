@@ -248,4 +248,14 @@
         border-radius: 0;
         box-shadow: none;
     }
+
+    /* Cardless: the form keeps its centred column, bare as on a phone, so
+       the section cards it is built from are the only cards on the page. */
+    .form.cardlessForm {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
 }

@@ -136,7 +136,7 @@ describe('ListShareForm', () => {
         fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
             target: { value: 'SHARE' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -191,15 +191,15 @@ describe('ListShareForm', () => {
         const messaging = mount(options);
 
         expect(await screen.findByText(reason)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
-        expect(screen.getByLabelText('Memo (optional)').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Memo').disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('requires exact uppercase SHARE before Review', async () => {
         const messaging = mount();
         const confirm = await screen.findByLabelText('Type SHARE to confirm');
-        const review = screen.getByRole('button', { name: 'Review' });
+        const review = screen.getByRole('button', { name: 'Share list' });
 
         expect(review.disabled).toBe(true);
         for (const value of ['share', ' SHARE', 'SHARE ', 'Share']) {
@@ -214,11 +214,11 @@ describe('ListShareForm', () => {
 
     it('uses the reported owner, shows the fee choice, and composes format 2 through createList', async () => {
         const messaging = mount();
-        const feeChoice = await screen.findByLabelText('Pay protocol fee in BTC instead of XCHAIN');
+        const feeChoice = await screen.findByLabelText('Pay protocol fee in BTC');
         fireEvent.click(feeChoice);
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: ' worldwide ' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: ' worldwide ' } });
         fireEvent.change(screen.getByLabelText('Type SHARE to confirm'), { target: { value: 'SHARE' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
 
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const request = messaging.composeForConfirm.mock.calls[0][0];
@@ -265,7 +265,7 @@ describe('ListShareForm', () => {
         fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
             target: { value: 'SHARE' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
 
         expect(messaging.getListByActionIndex).toHaveBeenCalledWith({
@@ -305,10 +305,10 @@ describe('ListShareForm', () => {
             chainId: CHAIN,
         });
         expect(messaging.getActionFormats).not.toHaveBeenCalled();
-        expect(screen.getByLabelText('Memo (optional)').disabled).toBe(true);
+        expect(screen.getByLabelText('Memo').disabled).toBe(true);
         expect(screen.getByLabelText('Type SHARE to confirm').disabled).toBe(true);
-        expect(screen.getByLabelText('Pay protocol fee in BTC instead of XCHAIN').disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Pay protocol fee in BTC').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
     });
 
     it('stops before signing when the list changed owner after the form opened', async () => {
@@ -319,7 +319,7 @@ describe('ListShareForm', () => {
         messaging.getListByActionIndex.mockResolvedValueOnce(baseDetail({
             state: { owner: ROOT_OWNER, edit_resolution_active: true, current_list: ['bc1qmember'] },
         }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Share list' }));
 
         expect(await screen.findByText(
             'This list has a different owner than when this screen opened. Review the owner and try again.',

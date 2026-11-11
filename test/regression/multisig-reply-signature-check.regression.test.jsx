@@ -133,6 +133,7 @@ describe('classical cosigner replies are verified before they count', () => {
         const reply = buildReplyEnvelope({
             kind: 'multisig-classical-reply',
             fingerprint: fingerprintSessionRef({
+                chainId: session.chainId,
                 scheme: session.scheme,
                 threshold: session.threshold,
                 cosignerPubkeys: session.cosignerPubkeys,

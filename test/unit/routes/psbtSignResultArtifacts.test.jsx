@@ -117,7 +117,7 @@ async function driveToResult({ source, result }) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.change(utils.getByLabelText(/Unsigned transaction/i), { target: { value: PSBT_HEX } });
+        fireEvent.change(utils.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_HEX } });
         await drainMicrotasks();
     });
     // The hardware branch relabels its own submit ("Sign on Ledger"), so match
@@ -161,6 +161,7 @@ describe('PSBT signing result screen renders the artifact the lane produced', ()
         const rawBlock = utils.queryByTestId('signed-tx-hex');
         expect(rawBlock).toBeTruthy();
         expect(rawBlock.textContent).toBe('cc22');
+        expect(rawBlock).toContainElement(utils.getByRole('button', { name: 'Copy signed transaction' }));
         // No PSBT was produced, so no PSBT block and no copy button over ''.
         expect(utils.queryByTestId('signed-psbt-hex')).toBe(null);
         expect(utils.container.textContent).toContain('Signed transaction (code)');
@@ -178,6 +179,7 @@ describe('PSBT signing result screen renders the artifact the lane produced', ()
         const psbtBlock = utils.queryByTestId('signed-psbt-hex');
         expect(psbtBlock).toBeTruthy();
         expect(psbtBlock.textContent).toBe('bb11');
+        expect(psbtBlock).toContainElement(utils.getByRole('button', { name: 'Copy signed PSBT' }));
         expect(utils.queryByTestId('signed-tx-hex')).toBe(null);
         expect(utils.container.textContent).toContain('Signed PSBT (code)');
         expect(utils.container.textContent).toContain('next cosigner');

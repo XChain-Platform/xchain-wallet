@@ -251,7 +251,7 @@ export function FeesSection() {
                             accessibleLabel={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
                             hint={descriptor?.feeStrategy?.rbfSupported
                                 ? t('settings.fees.keepThisOnSoYou')
-                                : t('settings.fees.feeBumpingIsNotSupported', { displayName })}
+                                : t('settings.fees.feeBumpingIsNotSupported')}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
                                 rbfByDefault: v,

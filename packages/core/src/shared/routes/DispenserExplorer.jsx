@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -321,6 +321,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {/* Options name the chain alone; the active network is set in Settings. */}
                         <Select
                             label="Network"
+                            help="Search one network, or every network the wallet supports."
                             size="md"
                             value={chainFilter}
                             onChange={(e) => setChainFilter(e.target.value)}
@@ -337,9 +338,11 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     <div className={local.queryControl}>
                         <Input
                             type="search"
-                            role="textbox"
                             size="md"
                             label={searchMode === 'token' ? 'Token ticker' : 'Address'}
+                            help={searchMode === 'token'
+                                ? 'The ticker of the token the dispensers sell, for example XCHAIN.'
+                                : 'The address that opened the dispensers, or a dispenser\'s own address.'}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             autoComplete="off"
@@ -350,8 +353,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     </div>
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
                         size="md"
+                        icon={<Icon.SearchIcon />}
                         loading={searching}
                         disabled={Boolean(searchDisabledReason)}
                         aria-describedby={searchDisabledReason ? 'dispenser-search-disabled-reason' : undefined}
@@ -479,6 +483,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                     <Button
                                         type="button"
                                         variant="secondary"
+                                        icon={<Icon.ChevronDownIcon />}
                                         loading={state.loadingMore}
                                         onClick={() => onLoadMore(cid)}
                                         aria-label={t('dispenserExplorer.loadMoreFor', { name: d?.displayName || t('send.rbf.thisChain') })}

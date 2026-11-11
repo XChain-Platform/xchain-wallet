@@ -11,10 +11,10 @@
 import { useEffect, useState } from 'react';
 import {
     CopyButton,
+    AddressField,
     FieldNote,
     FormPage,
     FormSection,
-    Select,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
@@ -36,11 +36,22 @@ import styles from './IssueTokenForm.module.css';
  * @param {object} props
  * @param {string} props.walletId
  * @param {Array<{ id: string, address: string, label?: string, source?: string }>} props.addresses   this wallet's addresses on the multisig network
+ * @param {string} props.chainId
  * @param {'mainnet' | 'testnet' | 'regtest'} [props.networkKind]
+ * @param {string} props.addressId
+ * @param {(addressId: string) => void} props.onAddressChange
+ * @param {(chainId: string) => void} props.onOpenAddressPicker
  */
-export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
+export function MultisigCosignerShare({
+    walletId,
+    addresses,
+    chainId,
+    networkKind,
+    addressId,
+    onAddressChange,
+    onOpenAddressPicker,
+}) {
     const { messaging } = useMessaging();
-    const [addressId, setAddressId] = useState('');
     const [info, setInfo] = useState(/** @type {any} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const selectedAddress = addresses.find((address) => address.id === addressId) || null;
@@ -53,11 +64,11 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
 
     useEffect(() => {
         if (addressId && !addresses.some((address) => address.id === addressId)) {
-            setAddressId('');
+            onAddressChange('');
             setInfo(null);
             setError(null);
         }
-    }, [addressId, addresses]);
+    }, [addressId, addresses, onAddressChange]);
 
     useEffect(() => {
         setInfo(null);
@@ -101,18 +112,16 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
                 {t('multisig.share.availability')}
             </p>
-            <Select
+            <AddressField
                 label={t('multisig.share.address')}
-                value={addressId}
-                onChange={(e) => setAddressId(e.target.value)}
-            >
-                <option value="">{t('multisig.share.selectAddress')}</option>
-                {addresses.map((a) => (
-                    <option key={a.id} value={a.id} disabled={!canShareAddress(a)}>
-                        {a.address} {a.label ? `· ${a.label}` : ''}{unavailableAddressLabel(a)}
-                    </option>
-                ))}
-            </Select>
+                icon="addresses"
+                value={selectedAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => onOpenAddressPicker?.(chainId)}
+                iconLabel={t('multisig.share.chooseAddress')}
+                placeholder={t('multisig.share.selectAddress')}
+            />
             {error ? <FieldNote variant="error">{error}</FieldNote> : null}
             {selectedInfo ? (
                 <>
@@ -161,17 +170,17 @@ function buildSharePayload({ info, address, networkKind }) {
     }, null, 2);
 }
 
-function canShareAddress(address) {
+export function canShareAddress(address) {
     return !address?.source || address.source === 'hd';
 }
 
-function unavailableAddressLabel(address) {
-    if (address?.source === 'watch-only') return ' (watch-only, unavailable)';
+export function unavailableAddressReason(address) {
+    if (address?.source === 'watch-only') return t('multisig.share.watchOnlyUnavailable');
     if (address?.source === 'trezor' || address?.source === 'ledger') {
-        return ' (hardware, export on device)';
+        return t('multisig.share.hardwareUnavailable');
     }
-    if (address?.source === 'imported-wif') return ' (imported key, unavailable)';
-    return '';
+    if (address?.source === 'imported-wif') return t('multisig.share.importedUnavailable');
+    return null;
 }
 
 function ShareRow({ label, value, hint = null }) {

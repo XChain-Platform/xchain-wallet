@@ -3,11 +3,26 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PairSignerForm } from '../../../packages/core/src/shared/routes/PairSignerForm.jsx';
 import { signerVendorLogoUrl } from '../../../packages/core/src/branding/branding.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import pairSignerStyles from '../../../packages/core/src/shared/routes/PairSignerForm.module.css';
+
+const pairSignerCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/PairSignerForm.module.css'),
+    'utf8',
+);
+
+function cssRule(selector) {
+    const start = pairSignerCss.indexOf(`${selector} {`);
+    const end = pairSignerCss.indexOf('}', start);
+    return start === -1 || end === -1 ? '' : pairSignerCss.slice(start, end + 1);
+}
 
 function signerRecord(overrides = {}) {
     return {
@@ -211,6 +226,29 @@ describe('PairSignerForm pairing flow', () => {
         }
     });
 
+    it('keeps the vendor list card and aligns each padded logo row with a token gap', () => {
+        mount();
+
+        const row = screen.getByRole('button', { name: /Trezor/ });
+        const list = row.closest('ul');
+        const contentRow = row.firstElementChild;
+        const logo = row.querySelector('img');
+        const listRule = cssRule('.vendorGrid');
+        const buttonRule = cssRule('.vendorCard.vendorCard');
+        const contentRule = cssRule('.vendorCard > span');
+
+        expect(list).toHaveClass(pairSignerStyles.vendorGrid);
+        expect(listRule).toContain("composes: flush from '../../ui/Card.module.css';");
+        expect(contentRow).toContainElement(logo);
+        expect(buttonRule).toContain('padding-block: var(--xc-space-3);');
+        expect(buttonRule).toContain('padding-inline: var(--xc-space-3);');
+        expect(contentRule).toContain('align-items: center;');
+        expect(contentRule).toContain('display: flex;');
+        expect(contentRule).toContain('flex-direction: row;');
+        expect(contentRule).toContain('gap: var(--xc-space-3);');
+        expect(contentRule).toContain('justify-content: flex-start;');
+    });
+
     it('leaves vendor selection through the header back button without a Cancel action', () => {
         const onBack = vi.fn();
         mount({ onBack });
@@ -235,15 +273,26 @@ describe('PairSignerForm pairing flow', () => {
         });
         expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
 
+        const cancel = screen.getByRole('button', { name: 'Cancel' });
+        const pairSigner = screen.getByRole('button', { name: 'Pair signer' });
+        expect(cancel.querySelector('svg')).toBeInTheDocument();
+        expect(pairSigner.querySelector('svg')).toBeInTheDocument();
+        expect(pairSigner).toHaveClass(buttonStyles.success);
+
         fireEvent.change(screen.getByLabelText('Label'), { target: { value: '  Travel signer  ' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+            fireEvent.click(pairSigner);
         });
         expect(registerSigner).toHaveBeenCalledWith(expect.objectContaining({
             walletId: 'wallet-1',
             label: 'Travel signer',
         }));
         expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
+        const unpair = screen.getByRole('button', { name: 'Unpair' });
+        const finish = screen.getByRole('button', { name: 'Finish pairing' });
+        expect(unpair.querySelector('svg')).toBeInTheDocument();
+        expect(finish.querySelector('svg')).toBeInTheDocument();
+        expect(finish).toHaveClass(buttonStyles.success);
     });
 
     it('returns quietly to device choice when the hardware prompt is cancelled', async () => {
@@ -267,7 +316,9 @@ describe('PairSignerForm pairing flow', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
         expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        const cancel = screen.getByRole('button', { name: 'Cancel' });
+        expect(cancel.querySelector('svg')).toBeInTheDocument();
+        fireEvent.click(cancel);
         expect(onBack).toHaveBeenCalledOnce();
         expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
 

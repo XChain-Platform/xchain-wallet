@@ -16,6 +16,8 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
+    'ui.field.optional': 'Optional',
+    'ui.field.about': 'About {label}',
     'ui.qrScanner.scanWithCamera': 'Scan with camera',
     'ui.qrScanner.scanningPointTheCameraAt': 'Scanning… point the camera at a QR code.',
     'ui.qrScanner.opensTheCameraToRead': 'Opens the camera to read a QR code.',
@@ -50,7 +52,6 @@ const messages = {
     'ui.feeSelector.pickHowFastThisTransaction':
         'Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate.',
     'ui.feeSelector.min': 'min',
-    'ui.feeSelector.feeEstimateUnavailableForThis': 'Fee estimate unavailable for this network.',
     'ui.feeSelector.slow': 'Slow',
     'ui.feeSelector.normal': 'Normal',
     'ui.feeSelector.fast': 'Fast',
@@ -61,8 +62,6 @@ const messages = {
     'ui.feeSelector.customFeeRate': 'Custom fee rate ({unit})',
     'ui.feeSelector.editFeeRate': 'Edit fee rate ({unit})',
     'ui.feeSelector.selectToEditTheFee': 'Select to edit the fee rate',
-    'ui.feeSelector.liveFeeEstimateUnavailableUsing':
-        'Live fee estimate unavailable. Using safe default rates. Custom fees remain available.',
     'ui.animatedQrFrames.animatedQr': 'Animated QR',
     'ui.animatedQrFrames.preparing': 'Preparing {qrAlt}',
     'ui.animatedQrFrames.frame': 'Frame',
@@ -74,6 +73,7 @@ const messages = {
     'ui.animatedQrFrames.prev': 'Prev',
     'ui.animatedQrFrames.nextFrame': 'Next frame',
     'ui.chainPicker.selectANetwork': 'Select a network',
+    'ui.networkPicker.selectNetwork': 'Select {network}',
     'ui.addressCombobox.contact': 'Contact',
     'ui.addressCombobox.recent': 'Recent',
     'ui.formErrorSummary.formErrors': 'Form errors',

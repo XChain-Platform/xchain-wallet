@@ -80,10 +80,11 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await expectActionReachable(page, 'welcome', create);
         await create.click();
 
-        await page.getByLabel('Wallet name').fill(WALLET_NAME);
+        await page.getByLabel('Wallet name', { exact: true }).fill(WALLET_NAME);
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
-        await expect(page.getByLabel('Wallet name')).toHaveValue(WALLET_NAME);
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
+        await expect(page.getByLabel('Wallet name', { exact: true })).toHaveValue(WALLET_NAME);
         await expect(page.getByRole('radio', { name: /^12 words/ })).toBeChecked();
         const next = page.getByRole('button', { name: 'Next' });
         await expectActionReachable(page, 'wallet details', next);

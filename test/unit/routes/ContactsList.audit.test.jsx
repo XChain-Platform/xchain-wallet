@@ -107,11 +107,15 @@ describe('ContactsList audited behavior', () => {
 
         const name = screen.getByLabelText('Name');
         name.focus();
+        // Notes' help tip (U57) sits on its label line, before the field.
+        await user.tab();
+        expect(document.activeElement.tagName).toBe('BUTTON');
+        expect(document.activeElement).toHaveAccessibleName(/Notes/);
         await user.tab();
         const notes = screen.getByLabelText('Notes');
         expect(document.activeElement).toBe(notes);
         await user.tab();
-        expect(document.activeElement).toHaveAccessibleName('Save');
+        expect(document.activeElement).toHaveAccessibleName('Update contact');
 
         fireEvent.change(name, { target: { value: '' } });
         name.focus();
@@ -158,7 +162,7 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bob' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         expect(await screen.findByText('This address is already saved for Alice.')).toBeTruthy();
         expect(messaging.saveContact).not.toHaveBeenCalled();
@@ -174,7 +178,9 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Bob' }));
         fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+        const addInDialog = within(screen.getByRole('dialog')).getByRole('button', { name: 'Add address' });
+        expect(addInDialog.className).toMatch(/success/);
+        fireEvent.click(addInDialog);
 
         const error = await screen.findByText('This address is already saved for Alice.');
         const address = screen.getByLabelText('Address');
@@ -248,6 +254,24 @@ describe('ContactsList audited behavior', () => {
         expect(listedNames()).toEqual(['Bob']);
     });
 
+    it('names the new-contact action and gives every field a help tip, Notes optional (U56, U57, U63)', async () => {
+        mount(makeMessaging([]));
+        await screen.findByText('No contacts yet');
+        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+
+        const submit = screen.getByRole('button', { name: 'Create contact' });
+        expect(submit.className).toMatch(/success/);
+        expect(submit.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+        const form = submit.closest('form');
+        const tips = Array.from(form.querySelectorAll('[role="tooltip"]')).map((tip) => tip.textContent);
+        expect(tips.some((text) => /name shown in place of this contact/.test(text))).toBe(true);
+        expect(tips.some((text) => /network is read from the address/.test(text))).toBe(true);
+        expect(tips.some((text) => /notes about this contact/.test(text))).toBe(true);
+        const notesLabel = Array.from(form.querySelectorAll('label')).find((label) => label.textContent.startsWith('Notes'));
+        expect(notesLabel.closest('div').parentElement.textContent).toMatch(/Optional/);
+    });
+
     it('stores an ambiguous valid address under the chain the user selects', async () => {
         const messaging = makeMessaging([]);
         mount(messaging);
@@ -256,8 +280,15 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Testnet friend' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: AMBIGUOUS_TESTNET } });
-        fireEvent.change(screen.getByLabelText('Network for this address'), { target: { value: 'litecoin' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        // U59: the undecided network is the standard Network field, empty until
+        // picked, and its picker offers only the networks the address fits.
+        const networkField = screen.getByRole('button', { name: /^Network:/ });
+        expect(networkField.querySelector('img')).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Network for this address' })).toBeNull();
+        fireEvent.click(networkField);
+        const picker = await screen.findByRole('dialog');
+        fireEvent.click(within(picker).getByRole('button', { name: /^Select Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledOnce());
         expect(messaging.saveContact.mock.calls[0][0].input.entries[0]).toMatchObject({
@@ -277,14 +308,14 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not save this contact. Try again.',
         );
         expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
         expect(screen.getByLabelText('Name')).toHaveValue('Alice');
-        expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Create contact' })).not.toBeDisabled();
     });
 
     it('keeps a contact visible and hides storage internals when deletion is refused', async () => {

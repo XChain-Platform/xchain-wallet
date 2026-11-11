@@ -92,7 +92,7 @@ describe('BackupSection label publication confirmation', () => {
         await screen.findByLabelText('Publish network');
         expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
             .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
-        const action = screen.getByRole('button', { name: 'Publish' });
+        const action = screen.getByRole('button', { name: 'Publish labels' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -106,7 +106,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
 
         await waitFor(() => expect(messaging.prepareLabelsRequest).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -145,7 +145,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
 
         await waitFor(() => expect(screen.getByLabelText('Wallet password')).toHaveValue(''));
@@ -156,7 +156,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
 
         expect(await screen.findByText('compose failed')).toBeTruthy();
         expect(screen.getByLabelText('Wallet password')).toHaveValue('');
@@ -177,7 +177,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
 
         expect(await screen.findByText(
             'The action encoded in the transaction does not match what you approved. Nothing was signed.',
@@ -196,7 +196,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
 
         expect(await screen.findByText('Failed to publish labels.')).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/inflateRawSync/);
@@ -211,7 +211,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'typo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
 
         expect(await screen.findByText('Incorrect password.')).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);
@@ -222,7 +222,7 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));
         fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
@@ -237,7 +237,7 @@ describe('BackupSection label publication confirmation', () => {
             mount();
             fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
             fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
             fireEvent.click(await screen.findByTestId('confirm-approve'));
             fireEvent.click(await screen.findByRole('button', { name: 'Copy transaction ID' }));
 
@@ -257,7 +257,7 @@ describe('BackupSection label publication confirmation', () => {
             mount();
             fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
             fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
             fireEvent.click(await screen.findByTestId('confirm-approve'));
 
             const button = await screen.findByRole('button', { name: 'Copy transaction ID' });
@@ -290,7 +290,7 @@ describe('BackupSection label publication confirmation', () => {
         await screen.findByText('Labels changed since the last publish');
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish labels' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));
 
         const queued = await screen.findByTestId('publish-labels-queued');

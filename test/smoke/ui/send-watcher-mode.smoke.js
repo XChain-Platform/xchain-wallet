@@ -152,12 +152,12 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /t\('send\.review\.createUnsigned'\)/,
-    'submit button label changes to "Create unsigned transaction" in watcher mode',
+    /isWatcherMode[\s\S]{0,120}\? t\('send\.title'\)/,
+    'submit button label is "Send" in watcher mode',
 );
 assert.match(
     sendSrc,
-    /t\('send\.watcherMode'\)/,
+    /t\('common\.watcherBuildsUnsigned'\)/,
     'review-stage hint copy explains watcher mode',
 );
 // §20 Cluster W FOLLOWUP 3 (closed at v0.239.0): when the source address is

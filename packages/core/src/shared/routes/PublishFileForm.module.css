@@ -11,6 +11,10 @@
     overflow: hidden;
 }
 
+.tokenPickerCard > :not(:last-child) {
+    border-block-end: 1px solid var(--xc-border);
+}
+
 .reviewPreview,
 .composePreview {
     display: block;

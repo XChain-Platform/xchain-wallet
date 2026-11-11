@@ -30,8 +30,10 @@ import {
     EmptyState,
     FormPage,
     Icon,
+    InfoTip,
     Input,
     ListPage,
+    OptionalPill,
     PageHeader,
     Screen,
     SectionHeader,
@@ -440,6 +442,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     <Button
                         variant="secondary"
                         size="sm"
+                        icon={<Icon.ClockIcon />}
                         aria-expanded={timelineKey === it.key}
                         onClick={() => setTimelineKey(timelineKey === it.key ? null : it.key)}
                     >
@@ -447,8 +450,8 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     </Button>
                     {status === 'open' ? (
                         <>
-                            <Button variant="secondary" size="sm" onClick={() => setActiveAction({ type: 'edit', item: it })}>Edit</Button>
-                            <Button variant="danger" size="sm" onClick={() => setActiveAction({ type: 'cancel', item: it })}>Cancel</Button>
+                            <Button variant="secondary" size="sm" icon={<Icon.PencilIcon />} onClick={() => setActiveAction({ type: 'edit', item: it })}>Edit</Button>
+                            <Button variant="danger" size="sm" icon={<Icon.XIcon />} onClick={() => setActiveAction({ type: 'cancel', item: it })}>Cancel</Button>
                         </>
                     ) : null}
                 </div>
@@ -698,7 +701,7 @@ function SwapActionPanel({
         // The broadcast panel lays out through ListPage, so it never draws
         // straight into the Screen content box.
         return wrap(
-            <ListPage actions={<Button variant="primary" onClick={onDone}>Done</Button>}>
+            <ListPage actions={<Button variant="primary" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}>
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
                 <p className={F.hint}>
                     {isCancel
@@ -729,13 +732,16 @@ function SwapActionPanel({
                 <StatusMessage variant="error">{validationError || error}</StatusMessage>
             ) : null}
             actions={(
+                // The panel's one forward action, green with its icon whether it
+                // updates or cancels the swap (U63).
                 <Button
                     type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
+                    variant="success"
+                    icon={isCancel ? <Icon.XIcon /> : <Icon.PencilIcon />}
                     loading={submitting || lane.composing}
                     disabled={submitting || lane.composing || !!validationError || (type === 'edit' && !editHasChange)}
                 >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Update swap')}
                 </Button>
             )}
         >
@@ -767,25 +773,29 @@ function SwapActionPanel({
             ) : (
                 <>
                     <Input
-                        label="New expiration (optional)"
+                        label="New expiration"
+                        optional
                         type="datetime-local"
-                        hint="Choose a date and time. Leave blank to keep the current expiration."
+                        help="The date and time this swap offer stops matching. Leave it blank to keep the current expiration."
                         value={expInput}
                         onChange={(e) => setExpInput(e.target.value)}
                     />
-                    <p className={F.successLabel}>Access lists (optional)</p>
+                    <p className={F.successLabel}>
+                        Access lists <OptionalPill />
+                        <InfoTip aria="About Access lists" label="An allow list limits which addresses can match this swap and a block list shuts addresses out. Pick a list you own, or remove the current one; a list you leave alone stays as it is." />
+                    </p>
                     <div className={F.actions}>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                        <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
                             {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
                         </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                        <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
                             {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
                         </Button>
                         {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
                         ) : null}
                         {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
-                            <Button type="button" variant="secondary" size="sm" onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('0')}>Remove block list</Button>
                         ) : null}
                     </div>
                     <p className={F.hint}>
@@ -797,8 +807,8 @@ function SwapActionPanel({
 
             {lane.isWatcherMode ? (
                 <p className={F.hint}>
-                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    Watcher mode: this prepares the transaction for your offline signer. Sign it
+                    there, then bring the signed transaction to a wallet that can broadcast it.
                 </p>
             ) : null}
         </FormPage>,

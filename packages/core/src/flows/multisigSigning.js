@@ -36,7 +36,10 @@ import {
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
 import { assertSigningAllowed } from './panicMode.js';
-import { assertBroadcastSignaturesVerify } from '../signers/verifyTxSignatures.js';
+import { assertBroadcastSignaturesVerify, assertTxSignaturesVerify } from '../signers/verifyTxSignatures.js';
+import { rawTxid } from '../signers/verifySignedTx.js';
+import { assembleMultisigTx } from './multisigSpend.js';
+import { assertMultisigTransactionBinding } from './multisigTransactionBinding.js';
 import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/multisig.js';
@@ -411,6 +414,9 @@ async function contributeMultisigSignatureLocked({ vault, sdkRegistry, sessionId
         return persist(vault, { ...session, partialSigs });
     }
 
+    // Refuse a valid signature for a request hash that does not describe the PSBT.
+    await assertMultisigTransactionBinding({ vault, sdkRegistry, session });
+
     // P2SH/P2WSH: DER-encoded ECDSA. Length is variable (typically
     // 70-72 bytes; 140-144 hex chars). Validate range loosely; the
     // PSBT finalizer rejects malformed sigs in any case.
@@ -633,6 +639,33 @@ async function finalizeMultisigSigningSessionLocked({
     const sdk = sdkRegistry.get(session.chainId);
     if (!sdk) {
         throw new Error(`finalizeMultisigSigningSession: no SDK registered for chainId "${session.chainId}"`);
+    }
+    if (session.scheme !== 'taproot-musig2' && session.psbtHex) {
+        const binding = await assertMultisigTransactionBinding({ vault, sdkRegistry, session });
+        if (binding.spend.partialSignatureCount === 0) {
+            const assembledTxHex = assembleMultisigTx({
+                scheme: session.scheme,
+                script: binding.script,
+                unsignedTxHex: binding.spend.unsignedTxHex,
+                signatures: session.signatures,
+            });
+            assertTxSignaturesVerify({
+                txHex: assembledTxHex,
+                prevouts: [{
+                    prevTxHash: binding.spend.input.txid,
+                    prevTxIndex: binding.spend.input.vout,
+                    scriptPubKeyHex: binding.spend.input.scriptPubKeyHex,
+                    value: binding.spend.input.amount,
+                }],
+                signerId: `multisig:${session.id}`,
+            });
+            return persist(vault, {
+                ...session,
+                finalizedTxHex: assembledTxHex,
+                txid: rawTxid(assembledTxHex),
+                status: 'finalized',
+            });
+        }
     }
     if (typeof sdk.wallet?.finalizeMultisigPsbt !== 'function') {
         throw new Error('finalizeMultisigSigningSession: sdk.wallet.finalizeMultisigPsbt is unavailable');

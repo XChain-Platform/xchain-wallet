@@ -151,6 +151,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                 <Input
                     ref={nameRef}
                     label="Account name"
+                    maxLength={NAME_MAX_LENGTH}
                     value={name}
                     onChange={(e) => {
                         userEditedRef.current = true;
@@ -160,7 +161,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                     autoComplete="off"
                     disabled={busy}
                     error={error || undefined}
-                    hint="Names a separate set of addresses in this wallet."
+                    help="Names a separate set of addresses in this wallet."
                 />
             </FormPage>
         </Screen>

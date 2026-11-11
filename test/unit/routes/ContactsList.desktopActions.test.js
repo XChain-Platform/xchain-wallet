@@ -35,8 +35,8 @@ describe('Contacts desktop actions and narrow layout', () => {
             resolve(process.cwd(), 'packages/core/src/shared/components/ListToolbar.module.css'),
             'utf8',
         );
-        // Every control, the sort select included, takes a full row once the toolbar wraps.
-        expect(toolbarCss).toMatch(/\.field\s*\{[\s\S]*?flex:\s*1 1 12rem/);
+        // The search box shrinks and the sort select keeps its own width on the same row.
+        expect(toolbarCss).toMatch(/\.filter\s*\{[\s\S]*?flex:\s*0 1 auto/);
     });
 
     it('ends a long contact name in an ellipsis inside the row', () => {

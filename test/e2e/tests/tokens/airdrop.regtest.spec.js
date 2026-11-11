@@ -302,7 +302,7 @@ async function expectConfirmModal(page, retrySubmit) {
 
 async function waitForHolderCount(page, tick, expected) {
     const holderLine = page.getByRole('main').getByText(/1 token · /);
-    const tickInput = page.getByLabel('Tokens (one per line)');
+    const tickInput = page.getByLabel('Tokens (one per line)', { exact: true });
     const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
     let last = '';
 
@@ -565,7 +565,7 @@ async function publishAddressList(page, source, members) {
     await expect(main, `the list form did not accept all ${members.length} addresses for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    const submit = main.getByRole('button', { name: /^(Publish list|Review)$/ });
+    const submit = main.getByRole('button', { name: 'Publish list', exact: true });
     await submit.click();
     await expectConfirmModal(page, submit);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -668,7 +668,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // composes the real drop: a well-formed address for another network
             // used to count as valid all the way through review, dry-run and
             // broadcast, and only the chain dropped it - after it was paid for.
-            await page.getByLabel('Recipients').fill([...recipients, MAINNET_ADDRESS].join('\n'));
+            await page.getByLabel('Recipients', { exact: true }).fill([...recipients, MAINNET_ADDRESS].join('\n'));
             await expect(main, 'the form counted the mainnet address among the payable recipients')
                 .toContainText(`${recipients.length} valid addresses · 1 invalid skipped`);
             const skipped = main.getByRole('alert');
@@ -679,7 +679,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Now the real list: two addresses, no debris, and the control
             // deliberately absent.
-            await page.getByLabel('Recipients').fill(recipients.join('\n'));
+            await page.getByLabel('Recipients', { exact: true }).fill(recipients.join('\n'));
             await expect(main).toContainText(`${recipients.length} valid addresses`);
             await expect(main, 'the form did not project the total this drop pays out')
                 .toContainText(`total ~${AMOUNT * recipients.length} ${TICK}`);
@@ -918,7 +918,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
             await main.getByLabel('Airdrop to').selectOption('holders');
-            await page.getByLabel('Tokens (one per line)').fill(MEMB_TICK);
+            await page.getByLabel('Tokens (one per line)', { exact: true }).fill(MEMB_TICK);
 
             // TWO holders right now: the issuer, which kept most of the supply,
             // and the address it just paid. This figure is the one the test is

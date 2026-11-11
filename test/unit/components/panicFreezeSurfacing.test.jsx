@@ -10,13 +10,11 @@
 
 // regression guard, rendered.
 //
-// The defect: with signing frozen by panic mode, the confirm screen still
-// said "Wallet unlocked. No password needed." -- the opposite of what was
-// true -- and the refusal only arrived on Approve & Sign. These tests hold
-// the two halves of the fix in place:
+// Keep sign surfaces quiet when signing is available and surface a self-armed
+// freeze before the user reaches Approve & Sign. These tests hold both parts
+// of the disclosure policy in place:
 //
-//   1. the sign surface stops claiming the wallet can sign, for BOTH
-//      self-armed and duress-armed freezes;
+//   1. the sign surface omits an unlocked-wallet readiness note;
 //   2. it explains why only when the user armed the freeze themselves, so
 //      the duress flow keeps giving an observer no cue.
 
@@ -41,41 +39,38 @@ const softwareAddress = { address: 'bc1qexample', source: 'hd' };
 const UNLOCKED_NOTE = /no password needed/i;
 
 describe('SigningReadyNote', () => {
-    it('keeps the wallet-unlocked note when signing is allowed', () => {
-        render(<SigningReadyNote><p>Wallet unlocked. No password needed.</p></SigningReadyNote>);
-        expect(screen.getByText(UNLOCKED_NOTE)).toBeTruthy();
+    it('renders nothing when signing is allowed', () => {
+        const { container } = render(<SigningReadyNote />);
+        expect(screen.queryByText(UNLOCKED_NOTE)).toBeNull();
+        expect(container.textContent).toBe('');
     });
 
-    it('replaces the note with the freeze when the user armed it themselves', () => {
+    it('shows the freeze when the user armed it themselves', () => {
         activatePanicMode();
-        render(<SigningReadyNote><p>Wallet unlocked. No password needed.</p></SigningReadyNote>);
+        render(<SigningReadyNote />);
         expect(screen.queryByText(UNLOCKED_NOTE)).toBeNull();
         expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
     });
 
     it('keeps the sentence about Approving where Approve is still shown', () => {
         activatePanicMode();
-        const { container } = render(<SigningReadyNote><p>Wallet unlocked. No password needed.</p></SigningReadyNote>);
+        const { container } = render(<SigningReadyNote />);
         expect(container.textContent).toMatch(/Approving will be refused/);
     });
 
-    it('withdraws the note WITHOUT a cue when the freeze was duress-armed', () => {
+    it('renders nothing when the freeze is duress-armed', () => {
         activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
-        const { container } = render(
-            <SigningReadyNote><p>Wallet unlocked. No password needed.</p></SigningReadyNote>,
-        );
-        // The false claim is gone...
+        const { container } = render(<SigningReadyNote />);
         expect(screen.queryByText(UNLOCKED_NOTE)).toBeNull();
-        // ...and nothing at all took its place: an observer standing over the
-        // user must not be able to read the freeze off this screen.
+        // Keep the duress freeze invisible to an observer on this screen.
         expect(container.textContent).toBe('');
     });
 });
 
 describe('SignCredentials under a signing freeze', () => {
-    it('claims the wallet can sign only when it actually can', () => {
+    it('shows no unlocked note and keeps the self-armed freeze statement', () => {
         render(<SignCredentials unlocked fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
-        expect(screen.getByText(UNLOCKED_NOTE)).toBeTruthy();
+        expect(screen.queryByText(UNLOCKED_NOTE)).toBeNull();
 
         cleanup();
         activatePanicMode();
@@ -100,20 +95,20 @@ describe('SignCredentials under a signing freeze', () => {
     it('asks for no password and states the freeze when the user armed it', () => {
         activatePanicMode();
         render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
-        expect(screen.queryByLabelText(/password/i)).toBeNull();
+        expect(screen.queryByLabelText(/password/i, { selector: 'input' })).toBeNull();
         expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
     });
 
     it('keeps the locked password field for a duress-armed freeze', () => {
         activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
         const { container } = render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
-        expect(screen.getByLabelText(/password/i)).toBeTruthy();
+        expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeTruthy();
         expect(container.textContent).not.toMatch(/panic/i);
     });
 
     it('keeps the locked password field when signing is allowed', () => {
         render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
-        expect(screen.getByLabelText(/password/i)).toBeTruthy();
+        expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeTruthy();
     });
 });
 

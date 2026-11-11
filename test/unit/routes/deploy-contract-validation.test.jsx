@@ -16,6 +16,7 @@ import { DeployContractForm } from '../../../packages/core/src/shared/routes/Dep
 import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
+const WATCHER_HINT = 'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.';
 const SOURCE = [
     'module.exports = {',
     '  run() {',
@@ -201,9 +202,9 @@ describe('DeployContractForm validation diagnostics', () => {
 
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
-        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: 'first|second' } });
-        fireEvent.change(utils.getByLabelText('Cooldown blocks (optional)'), { target: { value: '10' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: 'first|second' } });
+        fireEvent.change(utils.getByLabelText('Cooldown blocks'), { target: { value: '10' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent(
             'A stake-enabled contract accepts one constructor argument.',
@@ -223,12 +224,12 @@ describe('DeployContractForm validation diagnostics', () => {
 
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '1e5' } });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
 
         expect(await utils.findByRole('alert')).toHaveTextContent('Gas limit must be a positive whole number.');
     });
 
-    it('draws template names as plain labels with no icon picked from the word', async () => {
+    it('draws every template name with the contract icon, never an icon picked from the word', async () => {
         let utils;
         await domAct(async () => {
             utils = render(
@@ -246,9 +247,13 @@ describe('DeployContractForm validation diagnostics', () => {
             );
             await drain();
         });
+        // "validation" would pick the check icon from its label and read as
+        // chosen; both templates carry the same contract icon instead.
         const chip = utils.getByRole('button', { name: 'validation' });
-        expect(chip.querySelector('svg')).toBeNull();
-        expect(utils.getByRole('button', { name: 'escrow' }).querySelector('svg')).toBeNull();
+        const escrowIcon = utils.getByRole('button', { name: 'escrow' }).querySelector('svg');
+        expect(chip.querySelector('svg')).not.toBeNull();
+        expect(escrowIcon).not.toBeNull();
+        expect(chip.querySelector('svg').innerHTML).toBe(escrowIcon.innerHTML);
     });
 
     it('shows the required source message before review', async () => {
@@ -262,7 +267,7 @@ describe('DeployContractForm validation diagnostics', () => {
             await drain();
         });
 
-        const submit = utils.getByRole('button', { name: 'Publish' });
+        const submit = utils.getByRole('button', { name: 'Publish contract' });
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         expect(await utils.findByRole('alert')).toHaveTextContent('Contract source is required.');
@@ -280,11 +285,11 @@ describe('DeployContractForm validation diagnostics', () => {
         });
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
-        fireEvent.change(utils.getByLabelText('Cooldown blocks (optional)'), { target: { value: '10' } });
-        fireEvent.change(utils.getByLabelText('Slash destination (optional)'), {
+        fireEvent.change(utils.getByLabelText('Cooldown blocks'), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText('Slash destination'), {
             target: { value: 'not-an-address' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
 
         expect(await utils.findByRole('alert'))
             .toHaveTextContent('Slash destination must be BURN or a valid address for Bitcoin.');
@@ -307,19 +312,20 @@ describe('DeployContractForm validation diagnostics', () => {
         });
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
-        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), {
+        fireEvent.change(utils.getByLabelText('Constructor params'), {
             target: { value: 'first|second' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
 
         expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        expect(utils.getByText(WATCHER_HINT)).toBeInTheDocument();
         const constructorRow = utils.getByText('Constructor').nextElementSibling;
         expect(Array.from(constructorRow.querySelectorAll('li')).map((node) => node.textContent))
             .toEqual(['first', 'second']);
         expect(constructorRow).not.toHaveTextContent('first,second');
 
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
-        expect(await utils.findByLabelText('Constructor params (optional)')).toHaveValue('first|second');
+        expect(await utils.findByLabelText('Constructor params')).toHaveValue('first|second');
         expect(utils.getByLabelText('Gas limit')).toHaveValue('100000');
     });
 
@@ -340,10 +346,10 @@ describe('DeployContractForm validation diagnostics', () => {
         });
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '9007199254740993' } });
-        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), {
+        fireEvent.change(utils.getByLabelText('Constructor params'), {
             target: { value: '<img src=x>⚡|9007199254740993' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
 
         expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
         const constructorRow = utils.getByText('Constructor').nextElementSibling;

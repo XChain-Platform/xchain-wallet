@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the project-registry wallet surfaces: the "Official token"
-// banner data path (normalizeTokenInfo projects passthrough) and the
+// Smoke for the project-registry wallet surfaces: the token Details
+// project-membership path (normalizeTokenInfo projects passthrough) and the
 // ProjectRosterForm two-sign LIST → wait-index → owner LINK flow
 // (Project_Registry.md).
 
@@ -88,15 +88,15 @@ await assert.rejects(
     assert.equal(out, null, 'no-roster 400 resolves to null');
 }
 
-// --- normalizeTokenInfo projects passthrough (banner data) ---
+// --- normalizeTokenInfo projects passthrough (Details data) ---
 
 const tokenInfoSrc = readFileSync(join(core, 'src', 'flows', 'tokenInfo.js'), 'utf8');
 assert.ok(/projects/.test(tokenInfoSrc),
     'normalizeTokenInfo carries the explorer projects[] field');
 const tokenDetail = readFileSync(join(sharedRoutes, 'TokenDetail.jsx'), 'utf8');
-assert.ok(/officialBanner/.test(tokenDetail), 'TokenDetail renders the Official banner');
+assert.ok(/<DetailRow label="Projects">/.test(tokenDetail), 'TokenDetail renders project membership in Details');
 const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
-assert.ok(/officialBanner/.test(manageSrc), 'ManageToken renders the Official banner');
+assert.ok(!/officialBanner/.test(manageSrc), 'ManageToken omits the Official banner from its identity box');
 
 // --- Background host ---
 
@@ -120,10 +120,10 @@ for (const [shell, msgPath] of [
 // --- ManageToken entry (owner-gated) + App.jsx wiring (3 shells) ---
 
 assert.ok(/onManageRoster/.test(manageSrc), 'ManageToken accepts onManageRoster');
-assert.ok(/id:\s*['"]manage-roster['"]/.test(manageSrc),
+assert.ok(/id:\s*['"]official-list['"][^\n]*\.\.\.ownerAction\(options\.onManageRoster\)/.test(manageSrc),
     'ManageToken renders the Official-list action');
-assert.ok(/blockIssuerActions \? undefined : onManageRoster/.test(manageSrc),
-    'ManageToken hides Official list from non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?disabled: blockIssuerActions/.test(manageSrc),
+    'ManageToken disables Official list for non-owners');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -140,5 +140,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: project-roster smoke (ProjectRosterForm stage machine LIST -> wait-index -> LINK, TYPE=1 roster, owner gate + watcher block, getProjectForTick flow + 400->null, banner passthrough, bg handler, 3-shell messaging + App.jsx wiring)',
+    'OK: project-roster smoke (ProjectRosterForm stage machine LIST -> wait-index -> LINK, TYPE=1 roster, owner gate + watcher block, getProjectForTick flow + 400->null, Details passthrough, bg handler, 3-shell messaging + App.jsx wiring)',
 );

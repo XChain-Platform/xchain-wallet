@@ -48,6 +48,12 @@
     color: var(--xc-text-muted);
 }
 
+/* The wrapper already supplies the shared label gap, so the imported Input
+   label row must not add the same gap a second time. */
+.labelRow {
+    margin-block-end: 0;
+}
+
 .trigger {
     /* IconSelect.jsx adds Button's btn class beside this one. */
     --xc-button-hover-bg: var(--xc-surface);

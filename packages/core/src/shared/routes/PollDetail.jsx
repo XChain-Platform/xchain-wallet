@@ -8,16 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
+    AddressField,
     AddressText,
     Button,
     ChainBadge,
     Checkbox,
     FeeSelector,
     FormPage,
+    Icon,
+    InfoTip,
     Input,
     ListPage,
+    NetworkField,
     PageHeader,
     Screen,
     SectionHeader,
@@ -45,10 +49,11 @@ import styles from './IssueTokenForm.module.css';
 import detailStyles from './PollDetail.module.css';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
     latestBallotRows,
     pollResultPercentages,
@@ -126,6 +131,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [walletVotes, setWalletVotes] = useState(/** @type {any[] | null} */ (null));
     const [voteLoadError, setVoteLoadError] = useState(false);
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // Ballot editor state. Approval: Set of chosen option indices. Split: map of
     // option index -> share string.
@@ -313,6 +319,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         [fromAddress, walletVotes],
     );
     const initializedEditorRef = useRef('');
+    const ballotLabelId = useId();
 
     useEffect(() => {
         if (!poll || !fromAddress || walletVotes === null) return;
@@ -554,7 +561,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
     }, [formError]);
 
-    const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
+    const header = (
+        <PageHeader
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('view'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            title={`Poll #${String(pollIndex)}`}
+        />
+    );
     const wrap = (children) => (
         <Screen
             variant={variant}
@@ -571,6 +586,23 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
     if (!poll) return wrap(<ListPage><p>Loading poll…</p></ListPage>);
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                onPick={(address) => {
+                    setFromAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
@@ -596,7 +628,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
-                <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
+                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
             </ListPage>,
         );
     }
@@ -656,7 +688,6 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     ? 'Your vote could not be loaded.'
                     : 'No direct vote from this wallet.'}</p>
             )}
-            <p className={styles.hint}>A direct vote overrides any standing {poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.</p>
             {isOpen && sourceBallot.length ? <p className={styles.hint}>You can change this address&apos;s vote until the poll closes. The latest confirmed vote from this address replaces its earlier vote.</p> : null}
         </div>
     );
@@ -749,13 +780,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
-                    <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
-                        <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                            {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
-                        </Button>
-                    </>
+                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                        icon={isHwSource ? <Icon.SignIcon /> : <Icon.ThumbsUpIcon />}
+                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
+                    </Button>
                 )}
             >
                 <dl className={styles.detailsList}>
@@ -772,7 +801,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     </dd>
                 </dl>
                 {isWatcherMode ? (
-                    <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
+                    <p className={styles.hint}>Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -813,15 +842,41 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
+                    actions={<Button type="submit" variant="primary"
+                        icon={sourceBallot.length ? <Icon.CheckIcon /> : <Icon.ThumbsUpIcon />}
+                        disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
-                    <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
+                    <NetworkField
+                        label="Network"
+                        value={chainId}
+                        onChange={() => {}}
+                        chainIds={[chainId]}
+                        chainRegistry={chainRegistry}
+                        disabled
+                    />
+                    <AddressField
+                        label="From"
+                        help="The address casting this ballot. Its governance-token balance determines this vote's weight."
+                        icon="addresses"
+                        value={fromAddress?.address || ''}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setSourcePickerOpen(true)}
+                        iconLabel="Choose voting address"
+                    />
+                    <div role="group" aria-labelledby={ballotLabelId}>
+                        <div className={detailStyles.ballotLabelRow}>
+                            <span id={ballotLabelId} className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
+                            <InfoTip aria="About ballot choices"
+                                label={`Choose the option or options this address supports. A direct vote overrides any standing ${poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.`} />
+                        </div>
+                        <div className={detailStyles.ballotOptions}>
                         {options.map((label, i) => (
                             isSplit ? (
                                 <div key={i} className={detailStyles.splitOptionRow}>
                                     <div className={detailStyles.splitOptionInput}>
-                                        <Input label={`${i}: ${label}`} value={splitShares[i] || ''} inputMode="numeric"
+                                        <Input label={`${i}: ${label}`} help="The positive share of this address's voting weight assigned to this option."
+                                            value={splitShares[i] || ''} inputMode="numeric"
                                             onChange={(e) => setSplitShares((prev) => ({ ...prev, [i]: e.target.value }))}
                                             placeholder="share" autoComplete="off" />
                                     </div>
@@ -837,11 +892,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                                 />
                             )
                         ))}
+                        </div>
                     </div>
                     {options.length === 0 ? <p className={styles.hint}>This poll has no voting options.</p> : null}
-                    <Input label="Memo (optional)" hint={MEMO_HINT} value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    <Input label="Memo" optional maxLength={MAX_MEMO_LENGTH}
+                        help="An optional note recorded with this ballot. It does not affect the vote or its weight."
+                        value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     {feeTiers ? (
                         <FeeSelector
+                            chainId={chainId}
                             label="Network fee"
                             coinTicker={coinTicker}
                             tiers={feeTiers}

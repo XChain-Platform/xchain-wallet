@@ -71,11 +71,51 @@ function mount({
     return messaging;
 }
 
+function openMore(label) {
+    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+}
+
 describe('TokenDetail holders', () => {
+    it('keeps only Details on the page and moves secondary token panels into More info', async () => {
+        const description = 'A token description';
+        mount({
+            tokenInfoLookup: vi.fn().mockResolvedValue({
+                creator: CREATOR,
+                description,
+                websites: ['https://issuer.example/'],
+                images: [{ type: 'large', url: 'https://issuer.example/token.png' }],
+            }),
+        });
+
+        expect(await screen.findByText(description)).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Details']);
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+            'Supply over time',
+            'About',
+            'Media',
+            'Gated content',
+            'Holders',
+        ]);
+        expect(screen.queryByRole('menuitem', { name: 'Set price alert' })).toBeNull();
+    });
+
+    it('hides empty supplemental metadata entries but keeps discoverable lookups', async () => {
+        mount();
+        await screen.findByRole('button', { name: 'Copy creator address' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        expect(screen.queryByRole('menuitem', { name: 'About' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'Media' })).toBeNull();
+        expect(screen.getByRole('menuitem', { name: 'Gated content' })).toBeTruthy();
+        expect(screen.getByRole('menuitem', { name: 'Holders' })).toBeTruthy();
+    });
+
     it('renders the explorer amount and copies the complete holder address', async () => {
         mount({ holders: { data: [{ address: HOLDER, amount: '12345.5' }] } });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
 
         const list = await screen.findByRole('list', { name: 'Holder balances' });
         const row = within(list).getByRole('listitem');
@@ -84,7 +124,7 @@ describe('TokenDetail holders', () => {
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
     });
 
-    it('keeps History in the More info menu while details and holders share the row primitive', async () => {
+    it('keeps History in More info while details and holders share the row primitive', async () => {
         const onViewActivity = vi.fn();
         mount({
             holders: { data: [{ address: HOLDER, amount: '7' }] },
@@ -96,11 +136,10 @@ describe('TokenDetail holders', () => {
         fireEvent.click(activityAction);
         expect(onViewActivity).toHaveBeenCalledOnce();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         const detailList = await screen.findByRole('list', { name: 'Token detail fields' });
         const detailRow = within(detailList).getAllByRole('listitem')[0].firstElementChild;
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         const holderList = await screen.findByRole('list', { name: 'Holder balances' });
         const holderRow = within(holderList).getByRole('listitem').firstElementChild;
 
@@ -111,13 +150,13 @@ describe('TokenDetail holders', () => {
 
     it('distinguishes an empty list from a failed holder lookup', async () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText('No holders yet')).toBeTruthy();
 
         cleanup();
         __clearTokenInfoCache();
         mount({ holdersError: new Error('explorer offline') });
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
         expect(screen.queryByText('No holders yet')).toBeNull();
     });
@@ -128,7 +167,7 @@ describe('TokenDetail holders', () => {
             amount: String(index + 1),
         }));
         mount({ holders: { data, total: data.length } });
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
 
         await screen.findByText('Holders (5000)');
         const list = screen.getByRole('list', { name: 'Holder balances' });
@@ -148,8 +187,6 @@ describe('TokenDetail holders', () => {
 
     it('copies the complete creator address from Details', async () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-
         const copy = await screen.findByRole('button', { name: 'Copy creator address' });
         fireEvent.click(copy);
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(CREATOR));
@@ -165,7 +202,7 @@ describe('TokenDetail holders', () => {
             },
         });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         const table = await screen.findByRole('list', { name: 'Holder balances' });
         expect(within(table).getAllByText('-', { exact: true })).toHaveLength(4);
         expect(table.textContent).not.toMatch(/undefined|NaN/);
@@ -177,12 +214,12 @@ describe('TokenDetail holders', () => {
         mount({ tokenInfoLookup: getTokenInfo, holdersLookup: getHoldersForToken });
 
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
         expect(screen.getByRole('group', { name: 'Quick actions' })).toBeTruthy();
     });
 
-    it('discards holder pagination and tab state when the token changes', async () => {
+    it('discards holder pagination and revealed panel state when the token changes', async () => {
         let resolveOldPage;
         const oldPage = new Promise((resolve) => { resolveOldPage = resolve; });
         const first = Array.from({ length: 25 }, (_, index) => ({
@@ -210,14 +247,14 @@ describe('TokenDetail holders', () => {
             </MessagingProvider>
         );
         const view = render(tree('OLD'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         await screen.findByText('Holders (25 of 50)');
         fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
 
         view.rerender(tree('NEW'));
-        expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.queryByRole('list', { name: 'Holder balances' })).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Holders');
         expect(await screen.findByTitle(freshHolder)).toBeTruthy();
 
         await act(async () => {
@@ -253,12 +290,12 @@ describe('TokenDetail holders', () => {
             </MessagingProvider>
         );
         const view = render(tree(CHAIN, 'OLD'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Gated content');
         fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
         await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledWith(expect.objectContaining({ chainId: CHAIN, gateTicker: 'OLD' })));
 
         view.rerender(tree(secondChain, 'NEW'));
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        openMore('Gated content');
         fireEvent.click(await screen.findByRole('button', { name: 'Unlock and open secret.txt' }));
         await waitFor(() => expect(unlockGatedContent).toHaveBeenCalledTimes(2));
         expect(unlockGatedContent).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -269,7 +306,7 @@ describe('TokenDetail holders', () => {
 });
 
 describe('TokenDetail actions', () => {
-    it('renders applicable actions in Send, Receive, Exchange order and invokes them', async () => {
+    it('renders Send, Receive, Exchange and More info in order and invokes the routes', async () => {
         const onSend = vi.fn();
         const onReceive = vi.fn();
         const onBuy = vi.fn();
@@ -282,6 +319,7 @@ describe('TokenDetail actions', () => {
             'Send',
             'Receive',
             'Exchange',
+            'More info',
         ]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -292,15 +330,16 @@ describe('TokenDetail actions', () => {
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
 
-    it('hides Send in watch-only mode while retaining non-signing actions', async () => {
+    it('disables Send in watch-only mode while retaining the four-action row', async () => {
         mount({
             settings: { walletMode: 'watcher' },
             props: { onSend: vi.fn(), onReceive: vi.fn(), onBuy: vi.fn() },
         });
 
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled());
         expect(screen.getByRole('button', { name: 'Receive' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'More info' })).toBeTruthy();
     });
 
     it('keeps a zero-balance Send visible and shows why it is disabled', async () => {

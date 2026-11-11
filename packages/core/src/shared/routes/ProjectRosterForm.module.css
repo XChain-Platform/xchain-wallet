@@ -1,0 +1,10 @@
+.rosterList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.rosterList > * + * {
+    border-top: 1px solid var(--xc-border);
+}

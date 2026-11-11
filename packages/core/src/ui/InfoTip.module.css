@@ -51,6 +51,12 @@
 
 /* The help dot keeps its 16px glyph. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
 @media (pointer: coarse), (hover: none) {
+    /* The label row is 24px tall, so the layer reaches over the top edge of
+       the field below; lifting the dot keeps that field from taking the tap. */
+    .trigger.trigger {
+        z-index: var(--xc-z-base);
+    }
+
     .trigger.trigger::before {
         content: '';
         position: absolute;

@@ -184,13 +184,20 @@ describe('Settings keyboard interaction', () => {
             screen.getByRole('switch', { name: 'Show hide button on rows' }),
         ];
         await expectTabOrder([
+            screen.getByRole('button', { name: 'About Hide small balances' }),
             switches[0],
+            screen.getByRole('button', { name: 'About Hide unknown tokens' }),
             switches[1],
+            screen.getByRole('button', { name: 'About Small-balance threshold' }),
             screen.getByRole('combobox', { name: 'Small-balance threshold' }),
+            screen.getByRole('button', { name: 'About Balance number format' }),
             screen.getByRole('combobox', { name: 'Balance number format' }),
+            screen.getByRole('button', { name: 'About Show pin button on rows' }),
             switches[2],
+            screen.getByRole('button', { name: 'About Show hide button on rows' }),
             switches[3],
-            screen.getByRole('combobox', { name: 'Token network' }),
+            screen.getByRole('button', { name: /^Network:/ }),
+            screen.getByRole('button', { name: /^About Ticker$/i }),
             screen.getByRole('textbox', { name: 'Token ticker' }),
             screen.getByRole('button', { name: 'Watch token' }),
             screen.getByRole('button', { name: 'Reset list preferences' }),
@@ -226,7 +233,10 @@ describe('Settings keyboard interaction', () => {
         expect(tor).toBeDisabled();
         await expectTabOrder([
             ...switches,
+            // U57: each field's '?' tip sits on its label line, before the field.
+            screen.getByRole('button', { name: 'About clipboard auto-clear' }),
             screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' }),
+            screen.getByRole('button', { name: 'About form draft retention' }),
             screen.getByRole('combobox', { name: 'Form draft retention' }),
             screen.getByRole('button', { name: 'Reset to defaults' }),
         ]);
@@ -245,8 +255,10 @@ describe('Settings keyboard interaction', () => {
         const messaging = settingsHarness();
         mount(<NetworkSection activeWallet={{ id: 'wallet-1' }} />, messaging);
 
+        const picker = await screen.findByRole('combobox', { name: 'Active network' });
         await expectTabOrder([
-            await screen.findByRole('combobox', { name: 'Active network' }),
+            screen.getByRole('button', { name: 'About the network setting' }),
+            picker,
         ]);
     });
 

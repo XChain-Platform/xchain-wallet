@@ -39,7 +39,7 @@ function setThroughRow() {
     fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'fixture wallet pw' } });
     fireEvent.change(screen.getByLabelText('Duress passphrase'), { target: { value: PHRASE } });
     fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: PHRASE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
 }
 
 beforeEach(() => {

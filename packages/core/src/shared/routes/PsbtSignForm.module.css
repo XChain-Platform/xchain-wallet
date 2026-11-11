@@ -1,0 +1,31 @@
+.artifact {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.artifactLabel {
+    margin-block-end: var(--xc-label-gap);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.artifactBox {
+    composes: signatureBox from './SignMessageForm.module.css';
+    min-height: auto;
+    margin: 0;
+    padding-block: var(--xc-space-2);
+    padding-inline-start: var(--xc-space-2);
+    padding-inline-end: calc(var(--xc-tap-min) + var(--xc-space-3));
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+}
+
+.artifactCopy {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: var(--xc-space-1);
+    inset-inline-end: var(--xc-space-1);
+}

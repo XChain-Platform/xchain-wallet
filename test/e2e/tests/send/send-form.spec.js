@@ -183,7 +183,8 @@ test.describe('send form', () => {
 
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         await expect(toField(page)).toHaveValue(VALID_BTC);
-        await expect(amountField(page)).toHaveValue('0.01');
+        // BTC amounts show their exact 8-decimal format (U61).
+        await expect(amountField(page)).toHaveValue('0.01000000');
     });
 
     test('a failed signing attempt surfaces an error', async ({ page }) => {

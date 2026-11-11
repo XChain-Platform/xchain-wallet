@@ -442,6 +442,19 @@
     gap: var(--xc-space-1);
 }
 
+.assetPickerLabelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.assetPickerLabel {
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text-muted);
+}
+
 .assetPickerButton {
     appearance: none;
     display: inline-flex;

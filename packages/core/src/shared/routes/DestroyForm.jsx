@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -34,8 +34,7 @@ import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } fr
 import { compareDecimal, exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { useNativeFee } from '../hooks/useNativeFee.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -151,9 +150,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: native-coin protocol fee (DESTROY is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -185,6 +184,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // An amount refusal shows under the Amount field, which takes focus, so a
     // phone shows it beside the value to fix instead of above the fold.
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
+    // The Amount field shows the chosen token's own decimal places (U61): it
+    // pads "1" to "1.00000000" for an 8-place token and refuses extra digits
+    // with its own field error, which also holds the Destroy button.
+    const amountDivisibility = amountPlacesFor(tokenInfo);
+    const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const refuseAmount = (message) => {
         setFormError(null);
@@ -616,9 +620,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -640,7 +642,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 )}
                 <Input
                     label="Type DESTROY to confirm"
-                    hint={t('common.typedConfirmationDestroyHint')}
+                    help={t('common.typedConfirmationDestroyHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -677,7 +679,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 extraCredentials={(
                     <Input
                         label='Type "DESTROY" to confirm'
-                        hint={t('common.typedConfirmationDestroyReviewHint')}
+                        help={t('common.typedConfirmationDestroyReviewHint')}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -700,6 +702,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -738,21 +741,22 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     type="submit"
                     variant="primary"
                     loading={confirmAction.composing || checkingBalance}
-                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing || checkingBalance}
+                    disabled={!fromAddress || !ticker || !amount || !!amountPrecisionError || confirmAction.composing || checkingBalance}
                 >
-                    {!isWatcherMode ? 'Destroy' : 'Preview'}
+                    Destroy
                 </Button>
             )}
         >
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                <NetworkField label="Network" help="The chain the destroy is recorded on. Your From address, token balance, and network fee are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address whose balance is burned. It signs this destroy and pays the network fee."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -769,17 +773,20 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             {lockedToken ? null : (
                 <TokenField
                     label="Token"
+                    help="The token balance you are permanently destroying. Only tokens available to send from this wallet are listed."
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
             )}
             <AmountField
                 label="Amount"
-                hint="How much to destroy."
+                help="How much to destroy."
                 amount={amount}
                 tick={ticker}
+                divisibility={amountDivisibility}
                 inputRef={amountInputRef}
                 error={amountError || undefined}
+                onValidationError={setAmountPrecisionError}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -797,16 +804,15 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    showEstimateNotice={false}
                 />
             ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
         </FormPage>,
     );
 }
@@ -818,4 +824,19 @@ function DetailRow({ label, value }) {
             <dd className={styles.detailsValue}>{value}</dd>
         </>
     );
+}
+
+/**
+ * The chosen token's decimal places for the Amount field, or undefined while
+ * the token record is unknown. A missing value must stay undefined: the field
+ * reads Number(null) as 0 and would refuse every decimal.
+ *
+ * @param {{ divisibility?: unknown } | null | undefined} info
+ * @returns {number | undefined}
+ */
+function amountPlacesFor(info) {
+    const raw = info?.divisibility;
+    if (raw === null || raw === undefined || raw === '') return undefined;
+    const places = Number(raw);
+    return Number.isInteger(places) && places >= 0 ? places : undefined;
 }

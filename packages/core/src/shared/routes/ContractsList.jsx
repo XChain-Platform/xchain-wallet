@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { isDemoWallet } from '../../flows/demoMode.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -73,7 +73,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  */
 export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
 
     const vmChains = useChainIdsWithAction('DEPLOY');
@@ -140,9 +142,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return vmChainsWithAddresses.includes(chainFilter) ? [chainFilter] : [];
     }, [chainFilter, vmChainsWithAddresses]);
 
-    // A demo wallet lists no contracts of its own: a demo wallet's addresses
-    // never go to an explorer (issue #82).
-    const isDemo = isDemoWallet(walletId);
     // Offline the explorer reads cannot finish: the sections wait, the page
     // shows its offline state, and the reads run when the connection returns.
     const { offline, recheck } = useNetworkOffline({ walletId });
@@ -152,8 +151,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // per chain, merge, de-dupe.
     useEffect(() => {
         if (!addressesByChain) return;
-        if (activeChains.length === 0 || isDemo) {
-            setMyByChain(settledEmpty(isDemo ? activeChains : []));
+        if (activeChains.length === 0) {
+            setMyByChain(settledEmpty([]));
             return;
         }
         if (offline) return;
@@ -198,7 +197,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo, offline]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, offline]);
 
     // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
@@ -207,8 +206,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // latestBlock, kinds: Set<'deposit'|'withdraw'> } for rendering.
     useEffect(() => {
         if (!addressesByChain) return;
-        if (activeChains.length === 0 || isDemo) {
-            setInteractionsByChain(settledEmpty(isDemo ? activeChains : []));
+        if (activeChains.length === 0) {
+            setInteractionsByChain(settledEmpty([]));
             return;
         }
         if (offline) return;
@@ -294,11 +293,11 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo, offline]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, offline]);
 
     useEffect(() => {
-        if (activeChains.length === 0 || isDemo) {
-            setBrowseByChain(settledEmpty(isDemo ? activeChains : []));
+        if (activeChains.length === 0) {
+            setBrowseByChain(settledEmpty([]));
             return;
         }
         if (offline) return;
@@ -328,7 +327,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 });
         }
         return () => { cancelled = true; };
-    }, [activeChains, messaging, contractsReload, isDemo, offline]);
+    }, [activeChains, messaging, contractsReload, offline]);
 
         const header = (
         <PageHeader
@@ -382,7 +381,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             <div className={contractStyles.toolbarSearch}>
                 <Input
                     type="search"
-                    size="md"
+                    size="sm"
                     placeholder="Filter by name or number"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -395,8 +394,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 onChange={setChainFilter}
             />
             {onDeploy ? (
-                <Button variant="primary" size="sm" onClick={onDeploy}>
-                    + Publish contract
+                <Button variant="success" size="sm" className={contractStyles.toolbarControl} icon={<Icon.PlusIcon />} onClick={onDeploy}>
+                    Publish contract
                 </Button>
             ) : null}
         </>
@@ -559,6 +558,8 @@ function ChainFilterBar({ chains, value, onChange }) {
                 type="button"
                 variant={value === 'all' ? 'primary' : 'secondary'}
                 size="sm"
+                className={contractStyles.toolbarControl}
+                icon={<Icon.FilterIcon />}
                 role="tab"
                 aria-selected={value === 'all'}
                 onClick={() => onChange('all')}
@@ -573,6 +574,7 @@ function ChainFilterBar({ chains, value, onChange }) {
                         type="button"
                         variant={value === cid ? 'primary' : 'secondary'}
                         size="sm"
+                        className={contractStyles.toolbarControl}
                         role="tab"
                         key={cid}
                         aria-selected={value === cid}

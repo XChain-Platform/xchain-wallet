@@ -8,14 +8,21 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Fragment, useState } from 'react';
+import {
+    Fragment, useLayoutEffect, useRef, useState,
+} from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import {
+    act, render, screen, fireEvent, cleanup,
+} from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 function makeCommands() {
     return [
@@ -27,10 +34,10 @@ function makeCommands() {
 
 const getInput = () => screen.getByRole('combobox');
 
-function IssueForm() {
-    const [done, setDone] = useState(false);
-    if (done) return <h1>Token issued</h1>;
-    return <button type="button" onClick={() => setDone(true)}>Issue token</button>;
+function WizardForm() {
+    const [selected, setSelected] = useState(false);
+    if (selected) return <h1>Token template selected</h1>;
+    return <button type="button" onClick={() => setSelected(true)}>Meme token</button>;
 }
 
 function PaletteRouteHarness() {
@@ -39,10 +46,10 @@ function PaletteRouteHarness() {
     const commands = buildCommands({ navigate: palette.navigate || setView });
     return (
         <>
-            <button type="button" onClick={() => setView('issue')}>Open issue form</button>
+            <button type="button" onClick={() => setView('wizard')}>Open token wizard</button>
             <button type="button" onClick={palette.openPalette}>Open command palette</button>
             <Fragment key={palette.navigationKey}>
-                {view === 'issue' ? <IssueForm /> : null}
+                {view === 'wizard' ? <WizardForm /> : null}
             </Fragment>
             <CommandPalette
                 open={palette.open}
@@ -61,6 +68,22 @@ function RecentHarness({ commands }) {
             <CommandPalette open={open} onClose={() => setOpen(false)} commands={commands} />
         </>
     );
+}
+
+function ClosedPaletteHarness({ commands, onClose, onOpenReady, onOpened }) {
+    const [open, setOpen] = useState(false);
+    const handledOpen = useRef(false);
+    onOpenReady(() => setOpen(true));
+    useLayoutEffect(() => {
+        if (!open) {
+            handledOpen.current = false;
+            return;
+        }
+        if (handledOpen.current) return;
+        handledOpen.current = true;
+        onOpened();
+    }, [open, onOpened]);
+    return <CommandPalette open={open} onClose={onClose} commands={commands} />;
 }
 
 describe('CommandPalette', () => {
@@ -90,6 +113,48 @@ describe('CommandPalette', () => {
         fireEvent.change(getInput(), { target: { value: 'sett' } });
         expect(screen.queryByRole('option', { name: /Home/ })).toBeNull();
         expect(screen.getByRole('option', { name: /Settings/ })).toBeTruthy();
+    });
+
+    it('preserves a query typed immediately after opening', async () => {
+        const commands = makeCommands();
+        const onClose = vi.fn();
+        let openPalette;
+        const frames = [];
+        const reportConsoleError = console.error;
+        vi.spyOn(console, 'error').mockImplementation((...args) => {
+            // The event deliberately lands during the opening layout commit,
+            // which React reports even though render already wraps it in act.
+            if (String(args[0]).includes('not wrapped in act')) return;
+            reportConsoleError(...args);
+        });
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+            frames.push(callback);
+            return frames.length;
+        });
+        vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+        render(
+            <ClosedPaletteHarness
+                commands={commands}
+                onClose={onClose}
+                onOpenReady={(open) => { openPalette = open; }}
+                onOpened={() => {
+                    fireEvent.change(getInput(), { target: { value: 'settings' } });
+                }}
+            />,
+        );
+
+        await act(async () => {
+            openPalette();
+        });
+        await act(async () => {
+            frames.splice(0).forEach((callback) => callback(performance.now()));
+        });
+
+        expect(getInput()).toHaveValue('settings');
+        fireEvent.keyDown(getInput(), { key: 'Enter' });
+        expect(commands[2].run).toHaveBeenCalledOnce();
+        expect(commands[0].run).not.toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalledOnce();
     });
 
     it('shows an empty state when nothing matches', () => {
@@ -133,16 +198,16 @@ describe('CommandPalette', () => {
 
     it('re-opens the current action from the palette with a fresh form', () => {
         render(<PaletteRouteHarness />);
-        fireEvent.click(screen.getByRole('button', { name: 'Open issue form' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
-        expect(screen.getByRole('heading', { name: 'Token issued' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Open token wizard' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Meme token' }));
+        expect(screen.getByRole('heading', { name: 'Token template selected' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Open command palette' }));
         fireEvent.change(getInput(), { target: { value: 'Issue token' } });
         fireEvent.click(screen.getByRole('option', { name: /Issue token/ }));
 
-        expect(screen.queryByRole('heading', { name: 'Token issued' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Issue token' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Token template selected' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Meme token' })).toBeTruthy();
     });
 
     it('Escape closes without running anything', () => {

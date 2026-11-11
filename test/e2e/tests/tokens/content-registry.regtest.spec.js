@@ -194,7 +194,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 mimeType: 'image/svg+xml',
                 buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'),
             });
-            await page.getByRole('button', { name: 'Review upload', exact: true }).click();
+            await page.getByRole('button', { name: 'Attach artwork', exact: true }).click();
 
             const fileMain = page.getByRole('main');
             await expect(fileMain.getByRole('button', { name: 'Upload file', exact: true }))
@@ -311,13 +311,13 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('button', { name: 'Fork & edit', exact: true }).click();
             const forkMain = page.getByRole('main');
-            await expect(forkMain.getByRole('button', { name: 'Review', exact: true }))
+            await expect(forkMain.getByRole('button', { name: 'Publish edit', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             // The fork adds a member the parent does not already hold: ListForkForm
             // drops additions that are already on the list, so re-adding `source`
-            // would leave nothing to publish and Review disabled.
+            // would leave nothing to publish and Publish edit disabled.
             await forkMain.getByLabel(/^Add addresses/).fill(REGTEST_DESTINATION);
-            await forkMain.getByRole('button', { name: 'Review', exact: true }).click();
+            await forkMain.getByRole('button', { name: 'Publish edit', exact: true }).click();
 
             const publishAdd = forkMain.getByRole('button', { name: 'Publish add', exact: true });
             await expect(publishAdd).toBeVisible({ timeout: 30_000 });
@@ -363,8 +363,8 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // read while the venue's per-IP limit is paused after a 429.
             await page.getByRole('button', { name: 'Rename list', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
-            await renameMain.getByLabel('Name (empty means unchanged)').fill(NAME);
-            await renameMain.getByRole('button', { name: 'Review', exact: true }).click();
+            await renameMain.getByLabel('Name', { exact: true }).fill(NAME);
+            await renameMain.getByRole('button', { name: 'Rename list', exact: true }).click();
             const renamePassword = renameMain.getByLabel('Password', { exact: true });
             if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
@@ -384,9 +384,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('button', { name: 'Transfer list', exact: true }).click();
             const transferMain = page.getByRole('main');
-            await transferMain.getByLabel('Destination').fill(REGTEST_DESTINATION);
+            await transferMain.getByLabel('New owner', { exact: true }).fill(REGTEST_DESTINATION);
             await transferMain.getByLabel('Type TRANSFER to confirm').fill('TRANSFER');
-            await transferMain.getByRole('button', { name: 'Review', exact: true }).click();
+            await transferMain.getByRole('button', { name: 'Transfer list', exact: true }).click();
             const transferPassword = transferMain.getByLabel('Password', { exact: true });
             if (await transferPassword.count() > 0 && await transferPassword.isVisible()) await transferPassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
@@ -409,7 +409,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the wallet never finished checking the current official-token list')
                 .toBeVisible({ timeout: 60_000 });
             await rosterMain.getByLabel('Tokens (one per line)').fill(MEMBER);
-            await rosterMain.getByRole('button', { name: 'Review list', exact: true }).click();
+            await rosterMain.getByRole('button', { name: 'Save roster', exact: true }).click();
 
             await expect(rosterMain.getByRole('button', { name: 'Publish list', exact: true }))
                 .toBeVisible({ timeout: 30_000 });

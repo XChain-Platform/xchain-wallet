@@ -51,6 +51,8 @@ export class PriceAlertWatcher {
      * @param {Object} deps
      * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null, fetchedAt?: number }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
      *   the price source (typically a priceOracle.getNativePrices wrapper)
+     * @param {(opts: { items: Array<{ chainId: string, tick: string }>, fiatCurrency: string }) => Promise<{ prices: Record<string, { priceFiat: number|null, fetchedAt?: number }|null> }>} [deps.getTokenPrices]
+     *   optional per-token price source; token alerts remain armed when absent
      * @param {() => Promise<import('../schemas/priceAlert.js').PriceAlert[]>} deps.listArmedAlerts
      *   the user's alerts; the watcher filters to status === 'armed'
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
@@ -69,6 +71,7 @@ export class PriceAlertWatcher {
      */
     constructor({
         getNativePrices,
+        getTokenPrices,
         listArmedAlerts,
         getSettings,
         notify,
@@ -87,6 +90,7 @@ export class PriceAlertWatcher {
         if (typeof markTriggered !== 'function') throw new Error('PriceAlertWatcher: markTriggered is required');
 
         this._getNativePrices = getNativePrices;
+        this._getTokenPrices = typeof getTokenPrices === 'function' ? getTokenPrices : null;
         this._listArmedAlerts = listArmedAlerts;
         this._getSettings = getSettings;
         this._notify = withAlertInbox(notify, { recordAlert, now });
@@ -227,16 +231,33 @@ export class PriceAlertWatcher {
             }
 
             for (const [fiatCurrency, alerts] of byCurrency.entries()) {
-                const chainIds = Array.from(new Set(alerts.map((a) => a.chainId)));
-                let result;
-                try {
-                    result = await this._getNativePrices({ chainIds, fiatCurrency });
-                } catch (e) {
-                    this._log.error('PriceAlertWatcher: getNativePrices failed', e);
-                    continue;
+                const nativeAlerts = alerts.filter((a) => a.tick == null);
+                const tokenAlerts = alerts.filter((a) => a.tick != null);
+                let nativeResult = null;
+                let tokenResult = null;
+
+                if (nativeAlerts.length > 0) {
+                    const chainIds = Array.from(new Set(nativeAlerts.map((a) => a.chainId)));
+                    try {
+                        nativeResult = await this._getNativePrices({ chainIds, fiatCurrency });
+                    } catch (e) {
+                        this._log.error('PriceAlertWatcher: getNativePrices failed', e);
+                    }
                 }
                 if (generation !== this._generation) return;
-                if (!result || result.disabled || result.error || !result.prices) continue;
+
+                if (tokenAlerts.length > 0 && this._getTokenPrices) {
+                    const items = Array.from(new Map(tokenAlerts.map((a) => {
+                        const tick = normalizeTick(a.tick);
+                        return [`${a.chainId}::${tick}`, { chainId: a.chainId, tick }];
+                    })).values());
+                    try {
+                        tokenResult = await this._getTokenPrices({ items, fiatCurrency });
+                    } catch (e) {
+                        this._log.error('PriceAlertWatcher: getTokenPrices failed', e);
+                    }
+                }
+                if (generation !== this._generation) return;
 
                 // The price fetch can outlast an edit, so only alerts whose terms
                 // still match the store are judged against the fetched price.
@@ -247,7 +268,12 @@ export class PriceAlertWatcher {
                     // A lock during an earlier delivery must not let later alerts out.
                     if (generation !== this._generation) return;
                     if (current.get(alert.id) !== alertTerms(alert)) continue;
-                    const entry = result.prices[alert.chainId];
+                    const result = alert.tick == null ? nativeResult : tokenResult;
+                    if (!result || result.disabled || result.error || !result.prices) continue;
+                    const priceKey = alert.tick == null
+                        ? alert.chainId
+                        : `${alert.chainId}::${normalizeTick(alert.tick)}`;
+                    const entry = result.prices[priceKey];
                     const price = this._isFreshPrice(entry)
                         ? entry.priceFiat
                         : null;
@@ -299,7 +325,7 @@ export class PriceAlertWatcher {
      */
     async _fire(alert, price, settings) {
         this._fired.add(alert.id); // guard before any await so a slow markTriggered can't double-fire
-        const coin = coinDisplayName(alert.chainId);
+        const coin = alert.tick == null ? coinDisplayName(alert.chainId) : normalizeTick(alert.tick);
         const target = formatTarget(alert.targetFiat, alert.fiatCurrency);
         const dir = alert.direction === 'above' ? 'rose above' : 'fell below';
         // quiet hours: the threshold still fires and the alert is
@@ -316,6 +342,7 @@ export class PriceAlertWatcher {
                     body: `${coin} ${dir} ${target}.`,
                     data: {
                         chainId: alert.chainId,
+                        ...(alert.tick == null ? {} : { tick: normalizeTick(alert.tick) }),
                         direction: alert.direction,
                         targetFiat: alert.targetFiat,
                         fiatCurrency: alert.fiatCurrency,
@@ -393,7 +420,14 @@ export class PriceAlertWatcher {
 /** Identity of an alert's threshold terms; an edit changes it. */
 export function alertTerms(alert) {
     const fiat = String(alert.fiatCurrency || 'usd').toLowerCase();
+    if (alert.tick != null) {
+        return `${alert.chainId}::${normalizeTick(alert.tick)}::${alert.direction}::${alert.targetFiat}::${fiat}`;
+    }
     return `${alert.chainId}::${alert.direction}::${alert.targetFiat}::${fiat}`;
+}
+
+function normalizeTick(tick) {
+    return String(tick ?? '').trim().toUpperCase();
 }
 
 /** 'bitcoin-mainnet' → 'Bitcoin'. Falls back to the raw chainId. */

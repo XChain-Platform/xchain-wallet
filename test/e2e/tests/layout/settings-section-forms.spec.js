@@ -104,7 +104,8 @@ for (const size of SIZES) {
             const sentence = page.getByRole('main').getByText(/outgoing transactions? to reach the threshold/);
             await expect(sentence).toHaveCount(1);
             const sentenceBox = await sentence.boundingBox();
-            const firstCard = await page.getByRole('main').getByRole('heading', { level: 3 }).first().boundingBox();
+            // Each network's name is an h2, the level under the page's h1 title.
+            const firstCard = await page.getByRole('main').getByRole('heading', { level: 2 }).first().boundingBox();
             expect(sentenceBox.y, 'the sentence sits above the first network card').toBeLessThan(firstCard.y);
             await expectNoSidewaysScroll(page, `${size.name} Automatic donation`);
         });

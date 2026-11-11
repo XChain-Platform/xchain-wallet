@@ -16,12 +16,14 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/components/AppHeader.module.css': ['20'],
     'shared/components/LeftNav.module.css': ['1000'],
     'shared/components/PlatformSwitcher.module.css': ['20'],
+    // The selected chart range fill sits behind its label inside the label's
+    // own isolated stacking context, so -1 never reaches the chart card.
+    'shared/components/PortfolioChart.module.css': ['-1'],
     'shared/components/TxStatusTimeline.module.css': ['1'],
     'shared/routes/AddressList.module.css': ['200'],
     'shared/routes/ContactsList.module.css': ['100'],
     'shared/routes/DispenserDetail.module.css': ['20'],
     'shared/routes/History.module.css': ['20', '20'],
-    'shared/routes/ManageToken.module.css': ['20'],
     'shared/routes/StakeDetail.module.css': ['20'],
     'shared/routes/WalletPicker.module.css': ['1'],
     // The kit Checkbox stacks its transparent native input over the painted box.

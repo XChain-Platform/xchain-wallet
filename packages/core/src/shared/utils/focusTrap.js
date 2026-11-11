@@ -260,8 +260,13 @@ export function useFocusTrap(containerRef, {
         if (container.contains(ownerDoc.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
         } else if (!suppressInitialFocus && initial && typeof initial.focus === 'function') {
-            // Defer to after paint so the element is actually focusable.
-            requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
+            // Defer to after paint so the element is actually focusable. A
+            // focus move into the dialog before that frame (a keyboard user
+            // already on a row) wins over the default.
+            requestAnimationFrame(() => {
+                if (container.contains(ownerDoc.activeElement)) return;
+                try { initial.focus(); } catch { /* noop */ }
+            });
         }
 
         const onKeyDown = (e) => {

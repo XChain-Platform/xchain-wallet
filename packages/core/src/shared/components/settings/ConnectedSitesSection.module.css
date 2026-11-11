@@ -2,7 +2,8 @@
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
+    /* Each field carries a label line, so the submit lines up with the inputs, not the labels. */
+    align-items: flex-end;
     gap: var(--xc-space-2);
 }
 

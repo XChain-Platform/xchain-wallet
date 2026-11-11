@@ -17,7 +17,7 @@ afterEach(() => cleanup());
 describe('NativeFeeToggle', () => {
     it('renders a plain-language label naming the coin when coinTicker is set', () => {
         render(<NativeFeeToggle checked={false} onChange={() => {}} coinTicker="BTC" />);
-        expect(screen.getByText('Pay protocol fee in BTC instead of XCHAIN')).toBeTruthy();
+        expect(screen.getByText('Pay protocol fee in BTC')).toBeTruthy();
         expect(screen.getByText(/On sends the protocol fee's BTC equivalent as an on-chain output;/))
             .toHaveTextContent('off deducts the fee from your XCHAIN balance.');
         // The forfeiture hint is surfaced inline.

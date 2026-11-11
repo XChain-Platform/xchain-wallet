@@ -280,7 +280,7 @@ describe('nativeFeeErrorMessage', () => {
     it('offers the XCHAIN fallback only where one exists', () => {
         const err = { reason: 'unsupported' };
         expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
-            .toMatch(/Untick "Pay protocol fee in BTC instead of XCHAIN"/);
+            .toMatch(/Untick "Pay protocol fee in BTC"/);
         const ltc = nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true });
         expect(ltc).not.toMatch(/untick/i);
         expect(ltc).toMatch(/only way to pay a protocol fee here/);
@@ -289,7 +289,7 @@ describe('nativeFeeErrorMessage', () => {
     it('drops the turn-it-off suggestion from the stale-price message too', () => {
         const err = { reason: 'invalid' };
         expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
-            .toMatch(/untick "Pay protocol fee in BTC instead of XCHAIN"/);
+            .toMatch(/untick "Pay protocol fee in BTC"/);
         expect(nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true }))
             .toBe('The DOGE fee price is temporarily unavailable. Try again in a moment.');
     });
@@ -311,7 +311,7 @@ describe('nativeFeeErrorMessage', () => {
         for (const [label, err] of REFUSALS) {
             it(`quotes the checkbox label verbatim on a ${label} refusal`, () => {
                 const msg = nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false });
-                expect(msg).toContain('"Pay protocol fee in BTC instead of XCHAIN"');
+                expect(msg).toContain('"Pay protocol fee in BTC"');
                 expect(msg).toContain('pay it from your XCHAIN balance instead');
             });
         }

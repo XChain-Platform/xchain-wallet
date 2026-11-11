@@ -69,12 +69,13 @@ const listRowRoutes = [
 const choicePrimitiveRoutes = {
     AttachContentForm: ['Checkbox'],
     GatedPublishForm: ['Checkbox', 'RadioGroup'],
-    LinkForm: ['RadioGroup'],
+    PublishFileForm: ['Checkbox', 'RadioGroup'],
     SleepForm: ['RadioGroup'],
 };
 const tokenControlRoutes = [
     ['IssueTokenForm', { Switch: 2 }],
-    ['TokenAdminForm', { Checkbox: 3 }],
+    // Lock token's flags are Issue-style lock switches; the bridge checkboxes stay.
+    ['TokenAdminForm', { Checkbox: 2, Switch: 1 }],
     ['TokenWizard', { Checkbox: 1, Switch: 2 }],
     ['SweepForm', { Checkbox: 2 }],
     ['StakeForm', { RadioGroup: 1 }],
@@ -123,21 +124,16 @@ describe('shared route button usage', () => {
         expect(source).not.toMatch(/<(?:button|select|textarea)\b/);
     });
 
-    it('uses Checkbox and documents the remaining native radio exceptions', () => {
-        const source = ['ParallelComposer', 'PublishFileForm']
-            .map((routeName) => readFileSync(
-                resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
-                'utf8',
-            ))
-            .join('\n');
-        const inputs = source.match(/<input\b/g) || [];
-        const rationales = source.match(/The kit has no (?:checkbox|radio) primitive/g) || [];
-        const checkboxes = source.match(/<Checkbox\b/g) || [];
+    it('uses shared choice controls on Publish file', () => {
+        const source = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/PublishFileForm.jsx'),
+            'utf8',
+        );
 
-        expect(source).toMatch(/import\s+\{[^}]*\bCheckbox\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
-        expect(checkboxes).toHaveLength(2);
-        expect(inputs).toHaveLength(2);
-        expect(rationales).toHaveLength(inputs.length);
+        expect(source).toMatch(/import\s+\{[^}]*\bCheckbox\b[^}]*\bRadioGroup\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(source).toMatch(/<Checkbox\b/);
+        expect(source).toMatch(/<RadioGroup\b/);
+        expect(source).not.toMatch(/<input\b/);
     });
 
     it.each(Object.entries(styleGuideRoutes))('%s uses kit form and action controls', (routeName, controls) => {
@@ -376,8 +372,9 @@ describe('trade form style guide primitives', () => {
     ])('%s groups its allow-list and block-list buttons under one field-style label', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
-        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
-        expect(source).not.toMatch(/Restrict who can (?:buy|match) \(optional\)<\/p>\s*<div className=\{styles\.actions\}>/);
+        // The label may carry its own help tip after the Optional pill (U57).
+        expect(source).toMatch(/<p className=\{styles\.choiceGroupLabel\}>\s*Restrict who can (?:buy|match) <OptionalPill \/>(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.choiceButtons\}>/);
+        expect(source).not.toMatch(/Restrict who can (?:buy|match) <OptionalPill \/>(?:\s*<InfoTip [^>]*\/>)?\s*<\/p>\s*<div className=\{styles\.actions\}>/);
     });
 
     it('uses kit choice controls throughout the shared order panels', () => {
@@ -420,10 +417,11 @@ describe('trade form style guide primitives', () => {
             'packages/core/src/shared/components/PlaceOrderPanel.jsx',
         ), 'utf8'));
 
-        expect(createOrder).toMatch(/<AddressField\s+label="Receive at \(optional\)"/);
-        expect(dispenser).toMatch(/<Select[\s\S]*label="Priced in fiat \(optional\)"/);
+        // Optional shows as the Optional pill from the prop (U56).
+        expect(createOrder).toMatch(/<AddressField\s+label="Receive at(?: \(optional\)"|"\s+optional)/);
+        expect(dispenser).toMatch(/<Select[\s\S]*label="Priced in fiat(?: \(optional\)"|"\s+optional)/);
         expect(dispenser).toMatch(/<AddressField[\s\S]*id="dispenser-oracle"/);
-        expect(swap).toMatch(/<AddressField\s+label="Receive at \(optional\)"/);
+        expect(swap).toMatch(/<AddressField\s+label="Receive at(?: \(optional\)"|"\s+optional)/);
         expect(placeOrder).toMatch(/<FormPage\b/);
         expect(placeOrder).toMatch(/<EmptyState\b/);
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
@@ -490,8 +488,9 @@ describe('trade form style guide primitives', () => {
         expect(preferences).toMatch(/<FeeSelector\b/);
         expect(preferences.match(/<RadioGroup\b/g)).toHaveLength(2);
         expect(preferences).not.toMatch(/<(?:button|select|textarea)\b/);
-        expect(preferences.match(/<input\b/g)).toHaveLength(1);
-        expect(preferences.match(/type="checkbox"/g)).toHaveLength(1);
+        // The require-memo choice is the kit Checkbox, not a native input.
+        expect(preferences.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(preferences).not.toMatch(/<input\b/);
 
         expect(tokens).toMatch(/<ListToolbar\b/);
         expect(tokens).toMatch(/<Select\b/);

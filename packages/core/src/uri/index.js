@@ -72,3 +72,9 @@ export {
     encodeEnvelope as encodeMultisigEnvelope,
     decodeEnvelope as decodeMultisigEnvelope,
 } from './multisigPsbtEnvelope.js';
+export {
+    buildMultisigSessionLink,
+    parseMultisigSessionLink,
+    MultisigSessionLinkError,
+    MULTISIG_SESSION_LINK_MAX_REQ_CHARS,
+} from './multisigSessionLink.js';

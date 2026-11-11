@@ -52,7 +52,7 @@ const ROUTE_LABELS = {
     'list-union': 'Create union list',
     'contract-deploy': 'Publish contract',
     'stake-new': 'New stake',
-    'link-form': 'Link two actions across networks',
+    'link-form': 'Link actions',
     'parallel-compose': 'Action queue',
     'batch-compose': 'Batch',
     'multisig-create': 'Create multisig',
@@ -100,7 +100,7 @@ const ONBOARDING_LABELS = {
     create: 'Create Wallet',
     import: 'Import Wallet',
     'import-freewallet': 'Import FreeWallet',
-    'pair-partner': 'Pair Partner Wallet',
+    'pair-partner': 'Pair an Offline Signer',
 };
 
 function labelForRoute(route) {

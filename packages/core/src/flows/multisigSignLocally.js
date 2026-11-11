@@ -31,6 +31,7 @@
 import { unlockWallet } from './unlockWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { fingerprintSessionRef } from '../uri/multisigPsbtEnvelope.js';
+import { assertMultisigTransactionBinding } from './multisigTransactionBinding.js';
 
 /**
  * @typedef {Object} SignMultisigLocallyOpts
@@ -107,6 +108,13 @@ export async function signMultisigLocally(opts) {
         );
     }
     const lowerLocalPubkey = String(localCosigner.pubkey).toLowerCase();
+
+    // Bind the displayed request to the transaction before any key is unlocked.
+    await assertMultisigTransactionBinding({
+        vault: opts.vault,
+        sdkRegistry: opts.sdkRegistry,
+        session,
+    });
 
     // Round-appropriate duplicate check: don't unlock the wallet just
     // to fail on the contribute step.

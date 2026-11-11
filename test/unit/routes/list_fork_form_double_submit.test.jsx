@@ -149,8 +149,8 @@ describe('ListForkForm first-leg submission', () => {
     it('starts one compose when two rapid clicks wait on the membership check', async () => {
         const { messaging } = mountFork();
         await screen.findByText(/Forking token list #2700/);
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
         let releaseMembership;
@@ -182,10 +182,10 @@ describe('list form submission locks', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'XCHAIN' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
         act(() => {
             submit.click();
@@ -207,7 +207,7 @@ describe('list form submission locks', () => {
             source: BTC_OWNER.address,
         });
 
-        fireEvent.change(await screen.findByLabelText('Destination'), { target: { value: DESTINATION } });
+        fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: DESTINATION } });
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), {
             target: { value: 'TRANSFER' },
         });
@@ -238,13 +238,13 @@ describe('existing list form identity', () => {
             parentIndex: null,
         };
         const view = renderExistingForm(ListForkForm, messaging, first);
-        const additions = await screen.findByLabelText(/Add tokens/);
+        const additions = await screen.findByLabelText('Add tokens');
         fireEvent.change(additions, { target: { value: 'STALE' } });
 
         view.switchTo({ ...first, actionIndex: '2800', items: ['FRESH'] });
 
         expect(await screen.findByText(/Forking token list #2800/)).toBeInTheDocument();
-        expect(screen.getByLabelText(/Add tokens/)).toHaveValue('');
+        expect(screen.getByLabelText('Add tokens')).toHaveValue('');
     });
 
     it('resets rename fields when the list changes', async () => {
@@ -253,14 +253,14 @@ describe('existing list form identity', () => {
             chainId: BTC,
             actionIndex: '2700',
         });
-        fireEvent.change(await screen.findByLabelText('Name (empty means unchanged)'), {
+        fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: 'STALE' },
         });
 
         view.switchTo({ chainId: BTC, actionIndex: '2800' });
 
         expect(await screen.findByText('#2800')).toBeInTheDocument();
-        expect(screen.getByLabelText('Name (empty means unchanged)')).toHaveValue('');
+        expect(screen.getByLabelText('Name')).toHaveValue('');
     });
 
     it('resets share confirmation when the list changes', async () => {
@@ -269,7 +269,7 @@ describe('existing list form identity', () => {
             chainId: BTC,
             actionIndex: '2700',
         });
-        fireEvent.change(await screen.findByLabelText('Memo (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Memo'), {
             target: { value: 'STALE' },
         });
         fireEvent.change(screen.getByLabelText('Type SHARE to confirm'), {
@@ -279,7 +279,7 @@ describe('existing list form identity', () => {
         view.switchTo({ chainId: BTC, actionIndex: '2800' });
 
         expect(await screen.findByText('#2800')).toBeInTheDocument();
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Memo')).toHaveValue('');
         expect(screen.getByLabelText('Type SHARE to confirm')).toHaveValue('');
     });
 
@@ -290,7 +290,7 @@ describe('existing list form identity', () => {
             actionIndex: '2700',
             source: BTC_OWNER.address,
         });
-        fireEvent.change(await screen.findByLabelText('Destination'), {
+        fireEvent.change(await screen.findByLabelText('New owner'), {
             target: { value: DESTINATION },
         });
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), {
@@ -304,7 +304,7 @@ describe('existing list form identity', () => {
         });
 
         expect(await screen.findByText('#2800')).toBeInTheDocument();
-        expect(screen.getByLabelText('Destination')).toHaveValue('');
+        expect(screen.getByLabelText('New owner')).toHaveValue('');
         expect(screen.getByLabelText('Type TRANSFER to confirm')).toHaveValue('');
     });
 
@@ -318,7 +318,7 @@ describe('existing list form identity', () => {
             actionIndex: '2700',
             source: BTC_OWNER.address,
         });
-        fireEvent.change(await screen.findByLabelText('Destination'), {
+        fireEvent.change(await screen.findByLabelText('New owner'), {
             target: { value: DESTINATION },
         });
         fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), {
@@ -336,7 +336,7 @@ describe('existing list form identity', () => {
         await act(async () => build.resolve({ psbtHex: '70736274ff' }));
 
         expect(screen.getByText('#2800')).toBeInTheDocument();
-        expect(screen.getByLabelText('Destination')).toHaveValue('');
+        expect(screen.getByLabelText('New owner')).toHaveValue('');
         expect(screen.queryByLabelText('Unsigned transaction code')).toBeNull();
     });
 });

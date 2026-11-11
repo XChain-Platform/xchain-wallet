@@ -102,6 +102,7 @@ const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
     'nav-actions',
     'nav-multisig-create',
+    'nav-multisig-sign',
     'nav-cosigner-accounts',
     'sign-message',
     'sign-psbt',
@@ -255,10 +256,11 @@ export function buildCommands(ctx) {
     }
     if (ctx.hasBtcAddress) {
         list.push({ id: 'nav-staking', category: 'Navigate', title: t('home.staking'), subtitle: t('palette.navStaking.subtitle'), keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
-        // Multisig creation is Bitcoin-only, while signing sessions open only
-        // from their existing session flows.
+        // Multisig is Bitcoin-only, so it shares the staking gate. Multisig
+        // signing lists the sessions a multisig send starts.
         list.push(
             { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
+            { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
             { id: 'nav-cosigner-accounts', category: 'Navigate', title: t('palette.navCoSignerAccounts.title'), subtitle: t('palette.navCoSignerAccounts.subtitle'), keywords: ['agent', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'], Icon: Icon.UsersIcon, run: go('cosigner-accounts') },
         );
     }
@@ -279,7 +281,7 @@ export function buildCommands(ctx) {
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
     list.push(
         { id: 'create-token', category: 'Create', title: t('palette.createToken.title'), subtitle: t('palette.createToken.subtitle'), keywords: ['issue', 'new token', 'mint', 'launch'], Icon: Icon.PlusIcon, run: go('wizard') },
-        { id: 'create-issue', category: 'Create', title: t('issue.title'), subtitle: t('palette.createIssue.subtitle'), keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
+        { id: 'create-issue', category: 'Create', title: t('issue.title'), subtitle: t('palette.createIssue.subtitle'), keywords: ['issue'], Icon: Icon.TokenIcon, run: go('wizard') },
         { id: 'create-mint', category: 'Create', title: t('palette.createMint.title'), subtitle: t('palette.createMint.subtitle'), keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
         { id: 'create-destroy', category: 'Create', title: t('palette.createDestroy.title'), subtitle: t('palette.createDestroy.subtitle'), keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
         { id: 'create-sweep', category: 'Create', title: t('palette.createSweep.title'), subtitle: t('palette.createSweep.subtitle'), keywords: ['sweep', 'migrate', 'move', 'consolidate'], Icon: Icon.SendIcon, run: go('sweep') },
@@ -297,7 +299,7 @@ export function buildCommands(ctx) {
         // wallet that had never issued a token could not reach it from any
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
-        { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
+        { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LinkIcon, run: go('controller-bind') },
         // The two bridge surfaces. Authoring forms that open free-entry, like
         // their neighbours here: the move form picks its own leg from the
         // chain it is on, and the settings form carries the same token picker

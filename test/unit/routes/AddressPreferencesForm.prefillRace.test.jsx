@@ -98,7 +98,7 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
 
         await resolvePrefill(DEFAULTS);
         fireEvent.click(destroy);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
 
         expect(await screen.findByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
         expect(screen.getByText('Memo required on incoming sends (unchanged)')).toBeTruthy();
@@ -108,9 +108,9 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
     it('does not let the initial read replace a newer review-time read', async () => {
         const fresh = { onChain: true, feePreference: 1, requireMemo: 1, dispenserPreference: 2 };
         const { resolvePrefill } = mountWithSlowPrefill(fresh);
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
         expect(await screen.findByText('Destroy the fee (reduces supply) (unchanged)')).toBeTruthy();
         await resolvePrefill(DEFAULTS);
 

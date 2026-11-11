@@ -91,7 +91,8 @@ const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.
 assert.match(manage, /onCallbackSettings/, 'ManageToken offers Callback settings');
 assert.match(manage, /onExecuteCallback/, 'ManageToken offers Execute callback');
 assert.match(manage, /!assetInfo\?\.callbackTick/, 'Execute callback only when a callback is configured');
-assert.match(manage, /id: 'execute-callback'.*danger: true/s, 'Execute callback is danger-styled');
+assert.match(manage, /id: 'execute-callback'[\s\S]{0,500}?danger: true/, 'Execute callback is danger-styled');
+assert.match(manage, /id: 'destroy'[^\n]*danger: true/, 'Destroy is danger-styled');
 
 for (const shell of [
     ['packages', 'web', 'src', 'App.jsx'],

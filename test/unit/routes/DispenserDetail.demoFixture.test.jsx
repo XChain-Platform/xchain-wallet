@@ -17,6 +17,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/flows/demoMode.js';
+import { synthesizeDemoDispensers } from '../../../packages/core/src/flows/demoFixtures.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const WALLET = 'demo-wallet-1';
@@ -63,5 +64,66 @@ describe('DispenserDetail for a demo wallet', () => {
         expect(utils.container.textContent).not.toContain('Action not found');
         expect(reads).toEqual([]);
         vi.restoreAllMocks();
+    });
+
+    it('offers the same open-dispenser controls from fixture data as from live data', async () => {
+        const actionIndex = '4200981';
+        const fixture = synthesizeDemoDispensers(CHAIN, ADDRESS.address)
+            .find((row) => String(row.action_index) === actionIndex);
+        const mount = async (walletId, demo) => {
+            if (demo) markDemoWallet(walletId);
+            const target = {
+                getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
+                getActiveAddresses: () => Promise.resolve({}),
+                getSettings: () => Promise.resolve({ walletMode: 'full' }),
+                signerReady: () => Promise.resolve({ ready: true }),
+                getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+                getDispenserByActionIndex: () => Promise.resolve(fixture),
+                getDispenses: () => Promise.resolve({ data: [] }),
+                getDispenserLifecycle: () => Promise.resolve({ data: [] }),
+                getWalletBalances: () => Promise.resolve({
+                    [CHAIN]: [{
+                        address: ADDRESS.address,
+                        balances: {
+                            native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                            tokens: [],
+                        },
+                    }],
+                }),
+                getTokenInfo: () => Promise.resolve(null),
+                getListByActionIndex: () => Promise.resolve(null),
+            };
+            const messaging = new Proxy(target, {
+                get: (value, key) => (key in value ? value[key] : () => Promise.resolve(null)),
+            });
+            let utils;
+            await domAct(async () => {
+                utils = render(
+                    <MessagingProvider shell="web" messaging={messaging}>
+                        <DispenserDetail
+                            walletId={walletId}
+                            chainId={CHAIN}
+                            actionIndex={actionIndex}
+                            onBack={() => {}}
+                            onCanceled={() => {}}
+                        />
+                    </MessagingProvider>,
+                );
+                for (let i = 0; i < 24; i += 1) await Promise.resolve();
+            });
+            const controls = ['Close', 'Refill', 'Edit'].map((name) => ({
+                name,
+                present: Boolean(utils.queryByRole('button', { name })),
+            }));
+            utils.unmount();
+            if (demo) clearDemoWalletId();
+            return controls;
+        };
+
+        const liveControls = await mount('live-wallet-1', false);
+        const demoControls = await mount(WALLET, true);
+        expect(demoControls).toEqual(liveControls);
+        expect(demoControls.filter((control) => control.present).map((control) => control.name))
+            .toEqual(['Close', 'Refill', 'Edit']);
     });
 });

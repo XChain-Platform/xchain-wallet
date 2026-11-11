@@ -25,6 +25,7 @@ const EMPTY = { creator: null, totalSupply: null, canonicalTick: null };
 function Harness({
     initial,
     messaging,
+    help,
     onOpenPicker = () => {},
     onStatus,
     active = true,
@@ -36,6 +37,7 @@ function Harness({
         <TickItemsEditor
             value={text}
             onChange={setText}
+            help={help}
             items={classifyTickItems(text, { coinQualified })}
             chainId="bitcoin-mainnet"
             chainLabel="Bitcoin"
@@ -61,11 +63,31 @@ beforeEach(() => { vi.useFakeTimers(); __clearTokenInfoCache(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('TickItemsEditor', () => {
+    it('labels the field concisely and explains its line format in the help tip', () => {
+        const view = render(<Harness initial="" messaging={fakeMessaging({})} />);
+
+        expect(screen.getByLabelText('Tokens')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'About Tokens' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Put one token per line.');
+
+        view.rerender(
+            <Harness
+                initial=""
+                messaging={fakeMessaging({})}
+                help="Enter the tokens included in this roster, one per line."
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'About Tokens' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent(
+            'Enter the tokens included in this roster, one per line.',
+        );
+    });
+
     it('counts valid, duplicate and invalid names', async () => {
         const messaging = fakeMessaging({});
         render(<Harness initial={'AAA\naaa\nBBB\nbad name!'} messaging={messaging} />);
         expect(screen.getByText(/2 valid token names · 1 duplicate ignored · 1 invalid/)).toBeInTheDocument();
-        const input = screen.getByLabelText('Tokens (one per line)');
+        const input = screen.getByLabelText('Tokens');
         const invalid = screen.getByText('Not a token name: bad name!');
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(invalid.id);
@@ -74,7 +96,7 @@ describe('TickItemsEditor', () => {
 
     it('removes and reorders valid entries without discarding invalid input', () => {
         render(<Harness initial={'FIRST\nbad name!\nSECOND\nTHIRD'} messaging={fakeMessaging({})} />);
-        const input = screen.getByLabelText('Tokens (one per line)');
+        const input = screen.getByLabelText('Tokens');
 
         fireEvent.click(screen.getByRole('button', { name: 'Move THIRD up' }));
         expect(input).toHaveValue('FIRST\nbad name!\nTHIRD\nSECOND');
@@ -91,7 +113,7 @@ describe('TickItemsEditor', () => {
         second.focus();
         fireEvent.keyDown(second, { key: 'ArrowUp', altKey: true });
 
-        expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue('SECOND\nFIRST');
+        expect(screen.getByLabelText('Tokens')).toHaveValue('SECOND\nFIRST');
         expect(screen.getByRole('status')).toHaveTextContent('SECOND moved to position 1.');
         expect(screen.getByRole('listitem', { name: 'SECOND, position 1 of 2' })).toHaveFocus();
     });
@@ -108,7 +130,7 @@ describe('TickItemsEditor', () => {
         expect(screen.getByLabelText('Coin for BTC:SAME')).toHaveValue('BTC');
         expect(screen.getByLabelText('Coin for DOGE:SAME')).toHaveValue('DOGE');
         fireEvent.click(screen.getByRole('button', { name: 'Move DOGE:SAME up' }));
-        expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue('DOGE:SAME\nBTC:SAME');
+        expect(screen.getByLabelText('Tokens')).toHaveValue('DOGE:SAME\nBTC:SAME');
     });
 
     it('accepts a many-line paste and caps token lookups', async () => {
@@ -116,7 +138,7 @@ describe('TickItemsEditor', () => {
         const messaging = fakeMessaging(Object.fromEntries(ticks.map((tick) => [tick, FOUND])));
         render(<Harness initial="" messaging={messaging} />);
 
-        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
+        fireEvent.change(screen.getByLabelText('Tokens'), {
             target: { value: ticks.join('\n') },
         });
         expect(screen.getByText(`${ticks.length} valid token names · checking…`)).toBeInTheDocument();
@@ -135,7 +157,7 @@ describe('TickItemsEditor', () => {
         expect(messaging.getTokenInfo).toHaveBeenCalledTimes(2);
         expect(onStatus).toHaveBeenLastCalledWith({ GOODTOK: 'found', NOSUCH: 'missing' });
         expect(screen.getByText(/1 found · 1 not found/)).toBeInTheDocument();
-        const input = screen.getByLabelText('Tokens (one per line)');
+        const input = screen.getByLabelText('Tokens');
         const error = screen.getByRole('alert');
         expect(error).toHaveTextContent('Not found on Bitcoin: NOSUCH.');
         expect(input).toHaveAttribute('aria-invalid', 'true');

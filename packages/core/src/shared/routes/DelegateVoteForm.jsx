@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -36,8 +36,9 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -81,6 +82,9 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
     const [mode, setMode] = useState(initialMode === 'clear' ? 'clear' : 'delegate');
     const isClear = mode === 'clear';
     const verb = isClear ? 'Clear vote delegation' : 'Delegate votes';
+    // The main action names what it does, with its own icon (U63).
+    const submitLabel = isClear ? 'Clear delegation' : 'Delegate votes';
+    const submitIcon = isClear ? <Icon.TrashIcon /> : <Icon.UsersIcon />;
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -385,7 +389,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
-                <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
+                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
             </ListPage>,
         );
     }
@@ -401,10 +405,10 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => { setSubmitError(null); setStage('form'); }} disabled={stage === 'submitting'}>Back</Button>
                         <Button
                             type="submit"
                             variant="primary"
+                            icon={isWatcherMode || isHwSource ? undefined : submitIcon}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -439,10 +443,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     </dd>
                 </dl>
                 {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on
-                        your Signer-mode wallet, then broadcast from a Full-mode wallet.
-                    </p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -494,6 +495,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -536,20 +538,15 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 <Button
                     type="submit"
                     variant="primary"
+                    icon={submitIcon}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {/* The signing path opens the confirm page; a watcher only encodes,
-                        so its first step stays a preview. Neither repeats the title. */}
-                    {singleEncode ? 'Review' : 'Preview'}
+                    {submitLabel}
                 </Button>
             )}
         >
-            <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                <Button type="button" variant={isClear ? 'ghost' : 'primary'} size="sm" onClick={() => { setMode('delegate'); setFormError(null); }}>Delegate</Button>
-                <Button type="button" variant={isClear ? 'primary' : 'ghost'} size="sm" onClick={() => { setMode('clear'); setFormError(null); }}>Clear</Button>
-            </div>
-            <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <NetworkField label="Network" help="The chain the delegation is recorded on. Your From address and the fee are on this network, and the governance token must live on it." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
                     label="From"
@@ -559,11 +556,26 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
                     iconLabel="Choose source address"
+                    help="The address whose voting weight you delegate or take back. It sends this action and pays the network fee."
                 />
             ) : null}
 
+            {/* The form opens with Network, then From (U60); the action choice follows as a field. */}
+            <RadioGroup
+                legend="Action"
+                name="delegateMode"
+                value={mode}
+                onChange={(value) => { setMode(value === 'clear' ? 'clear' : 'delegate'); setFormError(null); }}
+                help="Delegating lets another holder cast this address's weight on polls you do not vote on yourself. A direct vote still overrides it. Clearing the delegation stops your weight flowing to the delegate."
+                options={[
+                    { value: 'delegate', label: 'Delegate my votes' },
+                    { value: 'clear', label: 'Clear my delegation' },
+                ]}
+            />
+
             <TokenField
                 label="Governance token"
+                help="The token whose voting weight you are delegating or clearing the delegation for."
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
@@ -572,7 +584,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
                 <AddressField
                     label="Delegate to address"
                     icon="contacts"
-                    hint="The holder who will cast your weight on polls you do not vote on directly."
+                    help="The holder who will cast your weight on polls you do not vote on directly."
                     value={delegateTo}
                     onChange={(e) => setDelegateTo(e.target.value)}
                     onIconClick={() => setContactsPickerOpen(true)}
@@ -580,8 +592,10 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
             ) : null}
 
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A short public note stored with this delegation on chain. Anyone can read it."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
@@ -589,6 +603,7 @@ function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chain
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

@@ -81,7 +81,7 @@ test.describe(`wizard callback fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await main.getByRole('button', { name: 'Advanced settings (optional)' }).click();
 
         const callbackBlock = (await readCurrentHeight(main)) + 25;
-        await main.getByLabel('Callback token (optional)').fill(CALLBACK_TICK);
+        await main.getByLabel('Callback token', { exact: true }).fill(CALLBACK_TICK);
         await main.getByLabel('Payout per unit').fill(String(CALLBACK_AMOUNT));
         await main.getByLabel('Callback allowed from block').fill(String(callbackBlock));
         await submitTokenWizard(page);

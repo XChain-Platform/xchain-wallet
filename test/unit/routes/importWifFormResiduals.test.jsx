@@ -74,7 +74,7 @@ function typeSelect() {
 
 async function submitWif(value = 'not a real key') {
     fireEvent.change(screen.getByLabelText(/WIF private key/i), { target: { value } });
-    const pw = screen.queryByLabelText(/Wallet password/i);
+    const pw = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
     if (pw) fireEvent.change(pw, { target: { value: 'correct horse' } });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /^Import$/ }));

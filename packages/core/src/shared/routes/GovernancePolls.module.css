@@ -1,20 +1,38 @@
 .pollList {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
     min-width: 0;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pollList > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
 .pollCard {
-    composes: card from '../../ui/Card.module.css';
     min-height: var(--xc-tap-min);
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
     text-align: start;
     color: var(--xc-text);
-    box-shadow: var(--xc-list-shadow);
     cursor: pointer;
+}
+
+.pollIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+}
+
+.pollIcon > svg {
+    width: 20px;
+    height: 20px;
 }
 
 .pollTitle {

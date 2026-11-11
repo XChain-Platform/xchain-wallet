@@ -14,7 +14,7 @@
 // the page already resolved.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';

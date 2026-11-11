@@ -136,7 +136,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            typeIn(utils, /Unsigned transaction/i, PSBT_HEX);
+            typeIn(utils, 'Unsigned transaction code', PSBT_HEX);
             await drainMicrotasks();
         });
         if (openConfirm) {
@@ -225,8 +225,8 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         });
 
         expect(utils.queryByTestId('confirm-modal')).toBeNull();
-        expect(utils.getByLabelText(/Unsigned transaction/i).value).toBe(PSBT_HEX);
-        expect(utils.getByLabelText('Signing address').value).toBe(HD_ADDRESS.id);
+        expect(utils.getByLabelText('Unsigned transaction code').value).toBe(PSBT_HEX);
+        expect(utils.getByLabelText('Signing address').value).toBe(HD_ADDRESS.address);
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
 

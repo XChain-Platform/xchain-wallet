@@ -13,9 +13,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { ROW_LAYOUT, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_LAYOUT,
+    SettingsActionRow,
+    SettingsFieldRow,
+    ToggleRow,
+} from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
 import cardStyles from '../../../packages/core/src/ui/Card.module.css';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
@@ -47,7 +53,8 @@ describe('Settings subpage row gap', () => {
 
         const route = readFileSync(join(SETTINGS_DIR, 'routes/Settings.jsx'), 'utf8');
         expect(route).toMatch(/className=\{settingsStyles\.settingsSurface\}/);
-        expect(route).toMatch(/preserveNestedCards=\{section\.id === 'notifications'\}/);
+        // No group keeps its own cards inside the Settings card (U16).
+        expect(route).not.toMatch(/preserveNestedCards/);
     });
 
     it('gives FormSection-based subpages the Settings row gap', () => {
@@ -67,9 +74,18 @@ describe('Settings subpage row gap', () => {
     it('separates keyboard shortcut rows by the Settings row gap', async () => {
         const { container } = mount(<KeyboardSection />);
         await waitFor(() => expect(container.querySelectorAll('section').length).toBeGreaterThan(1));
+        // A group's title sits the section header gap above its content, and
+        // the shortcut rows under it keep the Settings row gap.
         for (const section of container.querySelectorAll('section')) {
-            expect(section.style.gap).toBe('var(--xc-settings-row-gap)');
+            expect(section.style.gap).toBe('var(--xc-section-header-gap)');
             expect(section.style.flexDirection).toBe('column');
+        }
+        const rowColumns = [...container.querySelectorAll('section > [data-xc-section-header] + div')]
+            .filter((column) => column.querySelector('kbd'));
+        expect(rowColumns.length).toBeGreaterThan(0);
+        for (const column of rowColumns) {
+            expect(column.style.gap).toBe('var(--xc-settings-row-gap)');
+            expect(column.style.flexDirection).toBe('column');
         }
     });
 });
@@ -82,10 +98,12 @@ describe('Settings action rows', () => {
             </SettingsActionRow>,
         );
         const row = container.firstElementChild;
-        // The row is the shared card; its inline style carries only layout.
+        // The row is the shared padded card, including the divider treatment.
         expect(row).toHaveClass(cardStyles.card);
         expect(row.style.display).toBe(ROW_LAYOUT.display);
-        expect(row.style.border).toBe('');
+        expect(row.style.padding).toBe(ROW.padding);
+        expect(row.style.border).toBe(ROW.border);
+        expect(row.style.boxShadow).toBe(ROW.boxShadow);
         expect(getByRole('heading', { name: 'Back up recovery phrase' })).toBeTruthy();
         // The label never names the button, so its accessible name stays its own text.
         expect(getByRole('button', { name: 'Show…' })).toBeTruthy();
@@ -125,6 +143,39 @@ describe('Settings action rows', () => {
 });
 
 describe('Settings field rows', () => {
+    it('shows contextual help beside field and toggle labels only when requested', () => {
+        const onToggle = vi.fn();
+        const { getByRole, getByText, queryByRole } = render(
+            <>
+                <SettingsFieldRow label="Theme" help="Choose how the wallet is colored.">
+                    <select><option>System</option></select>
+                </SettingsFieldRow>
+                <ToggleRow
+                    label="Protect previews"
+                    help="Require confirmation before opening previews."
+                    checked={false}
+                    onChange={onToggle}
+                />
+                <SettingsFieldRow label="Format">
+                    <select><option>Full</option></select>
+                </SettingsFieldRow>
+                <ToggleRow label="Offline mode" checked={false} onChange={() => {}} />
+            </>,
+        );
+
+        const fieldHelp = getByRole('button', { name: 'About Theme' });
+        const toggleHelp = getByRole('button', { name: 'About Protect previews' });
+        expect(getByRole('combobox', { name: 'Theme' })).toBeTruthy();
+        expect(getByRole('switch', { name: 'Protect previews' })).toBeTruthy();
+        expect(queryByRole('button', { name: 'About Format' })).toBeNull();
+        expect(queryByRole('button', { name: 'About Offline mode' })).toBeNull();
+
+        fireEvent.click(toggleHelp);
+        expect(onToggle).not.toHaveBeenCalled();
+        fireEvent.focus(fieldHelp);
+        expect(getByText('Choose how the wallet is colored.', { selector: '[role="tooltip"]' })).toBeVisible();
+    });
+
     it('keeps a field row control in an end slot that fills the line on a phone', () => {
         const { getByLabelText } = render(
             <SettingsFieldRow label="Format" hint="How numbers show.">

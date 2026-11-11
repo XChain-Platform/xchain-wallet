@@ -110,8 +110,8 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
             }),
             makeMessaging([obligation(coinAmount)]),
         );
-        // The prefilled obligation lands on the confirm stage with a Review button.
-        return screen.findByRole('button', { name: 'Review' });
+        // The prefilled obligation lands on the confirm stage with a Pay order button.
+        return screen.findByRole('button', { name: 'Pay order' });
     }
 
     it('[REGRESSION] "10" reads as 10 DOGE on confirm and on review, never 1000000000 DOGE', async () => {

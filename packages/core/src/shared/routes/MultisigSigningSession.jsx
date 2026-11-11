@@ -9,15 +9,23 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
-import { schemas, uri as uriLib } from '@xchain-wallet/core';
+import { base58check, bech32 } from '@scure/base';
+import { sha256 } from '@noble/hashes/sha2';
+import { Screen, PageHeader, Button, EmptyState, FieldIconButton, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
+import { flows as flowsLib, schemas, uri as uriLib } from '@xchain-wallet/core';
+import { formatNativeBaseUnits, tickerForCoin } from '../../registry/coinTicker.js';
+import { ADDRESS_PARAMS } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { copyText } from '../clipboard.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/multisig.js';
 import styles from './IssueTokenForm.module.css';
 
 const { progressSummary } = schemas.multisigSigningSession;
+const base58 = base58check(sha256);
 const {
     encodeXcwChunks,
     createXcwCollector,
@@ -27,6 +35,8 @@ const {
     decodeMultisigEnvelope,
     encodeMultisigEnvelope,
     fingerprintSessionRef,
+    buildMultisigSessionLink,
+    parseMultisigSessionLink,
 } = uriLib;
 
 // Humanize the session status enum for display (#3881): the raw tokens are
@@ -50,6 +60,23 @@ const CONTRIBUTION_LABELS = {
     'classical-signature': 'Signature',
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
+
+function outputAddress(script, chainId) {
+    const coin = String(chainId || '').split('-')[0];
+    const network = String(chainId || '').includes('mainnet')
+        ? 'mainnet'
+        : String(chainId || '').includes('regtest') ? 'regtest' : 'testnet';
+    const params = ADDRESS_PARAMS[coin]?.[network];
+    if (!params) return null;
+    let match = /^76a914([0-9a-f]{40})88ac$/.exec(script);
+    if (match) return base58.encode(Uint8Array.from([params.p2pkh, ...match[1].match(/../g).map((b) => Number.parseInt(b, 16))]));
+    match = /^a914([0-9a-f]{40})87$/.exec(script);
+    if (match) return base58.encode(Uint8Array.from([params.p2sh, ...match[1].match(/../g).map((b) => Number.parseInt(b, 16))]));
+    match = /^00(14[0-9a-f]{40}|20[0-9a-f]{64})$/.exec(script);
+    if (!match || !params.hrp) return null;
+    const program = match[1].slice(2).match(/../g).map((b) => Number.parseInt(b, 16));
+    return bech32.encode(params.hrp, [0, ...bech32.toWords(Uint8Array.from(program))], 90);
+}
 
 // Host refusals of a reply's content; the same reply can never pass, so no retry.
 const REFUSED_REPLY_CODES = new Set(['MULTISIG_SIGNATURE_INVALID', 'MULTISIG_NONCE_INVALID']);
@@ -98,12 +125,40 @@ function hasFinalizationThreshold(session) {
 
 function sessionRefFor(session) {
     return {
+        chainId: session.chainId,
         scheme: session.scheme,
         threshold: session.threshold,
         cosignerPubkeys: session.cosignerPubkeys,
         msgHash: session.msgHash,
         psbtHex: session.psbtHex || '',
     };
+}
+
+export function buildSessionEnvelope(session) {
+    if (!session || !session.psbtHex) return null;
+    const sessionRef = sessionRefFor(session);
+    if (session.scheme === 'taproot-musig2') {
+        if (session.status === 'collecting-nonces') {
+            return buildRequestEnvelope({ kind: 'multisig-request-nonce', sessionRef });
+        }
+        if (session.status === 'collecting-sigs' && session.aggNonce) {
+            return buildRequestEnvelope({
+                kind: 'multisig-request-partial',
+                sessionRef,
+                aggNonceHex: session.aggNonce,
+            });
+        }
+    } else if (session.status === 'collecting-sigs') {
+        return buildRequestEnvelope({ kind: 'multisig-request-signature', sessionRef });
+    }
+    if (session.status === 'finalized' && session.finalizedTxHex) {
+        return buildFinalizedEnvelope({
+            sessionRef,
+            txHex: session.finalizedTxHex,
+            ...(session.txid ? { txid: session.txid } : {}),
+        });
+    }
+    return null;
 }
 
 function replyMismatchMessage(envelope, session) {
@@ -164,14 +219,16 @@ function replyMismatchMessage(envelope, session) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialSessionId]
+ * @param {string} [props.initialLink]
  */
-export function MultisigSigningSession({ walletId, onBack }) {
+export function MultisigSigningSession({ walletId, onBack, initialSessionId, initialLink }) {
     const { messaging, shell } = useMessaging();
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
-    const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
+    const [activeId, setActiveId] = useState(/** @type {string | null} */ (initialSessionId || null));
     const [active, setActive] = useState(/** @type {any | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [canceling, setCanceling] = useState(false);
@@ -183,9 +240,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [scannerOpen, setScannerOpen] = useState(false);
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
+    const [linkInput, setLinkInput] = useState(initialLink || '');
+    const [linkStatus, setLinkStatus] = useState(/** @type {string | null} */ (null));
     const listRequestId = useRef(0);
     const activeRequestId = useRef(0);
     const mountedRef = useRef(false);
+    const initialLinkRef = useRef(null);
 
     // (error-recovery sweep remainder): each error surface offers a
     // one-click "Try again" against whatever action last failed. The
@@ -234,6 +294,31 @@ export function MultisigSigningSession({ walletId, onBack }) {
         await refreshList();
     }, [refreshActive, refreshList]);
 
+    const importSigningLink = useCallback(async (text) => {
+        if (busy || typeof text !== 'string' || text.trim().length === 0) return;
+        setBusy(true);
+        setError(null);
+        setLinkStatus(null);
+        try {
+            const envelope = parseMultisigSessionLink(text);
+            const result = await withAutoLockHold(() => messaging.importMultisigSigningRequest({
+                walletId,
+                envelope,
+            }));
+            if (!result?.sessionId) throw new Error(t('multisig.signingLink.openFailed'));
+            setActiveId(result.sessionId);
+            setView('tracker');
+            await refreshList();
+        } catch (err) {
+            if (err?.userFacing !== true) {
+                console.error('Multisig signing link import failed:', err); // eslint-disable-line no-console
+            }
+            fail(userFacingMessage(err, t('multisig.signingLink.openFailed')), null);
+        } finally {
+            setBusy(false);
+        }
+    }, [busy, messaging, walletId, refreshList, fail]);
+
     // Two surfaces can apply the same reply at once, and the one that loses
     // holds a stale session: its refusal is developer text and a retry of the
     // same reply can never pass. Reload the session and re-run the reply check
@@ -269,6 +354,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
         if (activeId) refreshActive(activeId);
         return () => { activeRequestId.current += 1; };
     }, [activeId, refreshActive]);
+
+    useEffect(() => {
+        if (!initialLink || initialLinkRef.current === initialLink) return;
+        initialLinkRef.current = initialLink;
+        void importSigningLink(initialLink);
+    }, [initialLink, importSigningLink]);
 
     async function handleAggregate() {
         if (!active || busy) return;
@@ -340,52 +431,56 @@ export function MultisigSigningSession({ walletId, onBack }) {
     // Coordinator's request kind switches with the session's status:
     // round 1 (MuSig2 nonces) vs round 2 (MuSig2 partials, carries
     // aggNonce) vs P2SH/P2WSH single round vs finalized broadcast.
-    const exportFrames = useMemo(() => {
-        if (!active) return null;
+    const exportData = useMemo(() => {
+        if (!active || !active.psbtHex) return null;
         try {
-            const sessionRef = sessionRefFor(active);
-            let envelope;
-            if (active.scheme === 'taproot-musig2') {
-                if (active.status === 'collecting-nonces') {
-                    envelope = buildRequestEnvelope({
-                        kind: 'multisig-request-nonce',
-                        sessionRef,
-                    });
-                } else if (active.status === 'collecting-sigs' && active.aggNonce) {
-                    envelope = buildRequestEnvelope({
-                        kind: 'multisig-request-partial',
-                        sessionRef,
-                        aggNonceHex: active.aggNonce,
-                    });
-                } else if (active.status === 'finalized' && active.finalizedTxHex) {
-                    envelope = buildFinalizedEnvelope({
-                        sessionRef,
-                        txHex: active.finalizedTxHex,
-                        ...(active.txid ? { txid: active.txid } : {}),
-                    });
-                } else {
-                    return null;
-                }
-            } else if (active.status === 'collecting-sigs') {
-                envelope = buildRequestEnvelope({
-                    kind: 'multisig-request-signature',
-                    sessionRef,
-                });
-            } else if (active.status === 'finalized' && active.finalizedTxHex) {
-                envelope = buildFinalizedEnvelope({
-                    sessionRef,
-                    txHex: active.finalizedTxHex,
-                    ...(active.txid ? { txid: active.txid } : {}),
-                });
-            } else {
-                return null;
-            }
-            return encodeXcwChunks(encodeMultisigEnvelope(envelope));
+            const envelope = buildSessionEnvelope(active);
+            if (!envelope) return null;
+            const frames = encodeXcwChunks(encodeMultisigEnvelope(envelope));
+            const link = envelope.kind.startsWith('multisig-request-')
+                ? buildMultisigSessionLink(envelope)
+                : null;
+            return { envelope, frames, link };
         } catch (e) {
             // Surface in the UI rather than crashing; sessions with
             // malformed state still let the user cancel them.
             console.error('Multisig QR envelope build failed:', e); // eslint-disable-line no-console
             return { error: userFacingMessage(e, 'Could not build the transaction QR for this session.') };
+        }
+    }, [active]);
+
+    const exportFrames = exportData?.frames || (exportData?.error ? exportData : null);
+
+    async function handleCopyLink() {
+        if (!exportData?.link) return;
+        const { ok } = await copyText(exportData.link);
+        setLinkStatus(ok
+            ? t('multisig.signingLink.copied')
+            : t('multisig.signingLink.copyFailed'));
+    }
+
+    async function handleShareLink() {
+        const share = globalThis.navigator?.share;
+        if (!exportData?.link || typeof share !== 'function') return;
+        try {
+            await share.call(globalThis.navigator, {
+                title: t('multisig.signingLink.shareTitle'),
+                text: t('multisig.signingLink.shareText'),
+                url: exportData.link,
+            });
+        } catch (err) {
+            if (err?.name !== 'AbortError') {
+                fail(userFacingMessage(err, t('multisig.signingLink.shareFailed')), null);
+            }
+        }
+    }
+
+    const decodedSpend = useMemo(() => {
+        if (!active?.psbtHex || !['p2sh-multisig', 'p2wsh-multisig'].includes(active.scheme)) return null;
+        try {
+            return flowsLib.decodeMultisigSpend(active.psbtHex);
+        } catch {
+            return null;
         }
     }, [active]);
 
@@ -603,7 +698,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         </Screen>
     );
 
-    if (error && !active) {
+    if (error && activeId && !active) {
         return wrap(
             <>
                 <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage>
@@ -618,46 +713,70 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     if (!activeId) {
-        if (sessions.length === 0) {
-            return wrap(
+        return wrap(
+            <>
+                <section className={styles.signingLinkBlock} aria-labelledby="open-signing-link-title">
+                    <p id="open-signing-link-title" className={styles.successTitle}>
+                        {t('multisig.signingLink.openTitle')}
+                    </p>
+                    <Input
+                        label={t('multisig.signingLink.openLabel')}
+                        help={t('multisig.signingLink.openHint')}
+                        value={linkInput}
+                        onChange={(event) => setLinkInput(event.target.value)}
+                        autoComplete="off"
+                    />
+                    <div className={styles.actions}>
+                        <Button
+                            variant="primary"
+                            onClick={() => importSigningLink(linkInput)}
+                            loading={busy}
+                            disabled={linkInput.trim().length === 0}
+                        >
+                            {t('multisig.signingLink.open')}
+                        </Button>
+                    </div>
+                    {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                </section>
+                {sessions.length === 0 && !error ? (
                 <EmptyState
                     title="No signing sessions"
                     body="Multisig spending sessions for this wallet appear here."
-                />,
-            );
-        }
-        return wrap(
-            <ul
-                aria-label="Multisig sessions"
-                style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}
-            >
-                {sessions.map((s) => {
-                    const summary = signingProgressSummary(s);
-                    return (
-                        <li key={s.id}>
-                            <ListRow
-                                onClick={() => setActiveId(s.id)}
-                                chevron
-                                title={(
-                                    <MultisigBadge
-                                        threshold={s.threshold}
-                                        cosignerCount={s.cosignerPubkeys.length}
-                                        scheme={s.scheme}
-                                        size="sm"
+                />
+                ) : (
+                    <ul
+                        aria-label="Multisig sessions"
+                        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}
+                    >
+                        {sessions.map((s) => {
+                            const summary = signingProgressSummary(s);
+                            return (
+                                <li key={s.id}>
+                                    <ListRow
+                                        onClick={() => setActiveId(s.id)}
+                                        chevron
+                                        title={(
+                                            <MultisigBadge
+                                                threshold={s.threshold}
+                                                cosignerCount={s.cosignerPubkeys.length}
+                                                scheme={s.scheme}
+                                                size="sm"
+                                            />
+                                        )}
+                                        subtitle={(
+                                            <>
+                                                {summary?.label}: {summary?.current} of {summary?.threshold}
+                                                {' · '}{statusLabel(s.status)}
+                                                {s.actionSummary ? <><br />{s.actionSummary}</> : null}
+                                            </>
+                                        )}
                                     />
-                                )}
-                                subtitle={(
-                                    <>
-                                        {summary?.label}: {summary?.current} of {summary?.threshold}
-                                        {' · '}{statusLabel(s.status)}
-                                        {s.actionSummary ? <><br />{s.actionSummary}</> : null}
-                                    </>
-                                )}
-                            />
-                        </li>
-                    );
-                })}
-            </ul>,
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </>,
         );
     }
 
@@ -691,6 +810,26 @@ export function MultisigSigningSession({ walletId, onBack }) {
                         ? 'Scan this animated QR in a wallet that can broadcast the signed transaction.'
                         : 'Show this animated QR to a cosigner. Each frame is part of the signing request, and the cosigner\'s wallet reassembles it.'}
                 </p>
+                {exportData?.link ? (
+                    <section className={styles.signingLinkBlock}>
+                        <Input
+                            label={t('multisig.signingLink.label')}
+                            value={exportData.link}
+                            readOnly
+                        />
+                        <div className={styles.actions}>
+                            <Button variant="secondary" onClick={handleCopyLink}>
+                                {t('common.copy')}
+                            </Button>
+                            {typeof globalThis.navigator?.share === 'function' ? (
+                                <Button variant="secondary" onClick={handleShareLink}>
+                                    {t('multisig.signingLink.share')}
+                                </Button>
+                            ) : null}
+                        </div>
+                        {linkStatus ? <StatusMessage variant="status">{linkStatus}</StatusMessage> : null}
+                    </section>
+                ) : null}
                 {exportFrames && exportFrames.error ? (
                     // Encode failure is derived from the current session's
                     // state (a memo, not a user action): no re-run fixes it,
@@ -803,12 +942,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     onChange={(e) => setPasteInput(e.target.value)}
                     rows={6}
                     style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
-                    labelAction={(
-                        <Button
-                            variant="ghost"
-                            size="sm"
+                    fieldAction={(
+                        <FieldIconButton
                             icon={<Icon.ScanIcon />}
-                            aria-label={scannerOpen ? 'Stop scanner' : 'Scan with camera'}
+                            label={scannerOpen ? 'Stop scanner' : 'Scan with camera'}
+                            aria-pressed={scannerOpen}
                             onClick={() => setScannerOpen((v) => !v)}
                             disabled={busy}
                         />
@@ -885,6 +1023,32 @@ export function MultisigSigningSession({ walletId, onBack }) {
             ) : null}
             {active.actionSummary ? (
                 <p className={styles.hint}>{active.actionSummary}</p>
+            ) : null}
+            {decodedSpend ? (
+                <section aria-label="Transaction outputs" data-testid="multisig-spend-summary">
+                    <p className={styles.hint}>Transaction outputs</p>
+                    <ul>
+                        {decodedSpend.outputs.map((output, index) => {
+                            const isChange = output.scriptPubKeyHex === decodedSpend.input.scriptPubKeyHex;
+                            const coin = String(active.chainId || '').split('-')[0];
+                            return (
+                                <li key={`${output.scriptPubKeyHex}:${index}`}>
+                                    <code>{output.address || outputAddress(output.scriptPubKeyHex, active.chainId) || output.scriptPubKeyHex}</code>
+                                    {' '}{formatNativeBaseUnits(output.value, coin)} {tickerForCoin(coin)}
+                                    {isChange ? ' (Change back to this multisig)' : ''}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                    <p className={styles.hint}>
+                        Network fee: {formatNativeBaseUnits(
+                            decodedSpend.input.amount
+                                - decodedSpend.outputs.reduce((sum, output) => sum + output.value, 0n),
+                            String(active.chainId || '').split('-')[0],
+                        )}{' '}
+                        {tickerForCoin(String(active.chainId || '').split('-')[0])}
+                    </p>
+                </section>
             ) : null}
             {readiness ? <p className={styles.hint}>{readiness}</p> : null}
             {!isTerminal ? (

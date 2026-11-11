@@ -112,7 +112,7 @@ describe('native pause with a secret screen and an ordinary form', () => {
         const input = await typeNote();
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw-for-test' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         act(() => document.dispatchEvent(new Event('pause')));

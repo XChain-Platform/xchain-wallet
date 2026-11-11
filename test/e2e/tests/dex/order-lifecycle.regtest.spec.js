@@ -398,7 +398,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await row.getByRole('button', { name: 'Edit', exact: true }).click();
 
             const main = page.getByRole('main');
-            const expiration = main.getByLabel('New expiration (optional)');
+            const expiration = main.getByLabel('New expiration', { exact: true });
             await expect(expiration, 'the edit panel never opened for this order')
                 .toBeVisible({ timeout: 30_000 });
             await expect(main, 'the edit panel is pointed at a different order')
@@ -407,7 +407,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // A blank edit is refused before anything is signed: the wire has
             // no way to say "change nothing", so an empty submit would spend a
             // miner fee to say nothing.
-            await main.getByRole('button', { name: 'Edit order' }).click();
+            await main.getByRole('button', { name: 'Update order' }).click();
             await expect(main, 'a blank edit was not refused with the no-change notice')
                 .toContainText('Change at least one field', { timeout: 30_000 });
             await expect(page.getByTestId('confirm-approve'),
@@ -415,7 +415,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveCount(0);
 
             await expiration.fill(localInput);
-            await main.getByRole('button', { name: 'Edit order' }).click();
+            await main.getByRole('button', { name: 'Update order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await page.getByTestId('confirm-approve').click();

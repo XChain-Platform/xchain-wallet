@@ -1,649 +1,132 @@
-/* `<Screen>` already provides `padding: var(--xc-space-4)` on its
-   inner main element; this wrapper only needs to stack children with
-   a gap. */
-.body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-4);
-    width: 100%;
+.approvedBody {
+    gap: var(--xc-space-3);
 }
 
-/* Identity, stats, actions, activity and genesis are parts of one token
-   surface. Their former card classes flatten automatically inside this card. */
-.surface {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-section-gap);
+.approvedHero {
+    composes: balanceHero from './TokenDetail.module.css';
 }
 
-.surface > :not(:first-child) {
-    padding-top: var(--xc-section-gap);
-    border-top: 1px solid var(--xc-border);
-}
-
-.surface ul.list {
-    gap: 0;
-}
-
-.surface ul.list > li {
-    padding: var(--xc-list-row-padding);
-}
-
-.surface ul.list > li + li {
-    border-top: 1px solid var(--xc-border);
-}
-
-/* ───── Hero - token identity (no balance, this is the issuer view). ───── */
-
-.hero {
-    composes: card from '../../ui/Card.module.css';
-    position: relative;
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--xc-space-4);
-}
-
-.heroIconWrap {
-    flex: 0 0 auto;
-}
-
-.heroMain {
-    flex: 1 1 auto;
+.approvedHeroText {
     min-width: 0;
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: var(--xc-space-1);
 }
 
-.heroTitleRow {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    flex-wrap: wrap;
-}
-
-.heroTick {
+.approvedHeroName {
     margin: 0;
-    font-size: var(--xc-text-2xl);
-    font-weight: 700;
-    max-width: 100%;
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
     overflow-wrap: anywhere;
 }
 
-.heroBadges {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
-    margin-inline-start: auto;
-}
-
-.lockBadge {
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-pill);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-.lockBadgeLocked {
-    background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger-fg, #d93838);
-}
-
-.lockBadgeUnlocked {
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
-    color: var(--xc-success, #14b86c);
-}
-
-.lockBadge > svg {
-    width: var(--xc-icon-xs);
-    height: var(--xc-icon-xs);
-}
-
-.heroSub {
+.approvedHeroDescription {
+    margin: 0;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
-}
-
-.heroOwner {
-    font-family: var(--xc-font-mono, monospace);
-    color: var(--xc-text);
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.heroDescription {
-    margin: var(--xc-space-2) 0 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
     line-height: 1.4;
     overflow-wrap: anywhere;
 }
 
-/* ───── Market panel - stats strip + chart placeholder. ───── */
-
-.marketPanel {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
+.approvedTabPanel {
+    min-width: 0;
 }
 
-/* Narrow shells keep every statistic on its own row. At the tablet boundary
-   there is enough room for two columns, and wide screens use all four. */
-.statsStrip {
+.approvedActionGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--xc-space-3);
-}
-
-@media (min-width: 834px) {
-    .statsStrip {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (min-width: 1024px) {
-    .statsStrip {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-}
-
-.stat {
-    display: flex;
-    flex-direction: column;
-    /* Half-grid spacing keeps the three compact statistic lines grouped. */
-    gap: 2px;
-    min-width: 0;
-}
-
-.statLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-}
-
-.statValue {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    color: var(--xc-text);
-    font-variant-numeric: tabular-nums;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    overflow-wrap: anywhere;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.statSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.supplyBar {
-    /* The slim progress track has no matching control or spacing token. */
-    height: 6px;
-    background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill);
-    overflow: hidden;
-}
-
-.supplyBarFill {
-    height: 100%;
-    background: var(--xc-accent-primary);
-    border-radius: var(--xc-radius-pill);
-    transition: width 0.2s ease-out;
-}
-
-/* ───── Manage action grid (carried over). ───── */
-
-.manageGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--xc-space-2);
 }
 
-@media (min-width: 834px) {
-    .manageGrid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-}
-
-.manageGrid > button,
-.manageMoreWrap > button {
-    flex-direction: row;
-    min-height: calc(var(--xc-space-6) + var(--xc-space-1));
-}
-
-.manageGrid > button svg,
-.manageMoreWrap > button svg {
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-}
-
-/* "More" dropdown - mirrors Home's quickActionMore. */
-
-.manageMoreWrap {
-    position: relative;
-    display: flex;
-    align-self: stretch;
-}
-
-.manageMoreWrap > button {
-    flex: 1 1 auto;
-    width: 100%;
-}
-
-.manageMoreMenu {
-    position: absolute;
-    inset-inline-end: 0;
-    top: calc(100% + var(--xc-space-1));
-    /* The menu width fits its longest localized action and has no matching token. */
-    min-width: 220px;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    box-shadow: var(--xc-shadow-md);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    padding: var(--xc-space-1) 0;
-}
-
-.manageMoreMenu > button {
-    justify-content: flex-start;
-}
-
-/* ───── Tabs - match TokenDetail's pattern. ───── */
-
-.tabs {
-    display: flex;
-    gap: var(--xc-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
-    /* The one-pixel overlap joins the active tab edge to the hairline border. */
-    padding-bottom: 1px;
-    margin-bottom: -1px;
-    scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    flex: 0 0 auto;
-    font-family: inherit;
-}
-
-.tab:hover { color: var(--xc-text); }
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-/* Phones: all five panels fit a 360px screen on tighter spacing instead of
-   scrolling the last tab out of view. The tabs share the row's spare width so
-   the strip still spans the content. */
-@media not all and (min-width: 480px) {
-    .tabs {
-        gap: 0;
-    }
-
-    .tab {
-        flex: 1 1 auto;
-        justify-content: center;
-        padding-inline: var(--xc-space-1);
-    }
-}
-
-/* Under 360px the five labels at the base size run 7px past a 320px strip, so the
-   last tab is cut off until the strip is scrolled. The smaller size keeps all five
-   in view; larger text sizes still scroll the strip. */
-@media not all and (min-width: 360px) {
-    .tab {
-        font-size: var(--xc-text-xs);
-    }
-}
-
-.tabPanel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    min-height: 0;
-}
-
-/* ───── Shared list-row styles used by all tab panels. ───── */
-
-.list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-.row {
-    composes: card from '../../ui/Card.module.css';
-    /* The tap floor the audit can read; the control-height min-height below wins. */
-    min-block-size: var(--xc-tap-min);
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-    color: var(--xc-text);
-    font-family: inherit;
-    text-align: start;
-    cursor: pointer;
-    min-height: calc(var(--xc-control-h-md) - var(--xc-space-1));
-}
-
-.row:disabled { cursor: default; }
-
-button.row:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.rowMain {
-    font-size: var(--xc-text-sm);
-    font-weight: 500;
-    color: var(--xc-text);
+.approvedActionTile {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.rowMono {
-    font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    overflow-wrap: anywhere;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.holderAddress,
-.copyableGenesis {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.rowSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-variant-numeric: tabular-nums;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-/* ───── Genesis + subassets section - read-only metadata block at
-   the bottom of the page. Two-column key/value list + chip-style
-   subasset list so the bottom of the page has structured info
-   without competing with the tabs above. ───── */
-
-.genesisPanel {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
+    min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6) + var(--xc-space-3));
+    padding: var(--xc-space-2);
     flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.genesisList {
-    margin: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    column-gap: var(--xc-space-4);
-    row-gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    min-width: 0;
-}
-
-@media (min-width: 834px) {
-    .genesisList {
-        grid-template-columns: max-content minmax(0, 1fr);
-    }
-}
-
-.genesisList > dt {
-    color: var(--xc-text-muted);
-}
-
-.genesisList > dd {
-    margin: 0;
-    color: var(--xc-text);
-    overflow-wrap: anywhere;
-}
-
-.genesisMono {
-    font-family: var(--xc-font-mono, monospace);
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.copyableGenesis {
-    justify-content: flex-start;
-}
-
-.subassetList {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
-}
-
-.subassetItem {
-    /* Half-grid block padding keeps compact metadata chips aligned with text. */
-    padding: 2px var(--xc-space-2);
-    background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill);
-    font-size: var(--xc-text-xs);
-    font-family: var(--xc-font-mono, monospace);
-    color: var(--xc-text);
-    max-width: 100%;
-    overflow-wrap: anywhere;
-}
-
-/* ───── History-style row used by Dispensers / Orders / Swaps panels.
-   Mirrors the §23 timeline row visually: header (chain icon + ACTION
-   label + status pill), source line (mono muted), meta line (block +
-   confirms + relative time). Lives alongside the simple .row above
-   because Holders / Activity still use the compact two-column layout
-   and don't need the full history-row chrome. ───── */
-
-.histRow {
-    composes: card from '../../ui/Card.module.css';
-    min-height: var(--xc-tap-min);
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    width: 100%;
-    color: var(--xc-text);
-    font-family: inherit;
-    text-align: start;
-    cursor: pointer;
-    appearance: none;
-    margin: var(--xc-space-1) 0;
-}
-
-/* Row variant with a leading TickerIcon - used by OrdersPanel. Switches
-   the row into a horizontal flex with a fixed icon column on the left
-   and the existing header / summary / source / meta stack on the right. */
-.histRowWithIcon {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--xc-space-3);
-}
-
-.histRow > span:last-child {
-    width: 100%;
-    justify-content: flex-start;
-    text-align: start;
-}
-
-.histRowWithIcon > span:last-child {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
-}
-
-.histTickerIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
-}
-
-.histContent {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-.histRow:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.histRow:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.histRow:disabled {
-    cursor: default;
-}
-
-.histHeader {
-    display: flex;
-    align-items: center;
     gap: var(--xc-space-2);
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
 }
 
-.histChainIcon {
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    display: block;
+.approvedActionTile svg {
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
 }
 
-.histAction {
-    font-weight: 600;
+.approvedDetailsCard {
+    composes: card from '../../ui/Card.module.css';
+}
+
+.approvedDetailsList {
+    margin: 0;
+}
+
+.approvedDetailRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3) 0;
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.approvedDetailRow:first-child {
+    padding-top: 0;
+}
+
+.approvedDetailRow:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+.approvedDetailRow dt {
+    color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
-.histStatus {
-    margin-inline-start: auto;
+.approvedDetailRow dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+.approvedMono {
+    font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.approvedAddressValue,
+.approvedLocked,
+.approvedEditable {
     display: inline-flex;
     align-items: center;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.6;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    justify-content: flex-end;
+    gap: var(--xc-space-1);
+    min-width: 0;
 }
 
-.histStatusSuccess {
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
-    color: var(--xc-success, #14b86c);
-}
-
-.histStatusOpen {
-    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-text);
-}
-
-.histStatusPending {
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 20%, transparent);
-    color: var(--xc-warning, #d99000);
-}
-
-.histSummary {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    font-variant-numeric: tabular-nums;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.histSource {
-    font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    word-break: break-all;
-    direction: ltr;
-    unicode-bidi: isolate;
-}
-
-.histMeta {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.histTime {
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
-}
-
-/* ───── "Official token" notice - same treatment as TokenDetail's:
-   a project name inside the success message. ───── */
-
-.officialBannerProject {
+.approvedLocked,
+.approvedEditable {
     font-weight: 600;
+}
+
+.approvedLocked {
+    color: var(--xc-warning-text);
+}
+
+.approvedEditable {
+    color: var(--xc-success);
+}
+
+.approvedLocked svg,
+.approvedEditable svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }

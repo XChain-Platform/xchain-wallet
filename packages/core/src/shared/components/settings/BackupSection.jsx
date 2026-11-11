@@ -53,10 +53,11 @@ import {
     EmptyState,
     FormPage,
     FormSection,
+    Icon,
     Input,
+    PageNotice as Status,
     SectionHeader,
     Select,
-    StatusMessage,
     Textarea,
 } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../../ui/backStack.js';
@@ -82,11 +83,10 @@ import {
     startBackupDownload,
     writeBackupFile,
 } from '../../utils/backupFileSave.js';
-import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
-import '../../../i18n/locales/en/gatedPublish.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/importWallet.js';
 import '../../../i18n/locales/en/send.js';
@@ -567,7 +567,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
     }
 
     return (
-        <div style={STACK}>
+        <div className={styles.rows} style={STACK}>
             {exportResult && !exportResult.confirmed ? (
                 <BackupDownloadConfirm
                     fileName={exportResult.fileName}
@@ -652,6 +652,7 @@ export function BackupSection({ activeWallet, onExportInTab }) {
                     /* Spec §19.6 */
                     hint={t('settings.backup.checkARecoveryPhraseAgainst')}
                     actionLabel={t('settings.backup.test')}
+                    icon={<Icon.VerifyIcon />}
                     disabled={!activeWallet}
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
@@ -738,25 +739,34 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
             className={cardStyles.card}
         >
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onDismiss}>
+                <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onDismiss}>
                     {t('extensionBanner.notNow')}
                 </Button>
                 <Button
+                    variant="success"
                     size="sm"
+                    icon={<Icon.UploadIcon />}
                     onClick={onPublish}
                     disabled={disabled}
                 >
-                    {t('settings.backup.publish')}
+                    {t('settings.help.backup.publishLabels')}
                 </Button>
             </div>
         </FormSection>
     );
 }
 
-function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
+function BackupRow({ label, hint, actionLabel, icon, disabled, onClick }) {
     return (
         <SettingsActionRow label={label} hint={hint}>
-            <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
+            <Button
+                variant="ghost"
+                size="sm"
+                className={styles.rowAction}
+                icon={icon}
+                onClick={onClick}
+                disabled={disabled}
+            >
                 {actionLabel}
             </Button>
         </SettingsActionRow>
@@ -777,13 +787,15 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
         onSubmit(pw);
     };
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
             <FormPage onSubmit={submit} sectioned submitFromAnyField label={label}>
                 <FormSection title={label} description={hint}>
                     <Input
                         type="password"
                         revealable
                         label={t('send.gated.passwordLabel')}
+                        help={t('settings.help.backup.revealPassword')}
                         value={pw}
                         onChange={(e) => setPw(e.target.value)}
                         autoFocus
@@ -792,13 +804,15 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                         error={error === INCORRECT_PASSWORD ? error : undefined}
                     />
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                         <Button
                             type="submit"
+                            variant="success"
                             size="sm"
+                            icon={<Icon.EyeIcon />}
                             disabled={busy || pw.length === 0}
                         >
-                            {busy ? t('settings.backup.revealing') : t('settings.backup.reveal')}
+                            {busy ? t('settings.backup.revealing') : t('settings.help.backup.revealPhrase')}
                         </Button>
                     </div>
                 </FormSection>
@@ -925,11 +939,11 @@ function RevealedMnemonic({
             </div>
             <div className={`${styles.screenOnly} ${styles.actions}`}>
                 {!hidden ? (
-                    <Button variant="ghost" size="sm" onClick={onPrint}>
+                    <Button variant="ghost" size="sm" icon={<Icon.PrinterIcon />} onClick={onPrint}>
                         {t('settings.backup.printRecoverySheet')}
                     </Button>
                 ) : null}
-                <Button variant="ghost" size="sm" onClick={onDone}>
+                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>
                     {t('common.done')}
                 </Button>
             </div>
@@ -971,13 +985,17 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     };
 
     return (
-        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error} tone="error" />
             <FormPage onSubmit={submit} sectioned label={t('settings.backup.testBackup')}>
                 <FormSection
                     title={t('settings.backup.testBackup')}
                     description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
                 >
                     <Textarea
+                        label={t('settings.backup.recoveryPhraseToTest')}
+                        help={t('settings.help.backup.testPhrase')}
+                        autoFocus
                         value={mn}
                         onChange={(e) => setMn(e.target.value)}
                         placeholder={t('settings.backup.recoveryPhraseWordsSeparatedBy')}
@@ -992,6 +1010,7 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                     <div className={styles.fieldRow}>
                         <Select
                             label={t('settings.backup.format')}
+                                help={t('settings.help.backup.testFormat')}
                                 value={format}
                                 onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
                                 aria-label={t('settings.backup.phraseFormat')}
@@ -1002,6 +1021,7 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                         </Select>
                         <Input
                                 label={t('settings.backup.addressesToCheck2')}
+                                help={t('settings.help.backup.testGap')}
                                 type="number"
                                 inputMode="numeric"
                                 enterKeyHint="go"
@@ -1022,6 +1042,7 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                             revealable
                             label={t('importWallet.passphrase.label')}
                             optional
+                            help={t('settings.help.backup.testPassphrase')}
                             value={passphrase}
                             onChange={(e) => setPassphrase(e.target.value)}
                             autoComplete="off"
@@ -1032,10 +1053,12 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                         <Status text={t('settings.backup.addressesToCheckMustBe')} tone="error" />
                     ) : null}
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                         <Button
                             type="submit"
+                            variant="success"
                             size="sm"
+                            icon={<Icon.VerifyIcon />}
                             disabled={!canSubmit}
                         >
                             {busy ? t('settings.backup.testing') : t('settings.backup.runTest')}
@@ -1073,7 +1096,7 @@ function DryRunReport({ result, onDone }) {
                 />
             )}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1159,7 +1182,8 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
         onSubmit(pw1);
     };
     return (
-        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error} tone="error" />
             <FormPage onSubmit={submit} sectioned label={t('settings.backup.exportEncryptedBackup')}>
                 <FormSection
                     title={t('settings.backup.exportEncryptedBackup')}
@@ -1167,6 +1191,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                 >
                     <Input
                         label={label}
+                        help={t('settings.help.backup.exportPassword')}
                         type="password"
                         revealable
                         placeholder={t('settings.backup.backupPassword')}
@@ -1185,6 +1210,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                         type="password"
                         revealable
                         label={t('settings.backup.confirmBackupPassword')}
+                        help={t('settings.help.backup.exportConfirm')}
                         value={pw2}
                         onChange={(e) => setPw2(e.target.value)}
                         autoComplete="new-password"
@@ -1203,13 +1229,15 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                         />
                     ) : null}
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
+                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
                         <Button
                             type="submit"
+                            variant="success"
                             size="sm"
+                            icon={<Icon.DownloadIcon />}
                             disabled={!canSubmit}
                         >
-                            {busy ? t('settings.backup.exporting') : t('history.export.confirm')}
+                            {busy ? t('settings.backup.exporting') : t('settings.help.backup.exportBackup')}
                         </Button>
                     </div>
                 </FormSection>
@@ -1259,6 +1287,9 @@ function BackupExportResult({ result, onDone }) {
             />
             <Input
                 type="url"
+                label={t('settings.help.backup.pointerAddressLabel')}
+                optional
+                help={t('settings.help.backup.pointerAddress')}
                 placeholder={t('settings.backup.httpsExampleComMyBackup')}
                 value={location}
                 onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
@@ -1273,8 +1304,8 @@ function BackupExportResult({ result, onDone }) {
                 </div>
             ) : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={createPointer}>{t('settings.backup.createPointerQr')}</Button>
-                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="success" size="sm" icon={<Icon.PlusIcon />} onClick={createPointer}>{t('settings.backup.createPointerQr')}</Button>
+                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1290,8 +1321,8 @@ function BackupDownloadConfirm({ fileName, onConfirm, onCancel }) {
             <Status text={fileName} />
             <div style={ROW_HINT}>{t('settings.backup.checkThatTheFileIsInYourDownloads')}</div>
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
-                <Button size="sm" onClick={onConfirm}>{t('settings.backup.iSavedTheFile')}</Button>
+                <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
+                <Button variant="success" size="sm" icon={<Icon.CheckIcon />} onClick={onConfirm}>{t('settings.backup.iSavedTheFile')}</Button>
             </div>
         </FormSection>
     );
@@ -1370,7 +1401,8 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     const canSubmit = !busy && !loadingChains;
 
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
             <FormSection
                 title={t('settings.backup.publishLabelsOnChain')}
                 description={t('settings.backup.theLabelsContactsAreEncrypted')}
@@ -1388,6 +1420,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                 ) : (
                     <Select
                         label={t('send.fields.chain')}
+                        help={t('settings.help.backup.publishChain')}
                         value={chainId}
                         onChange={(e) => setChainId(e.target.value)}
                         aria-label={t('settings.backup.publishChain')}
@@ -1401,6 +1434,8 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                 <Input
                     type="password"
                     revealable
+                    label={t('send.gated.passwordLabel')}
+                    help={t('settings.help.backup.publishPassword')}
                     placeholder={t('send.gated.passwordLabel')}
                     value={password}
                     onChange={(e) => onPasswordChange(e.target.value)}
@@ -1410,13 +1445,15 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                     error={error === INCORRECT_PASSWORD ? error : undefined}
                 />
                 <div className={styles.actions}>
-                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                     <Button
+                        variant="success"
                         size="sm"
+                        icon={<Icon.UploadIcon />}
                         onClick={() => onSubmit({ chainId, password })}
                         disabled={!canSubmit}
                     >
-                        {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('gatedPublish.review.summary.beforeFile')}
+                        {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('settings.help.backup.publishLabels')}
                     </Button>
                 </div>
             </FormSection>
@@ -1443,7 +1480,7 @@ function PublishLabelsReport({ result, onDone }) {
                             : t('settings.backup.noTransactionIdCameBack')}
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
+                        <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
                     </div>
                 </FormSection>
             </div>
@@ -1465,7 +1502,7 @@ function PublishLabelsReport({ result, onDone }) {
             </dl>
             <div className={styles.actions}>
                 <CopyButton value={txid} label={t('common.copyTransactionId')} />
-                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1510,7 +1547,8 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
     const canSubmit = !!chainId && password.length > 0 && !busy;
 
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
             <FormSection
                 title={t('settings.backup.checkChainForBackedUp')}
                 description={t('settings.backup.decryptsTheLabelsContactsFile')}
@@ -1528,6 +1566,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 ) : (
                     <Select
                         label={t('send.fields.chain')}
+                        help={t('settings.help.backup.restoreChain')}
                         value={chainId}
                         onChange={(e) => setChainId(e.target.value)}
                         aria-label={t('settings.backup.restoreChain')}
@@ -1541,6 +1580,8 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 <Input
                     type="password"
                     revealable
+                    label={t('send.gated.passwordLabel')}
+                    help={t('settings.help.backup.restorePassword')}
                     placeholder={t('send.gated.passwordLabel')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -1550,13 +1591,15 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                     error={error === INCORRECT_PASSWORD ? error : undefined}
                 />
                 <div className={styles.actions}>
-                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                     <Button
+                        variant="success"
                         size="sm"
+                        icon={<Icon.SearchIcon />}
                         onClick={() => onSubmit({ chainId, password })}
                         disabled={!canSubmit}
                     >
-                        {busy ? t('settings.backup.checking') : t('settings.backup.check2')}
+                        {busy ? t('settings.backup.checking') : t('settings.help.backup.checkForContacts')}
                     </Button>
                 </div>
             </FormSection>
@@ -1602,7 +1645,7 @@ function RestoreLabelsReport({ result, onDone }) {
     return (
         <FormSection title={restoreLabelsMessage(result)} className={cardStyles.card}>
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );

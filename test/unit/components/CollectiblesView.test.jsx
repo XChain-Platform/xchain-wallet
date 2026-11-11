@@ -132,6 +132,20 @@ describe('CollectiblesView cards', () => {
         expect(css).not.toMatch(/-webkit-line-clamp/);
     });
 
+    it('stacks the ticker directly under the name with no reserved line', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/components/CollectiblesView.module.css',
+            'utf8',
+        );
+        const nameRule = css.match(/\n\.name \{([^}]*)\}/);
+        expect(nameRule).not.toBeNull();
+        expect(nameRule[1]).not.toMatch(/min-height/);
+
+        render(<CollectiblesView rows={[{ ...ROW, displayName: 'Short' }]} onSelectToken={vi.fn()} />);
+        const name = screen.getByText('Short');
+        expect(name.nextElementSibling).toHaveTextContent('LONGART');
+    });
+
     it('offers a smaller decode candidate for native ticker icons', () => {
         const { container } = render(
             <TickerIcon chainId="bitcoin-mainnet" tick="BTC" size={32} />,

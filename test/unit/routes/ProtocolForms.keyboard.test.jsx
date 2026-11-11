@@ -110,11 +110,18 @@ describe('protocol form keyboard operation', () => {
         const oracle = utils.getByLabelText('Your oracle address');
         const chooseOracle = utils.getByRole('button', { name: 'Choose oracle address' });
         const token = utils.getByRole('button', { name: /^Token bets are placed in:/ });
+        const tokenTip = utils.getByRole('button', { name: 'About Token bets are placed in' });
         const label = utils.getByLabelText('What is being bet on');
         const outcome0 = utils.getByLabelText('Outcome 0');
         const outcome1 = utils.getByLabelText('Outcome 1');
+        const oracleHelp = utils.getByRole('button', { name: 'About Your oracle address' });
+        const labelHelp = utils.getByRole('button', { name: 'About What is being bet on' });
+        const outcome0Help = utils.getByRole('button', { name: 'About Outcome 0' });
+        const outcome1Help = utils.getByRole('button', { name: 'About Outcome 1' });
 
-        await expectTabSequence(user, [network, chooseOracle, oracle, token, label, outcome0, outcome1]);
+        await expectTabSequence(user, [
+            network, oracleHelp, oracle, chooseOracle, tokenTip, token, labelHelp, label, outcome0Help, outcome0, outcome1Help, outcome1,
+        ]);
 
         label.focus();
         await user.keyboard('{Enter}');
@@ -138,17 +145,24 @@ describe('protocol form keyboard operation', () => {
         const user = userEvent.setup();
         const utils = await mountForm(DelegateVoteForm, { presetTick: 'XCHAIN' });
         const network = await utils.findByRole('button', { name: /^Network:/ });
-        const delegateMode = utils.getByRole('button', { name: 'Delegate' });
-        const clearMode = utils.getByRole('button', { name: 'Clear' });
+        const networkHelp = utils.getByRole('button', { name: 'About Network' });
         const from = utils.getByLabelText('From');
+        const fromHelp = utils.getByRole('button', { name: 'About From' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
+        const tokenHelp = utils.getByRole('button', { name: 'About Governance token' });
+        const actionHelp = utils.getByRole('button', { name: 'About Action' });
+        const delegateMode = utils.getByLabelText('Delegate my votes');
+        const clearMode = utils.getByLabelText('Clear my delegation');
         const token = utils.getByRole('button', { name: /^Governance token:/ });
+        const delegateHelp = utils.getByRole('button', { name: 'About Delegate to address' });
         const delegateTo = utils.getByLabelText('Delegate to address');
         const contacts = utils.getByRole('button', { name: 'Open address book' });
-        const memo = utils.getByLabelText('Memo (optional)');
+        const memoHelp = utils.getByRole('button', { name: 'About Memo' });
+        const memo = utils.getByLabelText('Memo');
 
         await expectTabSequence(user, [
-            delegateMode, clearMode, network, chooseSource, from, token, contacts, delegateTo, memo,
+            networkHelp, network, fromHelp, from, chooseSource, actionHelp, delegateMode, clearMode, tokenHelp, token,
+            delegateHelp, delegateTo, contacts, memoHelp, memo,
         ]);
 
         memo.focus();
@@ -174,8 +188,14 @@ describe('protocol form keyboard operation', () => {
         const topUp = utils.getByRole('radio', { name: /Top up an existing stake/ });
         const amount = utils.getByLabelText('Amount (XCHAIN)');
         const pubkey = utils.getByLabelText('Signing public key');
+        const modeHelp = utils.getByRole('button', { name: 'About Mode' });
+        const amountHelp = utils.getByRole('button', { name: 'About Amount (XCHAIN)' });
+        const pubkeyHelp = utils.getByRole('button', { name: 'About Signing public key' });
 
-        await expectTabSequence(user, [network, chooseSource, from, newStake, topUp, amount, pubkey]);
+        await expectTabSequence(user, [
+            network, from, chooseSource, modeHelp, newStake, topUp,
+            amountHelp, amount, pubkeyHelp, pubkey,
+        ]);
 
         pubkey.focus();
         await user.keyboard('{Enter}');
@@ -197,12 +217,17 @@ describe('protocol form keyboard operation', () => {
         const network = await utils.findByRole('button', { name: /^Network:/ });
         const from = utils.getByLabelText('From');
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
+        const listTypeHelp = utils.getByRole('button', { name: 'About List type' });
         const listType = utils.getByLabelText('List type');
-        const tokens = utils.getByLabelText('Tokens (one per line)');
+        const tokensHelp = utils.getByRole('button', { name: 'About Tokens' });
+        const tokens = utils.getByLabelText('Tokens');
         const picker = utils.getByRole('button', { name: 'Add from token picker' });
-        const memo = utils.getByLabelText('Memo (optional)');
+        const memoHelp = utils.getByRole('button', { name: 'About Memo' });
+        const memo = utils.getByLabelText('Memo');
 
-        await expectTabSequence(user, [network, chooseSource, from, listType, tokens, picker, memo]);
+        await expectTabSequence(user, [
+            network, from, chooseSource, listTypeHelp, listType, tokensHelp, tokens, picker, memoHelp, memo,
+        ]);
 
         memo.focus();
         await user.keyboard('{Enter}');
@@ -213,7 +238,7 @@ describe('protocol form keyboard operation', () => {
         memo.focus();
         await user.keyboard('{Enter}');
 
-        await expectReviewThenEscape(user, utils, () => utils.getByLabelText('Tokens (one per line)'));
+        await expectReviewThenEscape(user, utils, () => utils.getByLabelText('Tokens'));
         expect(utils.composeForConfirm).toHaveBeenCalledTimes(1);
     });
 });

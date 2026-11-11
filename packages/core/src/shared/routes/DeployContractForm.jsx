@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
@@ -23,6 +23,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import {
@@ -51,6 +52,7 @@ import contractStyles from './ContractScreens.module.css';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -236,6 +238,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const [metaRead, setMetaRead] = useState(
         /** @type {{ status: string, name?: string, description?: string, version?: string, computed?: string[] } | null} */ (null),
     );
+    const metaAbsent = metaRead?.status === 'absent';
 
     // PC-38: the SDK's audited template library. Sync + no network host-side,
     // so this is a cheap one-shot load per chain.
@@ -402,6 +405,40 @@ export function DeployContractForm({ walletId, onBack }) {
         return p;
     }, [code, effectiveGasLimit, constructorParams, cooldownBlocks, slashDestination]);
 
+    const deployQuoteActionData = useMemo(() => {
+        if (!fromAddress?.address || !chainId || !code.trim()) return null;
+        if (!/^\d+$/.test(effectiveGasLimit) || !/[1-9]/.test(effectiveGasLimit)) return null;
+        if (validation?.ok === false || metaAbsent) return null;
+        const cooldownText = cooldownBlocks.trim();
+        if (cooldownText) {
+            const cooldown = Number(cooldownText);
+            if (!/^\d+$/.test(cooldownText) || !Number.isInteger(cooldown)
+                || cooldown < 1 || cooldown > 100000) return null;
+        } else if (slashDestination.trim()) {
+            return null;
+        }
+        const slashTo = slashDestination.trim();
+        if (slashTo && slashTo !== 'BURN' && (!descriptor?.coin || !descriptor?.networkKind
+            || !isValidAddressForChain(slashTo, descriptor.coin, descriptor.networkKind))) return null;
+        const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
+        if (constructorParams.trim() && constructorParts.some((part) => part === '')) return null;
+        if (constructorParts.some((part) => part.includes(';'))) return null;
+        if (cooldownText && constructorParts.filter(Boolean).length > 1) return null;
+        if (!cooldownText && variadicSizeMessage(deployActionFit({
+            code,
+            gasLimit: effectiveGasLimit,
+            constructorParams: normalizeConstructorParams(constructorParams),
+        }), DEPLOY_ARGUMENT_WORDS)) return null;
+        return { action: 'DEPLOY', params: actionParams };
+    }, [fromAddress?.address, chainId, code, effectiveGasLimit, validation?.ok, metaAbsent,
+        cooldownBlocks, slashDestination, descriptor, constructorParams, actionParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: deployQuoteActionData,
+    });
+
     // PC-38: load the template list + any resumable run once the chain is known.
     useEffect(() => {
         let cancelled = false;
@@ -499,8 +536,6 @@ export function DeployContractForm({ walletId, onBack }) {
     // before anything is composed and therefore before any fee is spent. An
     // `undecidable` read (a computed meta) never refuses; the chain may accept
     // it, and refusing would block a legal deploy.
-    const metaAbsent = metaRead?.status === 'absent';
-
     async function handleUseTemplate(templateName) {
         if (!chainId || toolBusy) return;
         setToolBusy(`template:${templateName}`);
@@ -1185,9 +1220,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -1264,6 +1297,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -1343,19 +1377,21 @@ export function DeployContractForm({ walletId, onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.UploadIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Publish' : 'Preview'}
+                    Publish contract
                 </Button>
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <NetworkField label="Network" help="The chain the contract is published on. The From address, the publishing fee and the network fee are on this network." value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that publishes the contract, pays the network and publishing fees, and becomes its owner."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -1411,7 +1447,10 @@ export function DeployContractForm({ walletId, onBack }) {
             {/* PC-38: the SDK ships audited scaffolds; the wallet had no path to them. */}
             {templates && (templates.templates?.length || templates.patterns?.length) ? (
                 <div style={{ marginBottom: '0.75rem' }}>
-                    <p className={styles.detailsLabel}>Start from an audited template</p>
+                    <p className={styles.detailsLabel}>
+                        Start from an audited template{' '}
+                        <InfoTip aria="About templates" label="Loading a template replaces the code source below. Review and customize it before publishing." />
+                    </p>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {[...(templates.templates || []), ...(templates.patterns || [])].map((t) => (
                             <Button
@@ -1419,8 +1458,9 @@ export function DeployContractForm({ walletId, onBack }) {
                                 type="button"
                                 variant="ghost"
                                 // A template name is data; the label lookup would
-                                // give "validation" a check icon as if it were chosen.
-                                icon={null}
+                                // give "validation" a check icon as if it were chosen,
+                                // so every template carries the contract icon.
+                                icon={<Icon.ContractIcon />}
                                 onClick={() => handleUseTemplate(t)}
                                 loading={toolBusy === `template:${t}`}
                                 disabled={toolBusy !== null}
@@ -1429,14 +1469,12 @@ export function DeployContractForm({ walletId, onBack }) {
                             </Button>
                         ))}
                     </div>
-                    <p className={styles.hint}>
-                        Loading a template replaces the source below. Review and customize it before publishing.
-                    </p>
                 </div>
             ) : null}
 
             <Textarea
                 label="Code source"
+                help="The contract's JavaScript source. It must export a name and description, and is published exactly as written."
                 ref={codeRef}
                 value={code}
                 onChange={(e) => {
@@ -1555,7 +1593,8 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Maximum computation allowed when deploying or calling the contract.'}
+                help="Maximum computation allowed when deploying or calling the contract."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 inputMode="numeric"
                 value={gasLimit}
@@ -1564,8 +1603,10 @@ export function DeployContractForm({ walletId, onBack }) {
             />
 
             <Input
-                label="Constructor params (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Values passed to the contract when it is created. Separate them with |.'}
+                label="Constructor params"
+                optional
+                help="Values passed to the contract when it is created. Separate them with |."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 value={constructorParams}
                 onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
@@ -1574,8 +1615,10 @@ export function DeployContractForm({ walletId, onBack }) {
             />
 
             <Input
-                label="Cooldown blocks (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking.'}
+                label="Cooldown blocks"
+                optional
+                help="Enables contract staking and sets the blocks between unstaking and token release. Leave blank to disable staking."
+                hint={assembleLocked ? RESUME_FIELD_HINT : '1–100000 blocks.'}
                 disabled={assembleLocked}
                 inputMode="numeric"
                 value={cooldownBlocks}
@@ -1584,8 +1627,10 @@ export function DeployContractForm({ walletId, onBack }) {
             />
 
             <Input
-                label="Slash destination (optional)"
-                hint={assembleLocked ? RESUME_FIELD_HINT : 'Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment.'}
+                label="Slash destination"
+                optional
+                help="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
+                hint={assembleLocked ? RESUME_FIELD_HINT : undefined}
                 disabled={assembleLocked}
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
@@ -1596,8 +1641,9 @@ export function DeployContractForm({ walletId, onBack }) {
                 spellCheck={false}
             />
 
-            {feeTiers ? (
+            <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -1605,9 +1651,9 @@ export function DeployContractForm({ walletId, onBack }) {
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
-            ) : null}
-
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
+            ) : null}>
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
+            </FeesCard>
 
         </FormPage>
         {confirmDialog.request ? (

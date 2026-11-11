@@ -23,10 +23,10 @@ const modalPath = join(sharedRoutes, 'AddAddressModal.jsx');
 assert.ok(existsSync(modalPath), 'AddAddressModal.jsx exists');
 const modal = readFileSync(modalPath, 'utf8');
 
-// Four fields: coin (icon-bearing ChainPicker), type, purpose, number
-// of addresses.
-assert.ok(/<ChainPicker\b/.test(modal) && /label="Coin"/.test(modal),
-    'modal has a Coin field rendered via ChainPicker (shows coin icons)');
+// Four fields: coin (the icon-bearing NetworkField, U59), type, purpose,
+// number of addresses.
+assert.ok(/<NetworkField\b/.test(modal) && /label="Coin"/.test(modal),
+    'modal has a Coin field rendered via NetworkField (shows coin icons)');
 assert.ok(/label="Type"/.test(modal), 'modal has a Type field');
 assert.ok(/label="Purpose"/.test(modal), 'modal has a Purpose field');
 assert.ok(/label="Number of addresses"/.test(modal), 'modal has a count field');

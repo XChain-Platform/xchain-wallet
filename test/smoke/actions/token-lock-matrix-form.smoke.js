@@ -90,7 +90,7 @@ for (const [key, field] of EXPECTED_FLAGS) {
         `LOCK_FLAGS entry for ${key} maps to ${field}`,
     );
     assert.ok(
-        new RegExp(`key:\\s*'${key}'[\\s\\S]{0,200}hint:\\s*'[^']+'`).test(lockFlags),
+        new RegExp(`key:\\s*'${key}'[\\s\\S]{0,200}hint:\\s*(?:'[^']+'|\x22[^\x22]+\x22)`).test(lockFlags),
         `LOCK_FLAGS entry for ${key} carries a permanence hint`,
     );
 }
@@ -124,10 +124,14 @@ assert.ok(/const hasAnyNewLock = LOCK_FLAGS\.some/.test(src), 'hasAnyNewLock der
 assert.ok(/const allLocksSet = LOCK_FLAGS\.every/.test(src), 'allLocksSet derived from LOCK_FLAGS');
 assert.ok(/const isLocked = !!tokenLocks\[f\.key\]/.test(src), 'per-row isLocked reads the current on-chain flag');
 assert.ok(
-    /checked=\{isLocked \|\| !!lockChecks\[f\.key\]\}/.test(src),
-    'checkbox is checked when already locked OR newly checked this session',
+    /const checked = isLocked \|\| !!lockChecks\[f\.key\]/.test(src) && /checked=\{checked\}/.test(src),
+    'lock switch is on when already locked OR newly switched on this session',
 );
-assert.ok(/disabled=\{isLocked\}/.test(src), 'checkbox is disabled once the flag is already locked (cannot re-lock or unlock)');
+assert.ok(/disabled=\{isLocked\}/.test(src), 'lock switch is disabled once the flag is already locked (cannot re-lock or unlock)');
+assert.ok(
+    /checked \? Icon\.LockIcon : Icon\.UnlockIcon/.test(src),
+    'each lock row shows a lock icon when on and an unlock icon when off, as on the Issue form',
+);
 
 // --- 5. Gating: review validation + submit button + empty state --------
 
@@ -158,9 +162,11 @@ assert.ok(/\(mode === 'lock' && !typedConfirmOk\)/.test(src), 'submit stays disa
 assert.ok(/messaging\.issueToken\s*\(/.test(src), 'TokenAdminForm reuses messaging.issueToken');
 assert.ok(/messaging\.issueTokenHw\s*\(/.test(src), 'reuses the HW signing path (messaging.issueTokenHw)');
 assert.ok(/buildActionPsbtRequest/.test(src), 'reuses the watcher-mode encode-only path');
+// U63: Lock token is the main action, so it is green like every other one;
+// the typed LOCK confirmation carries the permanence warning.
 assert.ok(
-    /variant=\{isWatcherMode \? 'primary' : \(mode === 'lock' \? 'danger' : 'primary'\)\}/.test(src),
-    'lock mode still signs with the danger button variant (non-watcher)',
+    !/mode === 'lock' \? 'danger'/.test(src),
+    'lock mode signs with the main (green) action, not the danger variant',
 );
 
 // --- 8. ManageToken: hidden only once ALL seven flags are set -----------
@@ -172,7 +178,7 @@ assert.ok(
 );
 assert.ok(/const allLocksSet = LOCK_FLAG_KEYS\.every/.test(manageSrc), 'ManageToken derives allLocksSet from every flag');
 assert.ok(
-    /id:\s*'lock'[\s\S]{0,80}onSelect:\s*\(allLocksSet \|\| blockIssuerActions\)\s*\?\s*undefined\s*:\s*onLock/.test(manageSrc),
+    /id:\s*'lock-settings'[\s\S]{0,180}?\.\.\.ownerAction\(options\.onLock\)[\s\S]{0,180}?disabled:\s*blockIssuerActions \|\| allLocksSet \|\| typeof options\.onLock !== 'function'/.test(manageSrc),
     'ManageToken gates the Lock action on allLocksSet (not the coarse four-flag `locked`), same owner gate as before',
 );
 

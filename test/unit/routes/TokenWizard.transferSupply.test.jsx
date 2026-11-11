@@ -67,13 +67,13 @@ async function openCustom({ owner, holder }) {
     fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'Charlie_Lee' } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '84000000' } });
     if (owner !== undefined) {
-        fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), { target: { value: owner } });
+        fireEvent.change(screen.getByLabelText('Transfer ownership to'), { target: { value: owner } });
     }
     if (holder !== undefined) {
-        fireEvent.change(screen.getByLabelText('Send the initial mint to (optional)'), { target: { value: holder } });
+        fireEvent.change(screen.getByLabelText('Send the initial mint to'), { target: { value: holder } });
     }
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Issue token' }));
 }
 
 async function composedParams() {

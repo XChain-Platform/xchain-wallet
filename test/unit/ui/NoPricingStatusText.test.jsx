@@ -13,7 +13,7 @@
 // data; it renders only when a live price exists to prefill the alert.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/shared/hooks/usePriceAlerts.js', () => ({
@@ -57,6 +57,9 @@ function renderNative(priceResult) {
         getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD', activeNetwork: 'mainnet' }),
         getNativePricesRequest: vi.fn().mockResolvedValue(priceResult),
         getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+        listPriceAlertsForWallet: vi.fn().mockResolvedValue([]),
+        savePriceAlert: vi.fn().mockResolvedValue(undefined),
+        clearPriceAlert: vi.fn().mockResolvedValue(undefined),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -92,7 +95,7 @@ describe('TokenDetail missing price status text', () => {
         expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
     });
 
-    it('keeps the price alert entry when a live price exists', async () => {
+    it('offers the price alert through More info when a live price exists', async () => {
         renderNative({
             prices: {
                 [MAINNET_CHAIN]: {
@@ -105,7 +108,11 @@ describe('TokenDetail missing price status text', () => {
             },
         });
 
-        expect(await screen.findByRole('button', { name: 'Set price alert' })).toBeTruthy();
+        await screen.findByText('$40,000.00');
+        expect(screen.queryByRole('button', { name: 'Set price alert' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Set price alert' }));
+        expect(await screen.findByRole('button', { name: 'Add alert' })).toBeTruthy();
         expect(screen.queryByText(NO_ALERT_DATA)).toBeNull();
         expect(screen.queryByText(NO_MARKET_DATA)).toBeNull();
     });

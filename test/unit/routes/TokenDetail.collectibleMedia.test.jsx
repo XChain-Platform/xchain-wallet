@@ -78,11 +78,15 @@ function renderDetail({ displayName = 'Collectible', tokenInfo = {} } = {}) {
     );
 }
 
+function openMore(label) {
+    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+}
+
 describe('TokenDetail collectible media', () => {
     it('shows chain context as an icon without network-kind text', async () => {
         renderDetail();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         expect(await screen.findByRole('img', { name: 'Bitcoin' })).toBeTruthy();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
@@ -97,7 +101,7 @@ describe('TokenDetail collectible media', () => {
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
         expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(1);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        openMore('Media');
         const media = await screen.findByRole('img', { name: MEDIA_NAME });
         fireEvent.error(media);
 
@@ -109,7 +113,7 @@ describe('TokenDetail collectible media', () => {
     it('names media links by the action even when an image has no title', async () => {
         renderDetail();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        openMore('Media');
 
         expect(await screen.findByRole('link', { name: 'Open token image' }))
             .toHaveAttribute('href', UNNAMED_MEDIA_URL);
@@ -123,7 +127,7 @@ describe('TokenDetail collectible media', () => {
         const { container } = renderDetail({ displayName, tokenInfo: { description } });
 
         expect(await screen.findByText(description)).toBeInTheDocument();
-        expect(screen.getByText(displayName)).toBeInTheDocument();
+        expect(screen.getAllByText(displayName)).toHaveLength(2);
         expect(container.querySelector('script')).toBeNull();
         expect(container.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.tokenNameExecuted).toBeUndefined();
@@ -152,7 +156,7 @@ describe('TokenDetail collectible media', () => {
             ],
         } });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'About' }));
+        openMore('About');
         expect(await screen.findByRole('link', { name: 'Website · issuer.example' }))
             .toHaveAttribute('href', 'https://issuer.example/');
         expect(screen.getByRole('link', { name: /safe\.example/ }))
@@ -163,7 +167,7 @@ describe('TokenDetail collectible media', () => {
         expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
         expect(document.querySelector('a[href^="data:"]')).toBeNull();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        openMore('Media');
         fireEvent.click(await screen.findByRole('tab', { name: 'File' }));
         expect(await screen.findByRole('link', { name: /Safe file/ }))
             .toHaveAttribute('href', 'https://files.example/readme.txt');

@@ -69,14 +69,15 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-// Both control rows take the shared centred row class from the section stylesheet.
+// Both control rows take the shared row class from the section stylesheet: each field carries a
+// label line, so the row aligns its submit to the inputs at the bottom.
 const controlRowCss = readFileSync(
     'packages/core/src/shared/components/settings/ConnectedSitesSection.module.css',
     'utf8',
 ).match(/\.controlRow\s*\{[^}]*\}/s)?.[0] || '';
 
 describe('ConnectedSitesSection settings controls', () => {
-    it('centres md controls in the throttle row', async () => {
+    it('aligns the md throttle controls along their inputs', async () => {
         render(<ConnectedSitesSection />);
         const burstField = (await screen.findByRole('spinbutton', {
             name: 'Sign-throttle burst (max requests per window)',
@@ -86,11 +87,11 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
         expect(throttleForm.className).toMatch(/form/);
         expect(burstField.parentElement.className).toMatch(/controlRow/);
-        expect(controlRowCss).toMatch(/align-items:\s*center/);
-        expect(screen.getByRole('button', { name: 'Apply' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
+        expect(screen.getByRole('button', { name: 'Apply throttle' }).className).toMatch(/(?:^|\s)_?md_/);
     });
 
-    it('centres the md manual block action beside its md field', async () => {
+    it('aligns the md manual block action beside its md field', async () => {
         render(<ConnectedSitesSection />);
         const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
         const originField = origin.parentElement.parentElement;
@@ -99,8 +100,32 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(originField.className).toMatch(/(?:^|\s)_?md_/);
         expect(blockForm.className).toMatch(/form/);
         expect(originField.parentElement.className).toMatch(/controlRow/);
-        expect(controlRowCss).toMatch(/align-items:\s*center/);
-        expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
+        expect(screen.getByRole('button', { name: 'Block origin' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('makes each form submit a named green action with an icon and tips every field', async () => {
+        messaging.listConnectedSites.mockResolvedValue([{
+            id: 'site-1', origin: 'https://dapp.example', appName: 'Example dApp', permissions: {},
+        }]);
+        messaging.listBlockedOrigins.mockResolvedValue(['https://old.example']);
+        messaging.deleteConnectedSite = vi.fn();
+        render(<ConnectedSitesSection />);
+
+        const blockOrigin = await screen.findByRole('button', { name: 'Block origin' });
+        const apply = screen.getByRole('button', { name: 'Apply throttle' });
+        for (const submit of [blockOrigin, apply]) {
+            expect(submit.className).toMatch(/success/);
+            expect(submit.querySelector('svg')).not.toBeNull();
+        }
+        // Every other button on the page carries an icon too, and none is green.
+        const buttons = screen.getAllByRole('button').filter((b) => !/^About /.test(b.getAttribute('aria-label') || ''));
+        for (const button of buttons) {
+            expect(button.querySelector('svg'), button.textContent).not.toBeNull();
+            if (button !== blockOrigin && button !== apply) expect(button.className).not.toMatch(/success/);
+        }
+        // Burst, Window and the origin field each carry their own '?' tip.
+        expect(screen.getAllByRole('button', { name: /^About / })).toHaveLength(3);
     });
 
     it('names the manual block form apart from its origin field', async () => {
@@ -118,7 +143,8 @@ describe('ConnectedSitesSection settings controls', () => {
 
         expect(await screen.findByText('Latest 50 changes, newest last.')).toBeTruthy();
         expect(screen.getByText('Rejects excess requests until reset.')).toBeTruthy();
-        expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).toHaveTextContent(
+        // The pattern hint lives in the origin field's help tip, not as a loose line.
+        expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).not.toHaveTextContent(
             'Use *.example.com with example.com.',
         );
         expect(screen.queryByText(/Blocked sites cannot connect/)).toBeNull();
@@ -430,7 +456,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(burst.className).toMatch(/input/);
         fireEvent.change(burst, { target: { value: '' } });
         fireEvent.change(windowSeconds, { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Apply throttle' }));
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({
             signThrottle: {

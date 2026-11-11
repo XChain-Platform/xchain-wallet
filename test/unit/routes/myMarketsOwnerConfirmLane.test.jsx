@@ -240,7 +240,7 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         await openAction(utils, 'Edit');
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: /Address list #2701/ })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Edit ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({ VERSION: '2', [view.indexKey]: '700', BLOCK_LIST: '2701' });
@@ -258,7 +258,7 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         expect(utils.getByText(/Allow list #2701 · Block list none/)).toBeTruthy();
         await openAction(utils, 'Edit');
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Edit ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({

@@ -139,9 +139,9 @@ describe('ListForkForm lays out every non-signing state through FormPage', () =>
 
     it('keeps the watcher-mode add-and-remove refusal and its Back step inside the FormPage template', async () => {
         const container = mountFork({ walletMode: 'watcher' });
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
         fireEvent.click(screen.getByRole('checkbox', { name: 'REMOVE' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         await waitFor(() => expect(container.textContent).toContain('Not available in watcher mode'));
         const title = byText(container, 'h2', 'Not available in watcher mode');
         const root = formPageRoot(container, title);

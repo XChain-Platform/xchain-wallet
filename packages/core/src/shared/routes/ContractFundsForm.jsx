@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -412,7 +413,9 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         <PageHeader
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
-                : onBack}
+                // The withdraw token list replaces the form in place, so Back
+                // returns to the form rather than leaving the screen.
+                : (tokenPickerOpen && !isDeposit ? () => setTokenPickerOpen(false) : onBack)}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
@@ -534,9 +537,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -592,6 +593,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                lockNetwork
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -618,6 +620,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                                 <Button
                                     variant="ghost"
                                     block
+                                    icon={<Icon.TokenIcon />}
                                     onClick={() => {
                                         setTick(String(row.tick).toUpperCase());
                                         setTokenPickerOpen(false);
@@ -632,11 +635,6 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                         ))}
                     </ul>
                 )}
-                <div className={styles.actions}>
-                    <Button variant="secondary" block onClick={() => setTokenPickerOpen(false)}>
-                        Back
-                    </Button>
-                </div>
             </ListPage>,
         );
     }
@@ -680,20 +678,31 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={isDeposit ? <Icon.UploadIcon /> : <Icon.DownloadIcon />}
                     loading={actionConfirm.composing}
                     disabled={withdrawRefused || actionConfirm.composing}
                 >
-                    {singleEncode ? verb : 'Preview'}
+                    {verb}
                 </Button>
             )}
         >
             {isDeposit ? <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} /> : null}
             {/* The target contract pins the network, so the field is single-option. */}
-            <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
+            <NetworkField
+                label="Network"
+                help="The chain this contract lives on. It is fixed by the contract, so your address, the token and the fee are all on this network."
+                value={chainId}
+                onChange={() => {}}
+                chainIds={[chainId]}
+                chainRegistry={chainRegistry}
+            />
             {fromAddress ? (
                 <AddressField
                     label={isDeposit ? 'From' : 'To'}
+                    help={isDeposit
+                        ? 'The address that sends the tokens to the contract and pays the network fee.'
+                        : 'Your address that asks the contract to release the tokens and pays the network fee; the tokens arrive here.'}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -704,12 +713,15 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             ) : null}
             <TokenField
                 label="Token"
+                help={isDeposit
+                    ? 'The token to send into the contract. It leaves the From address and is held by the contract.'
+                    : 'The token to pull out of the contract. It is paid to the To address, and only if the contract permits it.'}
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
             <AmountField
                 label="Quantity"
-                hint={isDeposit
+                help={isDeposit
                     ? 'Amount to send to the contract.'
                     : 'Amount to pull out of the contract. Only succeeds if the contract permits it.'}
                 amount={quantity}
@@ -736,6 +748,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

@@ -49,9 +49,15 @@
     line-height: 1.5;
 }
 
+/* Each onboarding choice has its own colour (review 2026-11-10). */
 .freeWalletButton {
-    --xc-accent-primary: #a05c38;
-    --xc-accent-primary-hover: #7c4328;
+    --xc-accent-primary: var(--xc-accent-secondary);
+    --xc-accent-primary-hover: #64226F;
+}
+
+.pairSignerButton {
+    --xc-accent-primary: #334155;
+    --xc-accent-primary-hover: #1E293B;
 }
 
 .entryIcon {

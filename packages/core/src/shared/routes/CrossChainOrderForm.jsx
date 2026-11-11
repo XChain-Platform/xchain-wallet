@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormNotice, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FeeSelector, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/crossChainOrder.js';
 import '../../i18n/locales/en/crossChainSwap.js';
@@ -28,16 +29,21 @@ import { useActionForm } from '../hooks/useActionForm.js';
 import { useGetChainAddress } from '../hooks/useGetChainAddress.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { MessagingContext } from '../MessagingContext.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -92,7 +98,7 @@ const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim())
  * @param {() => void} [props.onManageOrders]   optional deep-link to My Orders
  */
 export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialFromAddress, onManageOrders }) {
-    const { messaging, shell } = useMessaging();
+    const { messaging, shell, locale } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
 
@@ -151,6 +157,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const [expInput, setExpInput] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
+    const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     const giveBalance = useTickBalance({
@@ -170,6 +177,29 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         tick: getTick,
         skip: getOwnership || !getTick.trim(),
     });
+
+    const givePickerMessaging = useMemo(() => {
+        const sourceAddress = fromAddress?.address;
+        if (!giveChainId || !sourceAddress) return messaging;
+        return new Proxy(messaging, {
+            get(target, property, receiver) {
+                if (property === 'getAddressesByChain') {
+                    return async () => ({ [giveChainId]: [fromAddress] });
+                }
+                if (property === 'getWalletBalances') {
+                    return async (...args) => {
+                        const balances = await target.getWalletBalances(...args);
+                        return {
+                            [giveChainId]: (balances?.[giveChainId] || [])
+                                .filter((entry) => entry?.address === sourceAddress),
+                        };
+                    };
+                }
+                const value = Reflect.get(target, property, receiver);
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+    }, [messaging, giveChainId, fromAddress]);
 
     // The protocol fee is paid on the give chain, the chain that is signed.
     const nativeFee = useNativeFee(giveCoinTicker);
@@ -285,6 +315,21 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     const missingRequiredTerm = !giveTick.trim() || (!giveOwnership && !giveAmount)
         || !getTick.trim() || (!getOwnership && !getAmount) || !getAddress.trim();
+    const quoteActionData = useMemo(() => {
+        const customExpirationValid = expMode !== 'custom'
+            || Boolean(localInputToUnix(expInput.trim())
+                && localInputToUnix(expInput.trim()) > Math.floor(Date.now() / 1000));
+        if (!giveChainId || !fromAddress || !getChainId || missingRequiredTerm
+            || validationError || !customExpirationValid) return null;
+        return { action: 'ORDER', params: actionParams };
+    }, [actionParams, expInput, expMode, fromAddress, getChainId, giveChainId,
+        missingRequiredTerm, validationError]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId: giveChainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     function guardBeforeSign() {
         if (!giveChainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
@@ -524,8 +569,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>{t('crossChainOrder.success.hint', { tick: giveTick.trim().toUpperCase() })}</p>
                 <div className={styles.actions}>
-                    {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My orders</Button> : null}
+                    <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -560,9 +605,30 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 title="From address"
                 walletId={walletId}
                 chainId={giveChainId}
+                onChainChange={handleGiveChainChange}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
+        );
+    }
+
+    if (givePickerOpen) {
+        return (
+            <MessagingContext.Provider value={{ messaging: givePickerMessaging, shell, locale }}>
+                <TokenPicker
+                    purpose="send"
+                    walletId={walletId}
+                    title="Select give token"
+                    chainIdFilter={giveChainId}
+                    kindFilter="tokens"
+                    kindLocked
+                    onSelect={(selection) => {
+                        setGiveTick(String(selection.tick || '').toUpperCase());
+                        setGivePickerOpen(false);
+                    }}
+                    onBack={() => setGivePickerOpen(false)}
+                />
+            </MessagingContext.Provider>
         );
     }
 
@@ -577,10 +643,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
+                        <Button variant="secondary" icon={<Icon.PencilIcon />} onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={isWatcherMode ? <Icon.DocumentIcon />
+                                : isHwSource ? <Icon.SignIcon /> : <Icon.MarketIcon />}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -611,10 +679,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     />
                 </dl>
                 {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
-                    </p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -652,29 +717,24 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             ) : null}
             actions={(
                 <>
-                    {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
+                    {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My orders</Button> : null}
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.MarketIcon />}
                         loading={confirmAction.composing}
                         disabled={!fromAddress || confirmAction.composing
                             || (!!validationError && !(missingRequiredTerm && validationError === receiveAddressError))}
                     >
-                        {singleEncode ? 'Place order' : 'Preview'}
+                        Place order
                     </Button>
                 </>
             )}
         >
-            <details>
-                <summary>How orders fill</summary>
-                <p className={styles.hint}>
-                    The order waits on the network&apos;s order book and fills automatically, possibly in parts.
-                    Use Cross-chain swap for an all-or-nothing single fill.
-                </p>
-            </details>
             <FormSection title="You give">
-                    <ChainPicker
+                    <NetworkField
                         label="Give network"
+                        help="The chain you pay from. The token you give, your From address and the network fee are on this chain."
                         value={giveChainId || ''}
                         onChange={handleGiveChainChange}
                         chainIds={chainIds}
@@ -684,6 +744,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         <AddressField
                             label="From"
                             icon="addresses"
+                            help="The wallet address that offers the give token and signs this cross-chain order."
                             value={fromAddress.address}
                             readOnly
                             onChange={() => {}}
@@ -693,20 +754,16 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     ) : (
                         <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
                     )}
-                    <Input
+                    <TokenFieldWithHelp
+                        id="cross-chain-order-give-token"
                         label="Give token"
-                        value={giveTick}
-                        onChange={(e) => {
-                            const nextTick = e.target.value.toUpperCase();
-                            if (nextTick !== giveTick) setGiveAmount('');
-                            setGiveTick(nextTick);
-                        }}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
+                        help="The token ticker or token reference you are offering on the give network."
+                        value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
+                        onOpenPicker={() => setGivePickerOpen(true)}
                     />
                     <Checkbox
                         label="Give this token's ownership (not a balance)"
+                        help="Offer control of the whole token instead of a quantity. It moves as one piece when the order fills."
                         checked={giveOwnership}
                         onChange={(e) => {
                             if (e.target.checked !== giveOwnership) setGiveAmount('');
@@ -716,8 +773,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     {!giveOwnership ? (
                         <AmountField
                             label="Give amount"
+                            help="The amount of the give token placed in escrow. The order waits on the network's order book and may fill in parts. Use Cross-chain swap for one all-or-nothing fill."
                             amount={giveAmount}
                             tick={giveTick}
+                            divisibility={giveTokenInfo?.divisibility}
                             onAmountFieldChange={(rawValue) => {
                                 const stripped = String(rawValue).replace(/,/g, '');
                                 if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -733,8 +792,9 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             </FormSection>
 
             <FormSection title="You get">
-                    <ChainPicker
+                    <NetworkField
                         label="Get network"
+                        help="The chain you want to be paid on. The token you get and your Receive at address are on this chain."
                         value={getChainId || ''}
                         onChange={handleGetChainChange}
                         chainIds={chainIds}
@@ -742,7 +802,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     />
                     <AddressField
                         label="Receive at"
-                        hint="Your address on the get network. Each fill is released to it."
+                        help="Your address on the get network. Each fill is released to it."
                         value={getAddress}
                         onChange={(e) => setGetAddress(e.target.value)}
                         placeholder="Automatically filled from your wallet on the get network"
@@ -752,6 +812,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     />
                     <Input
                         label="Get token"
+                        help="The token ticker or token reference you want to receive on the get network."
                         value={getTick}
                         onChange={(e) => {
                             const nextTick = e.target.value.toUpperCase();
@@ -764,6 +825,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     />
                     <Checkbox
                         label="Require the matcher to give that token's ownership"
+                        help="Ask for control of the whole token instead of a quantity. Only an address that currently owns it can match."
                         checked={getOwnership}
                         onChange={(e) => {
                             if (e.target.checked !== getOwnership) setGetAmount('');
@@ -773,8 +835,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     {!getOwnership ? (
                         <AmountField
                             label="Get amount"
+                            help="The total amount of the get token required in exchange for the offered asset."
                             amount={getAmount}
                             tick={getTick}
+                            divisibility={getTokenInfo?.divisibility}
                             onAmountFieldChange={(rawValue) => {
                                 const stripped = String(rawValue).replace(/,/g, '');
                                 if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -787,6 +851,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             <FormSection title="Order settings">
                     <RadioGroup
                         legend="Expiration"
+                        help="Choose the default order window or set the exact date and time when this order stops accepting fills."
                         name="xorder-exp"
                         value={expMode}
                         onChange={setExpMode}
@@ -799,16 +864,29 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         <Input
                             label="Expires"
                             type="datetime-local"
-                            hint="The order is valid until this wall-clock time. Must be in the future."
+                            help="The order is valid until this wall-clock time. Must be in the future."
                             value={expInput}
                             onChange={(e) => setExpInput(e.target.value)}
                         />
                     ) : null}
 
-                    <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    <Input
+                        label="Memo"
+                        help="An optional note stored with this cross-chain order."
+                        optional
+                        maxLength={MAX_MEMO_LENGTH}
+                        value={memo}
+                        onChange={(e) => setMemo(e.target.value)}
+                        autoComplete="off"
+                    />
 
-                    {feeTiers ? (
+                    <FeesCard
+                        chainId={giveChainId}
+                        quote={protocolFeeQuote}
+                        pending={protocolFeePending}
+                        feeSelector={feeTiers ? (
                         <FeeSelector
+                            chainId={giveChainId}
                             label="Network fee"
                             coinTicker={giveCoinTicker}
                             tiers={feeTiers}
@@ -816,10 +894,32 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                             onChange={setFeePick}
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
-                    ) : null}
-                    <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveCoinTicker} />
+                        ) : null}
+                    >
+                        <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveCoinTicker} />
+                    </FeesCard>
             </FormSection>
         </FormPage>,
+    );
+}
+
+function TokenFieldWithHelp({ help, ...props }) {
+    const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const [labelHost, setLabelHost] = useState(/** @type {HTMLElement | null} */ (null));
+
+    useLayoutEffect(() => {
+        const button = rootRef.current?.querySelector('button');
+        setLabelHost(button?.previousElementSibling || null);
+    }, []);
+
+    return (
+        <div ref={rootRef}>
+            <TokenField {...props} />
+            {labelHost ? createPortal(
+                <InfoTip label={help} aria={`About ${props.label}`} />,
+                labelHost,
+            ) : null}
+        </div>
     );
 }
 

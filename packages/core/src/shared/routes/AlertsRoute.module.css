@@ -60,7 +60,7 @@
     width: 100%;
 }
 
-.searchInput {
+.searchWrap .searchInput {
     padding-inline-start: calc(var(--xc-space-3) + var(--xc-icon-xl));
     padding-inline-end: calc(var(--xc-space-3) + var(--xc-icon-xl));
 }
@@ -78,7 +78,7 @@
     width: 100%;
 }
 
-.typeSelect {
+.typeWrap .typeSelect {
     padding-inline-start: calc(var(--xc-space-3) + var(--xc-icon-xl));
 }
 

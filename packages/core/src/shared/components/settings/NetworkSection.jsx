@@ -22,7 +22,7 @@
 // the cheapest robust path to a fully consistent post-switch UI.
 
 import { useState } from 'react';
-import { Select } from '@xchain-wallet/core/ui';
+import { InfoTip, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -87,7 +87,10 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     return (
         <>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>{t('settings.network.label')}</span>
+                <span style={{ color: 'var(--xc-text-muted)' }}>
+                    {t('settings.network.label')}{' '}
+                    <InfoTip aria={t('settings.help.network.networkLabel')} label={t('settings.help.network.network')} />
+                </span>
                 <div data-settings-control="">
                     <Select
                         value={current}

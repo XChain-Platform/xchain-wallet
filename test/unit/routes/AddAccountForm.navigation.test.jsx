@@ -45,14 +45,18 @@ describe('AddAccountForm navigation', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('puts account guidance with the name field instead of above the form', () => {
+    it('puts account guidance in the name field help tip', () => {
         render(
             <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
         );
 
         expect(screen.queryByText('A new set of derived addresses under the same recovery phrase.')).toBeNull();
-        expect(screen.getByText(/Names a separate set of addresses in this wallet/))
-            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'About Account name' }));
+        expect(screen.getByRole('tooltip'))
+            .toHaveTextContent('Names a separate set of addresses in this wallet.');
+        // The tip opens on demand; the only description is the live length counter.
+        expect(screen.getByLabelText('Account name', { selector: 'input' }).getAttribute('aria-describedby'))
+            .toMatch(/-counter$/);
     });
 
     it('uses the highest derivation index for the default name', async () => {

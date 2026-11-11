@@ -79,8 +79,9 @@ describe('every sidebar and bottom-bar destination is findable in the command pa
 });
 
 describe('hidden command-palette destinations', () => {
-    it('does not expose multisig signing', () => {
+    it('offers multisig signing only behind the Bitcoin gate', () => {
         const commands = buildCommands({ navigate() {}, hasBtcAddress: true });
-        expect(commands.map((command) => command.id)).not.toContain('nav-multisig-sign');
+        expect(commands.map((command) => command.id)).toContain('nav-multisig-sign');
+        expect(buildCommands({ navigate() {} }).map((command) => command.id)).not.toContain('nav-multisig-sign');
     });
 });

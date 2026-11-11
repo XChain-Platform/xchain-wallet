@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FormPage, Icon, Input, ListPage, NetworkField, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
@@ -37,7 +38,7 @@ import {
     normalizeLocalizedDecimal,
 } from '../utils/amountFormat.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -536,6 +537,7 @@ export function CreateBetFeedForm({
                 title="Oracle address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -667,13 +669,14 @@ export function CreateBetFeedForm({
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.MarketIcon />}
                     loading={submitting || actionConfirm.composing}
                     disabled={submitting || actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
-                        : isWatcherMode ? 'Create unsigned transaction' : 'Review market'}
+                        : isWatcherMode ? 'Create unsigned transaction' : 'Open market'}
                 </Button>
             )}
         >
@@ -686,6 +689,7 @@ export function CreateBetFeedForm({
             ) : null}
 
             <NetworkField
+                help="The chain the market is created on. Your oracle address, the token bets are placed in and the fees are on this network."
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 chainIds={(addressesByChain ? Object.keys(addressesByChain) : [chainId])
@@ -701,22 +705,20 @@ export function CreateBetFeedForm({
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
                     iconLabel="Choose oracle address"
+                    help="This address is the market: it is the only one that can publish the result or cancel, it collects your fee, and its record as an oracle is public. It cannot bet on its own market, because an oracle who could bet on the result would decide the result."
                 />
             ) : null}
-            <p className={styles.hint}>
-                This address IS the market: it is the only one that can publish the result or cancel,
-                it collects your fee, and its record as an oracle is public. It also cannot bet on its
-                own market, because an oracle who could bet on the result would decide the result.
-            </p>
 
             <TokenField
                 label="Token bets are placed in"
+                help="The token bettors stake on this market. Every bet and every payout is in this token."
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
 
             <Input
                 label="What is being bet on"
+                help="The question bettors back an outcome of, such as who wins a match. Everything about the market is permanent once it is on the chain: there is no edit. Your only later choices are publishing the winning outcome or cancelling and refunding everyone."
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 autoComplete="off"
@@ -729,6 +731,7 @@ export function CreateBetFeedForm({
                         <div className={styles.betOutcomeField}>
                             <Input
                                 label={`Outcome ${i}`}
+                                help="One possible result. Exactly one outcome can win: whoever backed it splits the whole pot, and if nobody backed it, everyone is refunded and you earn nothing."
                                 value={o}
                                 onChange={(e) => setOutcomeAt(i, e.target.value)}
                                 autoComplete="off"
@@ -742,14 +745,11 @@ export function CreateBetFeedForm({
                 {outcomes.length < MAX_OUTCOMES ? (
                     <Button type="button" variant="ghost" onClick={addOutcome}>Add outcome</Button>
                 ) : null}
-                <span className={styles.hint}>
-                    Exactly one of these can win. Whoever backed it splits the whole pot; if nobody backed
-                    it, everyone is refunded and you earn nothing.
-                </span>
             </div>
 
             <Input
                 label="Betting closes"
+                help="Bets are taken until this time. After it, you publish the winning outcome."
                 type="datetime-local"
                 value={deadlineInput}
                 onChange={(e) => setDeadlineInput(e.target.value)}
@@ -757,6 +757,7 @@ export function CreateBetFeedForm({
 
             <Select
                 label="Time to publish the result"
+                help="How long after betting closes you have to publish the winning outcome. If you publish nothing in this window, everyone is refunded. A longer window costs more, because the cost is measured to this deadline."
                 value={windowPreset}
                 onChange={(e) => setWindowPreset(e.target.value)}
             >
@@ -765,6 +766,7 @@ export function CreateBetFeedForm({
             {windowPreset === 'custom' ? (
                 <Input
                     label="Days to publish the result"
+                    help="The number of days after betting closes that you have to publish the winning outcome."
                     value={windowCustomDays}
                     onChange={(e) => setWindowCustomDays(e.target.value)}
                     inputMode="decimal"
@@ -778,11 +780,20 @@ export function CreateBetFeedForm({
                 the row states the real answer instead of the chain's rule. Most
                 markets are free (the first 90 days cost nothing), and on LTC the
                 row used to promise a coin payment for every one of them. */}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} showHint={false} />
+            <FeesCard
+                chainId={chainId}
+                quote={quote}
+                pending={!quote && !quoteFailed}
+                feeSelector={null}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={quote} showHint={false} />
+            </FeesCard>
 
             <Input
-                label="Your fee (optional)"
-                hint={`Your share of the pot, such as 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing.`}
+                label="Your fee"
+                optional
+                help="Your share of the pot, such as 1.5 for 1.5%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing."
+                hint={`Up to ${MAX_FEE_PCT}%.`}
                 value={formatWithThousands(feePct)}
                 onChange={(e) => {
                     const raw = e.target.value;
@@ -793,8 +804,9 @@ export function CreateBetFeedForm({
             />
 
             <Input
-                label="Smallest bet allowed (optional)"
-                hint="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
+                label="Smallest bet allowed"
+                optional
+                help="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
                 value={formatWithThousands(minAmount)}
                 onChange={(e) => {
                     const raw = e.target.value;
@@ -809,45 +821,46 @@ export function CreateBetFeedForm({
             </Button>
             {showDetails ? (
                 <>
-                    <p className={styles.hint}>
-                        This rides on the chain with the market, so bettors and every explorer see the same
-                        text. Write the settlement rule you will actually follow: it is what people will hold
-                        you to, and you cannot change it later.
-                    </p>
                     <Textarea
                         label="Description"
+                        optional
+                        help="This rides on the chain with the market, so bettors and every explorer see the same text. Write the settlement rule you will actually follow: it is what people will hold you to, and you cannot change it later."
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         rows={3}
                     />
                     <Textarea
                         label="How the result will be decided"
-                        hint="The rule you follow, including what happens in an edge case such as a postponement or a tie."
+                        optional
+                        help="The rule you follow, including what happens in an edge case such as a postponement or a tie."
                         value={resolutionCriteria}
                         onChange={(e) => setResolutionCriteria(e.target.value)}
                         rows={3}
                     />
                     <Input
                         label="Where the result comes from"
-                        hint="A name or address people can check. Nothing here is fetched automatically; it is a note to bettors, not a data feed."
+                        optional
+                        help="A name or address people can check. Nothing here is fetched automatically; it is a note to bettors, not a data feed."
                         value={source}
                         onChange={(e) => setSource(e.target.value)}
                         autoComplete="off"
                     />
                     <Input
                         label="Category"
-                        hint="e.g. sports, politics, weather. Used for browsing."
+                        optional
+                        help="E.g. sports, politics, weather. Used for browsing."
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
                         autoComplete="off"
                     />
                     {cleanOutcomes.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
-                            <span className={styles.fromLabel}>Notes per outcome (optional)</span>
+                            <span className={styles.fromLabel}>Notes per outcome <OptionalPill /></span>
                             {cleanOutcomes.map((o, i) => (
                                 <Input
                                     key={i}
                                     label={o}
+                                    help="A note bettors see beside this outcome, such as what counts as this result."
                                     value={outcomeNotes[i] || ''}
                                     onChange={(e) => setOutcomeNoteAt(i, e.target.value)}
                                     autoComplete="off"
@@ -858,14 +871,15 @@ export function CreateBetFeedForm({
                 </>
             ) : null}
 
-            <Button type="button" variant="ghost" onClick={() => setShowAdvanced((v) => !v)}>
-                {showAdvanced ? 'Hide who can bet' : 'Restrict who can bet (optional)'}
+            <Button type="button" variant="ghost" icon={showAdvanced ? undefined : <Icon.LockIcon />} onClick={() => setShowAdvanced((v) => !v)}>
+                {showAdvanced ? 'Hide who can bet' : 'Restrict who can bet'}
             </Button>
             {showAdvanced ? (
                 <>
                     <Input
                         label="Only these addresses may bet"
-                        hint="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
+                        optional
+                        help="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
                         value={allowList}
                         onChange={(e) => setAllowList(e.target.value)}
                         inputMode="numeric"
@@ -873,14 +887,18 @@ export function CreateBetFeedForm({
                     />
                     <Input
                         label="These addresses may not bet"
-                        hint="The number of an on-chain address list. If an address is on both lists, it is blocked."
+                        optional
+                        help="The number of an on-chain address list. If an address is on both lists, it is blocked."
                         value={blockList}
                         onChange={(e) => setBlockList(e.target.value)}
                         inputMode="numeric"
                         autoComplete="off"
                     />
                     <Input
-                        label="Memo (optional)"
+                        label="Memo"
+                        optional
+                        help="A short public note stored with the market transaction."
+                        maxLength={MAX_MEMO_LENGTH}
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
                         autoComplete="off"
@@ -891,6 +909,7 @@ export function CreateBetFeedForm({
             {!isWatcherMode && !isHwSource && !signerReady ? (
                 <Input
                     label="Password"
+                    help="Your wallet password, used to sign this market. It never leaves this device."
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -898,10 +917,6 @@ export function CreateBetFeedForm({
                 />
             ) : null}
 
-            <p className={styles.hint}>
-                Everything above is permanent once the market is on the chain: there is no edit. Your only
-                later choices are publishing the winning outcome or cancelling and refunding everyone.
-            </p>
         </FormPage>,
     );
 }

@@ -73,11 +73,11 @@ async function fillAndPublish({ messaging, source, constructorParams }) {
     await domAct(async () => {
         fireEvent.change(utils.getByLabelText('Code source'), { target: { value: source } });
         fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
-        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: constructorParams } });
+        fireEvent.change(utils.getByLabelText('Constructor params'), { target: { value: constructorParams } });
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish contract' }));
         await drain();
     });
     return utils;

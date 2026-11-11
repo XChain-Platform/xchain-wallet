@@ -271,7 +271,10 @@ describe('card surfaces', () => {
         const form = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.module.css'), 'utf8');
         expect(form).toMatch(/\.cardlessSections\s*\{\s*composes:\s*cardless from '\.\/Card\.module\.css'/);
         const page = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.jsx'), 'utf8');
-        expect(page).toMatch(/fullWidth \? styles\.cardlessSections/);
+        // A cardless form (Issue token, built from its own section cards)
+        // draws no wide card either, so it opts out the same way.
+        expect(page).toMatch(/fullWidth \|\| cardless \? styles\.cardlessSections/);
+        expect(form).toMatch(/\.form\.cardlessForm\s*\{[^}]*border:\s*0[^}]*\}/);
         expect(page).not.toMatch(/fullWidth && sectioned \? styles\.cardlessSections/);
     });
 

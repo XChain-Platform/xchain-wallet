@@ -80,7 +80,7 @@ async function pickTemplate(label) {
 
 async function submit() {
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Issue token' }));
 }
 
 async function composedParams() {

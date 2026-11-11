@@ -104,7 +104,7 @@ async function submitWizard(tick) {
         await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
     }
     // A refused ticker stops at the details step, so only a valid one reaches the review.
-    const proceed = screen.queryByRole('button', { name: 'Continue to confirmation' });
+    const proceed = screen.queryByRole('button', { name: 'Issue token' });
     if (proceed) fireEvent.click(proceed);
     return field;
 }
@@ -114,7 +114,9 @@ async function submitDirect(tick) {
     mount(IssueTokenForm);
     const field = await screen.findByLabelText('Ticker');
     fireEvent.change(field, { target: { value: tick } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), {
+        target: { value: '1000' },
+    });
     // The form holds submit until its availability lookup for a well-formed
     // ticker settles; a refused ticker never starts one.
     if (!tickerGrammarError(tick.trim())) {

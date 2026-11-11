@@ -77,7 +77,8 @@ describe('TokenDetail holder paging', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Holders' }));
         expect(await screen.findByText('Holders (25 of 49)')).toBeTruthy();
         const list = screen.getByRole('list', { name: 'Holder balances' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(25);
@@ -171,7 +172,7 @@ describe('DispenserExplorer result paging', () => {
         );
 
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PAGED' } });
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'PAGED' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
         const loadMore = await screen.findByRole('button', { name: /Load more results for/ });

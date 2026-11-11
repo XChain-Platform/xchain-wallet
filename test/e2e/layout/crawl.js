@@ -326,6 +326,10 @@ export function createCrawl(page, {
     start = null,
     directReentry = false,
     onScreen = null,
+    // Measure only: open each screen and hand it to onScreen, without
+    // pressing its controls or filling its forms. A layout measure needs one
+    // reading per screen; the full press-and-fill pass takes over 10 s a screen.
+    measureOnly = false,
 }) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
@@ -743,6 +747,10 @@ export function createCrawl(page, {
         }
         for (const e of since(mark)) finding(screen.label, '(open)', e.kind, { error: e.text });
         if (onScreen) await onScreen(screen);
+        if (measureOnly) {
+            covered.push({ screen: screen.label, control: '(screen)', result: 'measured; controls not pressed' });
+            return;
+        }
         // Each pass reopens the screen first; a screen that will not reopen
         // is a finding for this screen, not the end of the shard.
         try {

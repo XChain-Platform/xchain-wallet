@@ -63,11 +63,18 @@ async function openSendConfirm(page) {
 }
 
 async function openIssueConfirm(page) {
+    // Issue token opens the template wizard; Custom is the full Issue form
+    // (ruling U79), whose optional fields sit in sections under Ticker (U80).
     await gotoPalette(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible();
-    await main.getByLabel('Ticker').fill('TOPVIEW');
-    await main.getByLabel('Supply', { exact: true }).fill('100');
+    await main.getByRole('button', { name: /^Custom\b/ }).click();
+    // By role: each field's 'About ...' help tip (U57) carries its label too.
+    const ticker = main.getByRole('textbox', { name: 'Ticker', exact: true });
+    await expect(ticker).toBeVisible();
+    await ticker.fill('TOPVIEW');
+    const supply = main.getByRole('button', { name: /^Supply\b/ });
+    if (await supply.getAttribute('aria-expanded') !== 'true') await supply.click();
+    await main.getByRole('textbox', { name: 'Max supply', exact: true }).fill('100');
     // The availability lookup starts after a 350 ms debounce.
     await page.waitForTimeout(500);
     await scrollFormToBottom(page);
@@ -83,11 +90,12 @@ async function openDispenserConfirm(page) {
     await page.getByRole('button', { name: /^Select Rare Pepe/ }).click();
 
     main = page.getByRole('main');
-    await main.getByLabel('Give amount per fill').fill('1');
-    await main.getByLabel('Escrow amount').fill('2');
-    await main.getByLabel(/^Trigger price/).fill('0.004');
+    await main.getByRole('textbox', { name: /^Give amount per fill/ }).fill('1');
+    await main.getByRole('textbox', { name: /^Escrow amount/ }).fill('2');
+    await main.getByRole('textbox', { name: /^Trigger price/ }).fill('0.004');
     await scrollFormToBottom(page);
-    await main.getByRole('button', { name: 'Create', exact: true }).click();
+    // The main action names what it does (U63).
+    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
 }
 
 const FLOWS = [

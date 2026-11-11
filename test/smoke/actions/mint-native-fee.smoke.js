@@ -8,10 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for U81 (superseding PC-51 for MINT): MINT carries no protocol fee
-// in xchain-indexer, so MintForm mounts no NativeFeeToggle and never passes
-// payFeeInNativeCoin on any chain; on LTC and DOGE a native output would be a
-// fee paid for nothing. The generic mintToken flow keeps its encoder opt.
+// MINT carries no protocol fee, so neither its form nor its flow can request
+// a native protocol-fee output on any chain.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -26,10 +24,11 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'MintForm.jsx');
 assert.doesNotMatch(form, /NativeFeeToggle/, 'MintForm mounts no native protocol-fee toggle');
 assert.doesNotMatch(form, /useNativeFee/, 'MintForm does not mount the useNativeFee hook');
-assert.doesNotMatch(form, /payFeeInNativeCoin/, 'MintForm never passes payFeeInNativeCoin');
+assert.doesNotMatch(form, /nativeFeeForFeelessAction/, 'MintForm does not derive a native fee flag');
+assert.doesNotMatch(form, /payFeeInNativeCoin/, 'MintForm never requests a native fee output');
 
-// ---- mintToken flow threads the encoder opt ----
+// ---- mintToken flow rejects the encoder opt by omission ----
 const flow = read('packages', 'core', 'src', 'flows', 'mintToken.js');
-assert.match(flow, /opts\.payFeeInNativeCoin !== undefined && \{ payFeeInNativeCoin: opts\.payFeeInNativeCoin \}/, 'mintToken forwards payFeeInNativeCoin into encoderOpts');
+assert.doesNotMatch(flow, /payFeeInNativeCoin/, 'mintToken cannot forward a native fee flag');
 
 console.log('mint-native-fee smoke: all assertions passed');

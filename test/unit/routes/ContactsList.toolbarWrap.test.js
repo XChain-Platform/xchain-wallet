@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// At phone width each toolbar control takes a full row so the network filter
-// keeps room for its full "All networks" label. jsdom has no layout, so the
+// At phone width the search box shrinks and the network filter
+// stays on the same row at its own width. jsdom has no layout, so the
 // test pins the rules that make that happen.
 
 import { describe, expect, it } from 'vitest';
@@ -43,8 +43,9 @@ describe('list toolbar at phone width', () => {
         expect(rule(toolbarCss, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('gives each control an equal share that drops to its own row when narrow', () => {
-        expect(rule(toolbarCss, '.field')).toMatch(/flex:\s*1 1 12rem/);
+    it('lets the search box shrink while each filter keeps its width, wrapping only as a fallback', () => {
+        expect(rule(toolbarCss, '.search')).toMatch(/flex:\s*1 1 9rem/);
+        expect(rule(toolbarCss, '.filter')).toMatch(/flex:\s*0 1 auto/);
     });
 });
 

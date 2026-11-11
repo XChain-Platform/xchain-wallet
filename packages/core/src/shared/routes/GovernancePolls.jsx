@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-    Button, EmptyState, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
+    Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -189,8 +189,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             toolbar={(
             <>
                 <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
-                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
+                <Button variant="success" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
+                <Button variant="secondary" icon={<Icon.UsersIcon />} onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
             </>
         )}>
 
@@ -199,30 +199,33 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             ) : null}
 
             {rows && rows.length > 0 ? (
-                <div className={local.pollList}>
+                /* Safari needs an explicit list role because this class removes list styling. */
+                <ul className={local.pollList} role="list">
                     {rows.map((p) => {
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
                         return (
-                            <ListRow
-                                key={String(id)}
-                                type="button"
-                                onClick={() => onOpenPoll(chainId, id)}
-                                className={local.pollCard}
-                                title={<span className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</span>}
-                                subtitle={(
-                                    <>
-                                        {label ? <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>{String(label).slice(0, 100)}</span> : null}
-                                        <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
-                                            {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
-                                        </span>
-                                    </>
-                                )}
-                                trailing={<StatusPill status={p.poll_status} />}
-                            />
+                            <li key={String(id)}>
+                                <ListRow
+                                    type="button"
+                                    onClick={() => onOpenPoll(chainId, id)}
+                                    className={local.pollCard}
+                                    leading={<span className={local.pollIcon} aria-hidden="true"><Icon.HandshakeIcon /></span>}
+                                    title={<span className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</span>}
+                                    subtitle={(
+                                        <>
+                                            {label ? <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>{String(label).slice(0, 100)}</span> : null}
+                                            <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
+                                                {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                            </span>
+                                        </>
+                                    )}
+                                    trailing={<StatusPill status={p.poll_status} />}
+                                />
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             ) : null}
         </ListPage>,
     );

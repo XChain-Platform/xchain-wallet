@@ -215,11 +215,16 @@ describe('extension popup keyboard flows', () => {
 
         const destination = await screen.findByLabelText(/^To$/);
         const contacts = screen.getByRole('button', { name: 'Open address book' });
-        contacts.focus();
+        destination.focus();
         await user.tab();
-        expect(document.activeElement).toBe(destination);
+        expect(document.activeElement).toBe(contacts);
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Token' }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        await user.tab();
+        // The Amount label's help tip comes before the field.
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
         await user.tab();
         const amount = screen.getByLabelText(/^Amount \(/);
         expect(document.activeElement).toBe(amount);
@@ -246,6 +251,9 @@ describe('extension popup keyboard flows', () => {
         const token = await screen.findByRole('button', { name: /^Change asset/ });
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
         token.focus();
+        await user.tab();
+        // The Amount label's help tip comes before the field.
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^About Amount/ }));
         await user.tab();
         expect(document.activeElement).toBe(amount);
         fireEvent.change(amount, { target: { value: '1.25' } });

@@ -287,7 +287,7 @@ async function publishList(page, members) {
     await expect(main, 'the list form did not accept these addresses for this chain')
         .toContainText(`${members.length} valid address`);
 
-    await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');

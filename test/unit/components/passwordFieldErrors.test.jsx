@@ -128,7 +128,7 @@ describe('Backup password errors', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         const field = screen.getByLabelText('Wallet password');
         fireEvent.change(field, { target: { value: 'wrong-password' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
 
         expect(await screen.findByText('Incorrect password.')).toBeInTheDocument();
         expect(errorUnder(field)).toBe('Incorrect password.');

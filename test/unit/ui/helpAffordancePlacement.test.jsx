@@ -24,10 +24,12 @@ describe('help tip placement', () => {
         expect(source.match(/<InfoTip/g)).toHaveLength(1);
     });
 
-    it('ProjectRosterForm shows its help as a hint line, not a lone icon', () => {
+    it('ProjectRosterForm hands its explanations to field help props', () => {
         const source = read('ProjectRosterForm.jsx');
         expect(source).not.toMatch(/<InfoTip/);
-        expect(source).toMatch(/official-token list show an "Official" badge/);
+        expect(source).toMatch(/help=\{`Only the current owner/);
+        expect(source).toMatch(/help=\{`Tokens on \$\{tick\}'s official-token list/);
+        expect(source).toMatch(/help="An optional note stored with the link/);
     });
 
     it('PairPartnerWallet keeps its tip in the section heading and shows the role help as text', () => {

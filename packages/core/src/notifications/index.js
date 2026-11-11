@@ -15,6 +15,7 @@
 
 export { NotificationService } from './NotificationService.js';
 export { PriceAlertWatcher } from './PriceAlertWatcher.js';
+export { createTokenPriceLookup } from './tokenPriceLookup.js';
 export { GovernancePollWatcher } from './GovernancePollWatcher.js';
 export { DeadlineWatcher, describeWindow } from './DeadlineWatcher.js';
 export { DispenserEscrowWatcher } from './DispenserEscrowWatcher.js';

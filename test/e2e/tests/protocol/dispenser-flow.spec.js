@@ -79,12 +79,14 @@ async function fillDispenserAndReject(page, label) {
     await main.getByRole('button', { name: /^Token/ }).click();
     // Picker rows are named "Select <token name> on <chain>, <balance>".
     await page.getByRole('button', { name: /^Select Pepe Cash on / }).first().click();
-    await main.getByLabel('Give amount per fill').fill('25');
-    await main.getByLabel('Escrow amount').fill('100');
-    await main.getByLabel(/Trigger price/).fill('0.05');
+    // Text fields by role: each label's 'About ...' help tip (U57) carries the label too.
+    await main.getByRole('textbox', { name: /^Give amount per fill/ }).fill('25');
+    await main.getByRole('textbox', { name: /^Escrow amount/ }).fill('100');
+    await main.getByRole('textbox', { name: /Trigger price/ }).fill('0.05');
     await expectNoHorizontalOverflow(page, `${label} create dispenser`);
 
-    await main.getByRole('button', { name: 'Create', exact: true }).click();
+    // The main action names what it does (U63).
+    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 30_000 });
 
@@ -95,8 +97,9 @@ async function fillDispenserAndReject(page, label) {
 
     await reject.click();
     await expect(confirm).toHaveCount(0);
-    await expect(main.getByLabel('Give amount per fill')).toHaveValue('25');
-    await expect(main.getByLabel('Escrow amount')).toHaveValue('100');
+    // PEPECASH is divisible, so both amounts show its 8-decimal format (U61).
+    await expect(main.getByRole('textbox', { name: /^Give amount per fill/ })).toHaveValue('25.00000000');
+    await expect(main.getByRole('textbox', { name: /^Escrow amount/ })).toHaveValue('100.00000000');
 }
 
 async function exerciseOwnedDispensers(page, label) {
@@ -104,7 +107,7 @@ async function exerciseOwnedDispensers(page, label) {
     await expect(page.getByRole('heading', { name: 'My dispensers' })).toBeVisible();
 
     const search = page.getByLabel('Search dispensers');
-    const network = page.getByRole('button', { name: 'Filter by network' });
+    const network = page.getByRole('button', { name: /^Filter by network/ });
     await expect(search).toBeVisible({ timeout: 30_000 });
     await search.fill('PEPECASH');
     await network.click();
@@ -130,7 +133,8 @@ async function exerciseDispenserExplorer(page, label) {
 
     const chain = page.getByLabel('Network', { exact: true });
     await chain.selectOption({ index: 1 });
-    await page.getByLabel('Token ticker').fill('PEPECASH');
+    // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+    await page.getByLabel('Token ticker', { exact: true }).fill('PEPECASH');
     await expectControlRowAligned([byToken, byAddress], `${label} explorer search modes`);
     await expectNoHorizontalOverflow(page, `${label} dispenser explorer filters`);
 

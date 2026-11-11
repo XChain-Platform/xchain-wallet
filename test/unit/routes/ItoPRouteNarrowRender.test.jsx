@@ -104,7 +104,7 @@ describe('I through P route rendering at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: /^(Review|Link)$/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /^Link actions$/ })).toBeInTheDocument();
         expectNoFixedWidthBeyondViewport(container, issueTokenCss);
     });
 

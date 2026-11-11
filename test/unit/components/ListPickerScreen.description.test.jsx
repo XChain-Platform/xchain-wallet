@@ -184,7 +184,7 @@ describe('ListPickerScreen description detail', () => {
         ]);
         await screen.findByText('Treasury (List #10)');
 
-        const search = screen.getByRole('textbox', { name: 'Search lists' });
+        const search = screen.getByRole('searchbox', { name: 'Search lists' });
         for (const [query, match, miss] of [
             ['payROLL', 'Payroll (List #11) (pending)', 'Treasury (List #10)'],
             ['10', 'Treasury (List #10)', 'Payroll (List #11) (pending)'],
@@ -202,14 +202,14 @@ describe('ListPickerScreen description detail', () => {
         renderPicker([{ action_index: '10', type: '2', name: 'Treasury' }]);
         await screen.findByText('Treasury (List #10)');
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search lists' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search lists' }), {
             target: { value: 'missing' },
         });
 
         expect(screen.getByText('No matching lists')).toBeInTheDocument();
         expect(screen.getByText('Try a different search.')).toBeInTheDocument();
         expect(screen.queryByRole('listitem')).toBeNull();
-        expect(screen.getByRole('textbox', { name: 'Search lists' })).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search lists' })).toBeInTheDocument();
     });
 
     it('selects a list with its value and cancels without selecting on Back', async () => {

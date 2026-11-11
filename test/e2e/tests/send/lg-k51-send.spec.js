@@ -19,6 +19,8 @@ import {
 const CONTACT_NAME = 'K51 recipient';
 const CONTACT_ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const ENTERED_AMOUNT = '0.01';
+// BTC is divisible, so the field re-formats to its exact 8 decimals (U61).
+const FORMATTED_AMOUNT = '0.01000000';
 
 async function expectFitsWithReachableAction(page, label, action) {
     await action.scrollIntoViewIfNeeded();
@@ -100,7 +102,7 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await page.getByRole('button', { name: 'Create first contact' }).click();
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
         await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        await page.getByRole('button', { name: 'Create contact', exact: true }).click();
         await expect(page.getByText(CONTACT_NAME).first()).toBeVisible();
 
         await gotoSection(page, 'Home');
@@ -117,12 +119,12 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await expectFitsWithReachableAction(page, 'Send with entered amount', send);
         const enteredFee = await page.getByRole('button', { name: 'Edit exact fee amount' }).innerText();
         await send.click();
-        await expectReviewAndReject(page, ENTERED_AMOUNT, enteredFee, 'entered amount');
+        await expectReviewAndReject(page, FORMATTED_AMOUNT, enteredFee, 'entered amount');
 
         const max = page.getByRole('button', { name: 'Use max available amount' }).first();
         await expect(max).toBeEnabled();
         await max.click();
-        await expect.poll(() => page.locator('#send-amount').inputValue()).not.toBe(ENTERED_AMOUNT);
+        await expect.poll(() => page.locator('#send-amount').inputValue()).not.toBe(FORMATTED_AMOUNT);
         const maxAmount = await page.locator('#send-amount').inputValue();
         expect(Number(maxAmount.replace(/,/g, '')), 'Max did not produce a positive amount')
             .toBeGreaterThan(0);

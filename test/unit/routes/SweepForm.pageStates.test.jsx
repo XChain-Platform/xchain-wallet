@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 
 const confirmResult = { current: null, calls: 0 };
 
@@ -62,12 +62,12 @@ const EMPTY_PREVIEW = Object.freeze({
     gatedTicks: { rows: [], error: null, partial: false },
 });
 
-function mountSweep({ getAddressesByChain, migrate = false } = {}) {
+function mountSweep({ getAddressesByChain, migrate = false, walletMode = 'full' } = {}) {
     const target = {
         getAddressesByChain: getAddressesByChain || vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({ walletMode }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         sweepPreview: () => Promise.resolve(EMPTY_PREVIEW),
@@ -118,6 +118,17 @@ afterEach(() => {
 });
 
 describe('SweepForm lays out every page state through FormPage', () => {
+    it('names the watcher action and explains the offline signing handoff', async () => {
+        const container = mountSweep({ migrate: true, walletMode: 'watcher' });
+        const sweep = await within(container).findByRole('button', { name: 'Sweep' });
+
+        fireEvent.click(sweep);
+
+        await waitFor(() => expect(container).toHaveTextContent(
+            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        ));
+    });
+
     it('shows the address-load error as the FormPage status', async () => {
         const container = mountSweep({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Address store unavailable')) });
         await waitFor(() => expect(container.querySelector('[data-form-status]')).not.toBeNull());

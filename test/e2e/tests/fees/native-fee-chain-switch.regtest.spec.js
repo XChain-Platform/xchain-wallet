@@ -70,7 +70,8 @@ async function switchFormChain(scope, chainLabel) {
     const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
     await expect(trigger, 'this form has no "Network" chain picker').toBeVisible({ timeout: 30_000 });
     await trigger.click();
-    await scope.getByRole('option', { name: new RegExp(`^${chainLabel}\\b`) }).first().click();
+    await trigger.page().getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: new RegExp(`^Select ${chainLabel}\\b`) }).first().click();
     await expect(trigger, `the form did not switch to ${chainLabel}`)
         .toHaveAttribute('aria-label', new RegExp(chainLabel), { timeout: 15_000 });
 }

@@ -106,20 +106,12 @@ export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME }) {
 }
 
 /**
- * Sign-screen replacement for the "Wallet unlocked. No password needed."
- * note. Three outcomes:
- *
- *   not frozen        renders `children` (the caller's usual reassurance)
- *   self-armed        renders the freeze, in its place
- *   duress-armed      renders nothing: the claim is withdrawn without giving
- *                     an observer a cue
- *
- * @param {object} props
- * @param {import('react').ReactNode} [props.children]
+ * Shows the sign-screen freeze statement only for a self-armed freeze.
+ * Renders nothing when signing is allowed or the freeze is duress-armed.
  */
-export function SigningReadyNote({ children }) {
+export function SigningReadyNote() {
     const notice = usePanicFreeze(PANIC_SURFACE_SIGN);
-    if (!notice) return children ?? null;
+    if (!notice) return null;
     if (!notice.disclose) return null;
     return <PanicSignStatus notice={notice} />;
 }

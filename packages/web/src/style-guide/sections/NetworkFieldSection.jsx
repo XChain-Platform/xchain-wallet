@@ -24,26 +24,34 @@ export function NetworkFieldSection() {
             id="network-field"
             title="Network field"
             tag="CANONICAL form field"
-            kicker="THE way a form says which network the action runs on: a labeled ChainPicker, label “Network”, offering every network the wallet holds addresses on. Every authoring form leads with it; it replaces the old fixed ChainBadge bubble at the top of forms."
+            kicker="THE way a form says which network the action runs on: a field-shaped button with a list icon that opens the full-screen network picker. Every authoring form uses it instead of a dropdown."
         >
             <Guidance
-                what={<>A named wrapper over <code>ChainPicker</code> that pins the house conventions: label <code>Network</code> and the wallet's own networks as options. Network icons distinguish networks without repeating network-kind text.</>}
+                what={<>A field-shaped button showing the current network and a trailing list icon. It opens <code>NetworkPicker</code>, whose full-screen list gives every row its network icon and returns the selection to the form.</>}
                 when={<>The top of every action-authoring form (Send, Claim rewards, Unstake, Delegate, Issue, Broadcast…). Forms opened from a specific context (a staking position's Claim, a contract's Stake) still render it, seeded to that network, so the network is visible and retargetable like on any other form.</>}
                 whenNot={<>Pure display of a fixed network inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list toolbar's network filter dropdown).</>}
                 sizing={<><code>md</code> matches standard form controls; <code>lg</code> matches hero fields on focused transaction screens.</>}
-                variants={<>Custom label and <code>md</code> or <code>lg</code> size. Keep the default Network label on authoring forms.</>}
+                variants={<>Custom label and <code>md</code> or <code>lg</code> size. A host can pass <code>onOpenPicker</code> when it owns the picker screen.</>}
                 doRule={<>✓ Offer every network the wallet holds addresses on (<code>Object.keys(addressesByChain)</code>) · seed from the launching context · reset dependent state (source address, token) in <code>onChange</code></>}
-                dontRule={<>✗ Render a bare <code>ChainBadge</code> bubble at the top of a form · restrict options to one network just because the flow arrived with one · relabel it ("Network", "Coin") per-form</>}
+                dontRule={<>✗ Use a dropdown or native <code>&lt;select&gt;</code> for a network field · render a bare <code>ChainBadge</code> bubble at the top of a form · restrict options to one network just because the flow arrived with one</>}
                 supersedes={<>The <code>styles.chainLine</code> + <code>ChainBadge</code> header bubble pattern on authoring forms. Component: <code>packages/core/src/ui/NetworkField.jsx</code>.</>}
             />
 
             <Markup>
-{`import { NetworkField } from '@xchain-wallet/core/ui';
+{`import { NetworkField, NetworkPicker } from '@xchain-wallet/core/ui';
 
 <NetworkField
     value={chainId}
     onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
     chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+    chainRegistry={chainRegistry}
+/>
+
+<NetworkPicker
+    value={chainId}
+    onSelect={setChainId}
+    onBack={closePicker}
+    chainIds={allowedChainIds}
     chainRegistry={chainRegistry}
 />`}
             </Markup>

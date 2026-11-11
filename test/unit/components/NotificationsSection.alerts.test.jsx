@@ -22,10 +22,27 @@ vi.mock('../../../packages/core/src/shared/hooks/usePriceAlerts.js', () => ({
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ shell: 'web', messaging: {} }),
+    screenVariantFor: () => 'full',
+}));
+
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onBack, onSelect }) => (
+        <section aria-label="Held-token picker">
+            <h1>{title}</h1>
+            <button type="button" onClick={onBack}>Back to price alert</button>
+            <button
+                type="button"
+                onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick: 'PEPE', kind: 'token' })}
+            >
+                Select PEPE
+            </button>
+        </section>
+    ),
 }));
 
 const { NotificationsSection } = await import(
     '../../../packages/core/src/shared/components/settings/NotificationsSection.jsx');
+const { Settings } = await import('../../../packages/core/src/shared/routes/Settings.jsx');
 
 function alertRecord(overrides = {}) {
     return {
@@ -206,6 +223,32 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
+    it('opens the held-token picker as a screen and preserves the form on Back', () => {
+        settings.notifications.priceAlerts = true;
+        render(<Settings
+            activeWallet={{ id: 'wallet-1', name: 'Test wallet' }}
+            onBack={vi.fn()}
+        />);
+
+        fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
+        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '123' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Choose a coin or token' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull();
+        expect(screen.queryByRole('switch', { name: 'Transaction confirmations' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to price alert' }));
+        expect(screen.getByLabelText('Direction').value).toBe('below');
+        expect(screen.getByLabelText('Target price').value).toBe('123');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose a held token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select PEPE' }));
+
+        expect(screen.getByRole('button', { name: /PEPE/ })).toBeTruthy();
+        expect(screen.getByLabelText('Target price').value).toBe('');
+    });
+
     it('groups only the whole-number part of a saved target', () => {
         priceAlerts.alerts = [
             alertRecord({ id: 'a1', chainId: 'dogecoin-mainnet', direction: 'below', targetFiat: 0.1234 }),
@@ -234,7 +277,7 @@ describe('price alert manager', () => {
             'Delete and recreate an alert to use the current display currency.',
         );
         fireEvent.click(edit);
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
         await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
             chainId: 'bitcoin-mainnet',
             direction: 'above',
@@ -295,7 +338,7 @@ describe('price alert manager', () => {
         expect(screen.getByLabelText('Target price').value).toBe('70000');
         fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'below' } });
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '65000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
 
         await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
             chainId: 'bitcoin-mainnet',
@@ -324,17 +367,20 @@ describe('price alert manager', () => {
         priceAlerts.alerts = [alertRecord()];
         render(<NotificationsSection walletId="wallet-1" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        const remove = screen.getByRole('button', { name: 'Remove Bitcoin price alert' });
+        expect(remove).toHaveTextContent('');
+        expect(remove.querySelectorAll('line')).toHaveLength(2);
+        fireEvent.click(remove);
 
         const dialog = await screen.findByRole('dialog');
         expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-        expect(screen.getByRole('button', { name: 'Delete Bitcoin price alert' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Remove Bitcoin price alert' })).toBeTruthy();
         expect(priceAlerts.removeAlert).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
         fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
         await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledTimes(1));
@@ -345,7 +391,7 @@ describe('price alert manager', () => {
         priceAlerts.alerts = [alertRecord()];
         render(<NotificationsSection walletId="wallet-1" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
         fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
         await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));
@@ -357,7 +403,7 @@ describe('price alert manager', () => {
         priceAlerts.removeAlert.mockRejectedValueOnce(new Error('delete failed'));
         render(<NotificationsSection walletId="wallet-1" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Bitcoin price alert' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Bitcoin price alert' }));
         fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
         await waitFor(() => expect(priceAlerts.removeAlert).toHaveBeenCalledWith('alert-1'));

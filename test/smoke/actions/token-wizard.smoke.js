@@ -24,7 +24,7 @@
 //      merged it into Utility because it composed a byte-identical
 //      ISSUE and sold "dividend-enabled" as though a template could
 //      confer it, when DIVIDEND has no per-token opt-in at all.
-//   4. Preview stage consumes decoder.decodeAction with action: 'ISSUE'
+//   4. Review stage consumes decoder.decodeAction with action: 'ISSUE'
 //      and the composed params; that's the contract with Piece 2a.
 //   5. Review continues into the shared confirmation flow, whose approval
 //      calls messaging.issueToken with the prebuilt transaction.
@@ -125,9 +125,11 @@ assert.ok(
     /dividend/i.test(utilityCard[0]) && /every token/i.test(utilityCard[0]),
     'utility tagline says dividends work on every token',
 );
+// U79: the dividends note under the template list is removed; the Utility
+// tagline above still says dividends work on every token.
 assert.ok(
-    /Any token you issue here can pay dividends/.test(src),
-    'template stage states dividends are available on any token',
+    !/Any token you issue here can pay dividends/.test(src),
+    'template stage carries no dividends note under the list',
 );
 
 // --- 3b. Per-template composers present -----------------------------
@@ -243,7 +245,7 @@ assert.ok(
     'subtoken shows the parentToken field',
 );
 
-// --- 4. Preview wires through decoder ---------------------------------
+// --- 4. Review wires through decoder ----------------------------------
 
 assert.ok(
     /decoder\s+as\s+decoderLib|decoderLib\.decodeAction/.test(src),
@@ -328,7 +330,7 @@ assert.ok(!/^\.warnings\s*\{/m.test(css), 'TokenWizard warnings render through S
 assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'TokenWizard warnings use the shared warning message');
 assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
 assert.ok(
-    /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
+    /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={\([\s\S]*?<TemplateIcon \/>[\s\S]*?{t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
     'TokenWizard delegates template cards to ListRow',
 );
 // Templates are rows of one flush card split by dividers, never a grid of

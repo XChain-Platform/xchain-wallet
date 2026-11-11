@@ -161,7 +161,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     it('signs 3 fills of 2 DOGE as one native send of 600000000 base units to the dispenser', async () => {
         const messaging = await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
-        fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '3' } });
+        fireEvent.change(await screen.findByLabelText(/^Fills/i), { target: { value: '3' } });
         const buy = await buyButton();
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
@@ -179,7 +179,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(review).toHaveTextContent('Fills3');
         expect(review).toHaveTextContent('You pay6 DOGE');
         expect(review).toHaveTextContent('You receive300 DOGESWAP');
-        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -211,7 +211,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         const buy = await buyButton();
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
-        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -246,7 +246,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
 
-        fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(screen.getByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -283,7 +283,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         // 10 DOGE buys 5 fills, not 6.
         await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
-        fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '6' } });
+        fireEvent.change(await screen.findByLabelText(/^Fills/i), { target: { value: '6' } });
         await waitFor(async () => expect(await buyButton()).toBeDisabled());
         expect(await screen.findByTestId('preflight-chip')).toHaveTextContent(/Will likely fail/);
     });
@@ -297,11 +297,11 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(totals).toHaveTextContent('You pay2 DOGE');
         expect(totals).toHaveTextContent('You receive100 DOGESWAP');
 
-        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '1.5' } });
+        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '1.5' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/whole number of fills/i);
         expect(screen.getByRole('button', { name: /^Buy fills$/ })).toBeDisabled();
 
-        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/Only 2 complete fills remain/);
         expect(await buyButton()).toBeDisabled();
     });
@@ -371,7 +371,7 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
         fireEvent.click(buy);
 
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
-        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         expect(await screen.findByText(/The network would refuse this action/)).toBeInTheDocument();
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeDisabled();

@@ -70,11 +70,18 @@ describe('semantic status color tokens', () => {
         }
     });
 
+    // U97 (2026-11-10): the light theme's main action green is the operator's
+    // brighter #16A34A with white text at 3.3:1, held to the 3:1 floor so it
+    // cannot slip further. The dark theme keeps WCAG AA.
     it.each([
-        ['light', light],
-        ['dark', dark],
-    ])('%s theme success fill clears WCAG AA against its label', (_theme, palette) => {
+        ['light', light, 3],
+        ['dark', dark, 4.5],
+    ])('%s theme success fill keeps its ruled contrast against its label', (_theme, palette, minimum) => {
         expect(contrast(rgb(palette['--xc-success-fill']), rgb(palette['--xc-on-success'])))
-            .toBeGreaterThanOrEqual(4.5);
+            .toBeGreaterThanOrEqual(minimum);
+    });
+
+    it('keeps the light success fill at the U97 colour', () => {
+        expect(light['--xc-success-fill'].toUpperCase()).toBe('#16A34A');
     });
 });

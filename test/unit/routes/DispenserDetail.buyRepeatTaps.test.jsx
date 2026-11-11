@@ -124,7 +124,7 @@ describe('repeated dispenser buy taps', () => {
         let release;
         messaging.sendToken.mockImplementation(() => new Promise((r) => { release = () => r({ txid: 'deadbeef' }); }));
         await openReview();
-        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         const button = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(button).toBeEnabled());
         fireEvent.click(button);

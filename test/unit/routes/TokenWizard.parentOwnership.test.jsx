@@ -64,25 +64,25 @@ describe('TokenWizard subtoken parent lookup', () => {
     it('reaches review when this wallet owns the existing parent', async () => {
         const getTokenInfo = vi.fn().mockResolvedValue({ creator: OWNER });
         await review(getTokenInfo);
-        expect(await screen.findByRole('button', { name: /Continue to confirmation/ })).toBeTruthy();
+        expect(await screen.findByRole('button', { name: /Issue token/ })).toBeTruthy();
         expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PARENT' }));
     });
 
     it('refuses a parent that the explorer does not know', async () => {
         await review(vi.fn().mockResolvedValue({ creator: null }));
         expect(await screen.findByText(/PARENT could not be confirmed as a token this wallet owns/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Continue to confirmation/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
     });
 
     it('refuses a parent owned by another address', async () => {
         await review(vi.fn().mockResolvedValue({ creator: STRANGER }));
         expect(await screen.findByText(/This wallet does not own PARENT/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Continue to confirmation/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
     });
 
     it('refuses when the explorer cannot answer', async () => {
         await review(vi.fn().mockRejectedValue(new Error('explorer 500')));
         expect(await screen.findByText(/PARENT could not be confirmed as a token this wallet owns/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Continue to confirmation/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Issue token/ })).toBeNull();
     });
 });

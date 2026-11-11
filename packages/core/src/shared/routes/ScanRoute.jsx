@@ -27,6 +27,7 @@ import {
     Button,
     FieldNote,
     FormPage,
+    Icon,
     PageHeader,
     QrScanner,
     Screen,
@@ -44,6 +45,7 @@ import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
+const PASTE_HELP = 'Paste an xchain: or bitcoin: payment link, an address, or a transaction code. The wallet will identify it and open the matching next step.';
 
 /**
  * @typedef {(
@@ -290,7 +292,8 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        variant="secondary"
+                        variant="success"
+                        icon={<Icon.CheckIcon />}
                         disabled={!paste.trim() || stopped}
                     >
                         {t('scan.classifyPaste')}
@@ -305,6 +308,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 )}
                 <Textarea
                     label={t('scan.pasteLabel')}
+                    help={PASTE_HELP}
                     value={paste}
                     onChange={(e) => setPaste(e.target.value)}
                     placeholder={t('scan.pastePlaceholder')}

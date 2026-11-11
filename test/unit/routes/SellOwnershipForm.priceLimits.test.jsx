@@ -88,9 +88,9 @@ describe('SellOwnershipForm price limits', () => {
         mount(messaging);
         await screen.findByLabelText(/^Price/);
         fireEvent.click(screen.getByRole('tab', { name: 'Another token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose price token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Price token: Select a token' }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select GOLD on Bitcoin/ }));
-        await screen.findByRole('textbox', { name: /^Price \(in GOLD\)/ });
+        await screen.findByRole('textbox', { name: /^Price \(GOLD\)/ });
 
         await listAt('1001');
 

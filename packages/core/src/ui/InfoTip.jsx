@@ -40,6 +40,78 @@ import '../i18n/locales/en/ui.js';
 const VIEWPORT_MARGIN = 8;
 const BUBBLE_GAP = 6;
 
+function shellVisibleBounds(viewportTop, viewportBottom) {
+    const headerControl = document.querySelector('[data-header-control]');
+    const appHeader = headerControl?.closest('[role="region"]')
+        || document.querySelector('[role="region"][aria-label="App header"]');
+    const bottomTab = document.querySelector('[data-bottom-tab]');
+    const bottomBar = bottomTab?.closest('nav')
+        || document.querySelector('nav[aria-label="Bottom navigation"]');
+    const headerBottom = appHeader?.getBoundingClientRect().bottom;
+    const bottomBarTop = bottomBar?.getBoundingClientRect().top;
+    let top = Number.isFinite(headerBottom) && headerBottom > viewportTop && headerBottom < viewportBottom
+        ? headerBottom
+        : viewportTop;
+
+    // Screen wraps PageHeader's h1 in a semantic header outside its scrolling
+    // body. Count it only while it meets the visible top chrome; in short
+    // landscape layouts the whole Screen can scroll, taking this header away.
+    for (const pageHeader of document.querySelectorAll('header')) {
+        if (!pageHeader.querySelector('h1')) continue;
+        const rect = pageHeader.getBoundingClientRect();
+        if (
+            Number.isFinite(rect.top)
+            && Number.isFinite(rect.bottom)
+            && rect.top <= top
+            && rect.bottom > viewportTop
+            && rect.bottom < viewportBottom
+        ) {
+            top = Math.max(top, rect.bottom);
+        }
+    }
+
+    return {
+        top,
+        bottom: Number.isFinite(bottomBarTop) && bottomBarTop > viewportTop && bottomBarTop < viewportBottom
+            ? bottomBarTop
+            : viewportBottom,
+    };
+}
+
+/**
+ * Narrows the visible band to every ancestor that clips its overflow, such as
+ * the screen's scrolling body: a bubble that opens past that edge is cut off
+ * even when the viewport has room.
+ */
+function clippedBounds(node, bounds) {
+    let { top, bottom } = bounds;
+    for (let el = node?.parentElement; el && el !== document.body; el = el.parentElement) {
+        const overflowY = getComputedStyle(el).overflowY;
+        if (overflowY === 'visible') continue;
+        const rect = el.getBoundingClientRect();
+        if (Number.isFinite(rect.top) && rect.top > top) top = rect.top;
+        if (Number.isFinite(rect.bottom) && rect.bottom > 0 && rect.bottom < bottom) bottom = rect.bottom;
+    }
+    return { top, bottom };
+}
+
+/**
+ * The same narrowing sideways: the screen body clips its horizontal overflow,
+ * so beside a desktop sidebar the bubble must stay inside the body, not just
+ * inside the viewport.
+ */
+function clippedSides(node, left, right) {
+    for (let el = node?.parentElement; el && el !== document.body; el = el.parentElement) {
+        const overflowX = getComputedStyle(el).overflowX;
+        if (overflowX === 'visible') continue;
+        const rect = el.getBoundingClientRect();
+        if (!(rect.right > rect.left)) continue;
+        if (Number.isFinite(rect.left) && rect.left > left) left = rect.left;
+        if (Number.isFinite(rect.right) && rect.right < right) right = rect.right;
+    }
+    return { left, right };
+}
+
 /**
  * @param {object} props
  * @param {import('react').ReactNode} props.label   bubble content
@@ -98,12 +170,13 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
                 setMaxWidth(null);
                 setHorizontalOffset(0);
             } else {
-                const availableWidth = Math.max(1, viewportWidth - 2 * VIEWPORT_MARGIN);
+                const sides = clippedSides(node, viewportLeft, viewportLeft + viewportWidth);
+                const availableWidth = Math.max(1, sides.right - sides.left - 2 * VIEWPORT_MARGIN);
                 const widthLimit = Math.min(360, availableWidth);
                 const bubbleWidth = Math.min(bubbleRect.width || widthLimit, widthLimit);
                 const centeredLeft = center - bubbleWidth / 2;
-                const minimumLeft = viewportLeft + VIEWPORT_MARGIN;
-                const maximumLeft = viewportLeft + viewportWidth - VIEWPORT_MARGIN - bubbleWidth;
+                const minimumLeft = sides.left + VIEWPORT_MARGIN;
+                const maximumLeft = sides.right - VIEWPORT_MARGIN - bubbleWidth;
                 const clampedLeft = Math.min(Math.max(centeredLeft, minimumLeft), maximumLeft);
                 setMaxWidth(widthLimit);
                 setHorizontalOffset(clampedLeft - centeredLeft);
@@ -111,8 +184,9 @@ export function InfoTip({ label, aria = t('ui.infoTip.moreInfo'), placement = 't
 
             if (viewportHeight > 0) {
                 const viewportBottom = viewportTop + viewportHeight;
-                const spaceAbove = Math.max(0, rect.top - viewportTop - BUBBLE_GAP - VIEWPORT_MARGIN);
-                const spaceBelow = Math.max(0, viewportBottom - rect.bottom - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const visibleBounds = clippedBounds(node, shellVisibleBounds(viewportTop, viewportBottom));
+                const spaceAbove = Math.max(0, rect.top - visibleBounds.top - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const spaceBelow = Math.max(0, visibleBounds.bottom - rect.bottom - BUBBLE_GAP - VIEWPORT_MARGIN);
                 const preferredSpace = placement === 'top' ? spaceAbove : spaceBelow;
                 const oppositeSpace = placement === 'top' ? spaceBelow : spaceAbove;
                 const bubbleHeight = Math.max(bubbleRect.height, bubble.scrollHeight);

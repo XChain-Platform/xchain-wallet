@@ -151,7 +151,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address').inputValue();
+    return main.getByLabel('Your oracle address', { exact: true }).inputValue();
 }
 
 test.describe('BET across two wallets', () => {
@@ -186,20 +186,20 @@ test.describe('BET across two wallets', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await main.getByLabel('Your oracle address').inputValue()).toBe(oracle);
+            expect(await main.getByLabel('Your oracle address', { exact: true }).inputValue()).toBe(oracle);
 
             const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on').fill(`Two wallets ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0').fill('Yes');
-            await main.getByLabel('Outcome 1').fill('No');
-            await main.getByLabel('Betting closes')
+            await main.getByLabel('What is being bet on', { exact: true }).fill(`Two wallets ${RUN_TAG}`);
+            await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
+            await main.getByLabel('Outcome 1', { exact: true }).fill('No');
+            await main.getByLabel('Betting closes', { exact: true })
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await approveConfirm(page);
 
             const until = Date.now() + 180_000;
@@ -256,7 +256,7 @@ test.describe('BET across two wallets', () => {
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
             // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same
             // balance the stake leaves, so the debit below is stake plus this
             // fee. Read off the screen the user approved rather than hardcoded:

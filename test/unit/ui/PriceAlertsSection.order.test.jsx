@@ -72,21 +72,16 @@ describe('PriceAlertForm row order', () => {
         expectRows({ coin: screen.getByText('Bitcoin'), onCancel: true });
     });
 
-    it('stacks each group on its own line only when the form is narrow', () => {
+    it('keeps each group on its own line at every form width', () => {
         render(<PriceAlertForm onCreate={vi.fn()} />);
         const groups = [...document.querySelectorAll('[data-row]')];
         expect(groups).toHaveLength(3);
         const container = groups[0].parentElement;
         expect(container.style.display).toBe('flex');
-        expect(container.style.flexWrap).toBe('wrap');
-        // A container-relative basis: huge below the breakpoint (one group a
-        // line), negative and so zero above it (all groups share one line).
+        expect(container.style.flexDirection).toBe('column');
+        expect(container.style.alignItems).toBe('flex-start');
         for (const group of groups) {
-            const basis = group.style.flexBasis;
-            expect(basis).toMatch(/^calc\(/);
-            expect(basis).toMatch(/\(\d+rem - 100%\)/);
-            expect(basis).toMatch(/\b999\b/);
-            expect(group.style.flexGrow).toBe('0');
+            expect(group.style.flexBasis).toBe('');
         }
     });
 });

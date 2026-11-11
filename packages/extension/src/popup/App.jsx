@@ -444,6 +444,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const [coSignerAccountId, setCoSignerAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    const [multisigSessionId, setMultisigSessionId] = useState(/** @type {string | null} */ (null));
+    const [multisigInitialLink, setMultisigInitialLink] = useState(/** @type {string | null} */ (null));
     // `from` records the queue the payment was picked up from, so backing
     // out of CoinpayForm returns there instead of Home.
     const [resumeCoinpay, setResumeCoinpay] = useState(
@@ -690,6 +692,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         setSendPrefill(null);
         setScannedPsbt(null);
         setExecutePrefill(null);
+        setMultisigInitialLink(null);
         setParallelPrefill(null);
         setSendBackTo('home');
     }
@@ -859,6 +862,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
             }
+            if (route.view === 'multisig-sign') setMultisigInitialLink(route.initialLink || null);
             setUnlockedView(route.view);
             launchRouteState.current.remember(route.view);
         } catch {
@@ -1272,6 +1276,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             setHistoryInitialFocus(target || null);
                             setUnlockedView('history');
                         }}
+                        onSessionStarted={(sessionId) => {
+                            setMultisigSessionId(sessionId || null);
+                            setUnlockedView('multisig-sign');
+                        }}
                         prefill={sendPrefill}
                         onBack={() => {
                             setSendPrefill(null);
@@ -1377,6 +1385,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <TokenWizard
                         walletId={activeWalletId}
                         onBack={() => setUnlockedView('home')}
+                        onCustom={() => setUnlockedView('issue')}
                     />
                 );
             }
@@ -1384,7 +1393,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <IssueTokenForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        onBack={() => setUnlockedView('wizard')}
                     />
                 );
             }
@@ -2008,8 +2017,15 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         walletId={activeWalletId}
                         initialRows={parallelPrefill || undefined}
                         onBack={() => {
+                            const launchedFromTemplates = Boolean(parallelPrefill?.length);
                             setParallelPrefill(null);
-                            setUnlockedView('actions');
+                            if (launchedFromTemplates) {
+                                setUnlockedView('cross-chain-templates');
+                            } else if (formReturnView) {
+                                formBack();
+                            } else {
+                                setUnlockedView('settings');
+                            }
                         }}
                     />
                 );
@@ -2199,7 +2215,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <MultisigSigningSession
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialSessionId={multisigSessionId || undefined}
+                        initialLink={multisigInitialLink || undefined}
+                        onBack={() => { setMultisigInitialLink(null); setUnlockedView('actions'); }}
                     />
                 );
             }
@@ -2682,7 +2700,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
-                        onIssue={() => setUnlockedView('issue')}
+                        onIssue={() => setUnlockedView('wizard')}
                         onSelectTick={(tick, chainId, row) => {
                             setTokenDetailRef({
                                 chainId,
@@ -2708,6 +2726,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         tick={tokenDetailRef.tick}
                         divisibility={tokenDetailRef.divisibility ?? null}
                         onBack={() => setUnlockedView('my-tokens')}
+                        onIssueSubtoken={() => openForm('wizard')}
                         onMint={() => openForm('mint')}
                         onDestroy={() => openForm('destroy')}
                         onLock={() => openForm('lock')}
@@ -2754,7 +2773,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <ActionsMenu
                         entries={buildActionEntries({
-                            onIssue: () => setUnlockedView('issue'),
+                            onIssue: () => setUnlockedView('wizard'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
                             onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
@@ -2794,6 +2813,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onBridgeMove: () => setUnlockedView('bridge-move'),
                             onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
+                            onMultisigSign: hasBtcAddress ? () => {
+                                setMultisigSessionId(null);
+                                setMultisigInitialLink(null);
+                                setUnlockedView('multisig-sign');
+                            } : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),

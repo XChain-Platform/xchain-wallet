@@ -47,7 +47,7 @@ assert.ok(src.includes('value: 0'), 'autolock supports 0 (never)');
 // unlock, panic-mode activation, and automatic backup reminders.
 assert.match(src, /(?:t\('settings\.safety\.newRecipientTestSendWarning'\)|New-recipient test-send warning \(sats\))/, 'test-send warning row present');
 assert.match(src, /testSendThresholdSats:\s*threshold/, 'test-send writes through grace.testSendThresholdSats');
-assert.match(src, /(?:t\('settings\.safety\.forNativeCoinSendsAbove'\)|native-coin sends above this amount)/, 'test-send threshold explains its scope and recipient novelty');
+assert.match(src, /(?:t\('settings\.help\.safety\.testSend'\)|native-coin sends above this amount)/, 'test-send threshold explains its scope and recipient novelty');
 assert.match(src, /(?:t\('settings\.safety\.lookalikeAddressWarnings'\)|Lookalike address warnings)/, 'lookalike warning status is present');
 assert.match(src, /(?:t\('settings\.safety\.alwaysOn'\)|Always on)/, 'lookalike warnings are not presented as optional');
 assert.match(src, /<BiometricRow \/>/, 'biometric unlock row mounted');

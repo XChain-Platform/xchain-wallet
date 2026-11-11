@@ -176,7 +176,7 @@ async function settle() {
 }
 
 const verdictOf = (utils) => utils.queryByTestId('outside-address-verdict');
-const createButton = (utils) => utils.getByRole('button', { name: 'Create' });
+const createButton = (utils) => utils.getByRole('button', { name: 'Create dispenser' });
 
 describe('DispenserForm "Another address": format', () => {
     it('refuses a mistyped address with the Send wording and reads nothing', async () => {

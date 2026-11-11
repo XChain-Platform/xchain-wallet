@@ -57,7 +57,7 @@ describe('Backup prompt password labels', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
         const field = screen.getByLabelText('Extra passphrase');
-        expect(visibleLabelOf(field)).toBe('Extra passphrase (optional)');
+        expect(visibleLabelOf(field)).toBe('Extra passphrase');
         expect(field).toHaveAttribute('aria-required', 'false');
     });
 });

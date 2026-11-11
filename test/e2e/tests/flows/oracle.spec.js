@@ -227,14 +227,19 @@ for (const viewport of VIEWPORTS) {
             await expect(form).toBeVisible({ timeout: 30_000 });
             await expectScreenLayout(page, 'My oracle', `${viewport.name} oracle form`);
 
-            await form.getByLabel("Token's network").selectOption('LTC');
-            await form.getByLabel('Token ticker').fill(TICK);
-            await form.getByLabel('Currency').selectOption(FIAT);
-            await form.getByLabel(/^Price of one/).fill(PRICE);
-            await form.getByLabel('Usage fee (optional)').fill(USAGE_FEE);
-            await form.getByLabel('Memo (optional)').fill(MEMO);
+            // The Network field opens the network picker screen (ruling U59).
+            await form.getByRole('button', { name: /^Priced token network:/ }).click();
+            const networkPicker = page.getByRole('dialog', { name: 'Priced token network' });
+            await networkPicker.getByRole('button', { name: /^Select Litecoin/ }).click();
+            await expect(networkPicker).toBeHidden();
+            await form.getByLabel('Token ticker', { exact: true }).fill(TICK);
+            await form.getByLabel('Currency', { exact: true }).selectOption(FIAT);
+            // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+            await form.getByRole('textbox', { name: /^Price of one/ }).fill(PRICE);
+            await form.getByLabel('Usage fee', { exact: true }).fill(USAGE_FEE);
+            await form.getByLabel('Memo', { exact: true }).fill(MEMO);
 
-            const preview = form.getByRole('button', { name: 'Preview', exact: true });
+            const preview = form.getByRole('button', { name: 'Publish price', exact: true });
             await preview.scrollIntoViewIfNeeded();
             const before = await page.getByRole('main').evaluate((main) => main.scrollTop);
             expect(before, `${viewport.name}: the form did not scroll, so review top restoration was not exercised`)

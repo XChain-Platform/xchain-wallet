@@ -54,3 +54,23 @@ describe('amount field action room', () => {
             .toBe('max(var(--amount-action-width), var(--amount-actions-room, 0px))');
     });
 });
+
+describe('amount field Max button icon', () => {
+    afterEach(() => {
+        document.body.replaceChildren();
+    });
+
+    it.each(['sm', 'md', 'lg'])('shows an icon beside the Max text at size %s and keeps its name', (size) => {
+        render(<AmountField amount="" tick="BTC" size={size} onAmountFieldChange={() => {}} onMax={() => {}} />);
+        const max = screen.getByRole('button', { name: 'Use max available amount' });
+        expect(max.querySelector('svg[data-xc-icon]')).not.toBeNull();
+        expect(max.textContent).toBe('Max');
+    });
+
+    it('keeps the icon on the disabled Max shown before a token is chosen', () => {
+        render(<AmountField amount="" onAmountFieldChange={() => {}} />);
+        const max = screen.getByRole('button', { name: 'Use max available amount' });
+        expect(max).toBeDisabled();
+        expect(max.querySelector('svg[data-xc-icon]')).not.toBeNull();
+    });
+});

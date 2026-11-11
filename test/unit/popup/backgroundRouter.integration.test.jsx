@@ -265,7 +265,7 @@ describe('extension popup with the background message router', () => {
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(review).toHaveTextContent(`Send 0.01 BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Watch-only mode creates a transaction without signing or sending it');
+        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
         expect(chrome.messages).toContainEqual({
             type: 'addresses.byChain',
             request: { walletId: WALLET_ID, accountId: ACCOUNT_ID },

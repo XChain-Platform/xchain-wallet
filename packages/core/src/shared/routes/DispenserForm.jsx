@@ -19,15 +19,17 @@ import {
     Button,
     Input,
     ChainBadge,
-    ChainPicker,
+    NetworkField,
     AddressText,
     Icon,
+    InfoTip,
     StatusMessage,
     FeeSelector,
     AddressField,
     FormErrorSummary,
     Select,
     RadioGroup,
+    OptionalPill,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -67,6 +69,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -75,6 +78,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -586,12 +590,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+    const feeFiatFormat = useFeeFiat({
         chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
     });
+    const { formatNativeFee, formatProtocolFee } = feeFiatFormat;
     const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const priceNotes = useDispenserPriceFloor({
         coin: descriptor?.coin, coinTicker, payWith, triggerPrice, giveAmount, fiatCode, fiatAmount, oracleAddress,
@@ -866,6 +871,71 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         return p;
     }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, outsideTrimmed, sourceAddress, payWith, getTick, getTokenAmount, expMode, expInput, allowListIdx, blockListIdx]);
+    const quoteActionData = useMemo(() => {
+        const give = giveAmount.trim();
+        const escrowAmount = escrow.trim();
+        const oracle = oracleAddress.trim();
+        const fiat = fiatAmount.trim();
+        const trigger = triggerPrice.trim();
+        const customExpiration = expMode === 'custom' ? localInputToUnix(expInput.trim()) : null;
+        const addressReady = addressMode === 'current'
+            || (addressMode === 'new' && (Boolean(dispenserGetAddress?.address) || !canDeriveGetAddress))
+            || (addressMode === 'existing' && Boolean(existingAddress))
+            || (addressMode === 'other' && Boolean(outsideTrimmed)
+                && !outsideFormatError && outsideVerdict?.allowed === true);
+        const paymentReady = payWith === 'token'
+            ? Boolean(getTick.trim())
+                && !tickerReferenceError(getTick, { noun: 'Payment token' })
+                && isPositiveDecimal(getTokenAmount)
+                && !tokenAmountPrecisionError(getTokenAmount, {
+                    divisibility: paymentTokenInfo?.divisibility,
+                    tick: getTick,
+                    noun: 'Payment amount',
+                })
+            : Boolean(oracle || fiat || trigger)
+                && (!oracle || (!outsideAddressError(oracle, descriptor) && Boolean(fiatCode)))
+                && (!fiat || (Boolean(fiatCode) && isValidFiatAmount(fiat)))
+                && !(fiatCode && !oracle && !fiat)
+                && (Boolean(oracle) || !trigger || (isPositiveDecimal(trigger)
+                    && !tokenAmountPrecisionError(trigger, {
+                        divisibility: descriptor?.nativeDecimals ?? 8,
+                        tick: coinTicker,
+                        noun: 'Trigger price',
+                    })))
+                && !priceNotes.block;
+        const ready = Boolean(chainId && sourceAddress?.address && ticker.trim())
+            && !tickerReferenceError(ticker)
+            && isPositiveDecimal(give)
+            && !tokenAmountPrecisionError(give, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: ticker,
+                noun: 'Per-fill give amount',
+            })
+            && isPositiveDecimal(escrowAmount)
+            && !tokenAmountPrecisionError(escrowAmount, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: ticker,
+                noun: 'Escrow amount',
+            })
+            && compareDecimalStrings(escrowAmount, give) !== -1
+            && !exceedsBalance(escrowAmount, sourceTickBalance)
+            && paymentReady
+            && (expMode !== 'custom'
+                || Boolean(customExpiration && customExpiration > Math.floor(Date.now() / 1000)))
+            && !listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })
+            && addressReady;
+        return ready ? { action: 'DISPENSER', params: actionParams } : null;
+    }, [giveAmount, escrow, oracleAddress, fiatAmount, triggerPrice, expMode, expInput,
+        addressMode, dispenserGetAddress, canDeriveGetAddress, existingAddress, outsideTrimmed,
+        outsideFormatError, outsideVerdict, payWith, getTick, getTokenAmount, paymentTokenInfo,
+        descriptor, fiatCode, coinTicker, priceNotes.block, chainId, sourceAddress, ticker,
+        giveTokenInfo, sourceTickBalance, allowListIdx, blockListIdx, actionParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: sourceAddress?.address,
+        actionData: quoteActionData,
+    });
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -1380,9 +1450,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -1421,6 +1489,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 pickerActions={[{
                     key: 'new-dispenser-address',
                     label: pickerGenerating ? 'Generating…' : 'New dispenser address',
@@ -1551,6 +1620,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 walletId={walletId}
                 accountId={activeAccountId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     manualSourceRef.current = true;
                     setFromAddressId(a.id);
@@ -1599,27 +1669,41 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.TokenIcon />}
                     loading={derivingGetAddress || actionConfirm.composing}
                     disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
-                    Create
+                    Create dispenser
                 </Button>
             )}
         >
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                <NetworkField label="Network" help={t('dispenserForm.networkHelp')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
                 <>
+                    {/* From: which address funds the escrow and signs the action. */}
+                    <AddressField
+                        label="From"
+                        help="The address that funds the escrow, pays the network fee and signs the dispenser."
+                        icon="addresses"
+                        value={fromAddress.address}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setSourcePickerOpen(true)}
+                        iconLabel="Choose source address"
+                    />
+
                     {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
                     {addressMode === 'other' ? (
                         <AddressField
                             id="dispenser-address"
                             label="Dispenser address"
+                            help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
                             icon="addresses"
                             value={outsideAddress}
                             placeholder="Any address on the active network"
@@ -1635,6 +1719,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         // read "New di…eview)".
                         <AddressField
                             label="Dispenser address"
+                            help="The address the dispenser opens on: buyers send payment here. A new address keeps this dispenser apart from your other funds."
                             icon="addresses"
                             value={addressMode === 'new'
                                 ? ''
@@ -1663,16 +1748,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         </FieldNote>
                     ) : null}
 
-                    {/* Source: which address funds and signs the action. */}
-                    <AddressField
-                        label="Source"
-                        icon="addresses"
-                        value={fromAddress.address}
-                        readOnly
-                        onChange={() => {}}
-                        onIconClick={() => setSourcePickerOpen(true)}
-                        iconLabel="Choose source address"
-                    />
                 </>
             ) : (
                 <FormNotice variant="error">
@@ -1684,6 +1759,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <TokenField
                     id="dispenser-token"
                     label="Token"
+                    help={t('dispenserForm.tokenHelp')}
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
@@ -1696,7 +1772,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <AmountField
                 id="dispenser-give"
                 label={t('dispenserForm.giveAmountPerFill')}
-                hint="Tokens sent to the buyer every time the dispenser is triggered."
+                help="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
                 tick={ticker}
                 divisibility={giveTokenInfo?.divisibility}
@@ -1716,6 +1792,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <AmountField
                 id="dispenser-escrow"
                 label="Escrow amount"
+                help="How much of the token is locked in the dispenser for buyers to draw from. The dispenser closes when it runs out."
                 amount={escrow}
                 tick={ticker}
                 divisibility={giveTokenInfo?.divisibility}
@@ -1734,6 +1811,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             />
             <RadioGroup
                 legend="Buyers pay with"
+                help="Buyers pay in the network's native coin, or in another token you name."
                 name="disp-pay"
                 value={payWith}
                 onChange={setPayWith}
@@ -1747,7 +1825,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <Input
                         id="dispenser-payment-token"
                         label="Payment token"
-                        hint="Ticker buyers pay with (a token, not the native coin)."
+                        help="Ticker buyers pay with (a token, not the native coin)."
                         value={getTick}
                         onChange={(e) => setGetTick(e.target.value)}
                         autoComplete="off"
@@ -1758,7 +1836,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <Input
                         id="dispenser-payment-amount"
                         label={t('dispenserForm.paymentAmountPerFill')}
-                        hint="Amount of the payment token buyers send per fill."
+                        help="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
                         value={getTokenAmount}
                         onChange={(e) => setGetTokenAmount(
@@ -1775,7 +1853,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <Input
                     id="dispenser-trigger-price"
                     label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
-                    hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
+                    help={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
                     inputMode="decimal"
                     value={triggerPrice}
                     onChange={(e) => setTriggerPrice(
@@ -1792,7 +1870,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         type="button"
                         variant="link"
                         size="sm"
-                        icon={null}
+                        icon={<Icon.CheckIcon />}
                         onClick={() => {
                             setGiveAmount(priceNotes.bundle.giveAmount);
                             setTriggerPrice(priceNotes.bundle.getAmount);
@@ -1825,7 +1903,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <>
                     <Select
                         id="dispenser-fiat-code"
-                        label="Priced in fiat (optional)"
+                        label="Priced in fiat"
+                        optional
+                        help="Price each fill in a fiat currency instead of a fixed coin amount; validators convert it at the current rate."
                         value={fiatCode}
                         onChange={(e) => setFiatCode(e.target.value)}
                     >
@@ -1838,8 +1918,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     </Select>
                     <Input
                         id="dispenser-fiat-amount"
-                        label="Fiat amount (e.g. 12.34)"
-                        hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
+                        label="Fiat amount"
+                        placeholder="12.34"
+                        help="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
                         value={fiatAmount}
                         onChange={(e) => setFiatAmount(
@@ -1850,8 +1931,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <FieldNote variant="info" role="status">{priceNotes.fiatWarning}</FieldNote>
                     <AddressField
                         id="dispenser-oracle"
-                        label="Oracle address (optional)"
-                        hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
+                        label="Oracle address"
+                        optional
+                        help="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"
@@ -1864,6 +1946,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             <RadioGroup
                 legend="Expiration"
+                help="By default the dispenser stays open for the network's standard window. Pick a time to close it sooner or later."
                 name="disp-exp"
                 value={expMode}
                 onChange={setExpMode}
@@ -1877,20 +1960,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     id="dispenser-expiration"
                     label="Expires"
                     type="datetime-local"
-                    hint="Wall-clock time the dispenser closes. Must be in the future."
+                    help="The date and time the dispenser closes. It must be in the future."
                     value={expInput}
                     onChange={(e) => setExpInput(e.target.value)}
                 />
             ) : null}
 
             <div className={styles.choiceGroup}>
-                <p className={styles.choiceGroupLabel}>Restrict who can buy (optional)</p>
+                <p className={styles.choiceGroupLabel}>Restrict who can buy <OptionalPill /> <InfoTip aria="About restricting buyers" label="An allow-list lets only the listed addresses buy. A block-list refuses the listed addresses." /></p>
                 <div className={styles.choiceButtons}>
-                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
+                    <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
                         {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
                     </Button>
                     {allowListIdx ? <Button variant="secondary" size="sm" onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                    <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
+                    <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
                         {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
                     </Button>
                     {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
@@ -1904,22 +1987,28 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 one click away from the warning. */}
             {allowListWarningNode}
 
-            <FeeSelector
-                label="Network fee"
-                coinTicker={coinTicker}
-                formatFiat={formatNativeFee}
-                tiers={feeTiers}
-                value={feePick}
-                onChange={setFeePick}
-                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-            />
-
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
-                coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
-            />
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                fiat={feeFiatFormat}
+                feeSelector={<FeeSelector
+                    chainId={chainId}
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />}
+            >
+                <NativeFeeToggle
+                    checked={payFeeInNativeCoin}
+                    onChange={setPayFeeInNativeCoin}
+                    coinTicker={coinTicker}
+                    mandatory={nativeFeeMandatory}
+                />
+            </FeesCard>
 
         </FormPage>,
     );

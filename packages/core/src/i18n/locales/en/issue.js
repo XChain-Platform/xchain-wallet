@@ -24,30 +24,57 @@ const messages = {
     'issue.reviewTokenIssue': 'Review token issue',
     'issue.draft.unfinished':
         'Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.',
+    'issue.networkHelp': 'The chain the token is issued on. Your From address and the network fee are on this network.',
     'issue.ticker': 'Ticker',
     'issue.tickerTaken': 'Ticker "{ticker}" already exists on this network.',
+    'issue.required': 'Required',
+    'issue.irreversible': 'Irreversible',
+    'issue.section.publicMinting': 'Public minting',
+    'issue.section.description': 'Description',
+    'issue.section.locks': 'Locks',
+    'issue.section.lists': 'Allow and block lists',
+    'issue.section.ownership': 'Transfer ownership',
+    'issue.summary.notSet': 'Not set',
+    'issue.summary.setCount': '{count} set',
+    'issue.summary.descriptionAdded': 'Added',
+    'issue.summary.oneLockOn': '1 lock on',
+    'issue.summary.locksOn': '{count} locks on',
+    'issue.summary.set': 'Set',
+    'issue.summary.newOwner': 'New owner set',
     'issue.supply': 'Supply',
+    'issue.reserveTicker': 'Reserve ticker',
+    'issue.fromHelp':
+        'This address issues and owns the new token and pays the issuance and network fees.',
+    'issue.maxSupply': 'Max supply',
     'issue.supplyHint': 'The most that can ever exist.',
-    'issue.initialMintOptional': 'Initial mint (optional)',
+    'issue.initialMint': 'Initial mint',
     'issue.initialMintHeadroom': 'Leaves {amount} to mint later.',
     'issue.initialMintHint':
         'How much exists at creation. Leave blank to mint the whole supply now; a smaller number leaves the rest to mint later.',
-    'issue.maxMintOptional': 'Max mint per transaction (optional)',
-    'issue.maxMintHint': 'Caps how much can be minted in one transaction. Leave blank for no limit.',
+    'issue.maxMint': 'Max per transaction',
+    'issue.maxMintHelp':
+        'The most anyone can create in one public mint transaction for this new token.',
+    'issue.mintAddressMax': 'Max per address',
+    'issue.mintAddressMaxHelp':
+        'The total amount any one address can create through public minting for this new token.',
+    'issue.mintStartBlock': 'Start block',
+    'issue.mintStartBlockHelp':
+        'The block height when public minting for this new token opens.',
+    'issue.mintStopBlock': 'Stop block',
+    'issue.mintStopBlockHelp':
+        'The block height when public minting for this new token closes.',
+    'issue.descriptionAria': 'Token description',
+    'issue.allowList': 'Allow list',
+    'issue.allowListHelp':
+        'The number of the address list whose members may hold or transfer this new token. Everyone else is denied.',
+    'issue.blockList': 'Block list',
+    'issue.blockListHelp':
+        'The number of the address list whose members may not hold or transfer this new token.',
     'issue.divisible': 'Divisible (8 decimal places)',
-    'issue.descriptionOptional': 'Description (optional)',
-    'issue.descriptionHint': 'Up to 249 characters. Stored on-chain.',
-    'issue.lockSupply': 'Lock supply + minting (irreversible)',
-    'issue.lockSupplyWarning':
-        'Locking minting means the {amount} left under the cap can never be minted. Clear this box to mint it later.',
-    'issue.bridgingHint':
-        'Bridging is off. After the token exists you can open it to other networks from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
-    'issue.boundListHint':
-        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other networks, don't bind a list to it.",
-    'issue.transferOwnershipOptional': 'Transfer ownership to (optional)',
+    'issue.transferOwnership': 'New owner address',
     'issue.transferOwnershipHint':
-        "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
-    'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
+        "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; set their destination in Supply.",
+    'issue.sendInitialMint': 'Send initial mint to',
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
 };
 

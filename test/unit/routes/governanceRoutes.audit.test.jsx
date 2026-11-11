@@ -101,9 +101,9 @@ describe('governance route audit', () => {
         const network = screen.getByRole('button', { name: /^Network:/ });
         expect(network).toHaveFocus();
         await user.keyboard('{Enter}');
-        expect(screen.getByRole('listbox')).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         await user.keyboard('{Escape}');
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(network).toHaveFocus();
 
         await user.tab();
@@ -170,7 +170,7 @@ describe('governance route audit', () => {
     });
 
     it.each([
-        ['Question (optional)', 'safe\u202eunsafe', 'Question cannot contain text-direction control characters.'],
+        ['Question', 'safe\u202eunsafe', 'Question cannot contain text-direction control characters.'],
         ['Option 0', 'safe\u200bunsafe', 'Option cannot contain zero-width characters.'],
     ])('refuses hostile poll text from %s before compose', async (label, value, message) => {
         const messaging = messagingWith();
@@ -242,41 +242,40 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
         fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced (gates + deposit)' }));
-        fireEvent.change(screen.getByLabelText('Minimum vote balance (optional)'), { target: { value: '1.23' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText('Minimum vote balance'), { target: { value: '1.23' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
         expect(await screen.findByText('Minimum vote balance can have at most 1 decimal place for VOTE.')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Minimum vote balance (optional)'), { target: { value: '' } });
-        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '-1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText('Creation deposit must be a non-negative XCHAIN amount.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Minimum vote balance'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Creation deposit (XCHAIN)'), { target: { value: '-1' } });
+        expect(await screen.findByText(/Enter a valid decimal amount/)).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '3.001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-        expect(await screen.findByText('Creation deposit can have at most 2 decimal places for XCHAIN.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Creation deposit (XCHAIN)'), { target: { value: '3.001' } });
+        expect(await screen.findByText('Amount can have at most 2 decimal places.')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '3.00' } });
+        fireEvent.change(screen.getByLabelText('Creation deposit (XCHAIN)'), { target: { value: '3.00' } });
         fireEvent.click(screen.getByRole('button', { name: 'Binding poll (run a contract on the result)' }));
-        fireEvent.change(screen.getByLabelText('Contract to call (optional)'), { target: { value: '42' } });
+        fireEvent.change(screen.getByLabelText('Contract to call'), { target: { value: '42' } });
         fireEvent.change(screen.getByLabelText('Method to run'), { target: { value: 'release' } });
-        fireEvent.change(screen.getByLabelText('Quorum (optional)'), { target: { value: '0.2' } });
-        fireEvent.change(screen.getByLabelText('Minimum voters (optional)'), { target: { value: '1' } });
-        fireEvent.change(screen.getByLabelText('Escrow to fund the call (optional)'), { target: { value: '2.01' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText('Quorum'), { target: { value: '0.2' } });
+        fireEvent.change(screen.getByLabelText('Minimum voters'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Escrow to fund the call (XCHAIN)'), { target: { value: '2.01' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
         expect(await screen.findByText(/creation deposit and callback escrow together must stay within that balance/)).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Escrow to fund the call (optional)'), { target: { value: '2.00' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText('Escrow to fund the call (XCHAIN)'), { target: { value: '2.00' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+        expect(await screen.findByText(/prepares the transaction for your offline signer/)).toBeTruthy();
         expect(await screen.findByText('3 XCHAIN')).toBeTruthy();
         expect(screen.getByText('2 XCHAIN')).toBeTruthy();
         expect(screen.getByText('244')).toBeTruthy();
         expect(screen.getByText('Maximum selections').nextElementSibling).toHaveTextContent('1');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(screen.getByLabelText('Creation deposit (optional)')).toHaveValue('3.00');
-        expect(screen.getByLabelText('Escrow to fund the call (optional)')).toHaveValue('2.00');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(screen.getByLabelText('Creation deposit (XCHAIN)')).toHaveValue('3.00');
+        expect(screen.getByLabelText('Escrow to fund the call (XCHAIN)')).toHaveValue('2.00');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction: poll' }));
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: expect.objectContaining({
@@ -296,12 +295,12 @@ describe('governance route audit', () => {
         );
         const mounted = render(renderForm('wallet-1'));
         await screen.findByDisplayValue(ADDRESS.address);
-        fireEvent.change(screen.getByLabelText('Question (optional)'), { target: { value: 'Old question' } });
+        fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Old question' } });
         fireEvent.change(screen.getByLabelText('Tally mode'), { target: { value: 'split' } });
 
         mounted.rerender(renderForm('wallet-2'));
 
-        expect(await screen.findByLabelText('Question (optional)')).toHaveValue('');
+        expect(await screen.findByLabelText('Question')).toHaveValue('');
         expect(screen.getByLabelText('Tally mode')).toHaveValue('approval');
     });
 
@@ -319,7 +318,7 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
         fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
         fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create poll' }));
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction: poll' });
         const form = submit.closest('form');
 
@@ -334,20 +333,39 @@ describe('governance route audit', () => {
     it('keeps delegation required-field messages reachable from the primary action', async () => {
         mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Review' });
+        const action = screen.getByRole('button', { name: 'Delegate votes' });
         expect(action).toBeEnabled();
         fireEvent.click(action);
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
     });
 
-    it('puts the delegate and clear switch above every field so the form fields sit together', async () => {
+    it('opens with Network, then From, then the Action choice, with no mode buttons (U60)', async () => {
         mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
         const from = await screen.findByDisplayValue(ADDRESS.address);
-        const toggle = screen.getByRole('button', { name: 'Clear' });
+        const network = screen.getByRole('button', { name: /^Network:/ });
+        const action = screen.getByRole('group', { name: 'Action' });
         const follows = Node.DOCUMENT_POSITION_FOLLOWING;
-        expect(toggle.compareDocumentPosition(screen.getByRole('button', { name: /^Network:/ })) & follows).toBeTruthy();
-        expect(toggle.compareDocumentPosition(from) & follows).toBeTruthy();
-        expect(toggle.compareDocumentPosition(screen.getByLabelText('Delegate to address')) & follows).toBeTruthy();
+        expect(network.compareDocumentPosition(from) & follows).toBeTruthy();
+        expect(from.compareDocumentPosition(action) & follows).toBeTruthy();
+        expect(action.compareDocumentPosition(screen.getByLabelText('Delegate to address')) & follows).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Delegate' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'About From' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'About Action' })).toBeTruthy();
+    });
+
+    it('names its main action per mode with an icon, never Review or Preview (U63)', async () => {
+        mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
+        await screen.findByDisplayValue(ADDRESS.address);
+        const delegate = screen.getByRole('button', { name: 'Delegate votes' });
+        expect(delegate.className).toMatch(/success/);
+        expect(delegate.querySelector('svg')).not.toBeNull();
+        fireEvent.click(screen.getByLabelText('Clear my delegation'));
+        const clear = screen.getByRole('button', { name: 'Clear delegation' });
+        expect(clear.className).toMatch(/success/);
+        expect(clear.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
     });
 
     it('validates the source address and governance token before delegation compose', async () => {
@@ -361,7 +379,7 @@ describe('governance route audit', () => {
         }, sourceMessaging);
         await screen.findByDisplayValue(invalidSource.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText('The selected source address is not valid for this network.')).toBeTruthy();
         expect(sourceMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
 
@@ -372,7 +390,7 @@ describe('governance route audit', () => {
         }, tickMessaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText(/Governance token can only use letters/)).toBeTruthy();
         expect(tickMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
 
@@ -383,7 +401,7 @@ describe('governance route audit', () => {
         }, idMessaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText('Governance token cannot contain ^. That form is reserved for token IDs.')).toBeTruthy();
         expect(idMessaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -400,21 +418,21 @@ describe('governance route audit', () => {
         await screen.findByDisplayValue(source.address);
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'not-an-address' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText(/Delegate-to address is not valid/)).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: source.address } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText('Delegate-to address must be different from the source address.')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'bad|memo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad|memo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findByText('Memo cannot contain | or ; characters.')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: `${'😀'.repeat(125)}a` } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Memo is 251 characters; the network accepts at most 250 characters.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
@@ -428,21 +446,21 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
 
         for (const rate of ['0', '-1']) {
             fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
-            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
             expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         }
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -458,18 +476,19 @@ describe('governance route audit', () => {
         }, messaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: `  ${DELEGATE}  ` } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  keep my vote  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  keep my vote  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
 
         expect((await screen.findByText('Token')).nextElementSibling.textContent).toBe('VoTe');
+        expect(screen.getByText(/prepares the transaction for your offline signer/)).toBeTruthy();
         expect(screen.getByLabelText(DELEGATE)).toBeTruthy();
         expect(screen.getByText('Memo').nextElementSibling.textContent).toBe('keep my vote');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Delegate to address')).toHaveValue(`  ${DELEGATE}  `);
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('  keep my vote  ');
+        expect(screen.getByLabelText('Memo')).toHaveValue('  keep my vote  ');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction: delegate votes' }));
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
@@ -502,12 +521,12 @@ describe('governance route audit', () => {
         const mounted = render(renderForm('wallet-1'));
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Old memo' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Old memo' } });
 
         mounted.rerender(renderForm('wallet-2'));
 
         expect(await screen.findByLabelText('Delegate to address')).toHaveValue('');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Memo')).toHaveValue('');
     });
 
     it('admits only one watcher delegation build from batched submit events', async () => {
@@ -522,7 +541,7 @@ describe('governance route audit', () => {
         }, messaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Delegate votes' }));
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction: delegate votes' });
         const form = submit.closest('form');
 
@@ -728,15 +747,15 @@ describe('governance route audit', () => {
         }, messaging);
 
         fireEvent.click(await screen.findByLabelText('0: Yes'));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Fund it' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Fund it' } });
         fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
 
         // The review lists the vote's fields; the repeated summary sentence is gone.
         expect(await screen.findByText('Fund it')).toBeTruthy();
         expect(screen.getByText('Network fee').nextElementSibling).toHaveTextContent('BTC');
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('0: Yes')).toBeChecked();
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Fund it');
+        expect(screen.getByLabelText('Memo')).toHaveValue('Fund it');
     });
 
     it('shows the poll-list empty state after a successful empty read', async () => {

@@ -96,6 +96,33 @@ describe('AmountField follows the asset divisibility', () => {
         expect(u.getByRole('alert')).toHaveTextContent('Amount can have at most 0 decimal places.');
     });
 
+    it('clears typed errors and reformats in place when precision changes', () => {
+        const onValidationError = vi.fn();
+        const u = render(field({ amount: '1234.', divisibility: 8, onValidationError }));
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        expect(input).toHaveAttribute('placeholder', '0.00000000');
+        fireEvent.change(input, { target: { value: '1.123456789' } });
+        expect(u.getByRole('alert')).toHaveTextContent('Amount can have at most 8 decimal places.');
+
+        u.rerender(field({ amount: '1234.', divisibility: 0, onValidationError }));
+        expect(u.getByRole('textbox', { name: 'Amount (BTC)' })).toBe(input);
+        expect(input).toHaveAttribute('placeholder', '0');
+        expect(input.value).toBe('1,234');
+        expect(input).not.toHaveAttribute('aria-invalid', 'true');
+        expect(onValidationError).toHaveBeenLastCalledWith(null);
+
+        u.rerender(field({ amount: '12.5', divisibility: 0, onValidationError }));
+        expect(input.value).toBe('12.5');
+        expect(u.getByRole('alert')).toHaveTextContent('Amount can have at most 0 decimal places.');
+
+        u.rerender(field({ amount: '12.5', divisibility: 8, onValidationError }));
+        expect(input).toHaveAttribute('placeholder', '0.00000000');
+        expect(input.value).toBe('12.50000000');
+        expect(input).not.toHaveAttribute('aria-invalid', 'true');
+        expect(onValidationError).toHaveBeenLastCalledWith(null);
+    });
+
     it('leaves typing in progress unpadded and pads on blur', () => {
         let latest = '';
         const u = render(<Harness divisibility={8} onValue={(value) => { latest = value; }} />);
@@ -130,6 +157,15 @@ describe('AmountField follows the asset divisibility', () => {
     it('leaves the field empty when no amount is stored', () => {
         const u = render(field({ amount: '', divisibility: 8 }));
         expect(u.getByRole('textbox', { name: 'Amount (BTC)' }).value).toBe('');
+    });
+
+    it('forwards optional state while keeping the active unit in the bare label', () => {
+        const u = render(field({ label: 'Initial mint', optional: true }));
+        const input = u.getByRole('textbox', { name: 'Initial mint (BTC)' });
+        const pill = u.container.querySelector('[data-optional-pill]');
+
+        expect(pill).toHaveTextContent('Optional');
+        expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(pill.id);
     });
 
     it('ignores divisibility in fiat mode', () => {

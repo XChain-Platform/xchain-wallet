@@ -17,9 +17,8 @@
 // `{ disabled: true }`. The hook surfaces that so the calling UI can
 // hide the stats strip + chart with a single condition.
 //
-// Sparkline is opt-in via `includeSparkline`. Cheap pages that just
-// want the spot price omit it; the TokenDetail chart panel sets it
-// true.
+// Sparkline and daily history are opt-in. Cheap pages that just want the
+// spot price omit them; chart panels request only the tier they need.
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
@@ -30,6 +29,7 @@ import { useMessaging } from '../useMessaging.js';
  * @property {number | null} marketCapFiat
  * @property {number | null} change24hPct
  * @property {number[] | null} sparkline
+ * @property {Array<[number, number]> | null} [historyDaily]
  * @property {number} fetchedAt
  */
 
@@ -43,11 +43,12 @@ import { useMessaging } from '../useMessaging.js';
 
 /**
  * @param {string | null} chainId
- * @param {{ includeSparkline?: boolean, fiatCurrency?: string }} [opts]
+ * @param {{ includeSparkline?: boolean, includeHistory?: boolean, fiatCurrency?: string }} [opts]
  * @returns {UseNativePriceResult}
  */
 export function useNativePrice(chainId, opts = {}) {
     const includeSparkline = Boolean(opts.includeSparkline);
+    const includeHistory = Boolean(opts.includeHistory);
     const fiatCurrency = String(opts.fiatCurrency || 'USD').toUpperCase();
     const { messaging } = useMessaging();
     const [entry, setEntry] = useState(/** @type {NativePriceEntry | null} */ (null));
@@ -77,7 +78,11 @@ export function useNativePrice(chainId, opts = {}) {
         setDisabled(false);
         setError(null);
         Promise.resolve()
-            .then(() => messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline, fiatCurrency }))
+            .then(() => {
+                const request = { chainIds: [chainId], includeSparkline, fiatCurrency };
+                if (includeHistory) request.includeHistory = true;
+                return messaging.getNativePricesRequest(request);
+            })
             .then((result) => {
                 if (cancelled) return;
                 if (result?.disabled) {
@@ -99,7 +104,7 @@ export function useNativePrice(chainId, opts = {}) {
                 if (!cancelled) setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [chainId, includeSparkline, fiatCurrency, messaging]);
+    }, [chainId, includeSparkline, includeHistory, fiatCurrency, messaging]);
 
     return { entry, loading, disabled, error };
 }

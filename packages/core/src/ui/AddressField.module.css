@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-/* AddressField: Input + a read-only address preview over the control row.
- * Picker actions belong to Input's labelAction slot, outside the text box. */
+/* AddressField combines Input with a read-only address preview over the control row. */
 
 .wrap {
     --address-control-height: var(--xc-control-h-md);
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    --address-field-action-room: calc(var(--xc-tap-min) + var(--address-control-padding-x) + var(--xc-space-1));
     --address-control-row: 2;
     position: relative;
     display: grid;
@@ -65,6 +65,12 @@
     text-align: end;
 }
 
+/* The left-to-right input sits in a right-to-left page, so the field icon
+   (at the page's inline end) is on the input's inline start. */
+:global([dir='rtl']) .hasFieldAction input {
+    padding-inline-start: var(--address-field-action-room);
+}
+
 .readOnly input {
     color: transparent;
 }
@@ -84,6 +90,10 @@
     white-space: nowrap;
     font-size: var(--address-control-font-size);
     pointer-events: none;
+}
+
+.hasFieldAction .readOnlyValue {
+    inset-inline-end: var(--address-field-action-room);
 }
 
 .readOnlyValue > span {

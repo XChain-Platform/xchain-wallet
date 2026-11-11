@@ -87,7 +87,7 @@ describe('publish forms replace file state safely', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Publish file' })).toBeDisabled();
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -102,9 +102,11 @@ describe('publish forms replace file state safely', () => {
 
         expect(title).toHaveValue('Member brief');
         expect(memo).toHaveValue('October');
-        expect(file).toHaveAccessibleDescription(/Publish a file that only holders of GATE can read/);
+        fireEvent.click(screen.getByRole('button', { name: /^About File \(up to / }));
+        expect(screen.getByRole('tooltip'))
+            .toHaveTextContent(/Publish a file that only holders of GATE can read/);
         expect(screen.getByText('12 / 120')).toBeInTheDocument();
-        expect(screen.getByText('7 / 120')).toBeInTheDocument();
+        expect(screen.getByText('7 / 250')).toBeInTheDocument();
     });
 
     it('refuses hostile gated metadata before review', async () => {
@@ -118,7 +120,7 @@ describe('publish forms replace file state safely', () => {
             target: { value: 'safe\u202eunsafe' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Title cannot contain text-direction control characters.');
@@ -242,10 +244,10 @@ describe('publish forms replace file state safely', () => {
         await act(async () => readers[0].succeed(8_080));
         await waitFor(() => expect(document.body.textContent).toContain('art.txt'));
 
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'x'.repeat(100) },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Shorten the title or memo');
     });
@@ -268,7 +270,7 @@ describe('publish forms replace file state safely', () => {
         expect(document.body.textContent).not.toContain('No reusable packs');
     });
 
-    it('sends gated publish Review straight to the confirm compose and keeps the form when it fails', async () => {
+    it('sends gated publish straight to the confirm compose and keeps the form when it fails', async () => {
         const client = messaging();
         client.composeGatedPublishForConfirm = vi.fn().mockRejectedValue(new Error('Encoder offline'));
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />, client);
@@ -281,7 +283,7 @@ describe('publish forms replace file state safely', () => {
             target: { value: 'Member draft' },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: /published on-chain forever/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert')).toBeInTheDocument();
         expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1);
@@ -317,13 +319,13 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['art'], 'cover.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: 'Cover art' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('Cover art');
+        expect(await screen.findByLabelText('Title')).toHaveValue('Cover art');
         expect(screen.getByText('cover.txt')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     });
@@ -338,14 +340,14 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['abc'], ' report.txt ', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+        fireEvent.change(screen.getByLabelText('Title'), {
             target: { value: '  Quarterly report  ' },
         });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: ' keep these spaces ' },
         });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByText('report.txt · 3 bytes · text/plain')).toBeInTheDocument();
         expect(screen.getByText('Quarterly report')).toBeInTheDocument();
@@ -353,8 +355,8 @@ describe('publish forms replace file state safely', () => {
             element?.tagName === 'DD' && element.textContent === ' keep these spaces '
         ))).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('  Quarterly report  ');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue(' keep these spaces ');
+        expect(await screen.findByLabelText('Title')).toHaveValue('  Quarterly report  ');
+        expect(screen.getByLabelText('Memo')).toHaveValue(' keep these spaces ');
         expect(document.body.textContent).toContain(' report.txt ');
     });
 
@@ -382,7 +384,7 @@ describe('publish forms replace file state safely', () => {
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  October  ' } });
         fireEvent.click(await screen.findByRole('radio', { name: new RegExp(keyHash.slice(0, 12)) }));
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         await waitFor(() => expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1));
         expect(client.composeGatedPublishForConfirm).toHaveBeenCalledWith(expect.objectContaining({
@@ -417,7 +419,7 @@ describe('publish forms replace file state safely', () => {
             target: { value: rate },
         });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
@@ -432,13 +434,13 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: 'm'.repeat(251) },
         });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review publish' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 bytes');
+        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 characters');
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -462,7 +464,7 @@ describe('publish forms replace file state safely', () => {
         });
         await act(async () => readers[0].succeed(3));
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('no longer owns GATE');
         expect(client.composeGatedPublishForConfirm).not.toHaveBeenCalled();
@@ -486,11 +488,11 @@ describe('publish forms replace file state safely', () => {
         });
         await act(async () => readers[0].succeed(3));
         fireEvent.change(screen.getByLabelText('Memo'), {
-            target: { value: '😀'.repeat(63) },
+            target: { value: '😀'.repeat(126) },
         });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 bytes');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 characters');
 
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
@@ -499,7 +501,7 @@ describe('publish forms replace file state safely', () => {
         fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
             target: { value: '0' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
         expect(await screen.findAllByText(/must be greater than zero/)).not.toHaveLength(0);
         expect(client.getTokenInfo).not.toHaveBeenCalled();
     });
@@ -528,7 +530,7 @@ describe('publish forms replace file state safely', () => {
         await act(async () => readers[0].succeed(3));
         fireEvent.change(threshold, { target: { value: '1.234' } });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('at most 2 decimal places');
     });
@@ -559,7 +561,7 @@ describe('publish forms replace file state safely', () => {
         await act(async () => readers[0].succeed(3));
         fireEvent.change(threshold, { target: { value: '1.25' } });
         fireEvent.click(screen.getByRole('checkbox'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('not active on this network right now');
         expect(client.getIndexerWatermark).toHaveBeenCalledTimes(2);

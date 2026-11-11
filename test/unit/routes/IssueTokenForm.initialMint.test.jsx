@@ -69,22 +69,30 @@ async function fill({ supply, initialMint, lockSupply, divisible }) {
     fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'MINTABLE' },
     });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
+    // Divisible first: every amount edit is checked against the precision it sets.
+    if (!divisible) {
+        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
+    }
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: supply } });
     if (initialMint !== undefined) {
-        fireEvent.change(screen.getByLabelText('Initial mint (optional)'), {
+        fireEvent.change(screen.getByLabelText('Initial mint'), {
             target: { value: initialMint },
         });
     }
     if (lockSupply) {
-        fireEvent.click(screen.getByLabelText('Lock supply + minting (irreversible)'));
-    }
-    if (divisible) {
-        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
+        fireEvent.click(screen.getByLabelText('Minting'));
+        fireEvent.click(screen.getByLabelText('Mint supply'));
     }
 }
 
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.submit(screen.getByRole('form', { name: 'Issue token' }));
+}
+
+function field(label) {
+    return label === 'Max supply'
+        ? screen.getByRole('textbox', { name: label })
+        : screen.getByLabelText(label);
 }
 
 // The ISSUE params as they reach the host-side compose.
@@ -100,13 +108,13 @@ describe('IssueTokenForm initial mint', () => {
     it('refuses a hostile description before compose', async () => {
         mountForm();
         await fill({ supply: '10' });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Token description'), {
             target: { value: 'safe\u200bunsafe' },
         });
 
         await submit();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain zero-width characters.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Description cannot contain zero-width characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -127,7 +135,7 @@ describe('IssueTokenForm initial mint', () => {
         resolveCurrent({ canonicalTick: null, creator: null, totalSupply: null });
         resolveOld({ canonicalTick: 'OLDNAME', creator: 'bc1qcreator', totalSupply: '10' });
         await waitFor(() => expect(ticker).not.toHaveAttribute('aria-invalid', 'true'));
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
         await submit();
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
@@ -171,22 +179,21 @@ describe('IssueTokenForm initial mint', () => {
     });
 
     it.each([
-        ['Supply', 'Supply must be a whole number for an indivisible token.'],
-        ['Initial mint (optional)', 'Initial mint must be a whole number for an indivisible token.'],
-        ['Max mint per transaction (optional)', 'Max mint per transaction must be a whole number for an indivisible token.'],
+        ['Max supply', 'Max supply must be a whole number for an indivisible token.'],
+        ['Initial mint', 'Initial mint must be a whole number for an indivisible token.'],
+        ['Max per transaction', 'Max mint per transaction must be a whole number for an indivisible token.'],
     ])('keeps a fractional %s intact when divisibility is turned off and refuses it', async (label, message) => {
         mountForm();
-        await fill({ supply: label === 'Supply' ? '1.5' : '10' });
+        await fill({ supply: label === 'Max supply' ? '1.5' : '10', divisible: true });
         const divisible = screen.getByLabelText('Divisible (8 decimal places)');
-        fireEvent.click(divisible);
-        if (label !== 'Supply') {
-            fireEvent.change(screen.getByLabelText(label), { target: { value: '1.5' } });
+        if (label !== 'Max supply') {
+            fireEvent.change(field(label), { target: { value: '1.5' } });
         }
         fireEvent.click(divisible);
 
-        expect(screen.getByLabelText(label)).toHaveValue('1.5');
+        expect(field(label)).toHaveValue('1.5');
         await submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -214,7 +221,7 @@ describe('IssueTokenForm initial mint', () => {
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
-        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Dogecoin/i }));
 
         await waitFor(() => expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
             'aria-valuetext',
@@ -235,13 +242,17 @@ describe('IssueTokenForm initial mint', () => {
         ticker.focus();
 
         await user.tab();
-        const supply = screen.getByLabelText('Supply');
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Supply Optional$/ }));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Max supply' }));
+        await user.tab();
+        const supply = screen.getByRole('textbox', { name: 'Max supply' });
         expect(document.activeElement).toBe(supply);
         fireEvent.change(ticker, { target: { value: 'KEYS' } });
-        fireEvent.change(supply, { target: { value: 'invalid' } });
+        fireEvent.change(supply, { target: { value: 'abc' } });
         await user.keyboard('{Enter}');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Supply must be a positive number.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Max supply must be zero or a positive number.');
         expect(composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(supply, { target: { value: '1000' } });
@@ -257,29 +268,29 @@ describe('IssueTokenForm initial mint', () => {
     });
 
     it.each([
-        ['Supply', '1,000', 'Supply must be a positive number.'],
-        ['Initial mint (optional)', 'Infinity', 'Initial mint must be zero or a positive number.'],
-        ['Max mint per transaction (optional)', 'five', 'Max mint per transaction must be a positive number'],
+        ['Max supply', 'abc', 'Max supply must be zero or a positive number.'],
+        ['Initial mint', 'Infinity', 'Initial mint must be zero or a positive number.'],
+        ['Max per transaction', 'five', 'Max mint per transaction must be a positive number'],
     ])('refuses malformed numeric text in %s before composing', async (label, value, message) => {
         mountForm();
         await fill({ supply: '5000' });
-        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+        fireEvent.change(field(label), { target: { value } });
         await submit();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it.each([
-        'Transfer ownership to (optional)',
-        'Send the initial mint to (optional)',
+        'New owner address',
+        'Send initial mint to',
     ])('refuses an invalid %s address before composing', async (label) => {
         mountForm();
         await fill({ supply: '5000' });
-        fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
+        fireEvent.change(field(label), { target: { value: 'not-an-address' } });
         await submit();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for the active network/i);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(/not valid for the active network/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -304,6 +315,16 @@ describe('IssueTokenForm initial mint', () => {
         expect(params.MINT_SUPPLY).toBe('5000');
     });
 
+    it('mints an initial supply without declaring a cap', async () => {
+        mountForm();
+        await fill({ supply: '', initialMint: '1000' });
+        await submit();
+
+        const params = await composedParams();
+        expect(params.MAX_SUPPLY).toBeUndefined();
+        expect(params.MINT_SUPPLY).toBe('1000');
+    });
+
     it('omits MINT_SUPPLY entirely for a fair-mint (initial mint 0)', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '0' });
@@ -320,7 +341,7 @@ describe('IssueTokenForm initial mint', () => {
         await fill({ supply: '5000', initialMint: '6000' });
         await submit();
 
-        await screen.findByText('Initial mint cannot be more than the supply.');
+        await screen.findByText('Initial mint cannot be more than the max supply.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -333,27 +354,26 @@ describe('IssueTokenForm initial mint', () => {
         });
         await submit();
 
-        await screen.findByText('Initial mint cannot be more than the supply.');
+        await screen.findByText('Initial mint cannot be more than the max supply.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('refuses a 0 initial mint that is locked out of ever minting', async () => {
+    it('composes the public and owner mint locks as separate flags', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '0', lockSupply: true });
         await submit();
 
-        await screen.findByText(
-            'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
-        );
-        expect(composeForConfirm).not.toHaveBeenCalled();
+        const params = await composedParams();
+        expect(params.LOCK_MINT).toBe('1');
+        expect(params.LOCK_MINT_SUPPLY).toBe('1');
+        expect(params.LOCK_MAX_SUPPLY).toBeUndefined();
     });
 
-    it('warns that locking minting strands the unminted remainder', async () => {
+    it('shows no lock footnote beneath the switches', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '1000', lockSupply: true });
 
-        // 5000 cap minus a 1000 initial mint: 4000 would be stranded.
-        await screen.findByText(/4000 left under the cap can never be minted/);
+        expect(screen.queryByText(/left under the cap can never be minted/)).toBeNull();
     });
 
     it('shows one atomic unit of headroom at a large supply', async () => {

@@ -1,15 +1,23 @@
-.networkField {
-    margin-block-end: var(--xc-space-3);
-}
-
 .signatureField {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-.signatureLabel {
+.signatureLabelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
     margin-block-end: var(--xc-label-gap);
+}
+
+.signatureHelp {
+    flex: none;
+}
+
+.signatureLabel {
+    min-width: 0;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 500;
@@ -36,7 +44,7 @@
 }
 
 .signatureText {
-    padding-inline-end: 8rem;
+    padding-inline-end: calc(var(--xc-tap-min) + var(--xc-space-3));
 }
 
 .signaturePlaceholder {

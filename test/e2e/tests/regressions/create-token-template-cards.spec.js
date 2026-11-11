@@ -61,13 +61,28 @@ async function cardMetrics(page) {
         await expect(title, `${name} title is not visible`).toBeVisible();
 
         metrics.push(await card.evaluate((element, titleText) => {
-            const titleElement = [...element.querySelectorAll('span')]
-                .find((candidate) => candidate.textContent === titleText);
-            if (!titleElement) throw new Error(`No title element for ${titleText}`);
+            // The title is the icon plus the name; the row's subtitle sits after its title line.
+            const titleElement = element.querySelector('[data-template-title]');
+            if (!titleElement || titleElement.textContent.trim() !== titleText) {
+                throw new Error(`No title element for ${titleText}`);
+            }
 
             const cardBox = element.getBoundingClientRect();
             const titleBox = titleElement.getBoundingClientRect();
-            const style = getComputedStyle(element);
+            const iconElement = titleElement.querySelector(':scope > span[aria-hidden="true"]');
+            const subtitleElement = titleElement.parentElement?.nextElementSibling;
+            const nameNode = [...titleElement.childNodes]
+                .find((node) => node.nodeType === Node.TEXT_NODE
+                    && node.textContent.trim() === titleText);
+            if (!iconElement) throw new Error(`No icon element for ${titleText}`);
+            if (!subtitleElement) throw new Error(`No description element for ${titleText}`);
+            if (!nameNode) throw new Error(`No name text node for ${titleText}`);
+
+            const nameRange = document.createRange();
+            nameRange.selectNodeContents(nameNode);
+            const nameBox = nameRange.getBoundingClientRect();
+            const iconBox = iconElement.getBoundingClientRect();
+            const subtitleBox = subtitleElement.getBoundingClientRect();
             const titleStyle = getComputedStyle(titleElement);
             return {
                 name: titleText,
@@ -75,13 +90,13 @@ async function cardMetrics(page) {
                 height: cardBox.height,
                 titleInset: titleBox.left - cardBox.left,
                 titleColor: titleStyle.color,
-                backgroundColor: style.backgroundColor,
-                borders: ['Top', 'Right', 'Bottom', 'Left'].map((side) => ({
-                    side: side.toLowerCase(),
-                    width: parseFloat(style[`border${side}Width`]),
-                    style: style[`border${side}Style`],
-                    color: style[`border${side}Color`],
-                })),
+                nameLineCount: nameRange.getClientRects().length,
+                iconNameCenterOffset: Math.abs(
+                    (iconBox.top + iconBox.height / 2) - (nameBox.top + nameBox.height / 2),
+                ),
+                descriptionInset: subtitleBox.left - cardBox.left,
+                iconInset: iconBox.left - cardBox.left,
+                descriptionGap: subtitleBox.top - titleBox.bottom,
             };
         }, name));
     }
@@ -128,17 +143,29 @@ test('Create token template cards retain their visual hierarchy', async ({ page 
             const { linkColor, metrics } = await cardMetrics(page);
             const diagnostic = JSON.stringify({ linkColor, metrics }, null, 2);
 
-            const borderFailures = metrics.flatMap((metric) => metric.borders
-                .filter((border) => border.width <= 0
-                    || border.style === 'none'
-                    || border.style === 'hidden'
-                    || border.color === 'transparent'
-                    || border.color === 'rgba(0, 0, 0, 0)'
-                    || border.color === metric.backgroundColor)
-                .map((border) => `${metric.name} ${border.side}`));
+            const wrappedNames = metrics
+                .filter(({ nameLineCount }) => nameLineCount !== 1)
+                .map(({ name }) => name);
             expect(
-                borderFailures,
-                `${viewport.width}px: every card edge must have a visible border\n${diagnostic}`,
+                wrappedNames,
+                `${viewport.width}px: every template name must stay on one line with its icon\n${diagnostic}`,
+            ).toEqual([]);
+
+            const iconNameOffsets = metrics.map(({ iconNameCenterOffset }) => iconNameCenterOffset);
+            expect(
+                Math.max(...iconNameOffsets),
+                `${viewport.width}px: template icons and names do not share a line\n${diagnostic}`,
+            ).toBeLessThanOrEqual(MAX_OFFSET_PX);
+
+            const descriptionAlignmentFailures = metrics
+                .filter(({ descriptionInset, iconInset, descriptionGap }) => (
+                    Math.abs(descriptionInset - iconInset) > MAX_OFFSET_PX
+                    || descriptionGap < -MAX_OFFSET_PX
+                ))
+                .map(({ name }) => name);
+            expect(
+                descriptionAlignmentFailures,
+                `${viewport.width}px: descriptions must sit under the title and align with the icon\n${diagnostic}`,
             ).toEqual([]);
 
             const titleInsets = metrics.map(({ titleInset }) => titleInset);
@@ -156,20 +183,10 @@ test('Create token template cards retain their visual hierarchy', async ({ page 
             ).toEqual([]);
 
             const rows = rowsFor(metrics);
-            for (const row of rows) {
-                const heights = row.map(({ height }) => height);
-                expect(
-                    Math.max(...heights) - Math.min(...heights),
-                    `${viewport.width}px: cards in a row have unequal heights\n${diagnostic}`,
-                ).toBeLessThanOrEqual(MAX_OFFSET_PX);
-            }
-
-            if (viewport.width === 1280) {
-                expect(
-                    rows.some((row) => row.length > 1),
-                    `1280px: no multi-card row was rendered\n${diagnostic}`,
-                ).toBe(true);
-            }
+            expect(
+                rows.every((row) => row.length === 1),
+                `${viewport.width}px: templates must render as one list row each\n${diagnostic}`,
+            ).toBe(true);
         });
     }
 });

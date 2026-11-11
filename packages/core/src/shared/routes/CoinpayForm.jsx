@@ -34,8 +34,10 @@ import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligatio
 import { classifyObligation } from '../../market/obligationStatus.js';
 import { hasAttemptedCoinpay } from '../../market/coinpayPending.js';
 import styles from './IssueTokenForm.module.css';
+import coinpayStyles from './CoinpayForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -512,7 +514,7 @@ function ScopedCoinpayForm({
                     Payment broadcast successfully.
                 </StatusMessage>
                 {txid ? (
-                    <p style={{ margin: '0 0 0.5rem' }}>
+                    <p className={coinpayStyles.txid}>
                         Transaction: <code>{txid}</code>
                     </p>
                 ) : null}
@@ -541,12 +543,13 @@ function ScopedCoinpayForm({
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={ownerLane.isWatcherMode ? <Icon.SignIcon /> : <Icon.TokenIcon />}
                         loading={stage === 'submitting' || ownerLane.composing}
                     >
                         {ownerLane.isWatcherMode
                             ? 'Create unsigned transaction'
-                            : 'Continue to confirmation'}
+                            : `Pay ${amountLabel}`}
                     </Button>
                 )}
             >
@@ -554,7 +557,7 @@ function ScopedCoinpayForm({
                     {descriptor ? (
                         <DetailRow
                             label="Network"
-                            value={<ChainBadge descriptor={descriptor} size="sm" />}
+                            value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />}
                         />
                     ) : null}
                     <DetailRow
@@ -583,9 +586,7 @@ function ScopedCoinpayForm({
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : null}
             </FormPage>,
@@ -616,11 +617,11 @@ function ScopedCoinpayForm({
             {obligations.length > 0 ? (
                 <>
                     <SectionHeader title="Payments due" />
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem' }}>
+                    <ul className={coinpayStyles.dueList}>
                         {obligations.map((row) => {
-                            const isSelected = selected
+                            const isSelected = Boolean(selected
                                 && selected.chainId === row.chainId
-                                && String(selected.obligation.action_index) === String(row.obligation.action_index);
+                                && String(selected.obligation.action_index) === String(row.obligation.action_index));
                             const d = chainRegistry.get(row.chainId);
                             const t = d ? PROTOCOL_COIN_TICKER[d.coin] : '';
                             // Same canonical reader the confirm/review stages use
@@ -637,43 +638,30 @@ function ScopedCoinpayForm({
                                     {/* The native row button keeps the whole obligation card as one target. */}
                                     <button
                                         type="button"
+                                        className={coinpayStyles.dueRow}
                                         onClick={() => setSelected(row)}
                                         aria-pressed={isSelected}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            textAlign: 'left',
-                                            padding: '0.5rem',
-                                            marginBottom: '0.25rem',
-                                            border: isSelected
-                                                ? '2px solid var(--xc-accent-primary)'
-                                                : '1px solid var(--xc-border)',
-                                            borderRadius: '4px',
-                                            background: 'transparent',
-                                            cursor: 'pointer',
-                                            color: 'inherit',
-                                        }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                            <span style={{ fontWeight: 600 }}>
+                                        <div className={coinpayStyles.dueTitle}>
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
+                                            <span>
                                                 Matched order #{String(row.obligation.action_index)}
                                             </span>
                                         </div>
-                                        <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                                        <div className={coinpayStyles.dueAmount}>
                                             Pay {rowAmountLabel}{' '}
                                             <span className={styles.inlineDirectionalIcon}>
                                                 <Icon.ForwardIcon />
                                             </span>{' '}
                                             <AddressText address={row.obligation.payee_address} />
                                         </div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
+                                        <div className={coinpayStyles.dueMeta}>
                                             From <AddressText address={row.address} />
                                             {coinpayExpiryText(row.obligation.expiration) ? (
                                                 <> · payment deadline {coinpayExpiryText(row.obligation.expiration)}</>
                                             ) : null}
                                             {classifyObligation(row.obligation.expiration).state === 'expired' ? (
-                                                <strong style={{ color: 'var(--xc-danger-fg)' }}> · EXPIRED, do not pay</strong>
+                                                <strong className={coinpayStyles.dueExpired}> · EXPIRED, do not pay</strong>
                                             ) : null}
                                         </div>
                                     </button>
@@ -699,11 +687,12 @@ function ScopedCoinpayForm({
                     actions={(
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.TokenIcon />}
                             disabled={!selected || !summary || nativeBalance.loading
                                 || Boolean(validationError) || insufficientBalance}
                         >
-                            Review
+                            Pay order
                         </Button>
                     )}
                 >
@@ -712,7 +701,7 @@ function ScopedCoinpayForm({
                             <>
                                 <dt className={styles.detailsLabel}>Network</dt>
                                 <dd className={styles.detailsValue}>
-                                    <ChainBadge descriptor={descriptor} size="sm" />
+                                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
                                 </dd>
                             </>
                         ) : null}
@@ -720,7 +709,7 @@ function ScopedCoinpayForm({
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>
                         </dd>
-                        <dt className={styles.detailsLabel}>Paying from</dt>
+                        <dt className={styles.detailsLabel}>From</dt>
                         <dd className={styles.detailsValue}>
                             <AddressText address={selected.address} />
                         </dd>
@@ -744,6 +733,7 @@ function ScopedCoinpayForm({
 
                     {feeTiers ? (
                         <FeeSelector
+                            chainId={selected.chainId}
                             label="Network fee"
                             coinTicker={coinTicker}
                             tiers={feeTiers}

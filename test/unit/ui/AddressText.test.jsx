@@ -3,13 +3,25 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressText, truncateAddress } from '../../../packages/core/src/ui/AddressText.jsx';
 
 const ADDRESS = 'bc1q1234567890abcdefghijklmnopqrstuvwxyz';
 const SHORT_ADDRESS = 'bc1qabcdefghijklmnopqrstuv';
+
+afterEach(() => vi.restoreAllMocks());
+
+function mockAddressMeasurements() {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+        return Number(this.dataset.fitWidth || 0);
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+        const width = this.hasAttribute('data-address-measure') ? this.textContent.length * 10 : 0;
+        return { width, height: 0, top: 0, right: width, bottom: 0, left: 0, x: 0, y: 0, toJSON() {} };
+    });
+}
 
 describe('truncateAddress', () => {
     it('keeps short values intact', () => {
@@ -40,6 +52,28 @@ describe('<AddressText>', () => {
 
         fireEvent.blur(address);
         expect(address).toHaveTextContent('bc1q12…uvwxyz');
+    });
+
+    it('shows the whole address when the containing box is wide enough', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="1000"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(ADDRESS);
+    });
+
+    it('keeps the longest equal ends that fit a narrow box', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="130"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 6)}…${ADDRESS.slice(-6)}`);
+    });
+
+    it('uses the standard truncation when the containing box has no width', () => {
+        mockAddressMeasurements();
+        render(<div data-fit-width="0"><AddressText address={ADDRESS} fit /></div>);
+
+        expect(screen.getByLabelText(ADDRESS)).toHaveTextContent(truncateAddress(ADDRESS));
     });
 });
 

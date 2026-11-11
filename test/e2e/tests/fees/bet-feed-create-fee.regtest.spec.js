@@ -186,12 +186,12 @@ async function composeMarket(page, { label, daysOut }) {
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-    await main.getByLabel('What is being bet on').fill(label);
-    await main.getByLabel('Outcome 0').fill('Yes');
-    await main.getByLabel('Outcome 1').fill('No');
+    await main.getByLabel('What is being bet on', { exact: true }).fill(label);
+    await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
+    await main.getByLabel('Outcome 1', { exact: true }).fill('No');
 
     const now = await chainTime();
-    await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the
@@ -201,7 +201,7 @@ async function composeMarket(page, { label, daysOut }) {
 
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Review market', exact: true }).click();
+    await main.getByRole('button', { name: 'Open market', exact: true }).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -239,7 +239,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address').inputValue();
+            oracle = await main.getByLabel('Your oracle address', { exact: true }).inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

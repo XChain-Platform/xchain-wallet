@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -46,6 +46,12 @@ const stripBidiControls = (value) => value.replace(BIDI_CONTROLS, '');
 const isVersionConflict = (err) => /changed since this screen loaded/i.test(String(err?.message || err || ''));
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Field help for the contact forms (U57): written for these fields, shown in
+// the label's help tip instead of a hint line under the field.
+const CONTACT_NAME_HELP = 'The name shown in place of this contact\'s addresses across the inbox and history.';
+const CONTACT_ADDRESS_HELP = 'Any address on a supported network. The network is read from the address itself; if it cannot be, you choose it below.';
+const CONTACT_NOTES_HELP = 'Your own notes about this contact, for example how you know them. Search in Contacts matches them too.';
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
 
 function contactsSortStorageKey(walletId) {
@@ -738,13 +744,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
-                        Save
+                        Create contact
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
+                <Input label="Name" help={CONTACT_NAME_HELP} value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <AddressField
                     label="Address"
+                    help={CONTACT_ADDRESS_HELP}
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
@@ -762,6 +769,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
+                    help={CONTACT_NOTES_HELP}
+                    optional
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                 />
@@ -782,14 +791,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
-                        Save
+                        Update contact
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
+                <Input label="Name" help={CONTACT_NAME_HELP} value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
+                    help={CONTACT_NOTES_HELP}
+                    optional
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                 />
@@ -962,6 +973,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
                             <AddressField
                                 label="Address"
+                                help={CONTACT_ADDRESS_HELP}
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 error={addAddrError}
@@ -977,7 +989,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             />
                             <div className={picker.modalActions}>
                                 <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
-                                <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
+                                <Button type="button" variant="success" loading={addAddrSaving} onClick={handleAddAddress}>Add address</Button>
                             </div>
                         </div>
                     </div>
@@ -1016,7 +1028,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             {typeof onOpenBackup === 'function' ? (
                                 <>
                                     {' '}
-                                    <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
+                                    <Button type="button" variant="link" size="sm" onClick={() => setNudgeDismissed(true)}>
                                         Not now
                                     </Button>
                                 </>
@@ -1032,6 +1044,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         value={networkFilter}
                         onChange={setNetworkFilter}
                         announceNetworkCount
+                        iconOnly
                     />
                     <Select
                         value={sortBy}
@@ -1204,21 +1217,28 @@ function NetworkReadout({ address, chain, onPick, style }) {
             </div>
         );
     }
-    const choices = NETWORK_OPTIONS.filter((n) => decoded.candidates.includes(n.value));
+    // U59: the standard Network field opens the network picker, offering only
+    // the networks this address could belong to. It stays empty until the
+    // user picks; the pick is stored as the coin family.
+    const choices = NETWORK_OPTIONS
+        .filter((n) => decoded.candidates.includes(n.value))
+        .map((n) => chainIdFor(n.value, trimmed))
+        .filter(Boolean);
     return (
-        <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
-            <label htmlFor="contact-network-pick">Network: cannot be read from this address. Which is it?</label>
-            <Select
-                id="contact-network-pick"
-                aria-label="Network for this address"
+        <div style={{ ...style, display: 'grid', gap: 'var(--xc-space-2)' }}>
+            <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                The network cannot be read from this address. Which is it?
+            </p>
+            <NetworkField
+                label="Network"
                 value=""
-                onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
-            >
-                {/* A native option remains because Select renders a native listbox. */}
-                <option value="">Choose a network</option>
-                {/* Native options remain because Select renders a native listbox. */}
-                {choices.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-            </Select>
+                chainIds={choices}
+                chainRegistry={chainRegistry}
+                onChange={(chainId) => {
+                    const family = coinFamilyFromChainId(chainId);
+                    if (family) onPick(family);
+                }}
+            />
         </div>
     );
 }

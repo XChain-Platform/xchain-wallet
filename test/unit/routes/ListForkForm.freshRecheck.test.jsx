@@ -101,8 +101,8 @@ function mountFork({ name, listRead = 'available', walletMode = 'watcher', getAc
 }
 
 async function openFirstReview() {
-    fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 }
 
 afterEach(() => {

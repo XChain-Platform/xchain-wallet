@@ -40,6 +40,7 @@ function makeWatcher(over = {}) {
         || vi.fn(async ({ chainIds }) => ({
             prices: Object.fromEntries(chainIds.map((c) => [c, { priceFiat: state.price }])),
         }));
+    const getTokenPrices = over.getTokenPrices;
     const notify = over.notify || vi.fn(async () => {});
     const markTriggered = over.markTriggered
         || vi.fn(async (id) => {
@@ -50,6 +51,7 @@ function makeWatcher(over = {}) {
     const getSettings = vi.fn(async () => settings);
     const watcher = new PriceAlertWatcher({
         getNativePrices,
+        getTokenPrices,
         listArmedAlerts,
         getSettings,
         notify,
@@ -58,7 +60,7 @@ function makeWatcher(over = {}) {
         now: over.now,
         recordAlert: over.recordAlert,
     });
-    return { watcher, getNativePrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings, state };
+    return { watcher, getNativePrices, getTokenPrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings, state };
 }
 
 describe('PriceAlertWatcher', () => {
@@ -85,6 +87,72 @@ describe('PriceAlertWatcher', () => {
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(1);
         expect(notify.mock.calls[0][0].body).toContain('fell below');
+    });
+
+    it('fires a token alert when its token price crosses the threshold', async () => {
+        const getTokenPrices = vi.fn(async () => ({
+            prices: { 'bitcoin-mainnet::XCHAIN': { priceFiat: 1.25 } },
+        }));
+        const { watcher, getNativePrices, notify, markTriggered } = makeWatcher({
+            alerts: [armedAlert({ tick: 'XCHAIN', targetFiat: 1.2 })],
+            getTokenPrices,
+        });
+
+        await watcher.pollOnce();
+
+        expect(getNativePrices).not.toHaveBeenCalled();
+        expect(getTokenPrices).toHaveBeenCalledWith({
+            items: [{ chainId: 'bitcoin-mainnet', tick: 'XCHAIN' }],
+            fiatCurrency: 'usd',
+        });
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            body: 'XCHAIN rose above $1.2.',
+            data: expect.objectContaining({ tick: 'XCHAIN' }),
+        }));
+        expect(markTriggered).toHaveBeenCalledWith(
+            'a1',
+            'bitcoin-mainnet::XCHAIN::above::1.2::usd',
+        );
+    });
+
+    it('leaves a token alert armed when no token price source exists', async () => {
+        const { watcher, getNativePrices, notify, markTriggered } = makeWatcher({
+            alerts: [armedAlert({ tick: 'XCHAIN', targetFiat: 1.2 })],
+        });
+
+        await watcher.pollOnce();
+
+        expect(getNativePrices).not.toHaveBeenCalled();
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
+    });
+
+    it('does not fire a token alert from a stale token price', async () => {
+        const now = 1_000_000;
+        const getTokenPrices = vi.fn(async () => ({
+            prices: { 'bitcoin-mainnet::XCHAIN': { priceFiat: 1.25, fetchedAt: now - 300_001 } },
+        }));
+        const { watcher, notify, markTriggered } = makeWatcher({
+            alerts: [armedAlert({ tick: 'XCHAIN', targetFiat: 1.2 })],
+            getTokenPrices,
+            now: () => now,
+        });
+
+        await watcher.pollOnce();
+
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
+    });
+
+    it('continues pricing coin alerts through the native source', async () => {
+        const getTokenPrices = vi.fn();
+        const { watcher, getNativePrices, notify } = makeWatcher({ getTokenPrices, price: 71000 });
+
+        await watcher.pollOnce();
+
+        expect(getNativePrices).toHaveBeenCalledWith({ chainIds: ['bitcoin-mainnet'], fiatCurrency: 'usd' });
+        expect(getTokenPrices).not.toHaveBeenCalled();
+        expect(notify).toHaveBeenCalledTimes(1);
     });
 
     it('does NOT fire when the threshold is not crossed', async () => {

@@ -93,7 +93,7 @@ for (const viewport of VIEWPORTS) {
             await expectHeading(page, 'Messaging');
             await expectSameLineHeights('inbox filter row', [
                 main.getByRole('searchbox', { name: 'Search conversations' }),
-                main.getByRole('button', { name: 'Filter by network' }),
+                main.getByRole('button', { name: /^Filter by network/ }),
             ]);
             await expectNoHorizontalOverflow(page, `${viewport.name} inbox`);
         });
@@ -126,26 +126,22 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByText(/Recipient public key found/)).toBeVisible({ timeout: 15_000 });
             await expect(main.getByRole('button', { name: /^Encryption: Standard \(ECIES\)/ }))
                 .toBeVisible();
-            await expect(main.getByRole('button', { name: /^Delivery network: Dogecoin/ }))
+            await expect(main.getByRole('button', { name: /^Network: Dogecoin/ }))
                 .toBeVisible();
 
-            // The address book opens from an icon button on the field's label
-            // row (U36): beside the "Address" label at the field's end edge,
-            // never inside the text box and never a full-width button.
+            // The address book opens from a plain icon inside the field at its
+            // trailing edge (U53, superseding U36): never on the label row and
+            // never a full-width button.
             const addressBox = await main.getByLabel('Address', { exact: true }).boundingBox();
-            const labelBox = await main.locator('label', { hasText: /^Address$/ }).first().boundingBox();
             const bookBox = await main.getByRole('button', { name: 'Open address book' }).boundingBox();
-            expect(addressBox && labelBox && bookBox, 'compose address row: controls have no rendered box').toBeTruthy();
-            expect(bookBox.y + bookBox.height, 'compose address row: address book button sits inside or below the field')
-                .toBeLessThanOrEqual(addressBox.y + 1);
-            expect(
-                Math.abs((bookBox.y + bookBox.height / 2) - (labelBox.y + labelBox.height / 2)),
-                'compose address row: address book button is off the label row',
-            ).toBeLessThanOrEqual(bookBox.height / 2);
-            expect(
-                Math.abs((bookBox.x + bookBox.width) - (addressBox.x + addressBox.width)),
-                'compose address row: address book button is not at the field end',
-            ).toBeLessThanOrEqual(1);
+            expect(addressBox && bookBox, 'compose address row: controls have no rendered box').toBeTruthy();
+            expect(bookBox.y, 'compose address row: address book button sits above the field').toBeGreaterThanOrEqual(addressBox.y - 1);
+            expect(bookBox.y + bookBox.height, 'compose address row: address book button sits below the field')
+                .toBeLessThanOrEqual(addressBox.y + addressBox.height + 1);
+            expect(bookBox.x + bookBox.width, 'compose address row: address book button runs past the field end')
+                .toBeLessThanOrEqual(addressBox.x + addressBox.width + 1);
+            expect(bookBox.x, 'compose address row: address book button is not at the trailing edge')
+                .toBeGreaterThan(addressBox.x + addressBox.width / 2);
             expect(bookBox.width, 'compose address row: address book button is not an icon button')
                 .toBeLessThan(addressBox.width / 2);
             const feeAmount = main.getByRole('button', { name: 'Edit exact fee amount' });

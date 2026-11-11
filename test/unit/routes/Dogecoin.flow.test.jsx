@@ -190,8 +190,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         expect(await screen.findByTestId('confirm-fee')).toHaveTextContent('0.25 DOGE');
     });
 
-    it('composes a Dogecoin mint with no native protocol-fee output', async () => {
-        // A compose without payFeeInNativeCoin returns no native-fee quote.
+    it('composes a Dogecoin mint without a protocol fee flag or fee control', async () => {
         const composeForConfirm = vi.fn().mockResolvedValue({
             psbt: PSBT,
             encoding: 'psbt',
@@ -251,7 +250,6 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             chainId: CHAIN_ID,
             encoderOpts: { feePerKb: 100_000_000 },
         })));
-        expect(composeForConfirm.mock.calls[0][0].encoderOpts).not.toHaveProperty('payFeeInNativeCoin');
         await screen.findByTestId('confirm-approve');
         expect(screen.queryByTestId('confirm-native-protocol-fee')).toBeNull();
 

@@ -28,6 +28,7 @@ import {
     AddressText,
     CopyButton,
     FormPage,
+    Icon,
     StatusMessage,
     ListPage,
 } from '@xchain-wallet/core/ui';
@@ -275,16 +276,17 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                 status={editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
                 actions={(
                     <>
-                        <Button type="button" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
-                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>Save changes</Button>
+                        <Button type="button" variant="secondary" icon={<Icon.XIcon />} onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+                        <Button type="submit" variant="primary" icon={<Icon.PencilIcon />} loading={busy} disabled={busy}>Update policy</Button>
                     </>
                 )}
             >
-                <details>
-                    <summary>What changes?</summary>
-                    <p className={styles.hint}>Only the policy rules change. The account address and keys stay the same.</p>
-                </details>
-                <Input label="Account name" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input
+                    label="Account name"
+                    help="A label for this agent account that only this wallet shows. Updating changes the name and the policy rules below; the account address and keys stay the same."
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                />
                 <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
             </FormPage>,
         );
@@ -337,8 +339,11 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
 
             <div className={styles.actions}>
                 <Button variant="secondary" onClick={startEdit} disabled={busy}>Edit policy</Button>
+                {/* Enable is the forward action of a disabled account and the one
+                    green button; Disable stays quiet (U63). */}
                 <Button
-                    variant={account.enabled ? 'ghost' : 'primary'}
+                    variant={account.enabled ? 'ghost' : 'success'}
+                    icon={account.enabled ? <Icon.PauseIcon /> : <Icon.PlayIcon />}
                     onClick={toggleEnabled}
                     loading={busy}
                     disabled={busy}

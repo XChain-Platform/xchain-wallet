@@ -18,7 +18,7 @@
 
 import React from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { PortfolioChart } from '../../packages/core/src/shared/components/PortfolioChart.jsx';
 import { TotalBalanceHero } from '../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -31,6 +31,10 @@ const PRICE_HISTORY_REQUEST = {
     fiatCurrency: 'USD',
 };
 const SPARKLINE = Array.from({ length: 168 }, (_, index) => 70_000 + index * 50);
+const HISTORY_DAILY = Array.from({ length: 366 }, (_, index) => [
+    Date.now() - (365 - index) * 86_400_000,
+    60_000 + index * 50,
+]);
 const PRICE_ENTRY = {
     priceFiat: 80_000,
     marketCapFiat: 1_500_000_000_000,
@@ -50,8 +54,8 @@ const ROWS = [{
 function createMessaging() {
     return {
         getSettings: vi.fn(async () => ({ fiatCurrency: 'USD' })),
-        getNativePricesRequest: vi.fn(async () => ({
-            prices: { [CHAIN_ID]: PRICE_ENTRY },
+        getNativePricesRequest: vi.fn(async (request) => ({
+            prices: { [CHAIN_ID]: request.includeHistory ? { historyDaily: HISTORY_DAILY } : PRICE_ENTRY },
         })),
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [] })),
         listPriceAlertsForWallet: vi.fn(async () => []),
@@ -142,7 +146,7 @@ describe('regression/price-change-periods', () => {
         expect.soft(renderedLabel(detailChange.parentElement)).toMatch(/\b24h\b/i);
     });
 
-    it('[REGRESSION P1] draws the same recorded price history on Home and TokenDetail', async () => {
+    it('[REGRESSION P1] draws recorded hourly and daily price history on Home and TokenDetail', async () => {
         const messaging = createMessaging();
         const home = renderWithMessaging(
             messaging,
@@ -152,6 +156,9 @@ describe('regression/price-change-periods', () => {
         expect(await screen.findByRole('img', { name: /^Portfolio performance chart\. Range 1W\./ }))
             .toBeInTheDocument();
         expect(screen.queryByText(/No price history/)).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+        expect(await screen.findByRole('img', { name: /^Portfolio performance chart\. Range 1M\./ }))
+            .toBeInTheDocument();
 
         home.unmount();
         renderWithMessaging(messaging, nativeTokenDetail());
@@ -159,6 +166,9 @@ describe('regression/price-change-periods', () => {
         await waitFor(() => expect(messaging.getNativePricesRequest)
             .toHaveBeenCalledWith(PRICE_HISTORY_REQUEST));
         expect(await screen.findByRole('img', { name: /^Price trend\. Range 1W\./ }))
+            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+        expect(await screen.findByRole('img', { name: /^Price trend\. Range 1M\./ }))
             .toBeInTheDocument();
         expect(screen.queryByText('No price history yet')).toBeNull();
     });

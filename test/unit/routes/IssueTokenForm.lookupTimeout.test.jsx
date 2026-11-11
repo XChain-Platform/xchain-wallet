@@ -85,7 +85,7 @@ afterEach(() => {
 async function fillAndSubmit() {
     await advance(0);
     fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'HELD' } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '5000' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '5000' } });
     await submit();
 }
 

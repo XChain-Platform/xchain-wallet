@@ -54,10 +54,13 @@ describe('<Button>', () => {
         const create = readSource('routes/CreateWallet.jsx');
         const imported = readSource('routes/ImportWallet.jsx');
 
-        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? t\('components\.placeOrderPanel\.placeOrder', \{ side \}\) : t\('common\.review'\)\}/);
-        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create\s*<\/Button>/);
+        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{t\('components\.placeOrderPanel\.placeOrder', \{ side \}\)\}/);
+        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create dispenser\s*<\/Button>/);
         expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
-        expect(create).toMatch(/<Button loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
+        expect(create.match(/variant="success"/g)).toHaveLength(4);
+        expect(create.match(/icon=\{<Icon\.[A-Za-z]+ \/>\}/g)).toHaveLength(4);
+        expect(create).not.toMatch(/variant="primary"/);
+        expect(create).toMatch(/<Button variant="success" loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
         expect(imported).not.toMatch(/\{busy \? t\('importWallet\.(?:importing|restoring)'\)/);
     });
 
@@ -82,7 +85,7 @@ describe('<Button>', () => {
     });
 
     it('gives link actions the shared inline-link treatment', () => {
-        render(<Button variant="link" icon={null}>Learn more</Button>);
+        render(<Button variant="link">Learn more</Button>);
         const button = screen.getByRole('button');
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
         const linkRule = /\.link\s*\{([^}]*)\}/.exec(css)?.[1];
@@ -92,7 +95,17 @@ describe('<Button>', () => {
         expect(linkRule).toMatch(/text-decoration:\s*underline/);
         expect(linkRule).toMatch(/text-underline-offset:\s*0\.15em/);
         expect(linkRule).toMatch(/min-height:\s*var\(--xc-tap-min\)/);
+        expect(button.querySelector('svg')).toBeInTheDocument();
     });
+
+    it.each(['Not now', 'Learn more', 'Cancel', 'Skip', 'Show more'])(
+        'resolves an icon for the common link action "%s"',
+        (label) => {
+            render(<Button variant="link">{label}</Button>);
+
+            expect(screen.getByRole('button', { name: label }).querySelector('svg')).toBeInTheDocument();
+        },
+    );
 
     it.each([
         'shared/components/DraftDiscardButton.jsx',
@@ -101,10 +114,11 @@ describe('<Button>', () => {
         'shared/routes/ContactsList.jsx',
         'shared/routes/CreateOrderForm.jsx',
         'shared/routes/Locked.jsx',
-    ])('%s uses the link variant for its text action', (path) => {
+    ])('%s does not suppress the link button icon', (path) => {
         const source = readFileSync(`packages/core/src/${path}`, 'utf8');
 
-        expect(source).toMatch(/<Button\b[^>]*variant="link"[^>]*icon=\{null\}/);
+        expect(source).toMatch(/<Button\b[^>]*variant="link"/);
+        expect(source).not.toMatch(/<Button\b[^>]*variant="link"[^>]*icon=\{null\}/);
     });
 
     it('keeps kit styles when a caller adds a contextual class', () => {
@@ -212,8 +226,8 @@ describe('<Button>', () => {
             const css = readCss(`ui/${component}.module.css`);
             const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
             expect(source).toMatch(/styles\[size\] \|\| ''/);
-            expect(source).toMatch(/labelAction=\{IconComponent/);
-            expect(source).toMatch(/<Button[\s\S]*?variant="ghost"[\s\S]*?size="sm"/);
+            expect(source).toMatch(/fieldAction=\{IconComponent/);
+            expect(source).toMatch(/<FieldIconButton[\s\S]*?icon=\{<IconComponent/);
             expect(source).not.toMatch(/--address-end-room/);
             for (const size of ['sm', 'md', 'lg']) {
                 const block = css.match(new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';

@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -28,12 +29,13 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { TokenField } from '../components/TokenField.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { interpretSleep } from '../../flows/sleepQueries.js';
 import {
@@ -50,7 +52,7 @@ import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { addressLockStateError } from '../utils/addressLockState.js';
@@ -128,7 +130,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             'No addresses on any network yet. Use Receive to generate one first.',
     });
 
-    const ticker = isTick ? (initialTick || '') : '';
+    const [ticker, setTicker] = useState(isTick ? (initialTick || '') : '');
     // Pause target: the tick (v1) or the signing address itself (v0).
     const [resumeMode, setResumeMode] = useState(
         /** @type {'until' | 'indefinite' | 'resume'} */ ('until'),
@@ -138,15 +140,22 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     // Address self-lock is irreversible: gate it behind a typed confirm.
     const [typedConfirm, setTypedConfirm] = useState('');
     const typedConfirmOk = isTick || isExactTypedConfirmation(typedConfirm, 'LOCK');
 
+    const handleChainChange = (nextChainId) => {
+        if (!lockedToken && nextChainId !== chainId) setTicker('');
+        setFormError(null);
+        setChainId(nextChainId);
+    };
+
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: native-coin protocol fee (SLEEP is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });
@@ -307,7 +316,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             descriptor.networkKind,
         )) return `The selected source address is not valid for ${descriptor.displayName || 'this network'}.`;
         if (!fromAddress.derivationPath && !fromAddress.id) return 'The selected source address is missing its wallet identifier.';
-        if (isTick && sleepLocked) return `Pausing and resuming are permanently locked for ${ticker}.`;
+        if (isTick && sleepLocked) return `Pause and resume are permanently locked for ${ticker}.`;
         if (effectiveResumeMode === 'until') {
             if (!durationBlocks) return 'Enter a duration in blocks.';
             if (!/^\d+$/.test(durationBlocks)) return 'Duration must be a whole number of blocks.';
@@ -742,8 +751,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -763,7 +771,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 {!isTick ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint={typedConfirmationCopy.sleep()}
+                        help={typedConfirmationCopy.sleep()}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -820,8 +828,26 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={handleChainChange}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Select token"
+                onSelect={(selection) => {
+                    if (selection.chainId) setChainId(selection.chainId);
+                    setTicker(String(selection.tick || ''));
+                    setFormError(null);
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
             />
         );
     }
@@ -841,38 +867,33 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     icon={!isTick ? <Icon.LockIcon /> : resumeMode === 'resume' ? <Icon.PlayIcon /> : <Icon.ClockIcon />}
                     loading={refreshingHeight || confirmAction.composing}
                     disabled={!fromAddress || (isTick && (
-                        sleepLocked || !!issuerEligibility.error
+                        !ticker || sleepLocked || !!issuerEligibility.error
                     )) || !!addressLockError || refreshingHeight || confirmAction.composing}
                 >
-                    {isTick && isWatcherMode ? 'Preview' : titleNoun}
+                    {titleNoun}
                 </Button>
             )}
         >
-            {!isTick ? (
-                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]} chainRegistry={chainRegistry} hideNetworkKind />
-            ) : null}
+            {lockedToken && chainId ? <TickerIcon chainId={chainId} tick={ticker} size={32} /> : null}
 
-            {isTick ? (
-                <>
-                    {lockedToken && chainId ? <TickerIcon chainId={chainId} tick={ticker} size={32} /> : null}
-                    <p className={styles.hint}>
-                        Pausing a token rejects new XChain actions involving it. Already-open orders,
-                        swaps, and dispensers can still settle. The token owner can resume it early.
-                    </p>
-                    {sleepLocked ? (
-                        <FormNotice variant="warning" role="alert">
-                            {`Pausing and resuming are permanently locked for ${ticker}.`}
-                        </FormNotice>
-                    ) : null}
-                </>
+            {!lockedToken ? (
+                <NetworkField
+                    label="Network"
+                    help={isTick ? "The chain the token lives on. The pause or resume is recorded here, and your From address and the network fee are on this network." : "The chain where this address lock is recorded. The address and network fee are on this network."}
+                    value={chainId}
+                    onChange={handleChainChange}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]}
+                    chainRegistry={chainRegistry}
+                />
             ) : null}
-
-            {stateLine}
 
             {fromAddress ? (
                 <AddressField
                     label={isTick ? 'From (token owner)' : 'Address to lock'}
                     icon="addresses"
+                    help={isTick
+                        ? "The token owner's address. Only the owner can pause or resume a token."
+                        : 'The wallet address to lock. It cannot submit XChain actions until the chosen duration ends.'}
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
@@ -883,9 +904,27 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
+            {isTick && !lockedToken ? (
+                <TokenField
+                    label="Token"
+                    help="The token to pause or resume. Only its owner can pause it, and the pause covers every XChain action that involves it."
+                    value={ticker && chainId ? { chainId, tick: ticker } : null}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
+                />
+            ) : null}
+
+            {isTick && sleepLocked ? (
+                <FormNotice variant="warning" role="alert">
+                    {`Pause and resume are permanently locked for ${ticker}.`}
+                </FormNotice>
+            ) : null}
+
+            {stateLine}
+
             {isTick ? (
                 <RadioGroup
                     legend="Pause setting"
+                    help="Pausing a token rejects new XChain actions involving it. Already-open orders, swaps, and dispensers can still settle. The token owner can resume it early."
                     name="sleep-mode"
                     value={resumeMode}
                     onChange={(nextValue) => setResumeMode(nextValue)}
@@ -916,10 +955,19 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 />
             ) : null}
 
-            <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+            <Input
+                label="Memo"
+                help="An optional note stored with this action."
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+            />
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -928,7 +976,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
         </FormPage>,
     );
 }

@@ -125,7 +125,7 @@ const FORMS = [
             await screen.findByText(/available to mint/);
             fireEvent.change(await screen.findByLabelText(/^Amount\b/), { target: { value: '10' } });
         },
-        review: () => screen.getByRole('button', { name: /^(Mint|Preview)$/ }),
+        review: () => screen.getByRole('button', { name: 'Mint' }),
     },
     {
         name: 'Issue',
@@ -134,7 +134,7 @@ const FORMS = [
         messaging: { getTokenInfo: vi.fn().mockResolvedValue(null) },
         async fill(messaging) {
             fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'OWNED' } });
-            fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
+            fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
             // Review holds a submit until the ticker availability lookup settles.
             await waitFor(() => expect(messaging.getTokenInfo)
                 .toHaveBeenCalledWith(expect.objectContaining({ tick: 'OWNED' })), { timeout: 2000 });
@@ -151,7 +151,7 @@ const FORMS = [
             fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
         },
-        review: () => screen.getByRole('button', { name: 'Create' }),
+        review: () => screen.getByRole('button', { name: 'Create dispenser' }),
     },
     {
         name: 'Swap',
@@ -163,7 +163,7 @@ const FORMS = [
             fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
             fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
         },
-        review: () => screen.getByRole('button', { name: 'Review' }),
+        review: () => screen.getByRole('button', { name: 'Create swap' }),
     },
     {
         name: 'Stake',
@@ -172,7 +172,7 @@ const FORMS = [
             fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
             fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: 'a'.repeat(64) } });
         },
-        review: () => screen.getByRole('button', { name: /^(Stake|Preview)$/ }),
+        review: () => screen.getByRole('button', { name: /^(Stake|Review stake)$/ }),
     },
 ];
 

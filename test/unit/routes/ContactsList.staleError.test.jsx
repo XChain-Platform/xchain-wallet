@@ -31,7 +31,7 @@ describe('ContactsList new-contact form', () => {
         );
         await waitFor(() => expect(screen.getByText(/No contacts yet/)).toBeTruthy());
         fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
-        fireEvent.click(await screen.findByRole('button', { name: /save/i }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create contact' }));
         expect(await screen.findByText('Name is required.')).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Contact' } });
         await waitFor(() => expect(screen.queryByText('Name is required.')).toBeNull());

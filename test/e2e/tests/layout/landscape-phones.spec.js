@@ -13,7 +13,7 @@
 // their heights trip the short-landscape rules in Screen.module.css. The
 // spec holds the shell invariants there: nothing scrolls sideways, the page
 // gutter stays at the 16px rail tier, the app header and navigation stay put while the
-// route scrolls, a footer route fits without the screen itself scrolling,
+// route scrolls, compact action routes fit without the screen itself scrolling,
 // and a primary action stays reachable above a soft keyboard.
 
 import {
@@ -84,7 +84,7 @@ for (const phone of LANDSCAPE_PHONES) {
             hasTouch: true,
         });
 
-        test('keeps the shell fixed, the gutter even and footer routes unscrolled', async ({ page }) => {
+        test('keeps the shell fixed, the gutter even and action routes unscrolled', async ({ page }) => {
             test.slow();
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
             await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
@@ -104,11 +104,13 @@ for (const phone of LANDSCAPE_PHONES) {
                 });
             }
 
-            // Footer routes: header + body floor + footer must fit, or the
-            // screen scrolls a sliver of the title row away.
+            // Compact action routes: header + body floor + actions must fit, or
+            // the screen scrolls a sliver of the title row away.
             await test.step('Accounts', async () => {
                 await openSettingsRow(page, /Accounts/);
-                await expect(page.locator('footer').first()).toBeVisible();
+                // U48 keeps page actions directly under their content, never in a pinned footer.
+                await expect(page.getByRole('main').getByRole('button', { name: 'Add account' })).toBeVisible();
+                await expect(page.locator('footer')).toHaveCount(0);
                 await settle(page);
                 expect((await shellGeometry(page)).screenOverflow).toBe(0);
             });

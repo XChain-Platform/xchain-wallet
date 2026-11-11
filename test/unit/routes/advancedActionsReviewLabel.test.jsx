@@ -17,6 +17,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const BTC = 'bitcoin-mainnet';
 const FROM = {
@@ -54,8 +55,8 @@ async function openReview(actionCode) {
     await waitFor(() => expect(document.querySelector(`option[value="${actionCode}"]`)).toBeTruthy());
     const picker = document.querySelector(`option[value="${actionCode}"]`).closest('select');
     fireEvent.change(picker, { target: { value: actionCode } });
-    const preview = await screen.findByRole('button', { name: 'Preview' });
-    fireEvent.click(preview);
+    const submit = await screen.findByRole('button', { name: 'Sign action' });
+    fireEvent.click(submit);
 }
 
 describe('AdvancedActionsForm review stage wording', () => {
@@ -63,7 +64,10 @@ describe('AdvancedActionsForm review stage wording', () => {
         await openReview('EXECUTE');
 
         expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Create unsigned transaction: contract call' })).toBeInTheDocument();
+        const submit = screen.getByRole('button', { name: 'Create unsigned transaction: contract call' });
+        expect(submit).toHaveClass(buttonStyles.success);
+        expect(submit.querySelector('svg')).toBeTruthy();
+        expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         expect(screen.queryByText(/Review EXECUTE|: EXECUTE/)).not.toBeInTheDocument();
     });
 

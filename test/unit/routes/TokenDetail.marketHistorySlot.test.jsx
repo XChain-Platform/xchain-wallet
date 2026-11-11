@@ -6,10 +6,11 @@
 // The token market panel keeps one placeholder in its price-history slot
 // whenever no chart is drawn, so the slot never reads as a blank band,
 // including when the token record cannot be read and the panel carries its
-// unavailable hint. With no chart the slot stands below the market card at the
-// full content width (U15), so the empty state is never a box in the card.
+// unavailable hint. Drawn and empty states use the same fixed-height slot
+// inside the market card at every width.
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
@@ -83,12 +84,13 @@ async function settledSlot() {
 }
 
 describe('token market history slot', () => {
-    it('shows the no-history placeholder beside the hint when the token record cannot be read', async () => {
+    it('shows only the hint, not the no-history placeholder, when the token record cannot be read', async () => {
         renderToken('real-wallet', null, { readFails: true });
         const slot = await settledSlot();
         await vi.waitFor(() => expect(slot.textContent).toContain('Market data is unavailable.'));
-        expect(slot.textContent).toContain('No price history yet');
-        expect(inMarketCard(slot)).toBe(false);
+        expect(slot.textContent).not.toContain('No price history yet');
+        expect(inMarketCard(slot)).toBe(true);
+        expect(document.querySelectorAll('[class*="marketHistorySlot"]')).toHaveLength(1);
     });
 
     it('shows the no-history placeholder when the token record has no market price', async () => {
@@ -96,7 +98,9 @@ describe('token market history slot', () => {
         const slot = await settledSlot();
         await vi.waitFor(() => expect(slot.textContent).toContain('No price history yet'));
         expect(slot.textContent).not.toContain('Market data is unavailable.');
-        expect(inMarketCard(slot)).toBe(false);
+        expect(inMarketCard(slot)).toBe(true);
+        expect(document.body).not.toHaveTextContent('Indexed market activity builds');
+        expect(document.querySelectorAll('[class*="marketHistorySlot"]')).toHaveLength(1);
         expect(document.querySelector('[class*="marketCardOffset"]').textContent).toContain('Market cap');
     });
 
@@ -107,5 +111,13 @@ describe('token market history slot', () => {
         expect(slot.querySelector('[aria-label$="price chart"]')).not.toBeNull();
         expect(slot.textContent).not.toContain('No price history yet');
         expect(inMarketCard(slot)).toBe(true);
+    });
+
+    it('declares one token-based fixed height for chart and placeholder states', () => {
+        const css = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
+        const slot = /\.marketHistorySlot\s*\{([^}]*)\}/s.exec(css)?.[1] || '';
+        expect(slot).toContain('block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2))');
+        expect(slot).toContain('min-block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2))');
+        expect(css).not.toMatch(/@media[^}]*marketHistorySlot/s);
     });
 });

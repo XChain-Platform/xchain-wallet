@@ -107,7 +107,7 @@ describe('address management async guards', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), {
             target: { value: 'Renamed first' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: `View address ${SECOND}` }));
 

@@ -144,12 +144,16 @@ describe('CreateOrderForm amount text', () => {
         expect(params.GET_AMOUNT).toBe(getWire);
     });
 
-    it('reads trailing zeros past the token decimals as the plain amount', async () => {
+    // U61: digits past the token's decimals are a field error, never a
+    // silent cut, and the amount the field keeps is the one that composes.
+    it('refuses digits past the token decimals in the field and composes the kept amount', async () => {
         state.messaging.composeForConfirm = vi.fn(async () => ({ actionString: 'ORDER|0', psbtHex: 'cafe' }));
         state.confirm.mockImplementation(async (args) => { await args.compose(); return { txid: 'tx-1' }; });
         await renderForm();
         fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'XCP' } });
-        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.50' } });
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.55' } });
+        expect(await screen.findByText('Amount can have at most 1 decimal places.')).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2.5' } });
         fireEvent.change(screen.getByLabelText('Amount (BTC)'), { target: { value: '0.1' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
 

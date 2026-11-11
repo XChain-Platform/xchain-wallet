@@ -135,7 +135,8 @@ describe('primary routes at 768x1024', () => {
         expectRailNavigation(view.container);
         expectListPage(view.container);
         // A demo wallet shows the same quick actions as a real one; this shell wires Exchange and no actions menu.
-        expect(within(actions).getAllByRole('button')).toHaveLength(3);
+        expect(within(actions).getAllByRole('button').map((button) => button.textContent.trim()))
+            .toEqual(['Send', 'Receive', 'Exchange']);
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
     });
 

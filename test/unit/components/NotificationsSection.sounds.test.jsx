@@ -234,8 +234,9 @@ describe('notification permission feedback', () => {
         try {
             render(<NotificationsSection />);
             const button = screen.getByRole('button', { name: 'Request permission' });
-            expect(button.className).toMatch(/primary/);
+            expect(button.className).toMatch(/success/);
             expect(button.style.color).toBe('');
+            expect(button.querySelector('svg path[d^="M18 8a6 6"]')).not.toBeNull();
             fireEvent.click(button);
             expect(await screen.findByText(/Could not request notification permission/)).toBeTruthy();
         } finally {

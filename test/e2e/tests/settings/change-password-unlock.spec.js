@@ -87,9 +87,10 @@ test.describe('Settings: change wallet password', () => {
             await openSettingsSubpage(page, 'This wallet', change);
             await change.click();
 
-            await page.getByLabel('Current wallet password').fill(OLD_PASSWORD);
+            // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+            await page.getByLabel('Current wallet password', { exact: true }).fill(OLD_PASSWORD);
             await page.getByLabel('New wallet password', { exact: true }).fill(NEW_PASSWORD);
-            await page.getByLabel('Confirm new wallet password').fill(NEW_PASSWORD);
+            await page.getByLabel('Confirm new wallet password', { exact: true }).fill(NEW_PASSWORD);
             await page.getByRole('main')
                 .getByRole('button', { name: 'Change password', exact: true })
                 .click();

@@ -58,7 +58,7 @@ export function FormErrorSummarySection() {
             <LiveExample label="Written beside the field, shown at the top">
                 <FormPage as="div">
                     <Input id="sg-notice-amount" label="Amount" onChange={() => {}} />
-                    <FormNotice variant="warning">Live fee estimate unavailable. Using safe default rates.</FormNotice>
+                    <FormNotice variant="warning">Check the amount before continuing.</FormNotice>
                 </FormPage>
             </LiveExample>
             <Guidance

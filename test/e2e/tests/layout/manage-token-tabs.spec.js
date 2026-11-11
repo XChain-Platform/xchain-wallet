@@ -3,12 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// At 360px every Manage token panel tab fits the strip, so none sits cut
-// off past the edge of a phone screen.
+// On phone widths every Manage token tab (Actions and Details, ruling U78)
+// fits the strip, so none sits cut off past the edge of the screen.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
-const TABS = ['Dispensers', 'Orders', 'Swaps', 'Holders', 'Activity'];
+const TABS = ['Actions', 'Details'];
 
 async function openManagedToken(page) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -28,7 +28,7 @@ for (const width of [320, 360, 412]) {
         await createWallet(page);
         await openManagedToken(page);
 
-        const strip = page.getByRole('tablist', { name: 'Token management panels' });
+        const strip = page.getByRole('tablist', { name: 'Manage token view' });
         await strip.scrollIntoViewIfNeeded();
         const fit = await strip.evaluate((el) => ({
             client: el.clientWidth,
@@ -44,8 +44,8 @@ for (const width of [320, 360, 412]) {
             expect(box.x + box.width, `${name} tab runs past the strip`).toBeLessThanOrEqual(fit.right + 0.5);
         }
 
-        await strip.getByRole('tab', { name: 'Activity', exact: true }).click();
-        await expect(strip.getByRole('tab', { name: 'Activity', exact: true }))
+        await strip.getByRole('tab', { name: 'Details', exact: true }).click();
+        await expect(strip.getByRole('tab', { name: 'Details', exact: true }))
             .toHaveAttribute('aria-selected', 'true');
     });
 }

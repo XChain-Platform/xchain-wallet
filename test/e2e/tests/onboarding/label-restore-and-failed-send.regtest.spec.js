@@ -130,7 +130,7 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
             await page.getByRole('textbox', { name: 'Name' }).fill(CONTACT_CANARY);
             await page.getByRole('textbox', { name: 'Address' }).fill(owner);
-            await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+            await page.getByRole('button', { name: 'Create contact', exact: true }).first().click();
             await expect(page.getByText(CONTACT_CANARY).first(), 'the contact was never saved')
                 .toBeVisible({ timeout: 30_000 });
 

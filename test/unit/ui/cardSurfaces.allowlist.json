@@ -8,8 +8,7 @@
         "packages/core/src/shared/components/DerivationPathCrossCheck.module.css | .path": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/GatedFileViewer.module.css | .body": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/GatedFileViewer.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/components/HomeTabs.module.css | .sortControl": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/components/HomeTabs.module.css | .sortSelect": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
+        "packages/core/src/shared/components/HomeListFilterMenu.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/LayoutModeToggle.module.css | .btn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/LeftNav.module.css | .skipLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/MnemonicGrid.module.css | .cell": "One recovery-phrase word cell in the word grid, read like a value box, not a card.",
@@ -49,7 +48,6 @@
         "packages/core/src/shared/routes/ImportWallet.module.css | .scannerBox": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
-        "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/OnboardingCarousel.module.css | .stackFrame": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/PairSignerForm.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
@@ -119,13 +117,9 @@
             "count": 2,
             "reason": "The fee-bump dialog and the fieldset inside it."
         },
-        "packages/core/src/shared/routes/PairPartnerWallet.jsx": {
-            "count": 1,
-            "reason": "A monospace code value box."
-        },
         "packages/core/src/shared/routes/PsbtSignForm.jsx": {
-            "count": 2,
-            "reason": "A raw transaction value box and the paste field."
+            "count": 1,
+            "reason": "The paste field."
         },
         "packages/core/src/ui/AnimatedQrFrames.jsx": {
             "count": 1,

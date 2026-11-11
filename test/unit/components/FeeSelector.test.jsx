@@ -188,17 +188,17 @@ describe('FeeSelector', () => {
         expect(screen.getByRole('alert').textContent).toMatch(/1 DOGE\/kB/);
     });
 
-    it('renders fiat previews for preset and custom estimates', () => {
-        const formatFiat = vi.fn((amount) => `about ${amount} USD`);
+    it('renders the supplied fiat formatter for preset and custom estimates', () => {
+        const fiat = { formatNativeFee: vi.fn((amount) => `~$${amount}`) };
         const { rerender } = render(
             <FeeSelector
                 tiers={tiers}
                 value={{ mode: 'normal' }}
                 onChange={() => {}}
-                formatFiat={formatFiat}
+                fiat={fiat}
             />,
         );
-        expect(screen.getByText('about 0.00001500 USD')).toBeTruthy();
+        expect(screen.getByText('~$0.00001500')).toBeTruthy();
 
         rerender(
             <FeeSelector
@@ -206,13 +206,13 @@ describe('FeeSelector', () => {
                 value={{ mode: 'custom', customRate: 2.5 }}
                 onChange={() => {}}
                 customEstimate={estimate(2.5, '0.00000625')}
-                formatFiat={formatFiat}
+                fiat={fiat}
             />,
         );
-        expect(screen.getByText('about 0.00000625 USD')).toBeTruthy();
+        expect(screen.getByText('~$0.00000625')).toBeTruthy();
     });
 
-    it('shows the fallback note while keeping Custom editable', () => {
+    it('keeps fallback tiers editable without reporting their source', () => {
         render(
             <ControlledSelector
                 tiers={fallbackTiers}
@@ -220,28 +220,25 @@ describe('FeeSelector', () => {
             />,
         );
 
-        expect(screen.getByText(/Using safe default rates/)).toBeTruthy();
+        expect(screen.queryByText(/Using safe default rates/)).toBeNull();
         fireEvent.keyDown(screen.getByRole('slider', { name: 'Network fee' }), { key: 'End' });
 
         const customInput = screen.getByLabelText('Custom fee rate (sat/vB)');
         expect(customInput.disabled).toBe(false);
         fireEvent.change(customInput, { target: { value: '7.5' } });
         expect(customInput.value).toBe('7.5');
-        expect(screen.getByText(/Custom fees remain available/)).toBeTruthy();
+        expect(screen.queryByText(/Custom fees remain available/)).toBeNull();
     });
 
-    it('raises the fallback note at the top of the form it sits in', () => {
+    it('adds no fallback notice to the enclosing form', () => {
         const { container } = render(
             <FormPage actions={<button type="submit">Go</button>}>
                 <ControlledSelector tiers={fallbackTiers} initialValue={{ mode: 'normal' }} />
             </FormPage>,
         );
 
-        const note = screen.getByText(/Using safe default rates/);
         const form = container.querySelector('form');
-        // It leads the page content just above the form, so a wide card never nests it.
-        expect(form.previousElementSibling).toContainElement(note);
-        expect(form).not.toContainElement(note);
-        expect(note.closest('[role="status"]')).toBeTruthy();
+        expect(screen.queryByText(/Using safe default rates/)).toBeNull();
+        expect(form).toContainElement(screen.getByRole('slider', { name: 'Network fee' }));
     });
 });

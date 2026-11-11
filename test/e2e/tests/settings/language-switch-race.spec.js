@@ -348,7 +348,8 @@ test.describe('lifecycle', () => {
         await expect(unlock).toBeVisible();
         await expectLocale(page, 'pseudo-rtl', 'lock screen');
         expect(await rootFont()).toBeCloseTo(24, 1);
-        await page.getByLabel(/^‏?⟦?Password⟧?$/).fill(DEFAULT_PASSWORD);
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByRole('textbox', { name: /^‏?⟦?Password⟧?$/ }).fill(DEFAULT_PASSWORD);
         await unlock.click();
         await expect(unlockedAnyScreen(page).or(page.getByRole('region', { name: /App header/ })).first())
             .toBeVisible({ timeout: 120_000 }).catch(() => {});
@@ -361,7 +362,7 @@ test.describe('lifecycle', () => {
         await expect(unlock.or(page.locator('main')).first()).toBeVisible({ timeout: 120_000 });
         await expectLocale(page, 'pseudo-rtl', 'after reload');
         if (await unlock.isVisible()) {
-            await page.getByLabel(/^‏?⟦?Password⟧?$/).fill(DEFAULT_PASSWORD);
+            await page.getByRole('textbox', { name: /^‏?⟦?Password⟧?$/ }).fill(DEFAULT_PASSWORD);
             await unlock.click();
             await expect(unlock).toBeHidden({ timeout: 120_000 });
             await expectLocale(page, 'pseudo-rtl', 'after reload and unlock');

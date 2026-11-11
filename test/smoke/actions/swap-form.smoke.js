@@ -199,7 +199,7 @@ for (const [shell, appPath] of [
 // ManageToken exposes the Sell-name entry.
 const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
 assert.ok(/onSellOwnership/.test(manageSrc), 'ManageToken accepts onSellOwnership');
-assert.ok(/id:\s*['"]sell-ownership['"]/.test(manageSrc), 'ManageToken renders the Sell-name action');
+assert.ok(/id:\s*['"]sell-name['"][^\n]*\.\.\.ownerAction\(options\.onSellOwnership\)/.test(manageSrc), 'ManageToken renders the owner-gated Sell-name action');
 
 // SellOwnershipForm builds an ownership ORDER (GIVE_OWNERSHIP=1) and submits
 // via orderAction; supports native-coin (GET_TICK omitted) + token prices.

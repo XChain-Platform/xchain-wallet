@@ -42,7 +42,7 @@ describe('DelegationActionForm revoke prefill across networks', () => {
         await waitFor(() => expect(input).toHaveValue(KEY));
 
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
-        fireEvent.click((await screen.findAllByRole('option'))[1]);
+        fireEvent.click((await screen.findAllByRole('button', { name: /^Select / }))[1]);
 
         await waitFor(() => expect(getDelegationsForAddress).toHaveBeenCalledWith({ chainId: TEST, address: TEST_ADDRESS }));
         await waitFor(() => expect(screen.getByLabelText('Signing pubkey to revoke')).toHaveValue(''));
@@ -72,7 +72,7 @@ describe('DelegationActionForm revoke prefill across networks', () => {
         fireEvent.change(input, { target: { value: KEY } });
 
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
-        fireEvent.click((await screen.findAllByRole('option'))[1]);
+        fireEvent.click((await screen.findAllByRole('button', { name: /^Select / }))[1]);
 
         await waitFor(() => expect(target.getDelegationsForAddress).toHaveBeenCalledTimes(2));
         expect(screen.getByLabelText('Signing pubkey to revoke')).toHaveValue(KEY);

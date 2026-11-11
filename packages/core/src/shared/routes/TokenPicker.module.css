@@ -93,6 +93,13 @@
     min-width: 10rem;
 }
 
+/* The filter shares the toolbar line with the search field and the kind tabs,
+   which both use the small control type, so the filter takes it too (U07).
+   The doubled class outranks the filter's own size class. */
+.networkFilter.networkFilter > * {
+    --network-filter-font: var(--xc-control-font-sm);
+}
+
 /* Narrow shells (Chrome popup, slim mobile web): tighten the segment padding
    so the search box keeps usable width while search + segments stay on one
    line. The search field (min-width:0) absorbs the rest. */

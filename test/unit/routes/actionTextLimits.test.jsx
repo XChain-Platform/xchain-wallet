@@ -24,8 +24,8 @@ import {
     serializeMessageContent,
 } from '../../../packages/core/src/shared/utils/messageContent.js';
 import {
+    memoLength,
     memoLengthError,
-    utf8ByteLength,
 } from '../../../packages/core/src/shared/utils/memoLimit.js';
 import {
     MAX_MESSAGE_BYTES,
@@ -33,7 +33,7 @@ import {
 } from '../../../packages/core/src/flows/messageAction.js';
 
 const MAX_TEXT_LENGTH = 250;
-const AT_LIMIT = 'é'.repeat(MAX_TEXT_LENGTH / 2);
+const AT_LIMIT = '😀'.repeat(MAX_TEXT_LENGTH / 2);
 const OVER_LIMIT = `${AT_LIMIT}a`;
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -107,12 +107,12 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-describe('UTF-8 transaction text measurement', () => {
-    it('counts encoded bytes and gives an explicit memo refusal', () => {
-        expect(utf8ByteLength('aé📦')).toBe(7);
+describe('memo text measurement', () => {
+    it('counts UTF-16 units and gives an explicit memo refusal', () => {
+        expect(memoLength('aé📦')).toBe(4);
         expect(memoLengthError(AT_LIMIT)).toBeNull();
         expect(memoLengthError(OVER_LIMIT)).toBe(
-            `Memo is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`,
+            `Memo is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH} characters.`,
         );
     });
 });
@@ -170,7 +170,11 @@ describe('ComposeMessage text limit', () => {
         const submit = screen.getByRole('button', { name: 'Send message' });
 
         fireEvent.change(message, { target: { value: '📦' } });
-        expect(screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`)).toBeTruthy();
+        const counter = screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`);
+        const labelRow = counter.parentElement;
+        expect(labelRow).toContainElement(screen.getByText('Message'));
+        expect(labelRow).not.toContainElement(message);
+        expect(counter).toHaveAttribute('aria-live', 'polite');
         expect(submit.disabled).toBe(false);
 
         fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_BYTES / 2)}a` } });
@@ -251,7 +255,8 @@ describe('ComposeMessage text limit', () => {
 
     it('refuses unsupported and oversized attachments with specific limits', async () => {
         mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        const input = await screen.findByLabelText('Attachment (optional)');
+        // The limit rides in the label, like Publish file's field (U94).
+        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
 
         fireEvent.change(input, {
             target: { files: [new File(['#!/bin/sh'], 'run.sh', { type: 'application/x-sh' })] },
@@ -276,7 +281,8 @@ describe('ComposeMessage text limit', () => {
 
     it('accepts a supported attachment and reports its exact size', async () => {
         mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        const input = await screen.findByLabelText('Attachment (optional)');
+        // The limit rides in the label, like Publish file's field (U94).
+        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
 
         fireEvent.change(input, {
             target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
@@ -313,23 +319,23 @@ describe('ComposeMessage text limit', () => {
 });
 
 describe('LinkForm memo limit', () => {
-    it('shows a live counter and explains the memo limit when Link is pressed', async () => {
+    it('shows a live counter and explains the memo limit when Link actions is pressed', async () => {
         const messaging = mount(LinkForm);
-        const [firstIndex, secondIndex] = await screen.findAllByLabelText('Action to reference');
+        const [firstIndex, secondIndex] = await screen.findAllByLabelText('Action number');
         fireEvent.change(firstIndex, { target: { value: '11' } });
         fireEvent.change(secondIndex, { target: { value: '22' } });
-        const memo = screen.getByLabelText('Memo (optional)');
-        const submit = await screen.findByRole('button', { name: 'Link' });
+        const memo = screen.getByLabelText('Memo');
+        const submit = await screen.findByRole('button', { name: 'Link actions' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0);
         expect(submit.disabled).toBe(false);
         fireEvent.click(submit);
-        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(1);
+        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(1);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -341,15 +347,15 @@ describe('CallbackForm memo limit', () => {
             initialTick: 'CALLABLE',
             initialFromAddress: SOURCE.address,
         });
-        const memo = await screen.findByLabelText('Memo (optional)');
+        const memo = await screen.findByLabelText('Memo');
         const submit = await screen.findByRole('button', { name: 'Execute callback' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(/Memo is 251 bytes/)).toBeTruthy();
+        expect(screen.getByText(/Memo is 251 characters/)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -360,7 +366,7 @@ describe('CallbackForm memo limit', () => {
             initialTick: 'CALLABLE',
             initialFromAddress: SOURCE.address,
         });
-        const memo = await screen.findByLabelText('Memo (optional)');
+        const memo = await screen.findByLabelText('Memo');
 
         fireEvent.change(memo, { target: { value: 'safe\u0000unsafe' } });
 

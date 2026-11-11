@@ -71,7 +71,7 @@ describe('PlaceOrderPanel review price', () => {
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: typed } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
 
         const label = await screen.findByText('Price', { selector: 'dt' });
         expect(label.nextElementSibling).toHaveTextContent(`${shown} BTC/XCHAIN`);

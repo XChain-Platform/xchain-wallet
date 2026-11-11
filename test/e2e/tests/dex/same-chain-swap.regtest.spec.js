@@ -123,7 +123,7 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             });
             await main.getByRole('textbox', { name: /^Give amount/ }).fill(String(GIVE_AMOUNT));
             await main.getByRole('textbox', { name: /^Get amount/ }).fill(String(GET_AMOUNT));
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Swap', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
             await expect(page.getByTestId('action-intent'))

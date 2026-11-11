@@ -36,7 +36,7 @@ function escapeRegExp(value) {
 
 function settingsRow(page, title) {
     return page.getByRole('main').getByRole('button', {
-        name: new RegExp(`^${escapeRegExp(title)}\\b`, 'i'),
+        name: new RegExp(`^${escapeRegExp(title)}\\b(?! the )`, 'i'),
     }).first();
 }
 

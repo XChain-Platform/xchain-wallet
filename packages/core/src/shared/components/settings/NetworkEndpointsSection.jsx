@@ -32,15 +32,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
-import { Button, EmptyState, FormSection, Input } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormSection, Icon, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import styles from './NetworkEndpointsSection.module.css';
 import { t } from '../../../i18n/index.js';
-import '../../../i18n/locales/en/history.js';
-import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
 import '../../../i18n/locales/en/ui.js';
 
@@ -65,7 +63,7 @@ export function NetworkEndpointsSection() {
     }
 
     return (
-        <div style={STACK}>
+        <div className={styles.groups} style={STACK}>
             <ChainRegistryRefreshRow />
             {descriptors.map((d) => (
                 <ChainEndpointBlock
@@ -138,6 +136,7 @@ function ChainRegistryRefreshRow() {
                     disabled={refreshing}
                     size="sm"
                     variant="secondary"
+                    icon={<Icon.RefreshIcon />}
                 >
                     {refreshing ? t('settings.endpoints.refreshing') : t('settings.endpoints.refreshNow')}
                 </Button>
@@ -354,18 +353,21 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         >
             <UrlField
                 label={t('settings.endpoints.explorerUrl')}
+                help={t('settings.help.endpoints.explorerUrl')}
                 value={draft.explorerUrl}
                 placeholder={defaults.explorerUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, explorerUrl: v })); setEditing(true); }}
             />
             <UrlField
                 label={t('settings.endpoints.encoderUrl')}
+                help={t('settings.help.endpoints.encoderUrl')}
                 value={draft.encoderUrl}
                 placeholder={defaults.encoderUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, encoderUrl: v })); setEditing(true); }}
             />
             <UrlField
                 label={t('settings.endpoints.hubUrl')}
+                help={t('settings.help.endpoints.hubUrl')}
                 value={draft.hubUrl}
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
@@ -386,13 +388,13 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             {isCustom || dirty || editing ? (
                 <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                     {isCustom || dirty ? (
-                        <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                        <Button type="button" onClick={onReset} size="sm" variant="secondary" icon={<Icon.RefreshIcon />} disabled={saving}>
                             {t('settings.endpoints.resetToDefault')}
                         </Button>
                     ) : null}
                     {dirty || editing ? (
-                        <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
-                            {saving ? t('send.saveRecipient.saving') : t('history.contact.save')}
+                        <Button type="button" onClick={onCommit} size="sm" variant="success" icon={<Icon.SaveIcon />} disabled={!dirty || saving}>
+                            {saving ? t('settings.help.endpoints.savingEndpoints') : t('settings.help.endpoints.saveEndpoints')}
                         </Button>
                     ) : null}
                 </div>
@@ -401,11 +403,12 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     );
 }
 
-function UrlField({ label, value, placeholder, onChange }) {
+function UrlField({ label, help, value, placeholder, onChange }) {
     return (
         <Input
             type="url"
             label={label}
+            help={help}
             enterKeyHint="done"
             autoCapitalize="off"
             autoCorrect="off"

@@ -112,16 +112,18 @@ assert.ok(
     'TokenAdminForm distinguishes wrong-password from other errors',
 );
 
-// --- 7. Lock-mode danger variant --------------------------------------
+// --- 7. Lock-mode main action is green ---------------------------------
 //
-// §20 Cluster X Step 21: variant flips to plain 'primary' in watcher
-// mode (the "Create unsigned transaction" CTA is not destructive; destruction
-// happens later when the signed PSBT broadcasts). Pin both the legacy
-// shape AND the new wrapped shape. Either is acceptable.
+// U63: the main forward action of every form is green (FormPage turns a
+// primary submit into the success style), Lock token included; the typed
+// LOCK confirmation carries the permanence warning instead of a red button.
 assert.ok(
-    /variant=\{mode === 'lock' \? 'danger' : 'primary'\}/.test(src)
-        || /variant=\{isWatcherMode \? 'primary' : \(mode === 'lock' \? 'danger' : 'primary'\)\}/.test(src),
-    'TokenAdminForm uses the danger variant only on lock mode (in non-watcher mode)',
+    !/mode === 'lock' \? 'danger'/.test(src),
+    'TokenAdminForm no longer paints Lock token with the danger variant',
+);
+assert.ok(
+    /typedConfirmationLockAboveHint/.test(src),
+    'Lock token keeps its typed LOCK confirmation, which says locking is permanent',
 );
 
 // --- 8. ActionsMenu + App.jsx sub-routes ------------------------------

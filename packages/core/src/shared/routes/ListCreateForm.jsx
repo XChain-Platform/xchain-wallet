@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -23,7 +23,9 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { TickItemsEditor } from '../components/TickItemsEditor.jsx';
 import {
@@ -32,6 +34,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { t } from '../../i18n/index.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
@@ -48,7 +51,7 @@ import {
     utf8ByteLength,
 } from '../../flows/listMetaInput.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -329,6 +332,15 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         () => listActionSize(wireParams),
         [wireParams],
     );
+    // A new list is quoted once it holds an item; the venue answers free for
+    // an unshared create, so the card's Total is the network fee alone.
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionString: items.length > 0 ? actionSize.actionString : null,
+        enabled: true,
+    });
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -612,6 +624,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <Button
                             type="button"
                             variant="ghost"
+                            icon={<Icon.BackIcon />}
                             onClick={(event) => {
                                 event.preventDefault();
                                 setSubmitError(null);
@@ -623,7 +636,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         </Button>
                         <Button
                             type="submit"
-                            variant="primary"
+                            variant="success"
+                            icon={isWatcherMode
+                                ? <Icon.DocumentIcon />
+                                : hw ? <Icon.SignIcon /> : <Icon.UploadIcon />}
                             loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
@@ -665,7 +681,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
-                    <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : (
                     <SignCredentials
                         unlocked={signerReady}
@@ -691,6 +707,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -746,21 +763,22 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={singleEncode ? <Icon.UploadIcon /> : <Icon.DocumentIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Create unsigned transaction'}
                 </Button>
             )}
         >
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The chain the list is published on. Your From address and the fee are on this network, and the list holds addresses or tokens of this chain."
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -783,7 +801,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     setListType(/** @type {'1' | '2'} */ (e.target.value));
                     setFormError(null);
                 }}
-                hint={listType === '2'
+                help={listType === '2'
                     ? 'A reusable list of addresses. Used by airdrops, allow/block gates, dispensers, and orders.'
                     : 'A reusable list of tokens. Used for project rosters and allow/block gates.'}
             >
@@ -800,6 +818,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <Textarea
                             id="list-addresses"
                             label="Addresses"
+                            help={`These addresses become permanent public on-chain data once the list is published.${editResolutionActive === true
+                                ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the network\'s history.'
+                                : editResolutionActive === false
+                                    ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
+                                    : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the network\'s history.'} If you later point a token's allow-list or block-list at this list, that token can never be bridged to another network, and the binding itself can never be cleared once set. Each address adds to the transaction size and increases the network fee; the exact fee is set when you broadcast.`}
                             value={pasteText}
                             onChange={(e) => { setPasteText(e.target.value); setFormError(null); }}
                             placeholder={recipientsDrop.isDragOver
@@ -882,32 +905,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             />
                         </FieldNote>
                     ) : null}
-                    {/* PC-10: pasted or contact-book addresses become permanent
-                        public on-chain data once the list is broadcast. */}
-                    {/* What an edit does depends on list-edit resolution:
-                        after it, every reference follows the owner's newest
-                        edit; before it, a fork is a separate list. */}
-                    <p className={styles.hint}>
-                        These addresses become permanent public on-chain data once the list is published.
-                        {editResolutionActive === true
-                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the network\'s history.'
-                            : editResolutionActive === false
-                                ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
-                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the network\'s history.'}
-                    </p>
-                    {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
-                        an address list is the thing IssueTokenForm/TokenAdminForm point
-                        owners at to bind an allow-list or block-list, and that bind is
-                        the one decision that is final from THAT screen (a bound list can
-                        never be cleared, so the token can never open to the bridge in
-                        milestone 1). This form has no way to know whether a list will
-                        ever be bound, so the disclosure here is a heads-up rather than a
-                        block, in the same voice IssueTokenForm already uses. */}
-                    <p className={styles.hint}>
-                        If you later point a token&apos;s allow-list or block-list at this
-                        list, that token can never be bridged to another network, and the
-                        binding itself can never be cleared once set.
-                    </p>
                 </>
             ) : (
                 <TickItemsEditor
@@ -928,7 +925,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             {metaSupported ? (
                 <>
                     <Input
-                        label="Name (optional)"
+                        label="Name"
+                        optional
+                        help={`A public on-chain name for this list, up to ${LIST_META_NAME_MAX_BYTES} UTF-8 bytes.`}
                         hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
                         error={nameError || undefined}
                         value={listName}
@@ -936,7 +935,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         autoComplete="off"
                     />
                     <Input
-                        label="Description (optional)"
+                        label="Description"
+                        optional
+                        help={`A public on-chain description of this list, up to ${LIST_META_DESCRIPTION_MAX_BYTES} UTF-8 bytes.`}
                         hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
                         error={descriptionError || undefined}
                         value={listDescription}
@@ -946,27 +947,35 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 </>
             ) : null}
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A public note stored on-chain with this list creation action. It is separate from the list's name and description and cannot contain | or ;."
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            <FeesCard
+                chainId={chainId}
+                feeSelector={feeTiers ? (
+                    <FeeSelector
+                        chainId={chainId}
+                        label="Network fee"
+                        coinTicker={coinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            </FeesCard>
             <p className={styles.hint}>
-                A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
-                {' '}Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
+                Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
             </p>
 
         </FormPage>,
@@ -1059,6 +1068,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
                 <Button
                     type="button"
                     variant="primary"
+                    icon={<Icon.PlusIcon />}
                     disabled={checked.size === 0}
                     onClick={() => onAdd(rows.filter((r) => checked.has(r.key)).map((r) => r.address))}
                 >

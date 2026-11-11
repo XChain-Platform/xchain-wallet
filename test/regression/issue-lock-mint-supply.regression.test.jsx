@@ -8,11 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite: the Issue form's "Lock supply + minting" option.
+// Regression suite: the Issue form's supply locks.
 //
-//   [L1] The option writes LOCK_MINT_SUPPLY beside LOCK_MAX_SUPPLY and
-//        LOCK_MINT, matching the wizard's meme and collectible templates,
-//        so an owner who locked minting cannot mint through a re-ISSUE.
+//   [L1] Locking Max supply, Minting and Mint supply (the separate switches
+//        that replaced "Lock supply + minting", U80) writes LOCK_MAX_SUPPLY,
+//        LOCK_MINT and LOCK_MINT_SUPPLY, matching the wizard's meme and
+//        collectible templates, so an owner who locked minting cannot mint
+//        through a re-ISSUE.
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -80,8 +82,13 @@ describe('regression/issue-lock-mint-supply', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'LOCKTEST' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        if (lock) fireEvent.click(screen.getByLabelText(/Lock supply \+ minting/));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
+        if (lock) {
+            fireEvent.click(screen.getByRole('button', { name: /^Locks/ }));
+            fireEvent.click(screen.getByRole('switch', { name: 'Max supply' }));
+            fireEvent.click(screen.getByRole('switch', { name: 'Minting' }));
+            fireEvent.click(screen.getByRole('switch', { name: 'Mint supply' }));
+        }
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         return composedParams(messaging);

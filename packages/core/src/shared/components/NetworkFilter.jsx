@@ -13,6 +13,9 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
+import { TokenListIcon } from '../../ui/icons/index.jsx';
+import buttonStyles from '../../ui/Button.module.css';
+import fieldStyles from '../../ui/ChainPicker.module.css';
 import styles from './NetworkFilter.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
@@ -40,6 +43,9 @@ import '../../i18n/locales/en/extension.js';
  * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {boolean} [props.iconOnly]  draw only the filter or coin icon; the
  *   network name stays in the title and the accessible name (U12)
+ * @param {boolean} [props.fieldTrigger]  draw the trigger like the standard
+ *   network field (button base, network icon and name, list icon, no accent
+ *   fill) instead of the chip; callers that leave it off keep the chip
  */
 export function NetworkFilter({
     chainRegistry,
@@ -49,6 +55,7 @@ export function NetworkFilter({
     ariaLabel,
     size = 'md',
     iconOnly = false,
+    fieldTrigger = false,
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -109,6 +116,24 @@ export function NetworkFilter({
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
 
+    const triggerProps = {
+        onClick: () => {
+            if (open) closeFilter();
+            else openFilter(entries.length > 6 ? 'search' : 'selected');
+        },
+        onKeyDown: (e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            openFilter(e.key === 'ArrowUp' ? 'last' : 'selected');
+        },
+        'aria-haspopup': 'listbox',
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-controls': open ? listboxId : undefined,
+        'aria-label': triggerAriaLabel,
+        title: triggerLabel,
+    };
+    const asField = fieldTrigger && !iconOnly;
+
     useEffect(() => {
         if (!open) return;
         if (focusOnOpenRef.current === 'search') {
@@ -158,43 +183,49 @@ export function NetworkFilter({
     return (
         <div
             ref={triggerRef}
-            className={[styles.wrap, styles[size], iconOnly ? styles.iconOnly : '']
+            className={[styles.wrap, styles[size], iconOnly ? styles.iconOnly : '',
+                asField ? fieldStyles.wrap : '', asField ? fieldStyles[size] : '']
                 .filter(Boolean).join(' ')}
         >
-            <Chip
-                pressed={value !== 'all'}
-                className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
-                onClick={() => {
-                    if (open) closeFilter();
-                    else openFilter(entries.length > 6 ? 'search' : 'selected');
-                }}
-                onKeyDown={(e) => {
-                    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-                    e.preventDefault();
-                    openFilter(e.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-                aria-haspopup="listbox"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-controls={open ? listboxId : undefined}
-                aria-label={triggerAriaLabel}
-                title={triggerLabel}
-            >
-                <span className={styles.triggerIcon} aria-hidden="true">
-                    {triggerIconUrl ? (
-                        <img src={triggerIconUrl} alt="" />
-                    ) : (
-                        <Icon.FilterIcon />
-                    )}
-                </span>
-                {iconOnly ? null : (
-                    <span className={styles.triggerText}>
-                        <span className={styles.triggerLabel}>{triggerLabel}</span>
+            {asField ? (
+                <button
+                    type="button"
+                    className={`${buttonStyles.btn} ${fieldStyles.trigger}`}
+                    {...triggerProps}
+                >
+                    <span className={fieldStyles.triggerIcon} aria-hidden="true">
+                        {triggerIconUrl ? <img src={triggerIconUrl} alt="" /> : <Icon.FilterIcon />}
                     </span>
-                )}
-                <span className={styles.triggerCaret} aria-hidden="true">
-                    <ChevronIcon open={open} />
-                </span>
-            </Chip>
+                    <span className={fieldStyles.triggerText}>
+                        <span className={fieldStyles.triggerLabel}>{triggerLabel}</span>
+                    </span>
+                    <span className={fieldStyles.triggerCaret} aria-hidden="true">
+                        <TokenListIcon />
+                    </span>
+                </button>
+            ) : (
+                <Chip
+                    pressed={value !== 'all'}
+                    className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
+                    {...triggerProps}
+                >
+                    <span className={styles.triggerIcon} aria-hidden="true">
+                        {triggerIconUrl ? (
+                            <img src={triggerIconUrl} alt="" />
+                        ) : (
+                            <Icon.FilterIcon />
+                        )}
+                    </span>
+                    {iconOnly ? null : (
+                        <span className={styles.triggerText}>
+                            <span className={styles.triggerLabel}>{triggerLabel}</span>
+                        </span>
+                    )}
+                    <span className={styles.triggerCaret} aria-hidden="true">
+                        <ChevronIcon open={open} />
+                    </span>
+                </Chip>
+            )}
             {open ? (
                 <div
                     ref={popoverRef}

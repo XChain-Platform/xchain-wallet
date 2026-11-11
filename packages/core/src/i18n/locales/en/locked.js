@@ -21,6 +21,8 @@ const messages = {
     'locked.autoLockUnsaved': "The wallet locked because its auto-lock timer couldn't be saved.",
     'locked.unlockingYourWalletSecurelyThis': 'Unlocking your wallet securely. This may take a moment.',
     'locked.unlockWallet2': 'Unlock Wallet',
+    'locked.passwordHelp':
+        "The password you set for this wallet on this device. It only unlocks the wallet here and isn't used to restore it.",
     'locked.useBiometrics': 'Use biometrics',
     'locked.thisIsADemoWallet':
         'This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.',

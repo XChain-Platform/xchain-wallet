@@ -372,7 +372,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             // amount is the mode selector - with one it is Mode A and the
             // validator prices the fill; without one the oracle does.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat (optional)').selectOption(ORACLE.fiat);
+            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(ORACLE.fiat);
             await main.getByLabel(/^Oracle address/).fill(ORACLE.address);
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();

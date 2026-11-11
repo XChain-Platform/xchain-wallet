@@ -84,7 +84,7 @@ describe('regression/form-submit-guards', () => {
         fireEvent.submit(form);
 
         expect(mocks.messaging.blockOrigin).toHaveBeenCalledTimes(1);
-        expect(screen.getByRole('button', { name: 'Block' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Block origin' })).toBeDisabled();
 
         pending.resolve();
         await waitFor(() => expect(mocks.messaging.listBlockedOrigins).toHaveBeenCalledTimes(2));
@@ -105,6 +105,6 @@ describe('regression/form-submit-guards', () => {
         expect(screen.getByRole('button', { name: 'Applying…' })).toBeDisabled();
 
         pending.resolve(mocks.settings);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Apply throttle' })).toBeEnabled());
     });
 });

@@ -10,8 +10,8 @@
 
 // Regression suite: compact network filters.
 //
-//   [P1] 2026-10-13: A visible network count forms a second line and clips
-//        the Contacts and Dispensers filter trigger in a 411px toolbar.
+//   [P1] 2026-10-13: Visible network text forms a second line and clips the
+//        Contacts and Dispensers filter trigger in a 411px toolbar.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -62,6 +62,7 @@ describe('regression/network-filter-one-line', () => {
                         value="all"
                         onChange={() => {}}
                         announceNetworkCount
+                        iconOnly
                     />
                 </div>,
             );
@@ -77,7 +78,7 @@ describe('regression/network-filter-one-line', () => {
 
             expect(window.innerWidth).toBe(VIEWPORT_WIDTH);
             expect(routeSource).toMatch(
-                /<NetworkFilterDropdown\b[^>]*\bannounceNetworkCount\b[^>]*\/>/,
+                /<NetworkFilterDropdown\b[^>]*\bannounceNetworkCount\b[^>]*\biconOnly\b[^>]*\/>/,
             );
             expect(dropdown).toHaveClass(dropdownStyles.md);
             expect(filter).toHaveClass(filterStyles.md);

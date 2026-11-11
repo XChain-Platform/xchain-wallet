@@ -53,12 +53,13 @@ async function importClaimant(page, claimant) {
     await expect(chain).toBeVisible({ timeout: 30_000 });
     if (!((await chain.getAttribute('aria-label')) || '').includes('Bitcoin')) {
         await chain.click();
-        await page.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: /^Select\sBitcoin\b/ }).first().click();
     }
 
     await page.getByLabel('Address type').selectOption(type);
     await page.getByLabel('WIF private key').fill(claimant.wif);
-    await page.getByLabel('Label (optional)').fill('Testnet validator claimant');
+    await page.getByLabel('Label', { exact: true }).fill('Testnet validator claimant');
     const password = page.getByLabel('Wallet password', { exact: true });
     if (await password.count()) await password.fill(WALLET_UNLOCK);
     await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();

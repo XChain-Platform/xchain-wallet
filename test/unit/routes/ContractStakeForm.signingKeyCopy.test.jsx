@@ -55,7 +55,7 @@ function mountForm(props, walletMode = 'full') {
 
 async function submitUntil(check) {
     await screen.findByLabelText('From');
-    const form = screen.getByLabelText(/signing public key/i).closest('form');
+    const form = screen.getByLabelText(/signing public key/i, { selector: 'input' }).closest('form');
     await waitFor(() => {
         if (form.isConnected) fireEvent.submit(form);
         check();

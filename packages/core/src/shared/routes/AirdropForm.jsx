@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -42,7 +42,9 @@ import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -66,7 +68,7 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
-import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { existingListRowText } from '../utils/existingListRowText.js';
 import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
@@ -181,6 +183,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // token has gated content.
     const gatedDropNotice = useGatedTickNotice({ messaging, chainId, tick: token });
     const [amountPer, setAmountPer] = useState('');
+    const [amountValidationError, setAmountValidationError] = useState(/** @type {string | null} */ (null));
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
@@ -805,6 +808,39 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return p;
     }, [token, amountPer, memo, listActionIndex]);
 
+    const quoteActionData = useMemo(() => {
+        if (!chainId || !fromAddress?.address) return null;
+        const hasKnownList = /^[1-9]\d*$/.test(listActionIndex || '');
+        if (!hasKnownList && sourceMode !== 'existing') {
+            const listReady = sourceMode === 'holders'
+                ? memberTicks.length > 0 && invalidTicks.length === 0
+                : !recipientsPending && recipients.valid.length > 0;
+            return listReady && !listFit ? { action: 'LIST', params: listParams } : null;
+        }
+        const amount = String(amountPer).trim();
+        const airdropReady = hasKnownList
+            && !tickerReferenceError(token, { noun: 'Token ticker', allowRef: true })
+            && compareDecimalStrings(amount, '0') === 1
+            && !tokenAmountPrecisionError(amount, {
+                divisibility: dropInfo?.divisibility,
+                tick: token,
+                noun: 'Per-recipient amount',
+            })
+            && !(memo && /[|;]/.test(memo))
+            && !memoLengthError(memo.trim())
+            && (sourceMode !== 'existing'
+                || Boolean(existingListDetail && !existingListDetail.loading && !existingListDetail.unsupported));
+        return airdropReady ? { action: 'AIRDROP', params: airdropParams } : null;
+    }, [chainId, fromAddress, listActionIndex, sourceMode, memberTicks, invalidTicks,
+        recipientsPending, recipients.valid, listFit, listParams, amountPer, token,
+        dropInfo, memo, existingListDetail, airdropParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
+
     const listDecoded = useMemo(() => {
         if (stage !== 'review-list' && stage !== 'wait-index') return null;
         return decoderLib.decodeAction({
@@ -983,6 +1019,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         const amt = String(amountPer).trim();
         if (!amt) {
             setFormError('Per-recipient amount is required.');
+            return;
+        }
+        if (amountValidationError) {
+            setFormError(amountValidationError);
             return;
         }
         const amountComparison = compareDecimalStrings(amt, '0');
@@ -1831,6 +1871,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -1910,8 +1951,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
-                    disabled={sourceMode === 'paste' && (recipientsPending || listFit !== null)}
+                    variant="success"
+                    icon={<Icon.UsersIcon />}
+                    disabled={Boolean(amountValidationError)
+                        || (sourceMode === 'paste' && (recipientsPending || listFit !== null))}
                 >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>
@@ -1933,13 +1976,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         that control only renders when an address IS resolved.
                         Same shape as ListCreateForm / ControllerBindForm, which
                         have always reset here. */}
-                    <ChainPicker label="Network" value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
+                    <NetworkField label="Network" help="The chain the airdrop is recorded on. Your From address, token, recipients, and fees are on this network." value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 </>
             )}
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that sends the airdrop. It must hold the token and pays the fees."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -1956,6 +2000,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             {lockedToken ? null : (
                 <TokenField
                     label="Token to drop"
+                    help="The token sent to every recipient. Only tokens available to send from this wallet are listed."
                     value={token && chainId ? { chainId, tick: token } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                 />
@@ -1967,9 +2012,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             ) : null}
             <AmountField
                 label="Per-recipient amount"
-                hint="Amount sent to each address (or, for a token-holder list, each holder)."
+                help="Amount sent to each address (or, for a token-holder list, each holder)."
                 amount={amountPer}
                 tick={token}
+                divisibility={dropInfo?.divisibility}
+                onValidationError={setAmountValidationError}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1996,7 +2043,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setExistingListDetail(null);
                     setSelectedListRow(null);
                 }}
-                hint={sourceMode === 'paste'
+                help={sourceMode === 'paste'
                     ? 'Enter or upload addresses; publishes a new address list, then airdrops to it.'
                     : sourceMode === 'existing'
                         ? "Pick a list you've already published (address or token) and airdrop straight to it; no new list gets created."
@@ -2023,6 +2070,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     >
                         <Textarea
                             label="Recipients"
+                            help="Enter or upload the recipient addresses for this airdrop. A new address list is published first, then the airdrop is sent to that list."
                             value={pasteText}
                             onChange={(e) => {
                                 setImportedRecipientEntries(null);
@@ -2113,6 +2161,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             <Button
                                 type="button"
                                 className={styles.back}
+                                icon={showInvalid ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                                 onClick={() => setShowInvalid((s) => !s)}
                             >
                                 {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
@@ -2178,6 +2227,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <Textarea
                         id="airdrop-holder-ticks"
                         label="Tokens (one per line)"
+                        help="Enter one token ticker per line. A new token list is published first, then the airdrop is sent to every current holder of those tokens. A wallet holding more than one listed token can receive more than one payout. The holder set is fixed only when the airdrop confirms, so the count is a preview."
                         value={ticksText}
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
@@ -2186,7 +2236,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
-                        <Button type="button" variant="ghost" onClick={() => setHolderTicksPickerOpen(true)}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            icon={<Icon.PlusIcon />}
+                            onClick={() => setHolderTicksPickerOpen(true)}
+                        >
                             Add from token picker
                         </Button>
                     </div>
@@ -2206,16 +2261,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     {invalidTicks.length > 0 ? (
                         <p className={styles.hint}>These don't look like token names: {invalidTicks.join(', ')}</p>
                     ) : null}
-                    {/* PC-11 holder-snapshot honesty: this count is a preview,
-                        not a promise. See the file-level doc comment. */}
-                    <p className={styles.hint}>
-                        This publishes a new token list, then airdrops to every current
-                        holder of {memberTicks.length === 1 ? 'that token' : 'these tokens'}.
-                        A wallet holding more than one listed token can receive more than
-                        one payout. The holder set is only fixed when the airdrop
-                        transaction confirms on-chain, not now; the count above is a
-                        preview, not a guarantee of who gets paid.
-                    </p>
                 </>
             ) : null}
 
@@ -2277,15 +2322,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             ) : null}
 
             <Input
-                label="Memo (optional)"
-                hint={MEMO_HINT}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
 
-            {feeTiers ? (
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -2293,8 +2345,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                ) : null}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            </FeesCard>
 
         </FormPage>,
     );

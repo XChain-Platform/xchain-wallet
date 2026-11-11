@@ -318,22 +318,14 @@ export function ActionConfirmScreen({
                             onConfirmedChange={onHwConfirmedChange}
                         />
                     ) : signerReady ? (
-                        // This is the last screen before Approve & Sign,
-                        // and panic mode makes "no password needed" a claim the
-                        // wallet cannot honour. SigningReadyNote withdraws it
-                        // whenever signing is frozen, and explains why only for
-                        // a self-armed freeze.
-                        <SigningReadyNote>
-                            <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
-                            </p>
-                        </SigningReadyNote>
+                        // State a self-armed freeze without exposing a duress-armed freeze.
+                        <SigningReadyNote />
                     ) : (
                         <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
                             <Input
                                 type="password"
                                 label={t('common.password')}
-                                hint={t('components.messageConfirmScreen.requiredToSign')}
+                                help={t('components.messageConfirmScreen.requiredToSign')}
                                 value={password}
                                 onChange={(e) => onPasswordChange(e.target.value)}
                                 autoComplete="current-password"

@@ -74,8 +74,8 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
                 buffer: randomBytes(FILE_BYTES),
             });
             await expect(main).toContainText(`${FILE_BYTES.toLocaleString('en-US')} bytes`);
-            await main.getByLabel('Title (optional)').fill(TITLE);
-            await main.getByLabel('Memo (optional)').fill(MEMO);
+            await main.getByLabel('Title', { exact: true }).fill(TITLE);
+            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('checkbox', { name: /on-chain forever/ }).check();
             await main.getByRole('button', { name: 'Publish file', exact: true }).click();
         });

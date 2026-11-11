@@ -108,11 +108,19 @@ function sync() {
     syncScheduled = false;
     if (!hasHistory()) return;
     if (unloading) return;
+    // A Back we issued has not landed yet. Pushing now would put the new
+    // sentinel where that Back then removes it, so wait for its popstate,
+    // which syncs again.
+    if (ignoreNextPop) return;
     const want = handlers.some((entry) => entry.kind !== 'route')
         || (!routeHistoryManaged && handlers.length > 0);
     if (want && !armed) {
         window.history.pushState({ xcBack: true }, '');
         armed = true;
+    } else if (!want && armed && window.history.state?.xcRoute) {
+        // A route snapshot now holds the top entry, so the sentinel was
+        // taken over (or already left). Going back would undo that route.
+        armed = false;
     } else if (!want && armed) {
         // The user got home by an on-screen control, so the sentinel is
         // stale. Take it back out, and do not mistake the resulting
@@ -147,6 +155,8 @@ function scheduleSync() {
 function onPopState() {
     if (ignoreNextPop) {
         ignoreNextPop = false;
+        // Handlers that registered while that Back was in flight still need their sentinel.
+        scheduleSync();
         return;
     }
     if (!armed) return; // not our entry; someone else's navigation
@@ -256,6 +266,21 @@ export function useNativeBackRoot(enabled = true, onExitArmed, skipHistory) {
             if (nativeBackRoot === root) nativeBackRoot = null;
         };
     }, [enabled]);
+}
+
+/**
+ * True when the current history entry is a bare Back sentinel of ours.
+ * A route snapshot about to be pushed takes that slot instead (see
+ * `takeSentinelForRoute`), so closing an overlay never pops the new route.
+ */
+export function isBareSentinel(state) {
+    return Boolean(state && state.xcBack && !state.xcRoute);
+}
+
+/** The route snapshot replaced our sentinel: forget it and re-arm if an overlay still needs one. */
+export function takeSentinelForRoute() {
+    armed = false;
+    scheduleSync();
 }
 
 /** Let the shell's route snapshots own browser Back while keeping overlay

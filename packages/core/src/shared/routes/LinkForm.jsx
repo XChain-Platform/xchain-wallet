@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -17,8 +17,8 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { t } from '../../i18n/index.js';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -35,7 +35,8 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -58,12 +59,11 @@ const COIN_DISPLAY_TICKER = {
 };
 
 /**
- * §42.8.1 LINK creation: two-panel composer.
+ * §42.8.1 LINK creation: two-action composer.
  *
  * Anchors a pair of existing actions across two chains. The form
  * builds a LINK action with `COIN1 / COIN1_ACTION_INDEX / COIN2 /
- * COIN2_ACTION_INDEX / MEMO` and submits it on whichever chain the
- * user picks (defaults to chain A, the first panel). The LINK
+ * COIN2_ACTION_INDEX / MEMO` and submits it on the form network. The LINK
  * itself is a single on-chain action; both sides are still recorded
  * in the indexer's `links` table so the §23.5 cross-chain thread
  * rendering on History works regardless of which side the user
@@ -95,13 +95,14 @@ export function LinkForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
+    const [formChainId, setFormChainId] = useState(/** @type {string | null} */ (null));
     const [chain1Id, setChain1Id] = useState(/** @type {string | null} */ (null));
     const [chain2Id, setChain2Id] = useState(/** @type {string | null} */ (null));
     const [actionIndex1, setActionIndex1] = useState('');
     const [actionIndex2, setActionIndex2] = useState('');
     const [memo, setMemo] = useState('');
-    const [submitOn, setSubmitOn] = useState(/** @type {'chain1' | 'chain2'} */ ('chain1'));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -160,6 +161,7 @@ export function LinkForm({ walletId, onBack }) {
                 // so it takes the next distinct chain.
                 const restricted = Object.fromEntries(chains.map((cid) => [cid, byChain[cid]]));
                 const chain1 = pickDefaultChainId(restricted, { settings }) || chains[0];
+                setFormChainId(chain1);
                 setChain1Id(chain1);
                 setChain2Id(chains.find((cid) => cid !== chain1) || chain1);
             })
@@ -169,14 +171,16 @@ export function LinkForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const submitChainId = submitOn === 'chain1' ? chain1Id : chain2Id;
+    const submitChainId = formChainId;
 
     // The signing address must belong to the chain we're submitting
-    // the LINK on. Reset fromAddressId when submitChainId changes, to the
+    // the LINK on. Reset fromAddressId when the form network changes, to the
     // same default as Send and every other spend-from-balance form: the
     // chain's active address, else the newest HD external, else the first
     // remaining record (a hardware-only wallet). A dispenser-delegated
-    // address is never the default; it vends rather than funds.
+    // address is never the default; it vends rather than funds. An address
+    // already on the new network is kept: picking an own address on another
+    // chain switches the network and fills the address in the same step.
     useEffect(() => {
         if (!addressesByChain || !activeByChain || !submitChainId) {
             setFromAddressId(null);
@@ -184,9 +188,9 @@ export function LinkForm({ walletId, onBack }) {
         }
         const all = addressesByChain[submitChainId] || [];
         const funding = all.filter((a) => a.role !== 'dispenser');
-        setFromAddressId(
-            preferredSourceId(funding, activeByChain[submitChainId]) || funding[0]?.id || all[0]?.id || null,
-        );
+        setFromAddressId((current) => (current && all.some((a) => a.id === current)
+            ? current
+            : preferredSourceId(funding, activeByChain[submitChainId]) || funding[0]?.id || all[0]?.id || null));
     }, [submitChainId, addressesByChain, activeByChain]);
 
     const fromAddress = useMemo(() => {
@@ -270,15 +274,15 @@ export function LinkForm({ walletId, onBack }) {
         if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
-        if (!/^\d+$/.test(actionIndex1)) return 'The action number on the network A must be a whole number.';
-        if (!/^\d+$/.test(actionIndex2)) return 'The action number on the network B must be a whole number.';
+        if (!/^\d+$/.test(actionIndex1)) return 'The number for Action 1 must be a whole number.';
+        if (!/^\d+$/.test(actionIndex2)) return 'The number for Action 2 must be a whole number.';
         if (ticker1 === ticker2 && BigInt(actionIndex1) === BigInt(actionIndex2)) {
             return 'Cannot link an action to itself.';
         }
-        if (preview1?.error) return 'Could not verify the action on the network A. Check the number and try again.';
-        if (preview2?.error) return 'Could not verify the action on the network B. Check the number and try again.';
-        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on the network A at that number.';
-        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on the network B at that number.';
+        if (preview1?.error) return 'Could not verify Action 1. Check the number and try again.';
+        if (preview2?.error) return 'Could not verify Action 2. Check the number and try again.';
+        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found for Action 1 at that number.';
+        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found for Action 2 at that number.';
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
 
@@ -313,9 +317,9 @@ export function LinkForm({ walletId, onBack }) {
         ? (COIN_DISPLAY_TICKER[submitDescriptor.coin] || submitDescriptor.coin)
         : null;
 
-    // PC-51: native-coin protocol fee (LINK is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(submitDescriptor);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(submitDescriptor);
 
     // The wire params, mirroring linkAction's own build. What is signed is a
     // BINDING between two on-chain records, and the confirm page's action-byte
@@ -501,7 +505,7 @@ export function LinkForm({ walletId, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across networks'}
+            title={isReviewOrSubmitting ? 'Review link' : 'Link actions'}
         />
     );
     const wrap = (children) => (
@@ -566,6 +570,23 @@ export function LinkForm({ walletId, onBack }) {
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={formChainId}
+                onChainChange={(value) => { setFormChainId(value); setFormError(null); }}
+                onPick={(address) => {
+                    setFromAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
     }
 
     // Confirm page, rendered in place of the form; form state stays intact
@@ -660,7 +681,7 @@ export function LinkForm({ walletId, onBack }) {
                         Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
                     <dt className={styles.detailsLabel}>First action</dt>
-                    <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                    <dd className={`${styles.detailsValue} ${styles.linkReviewAction}`}>
                         {preview1?.loading
                             ? 'Loading…'
                             : preview1?.error
@@ -670,7 +691,7 @@ export function LinkForm({ walletId, onBack }) {
                                     : '(preview not loaded)'}
                     </dd>
                     <dt className={styles.detailsLabel}>Second action</dt>
-                    <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                    <dd className={`${styles.detailsValue} ${styles.linkReviewAction}`}>
                         {preview2?.loading
                             ? 'Loading…'
                             : preview2?.error
@@ -689,9 +710,7 @@ export function LinkForm({ walletId, onBack }) {
 
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -721,7 +740,7 @@ export function LinkForm({ walletId, onBack }) {
     return wrapForm(
         <FormPage
             demoGuard={demoGuard}
-            label="Link two actions across networks"
+            label="Link actions"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
@@ -739,20 +758,43 @@ export function LinkForm({ walletId, onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.LinkIcon />}
                     loading={actionConfirm.composing || previewPending}
                     disabled={actionConfirm.composing || previewPending}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
                         : previewPending ? 'Looking up actions…'
-                        : singleEncode ? 'Link' : 'Review'}
+                        : 'Link actions'}
                 </Button>
             )}
         >
-            <div className={styles.linkPanels}>
-                <SidePanel
-                    title="Network A"
+            <NetworkField
+                label="Network"
+                help="The chain the link is recorded on. Your From address and the fee are on this network."
+                value={formChainId}
+                onChange={(value) => { setFormChainId(value); setFormError(null); }}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+            />
+
+            {fromAddress ? (
+                <AddressField
+                    label="From"
+                    help="The address that signs and pays for the link. The link is recorded on the network chosen above."
+                    icon="addresses"
+                    value={fromAddress.address}
+                    readOnly
+                    onChange={() => {}}
+                    onIconClick={() => setSourcePickerOpen(true)}
+                    iconLabel="Choose source address"
+                />
+            ) : null}
+
+            <div className={styles.linkActions} data-xc-preserve-nested-cards>
+                <ActionCard
+                    number="1"
                     chainIds={chainIds}
                     chainId={chain1Id}
                     onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
@@ -760,8 +802,11 @@ export function LinkForm({ walletId, onBack }) {
                     onActionIndexChange={(value) => { setActionIndex1(value); setFormError(null); }}
                     previewCache={previewCache}
                 />
-                <SidePanel
-                    title="Network B"
+                <div className={styles.linkConnector} aria-hidden="true">
+                    <Icon.LinkIcon />
+                </div>
+                <ActionCard
+                    number="2"
                     chainIds={chainIds}
                     chainId={chain2Id}
                     onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
@@ -772,55 +817,18 @@ export function LinkForm({ walletId, onBack }) {
             </div>
 
             <Input
-                label="Memo (optional)"
-                hint={`${utf8ByteLength(trimmedMemo)} / ${MAX_MEMO_LENGTH} bytes.`}
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help={MEMO_HINT}
                 error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            <RadioGroup
-                legend="Submit the link on:"
-                aria-label="Submit the link on"
-                name="submitOn"
-                value={submitOn}
-                onChange={(nextValue) => setSubmitOn(nextValue)}
-                options={[
-                    {
-                        value: 'chain1',
-                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Network A',
-                    },
-                    {
-                        value: 'chain2',
-                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Network B',
-                        disabled: !chain2Id || chain2Id === chain1Id,
-                    },
-                ]}
-            />
-
-            {fromAddress && submitChainId ? (
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Submit on</dt>
-                    <dd className={styles.detailsValue}>
-                        {chainRegistry.get(submitChainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" showName={false} />
-                            : 'Selected network'}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Pair</dt>
-                    <dd className={styles.detailsValue}>
-                        {ticker1} #{actionIndex1 || '?'}
-                        {' ↔ '}
-                        {ticker2} #{actionIndex2 || '?'}
-                    </dd>
-                </dl>
-            ) : null}
-
             {feeTiers ? (
                 <FeeSelector
+                    chainId={submitChainId}
                     label="Network fee"
                     coinTicker={feeCoinTicker || ''}
                     tiers={feeTiers}
@@ -829,66 +837,88 @@ export function LinkForm({ walletId, onBack }) {
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker || ''} />
-
         </FormPage>,
     );
 }
 
-/** One side of the two-panel composer. */
-function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onActionIndexChange, previewCache }) {
+/** One referenced action and its explorer lookup result. */
+function ActionCard({ number, chainIds, chainId, onChainChange, actionIndex, onActionIndexChange, previewCache }) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const previewKey = chainId && /^\d+$/.test(actionIndex)
         ? `${chainId}:${actionIndex}`
         : null;
     const preview = previewKey ? previewCache[previewKey] : null;
 
+    const checkText = actionIndex && !/^\d+$/.test(actionIndex)
+        ? 'This must be a whole number.'
+        : preview?.loading
+            ? 'Looking up that action…'
+            : preview?.error
+                ? humanizeError(preview.error, 'load that action').message
+                : preview?.action
+                    ? foundActionText(preview.action)
+                    : preview
+                        ? 'No action was found at that number.'
+                        : descriptor && actionIndex
+                            ? 'Enter the action number from the explorer to see a preview…'
+                            : '';
+
     return (
-        <fieldset className={`${styles.flatFieldset} ${styles.linkPanel}`}>
-            <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
-                {title}
+        <fieldset className={styles.linkActionCard}>
+            <legend className={styles.linkActionTitle}>
+                <span className={styles.linkActionNumber}>{number}</span>
+                Action {number}
             </legend>
 
-            <ChainPicker
-                label="Network"
-                value={chainId}
-                onChange={onChainChange}
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-                hideNetworkKind
-            />
+            <div className={styles.linkActionFields}>
+                <div className={styles.linkActionNetwork}>
+                    <NetworkField
+                        label="Network"
+                        help={`The chain Action ${number} was recorded on. The action number is looked up on this network.`}
+                        value={chainId}
+                        onChange={onChainChange}
+                        chainIds={chainIds}
+                        chainRegistry={chainRegistry}
+                    />
+                </div>
 
-            <Input
-                label="Action to reference"
-                hint="The number shown next to the action on the explorer."
-                value={actionIndex}
-                onChange={(e) => onActionIndexChange(e.target.value.replace(/\D/g, ''))}
-                inputMode="numeric"
-                placeholder="e.g. 12345"
-            />
-
-            <div style={{
-                marginTop: 'var(--xc-space-2)',
-                fontSize: 'var(--xc-text-xs)',
-                color: 'var(--xc-text-muted)',
-                minHeight: '1.5rem',
-            }}>
-                {actionIndex && !/^\d+$/.test(actionIndex)
-                    ? 'This must be a whole number.'
-                    : preview?.loading
-                        ? 'Looking up that action…'
-                        : preview?.error
-                            ? humanizeError(preview.error, 'load that action').message
-                            : preview?.action
-                                ? `Preview: ${decodePreview(preview.action)}`
-                                : preview
-                                    ? 'No action was found at that number.'
-                                    : descriptor && actionIndex
-                                        ? 'Enter the action number from the explorer to see a preview…'
-                                        : ''}
+                <Input
+                    className={styles.linkActionIndex}
+                    label="Action number"
+                    help="The number shown next to the action on the explorer."
+                    value={actionIndex}
+                    onChange={(e) => onActionIndexChange(e.target.value.replace(/\D/g, ''))}
+                    inputMode="numeric"
+                    placeholder="e.g. 12345"
+                />
             </div>
+
+            {checkText ? (
+                <div className={`${styles.linkActionCheck} ${preview?.action ? styles.linkActionFound : ''}`}>
+                    {checkText}
+                </div>
+            ) : null}
         </fieldset>
     );
+}
+
+function foundActionText(action) {
+    const actionName = action?.action || action?.ACTION;
+    const amount = action?.amount ?? action?.AMOUNT;
+    const ticker = action?.tick ?? action?.TICK;
+    const block = action?.block_index ?? action?.BLOCK_INDEX ?? action?.blockIndex;
+    const summary = [actionName ? String(actionName).toUpperCase() : actionName, amount, ticker]
+        .filter((part) => part !== undefined && part !== null && String(part).trim() !== '')
+        .map(String)
+        .join(' ');
+    const blockText = formatBlockIndex(block);
+    return `Found: ${summary || 'Action details unavailable'}${blockText ? `, block ${blockText}` : ''}`;
+}
+
+function formatBlockIndex(block) {
+    if (block === undefined || block === null || String(block).trim() === '') return '';
+    const text = String(block).trim();
+    return /^\d+$/.test(text) ? BigInt(text).toLocaleString('en-US') : text;
 }
 
 function decodePreview(action) {

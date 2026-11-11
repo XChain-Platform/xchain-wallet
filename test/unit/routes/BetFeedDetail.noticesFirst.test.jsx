@@ -10,7 +10,7 @@
 
 // Every notice is the first item of the page content. The market page drew the
 // place-bet error, and in a demo wallet the demo note, in the middle of the page
-// under the market's terms and pool split, where a phone tapping Review bet
+// under the market's terms and pool split, where a phone tapping Place bet
 // from the bottom of the form never saw them.
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -88,7 +88,7 @@ describe('Market page notices', () => {
     it('shows the place-bet error before the market terms', async () => {
         const utils = await openMarket('w');
         const review = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /Review bet/.test(b.textContent || ''));
+            .find((b) => /Place bet/.test(b.textContent || ''));
         await domAct(async () => {
             review.click();
             await drain();

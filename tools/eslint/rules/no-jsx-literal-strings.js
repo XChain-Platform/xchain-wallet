@@ -30,7 +30,7 @@
 //   - JSXAttribute "literal"   <input placeholder="x" />   → flagged for
 //     attributes whose names are user-visible: aria-label,
 //     aria-description, aria-roledescription, aria-valuetext, alt,
-//     title, placeholder, label, hint, caption, tooltip, heading,
+//     title, placeholder, label, hint, help, caption, tooltip, heading,
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
@@ -39,7 +39,7 @@
 //     message, description, lead, legend, closeLabel, searchLabel, subtitle,
 //     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
 //     unavailableMessage, intro (the USER_FACING_ATTRS set below is the authority;
-//     keep this list in step with it). The last forty-four are component
+//     keep this list in step with it). The last forty-five are component
 //     props rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
@@ -157,6 +157,9 @@ const USER_FACING_ATTRS = new Set([
     'placeholder',
     'label',
     'hint',
+    // Field help copy shown from the label-row InfoTip, the successor of
+    // the static hint line under a field.
+    'help',
     'caption',
     'tooltip',
     // Component props, not DOM attributes. Shipping components render copy

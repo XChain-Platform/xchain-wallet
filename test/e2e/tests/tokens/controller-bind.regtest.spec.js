@@ -494,7 +494,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
 async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await seedPrices();
     await openPaletteCommand(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Publish contract' });
+    const deploy = page.getByRole('button', { name: 'Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
 
@@ -601,10 +601,10 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
         .toBe(source);
 
     await form.getByLabel('Guard contract').fill(contractIndex);
-    // selectOption THROWS when the option is absent, so this line is also the
+    // A missing checkbox fails chooseActionClass, so this line is also the
     // browser-side proof of D-150: before the fix the picker carried five of the
     // chain's seven bindable classes and `all` was simply not there to choose.
-    await form.getByLabel('Action class').selectOption(actionClass);
+    await chooseActionClass(form, actionClass);
     await form.getByLabel(/^Cooldown blocks/).fill('0');
     await form.getByRole('button', { name: 'Bind', exact: true }).click();
 
@@ -645,7 +645,7 @@ async function unbindController(page, source, tick = TICK) {
     await expect(form.getByLabel(/^Cooldown blocks/),
         'the Unbind path still offers a cooldown field, which a drop cannot set')
         .toHaveCount(0);
-    await form.getByLabel('Action class').selectOption('transfer');
+    await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
@@ -695,11 +695,30 @@ async function gotoAddressControllerForm(page, source) {
     return form;
 }
 
+/**
+ * Leaves exactly `actionClass` ticked in the form's Action class checkboxes.
+ * The form opens with `transfer` ticked, so every other ticked box is cleared
+ * first. A class the chain does not offer has no checkbox, and the visibility
+ * assertion fails the test instead of silently binding the wrong class.
+ */
+async function chooseActionClass(form, actionClass) {
+    const group = form.getByRole('group', { name: 'Action class' });
+    const target = group.getByRole('checkbox', { name: actionClass, exact: true });
+    await expect(target, `the Action class checkboxes carry no \`${actionClass}\` option`).toBeVisible();
+    for (const box of await group.getByRole('checkbox', { checked: true }).all()) {
+        await box.uncheck();
+    }
+    await target.check();
+    await expect(target).toBeChecked();
+    await expect(group.getByRole('checkbox', { checked: true }),
+        `exactly \`${actionClass}\` must stay ticked`).toHaveCount(1);
+}
+
 /** Binds `contractIndex` to `source` itself (ADDRESS v1) and waits for the chain. */
 async function bindAddressController(page, source, contractIndex) {
     const form = await gotoAddressControllerForm(page, source);
     await form.getByLabel('Guard contract').fill(contractIndex);
-    await form.getByLabel('Action class').selectOption('transfer');
+    await chooseActionClass(form, 'transfer');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
     await form.getByRole('button', { name: 'Bind', exact: true }).click();
 
@@ -743,7 +762,7 @@ async function unbindAddressController(page, source) {
     await reloadToHome(page);
     const form = await gotoAddressControllerForm(page, source);
     await form.getByLabel(/^Unbind/).check();
-    await form.getByLabel('Action class').selectOption('transfer');
+    await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
@@ -949,7 +968,7 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
     });
 
     // THE `all` CLASS, WHICH IS THE ONE THE POLICY LAYER IS ACTUALLY DESIGNED
-    // AROUND - and which, until this session, no client could author at all.
+    // AROUND - and which the wallet is the first client able to author.
     //
     // D-150: the SDK validated ACTION_CLASS against the indexer's ROUTING set
     // (CONTROLLER_ACTION_CLASSES) where the field it guards appears only on a
@@ -1010,8 +1029,8 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('bind the deny-all guard over the `all` class', async () => {
-            // The class the wallet could not name until this session. `selectOption`
-            // throws when the option is absent, so reaching the chain at all is the
+            // The class only this wallet can name. `chooseActionClass`
+            // throws when the checkbox is absent, so reaching the chain at all is the
             // browser-side half of D-150.
             const { live } = await bindController(page, source, denyIndex, {
                 tick: CATCHALL_TICK, actionClass: 'all',

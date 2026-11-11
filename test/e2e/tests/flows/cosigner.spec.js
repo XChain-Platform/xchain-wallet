@@ -129,28 +129,32 @@ async function openAgentAccounts(page) {
 }
 
 async function configurePolicy(page) {
-    await page.getByLabel("This wallet's key").selectOption({ index: 1 });
-    await page.getByLabel(/Agent public key/).fill(AGENT_PUBLIC_KEY);
-    await page.getByLabel('Account name').fill(ACCOUNT_NAME);
+    await page.getByRole('button', { name: "Choose this wallet's key" }).click();
+    const walletKey = page.getByRole('button', { name: /^View address / }).first();
+    await expect(walletKey).toBeVisible();
+    await walletKey.click();
+    // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+    await page.getByRole('textbox', { name: /^Agent public key/ }).fill(AGENT_PUBLIC_KEY);
+    await page.getByLabel('Account name', { exact: true }).fill(ACCOUNT_NAME);
     await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Issue', exact: true }).check();
 
     const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
-    await perAction.getByRole('button', { name: '+ Add limit' }).click();
+    await perAction.getByRole('button', { name: 'Add limit', exact: true }).click();
     await perAction.getByLabel('Action', { exact: true }).selectOption('SEND');
-    await perAction.getByLabel('Token').fill('BTC');
-    await perAction.getByLabel('Max amount').fill('0.25');
+    await perAction.getByLabel('Token', { exact: true }).fill('BTC');
+    await perAction.getByRole('textbox', { name: /^Max amount/ }).fill('0.25');
 
     const rolling = page.getByRole('group', { name: 'Rolling limit' });
     // The kit Switch exposes the switch role.
     await rolling.getByRole('switch', { name: 'Enforce a rolling limit' }).check();
-    await rolling.getByLabel('Window length (hours)').fill('12');
-    await rolling.getByLabel('Max actions per window').fill('4');
+    await rolling.getByLabel('Window length (hours)', { exact: true }).fill('12');
+    await rolling.getByLabel('Max actions per window', { exact: true }).fill('4');
 
     const threshold = page.getByRole('group', { name: 'Extra-confirmation threshold' });
-    await threshold.getByRole('button', { name: '+ Add threshold' }).click();
-    await threshold.getByLabel('Token').fill('BTC');
-    await threshold.getByLabel('Warn above').fill('1.5');
+    await threshold.getByRole('button', { name: 'Add threshold', exact: true }).click();
+    await threshold.getByLabel('Token', { exact: true }).fill('BTC');
+    await threshold.getByLabel('Warn above', { exact: true }).fill('1.5');
 }
 
 function definitionValue(page, term) {
@@ -185,7 +189,7 @@ async function walkCoSignerScreens(page, viewport) {
     await expectScreen(page, 'New agent account', `${viewport.name} expanded policy editor`);
 
     // The form opens a review of every value before anything is created.
-    await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+    await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
     await expectScreen(page, 'Review agent account', `${viewport.name} provisioning check`);
     await expect(definitionValue(page, 'Account name')).toHaveText(ACCOUNT_NAME);
 
@@ -204,15 +208,15 @@ async function walkCoSignerScreens(page, viewport) {
     await page.getByRole('button', { name: 'Edit policy', exact: true }).click();
     await expectScreen(page, 'Agent account', `${viewport.name} policy editor`);
     await expect(page.getByRole('form', { name: 'Edit agent account' })).toBeVisible();
-    await expect(page.getByLabel('Account name')).toHaveValue(ACCOUNT_NAME);
+    await expect(page.getByLabel('Account name', { exact: true })).toHaveValue(ACCOUNT_NAME);
     await expect(page.getByRole('checkbox', { name: 'Send', exact: true })).toBeChecked();
     await expect(page.getByRole('checkbox', { name: 'Issue', exact: true })).toBeChecked();
-    await expect(page.getByLabel('Window length (hours)')).toHaveValue('12');
-    await expect(page.getByLabel('Max actions per window')).toHaveValue('4');
+    await expect(page.getByLabel('Window length (hours)', { exact: true })).toHaveValue('12');
+    await expect(page.getByLabel('Max actions per window', { exact: true })).toHaveValue('4');
 
-    await page.getByLabel('Account name').fill(UPDATED_ACCOUNT_NAME);
-    await page.getByLabel('Max actions per window').fill('6');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await page.getByLabel('Account name', { exact: true }).fill(UPDATED_ACCOUNT_NAME);
+    await page.getByLabel('Max actions per window', { exact: true }).fill('6');
+    await page.getByRole('button', { name: 'Update policy', exact: true }).click();
     await expectScreen(page, 'Agent account', `${viewport.name} updated account detail`);
     await expect(page.getByText(UPDATED_ACCOUNT_NAME, { exact: true })).toBeVisible();
     await expect(definitionValue(page, 'Allowed actions')).toHaveText('Send, Issue');

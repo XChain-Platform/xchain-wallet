@@ -112,7 +112,7 @@ describe('dispenser buy Confirm across a wallet switch', () => {
         view.rerender(tree(messaging, 'wallet-b'));
         // The page reloads for the new wallet; the open Confirm comes back with it.
         const approve = await screen.findByTestId('confirm-approve', {}, { timeout: 5000 });
-        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
         await waitFor(() => expect(screen.queryByTestId('confirm-approve')).toBeNull());

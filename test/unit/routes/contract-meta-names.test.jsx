@@ -126,7 +126,7 @@ describe('the deploy form no longer asks for a name', () => {
             .map((l) => l.textContent || '');
         expect(labels.some((l) => /^Name/.test(l))).toBe(false);
         // And no input carries the old label either, under any wrapper.
-        expect(utils.queryByLabelText(/^Name \(optional\)/)).toBeNull();
+        expect(utils.queryByLabelText(/^Name$/)).toBeNull();
         expect(utils.container.textContent).not.toMatch(/saved on this device/i);
     });
 

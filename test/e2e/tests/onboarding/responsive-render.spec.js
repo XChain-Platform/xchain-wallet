@@ -104,7 +104,8 @@ for (const viewport of VIEWPORTS) {
             page.getByRole('button', { name: 'Next' }),
         );
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
+        // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+        await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(PASSWORD);
         await page.getByRole('button', { name: 'Next' }).click();
 
         // readRecoveryPhrase asserts the stage opens concealed, then reveals it.

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -86,6 +86,7 @@ describe('SignMessageForm direct signing', () => {
         expect(document.querySelector('select[aria-label="Address"]')).toBeNull();
         expect(screen.getByRole('textbox', { name: 'Signature' }))
             .toHaveTextContent('The signature appears here after you sign.');
+        expect(screen.queryByRole('button', { name: 'Copy signature' })).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose address' }));
         expect(screen.getByTestId('own-address-picker')).toBeInTheDocument();
@@ -103,8 +104,10 @@ describe('SignMessageForm direct signing', () => {
             message: 'Proof of control',
         });
         expect(screen.queryByTestId('confirm-modal')).toBeNull();
-        expect(screen.getByRole('textbox', { name: 'Signature' })).toHaveTextContent('signed-value');
-        expect(screen.getByRole('button', { name: 'Copy signature' })).toBeInTheDocument();
+        const signatureBox = screen.getByRole('textbox', { name: 'Signature' });
+        expect(signatureBox).toHaveTextContent('signed-value');
+        expect(within(signatureBox).getByRole('button', { name: 'Copy signature' })).toBeInTheDocument();
+        expect(screen.queryByText('Copy signature')).toBeNull();
         expect(screen.getByLabelText('Message')).toHaveValue('Proof of control');
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose address' }));

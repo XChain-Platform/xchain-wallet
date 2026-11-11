@@ -146,16 +146,19 @@ describe('Receive keyboard operation', () => {
 
         const addressType = await screen.findByRole('combobox', { name: 'Address type' });
         addressType.focus();
-        // The address picker sits on the address label row, before its field.
+        // The address picker sits inside the address field after its value.
         const expected = [
-            screen.getByRole('button', { name: 'Choose receive address' }),
+            screen.getByRole('button', { name: 'About Deposits' }),
             screen.getByRole('textbox', { name: 'Deposits' }),
+            screen.getByRole('button', { name: 'Choose receive address' }),
             screen.getByRole('button', { name: 'Copy payment link' }),
             screen.getByRole('button', { name: 'Share QR payment link' }),
             screen.getByRole('link', { name: 'View address in block explorer' }),
             screen.getByRole('button', { name: 'Generate new address' }),
+            screen.getByRole('button', { name: 'About Address label' }),
             screen.getByRole('textbox', { name: 'Address label' }),
             screen.getByRole('button', { name: /^Change asset/ }),
+            screen.getByRole('button', { name: /^About Amount/ }),
             screen.getByRole('textbox', { name: 'Amount (BTC)' }),
         ];
 
@@ -178,14 +181,17 @@ describe('Receive keyboard operation', () => {
             await waitFor(() => expect(copy).not.toBeDisabled());
             addressType.focus();
             const expected = [
-                screen.getByRole('button', { name: 'Choose receive address' }),
+                screen.getByRole('button', { name: 'About Deposits' }),
                 screen.getByRole('textbox', { name: 'Deposits' }),
+                screen.getByRole('button', { name: 'Choose receive address' }),
                 copy,
                 screen.getByRole('button', { name: 'Share QR payment link' }),
                 screen.getByRole('link', { name: 'View address in block explorer' }),
                 screen.getByRole('button', { name: 'Generate new address' }),
+                screen.getByRole('button', { name: 'About Address label' }),
                 screen.getByRole('textbox', { name: 'Address label' }),
                 screen.getByRole('button', { name: /^Change asset/ }),
+                screen.getByRole('button', { name: /^About Amount/ }),
                 screen.getByRole('textbox', { name: 'Amount (BTC)' }),
             ];
 

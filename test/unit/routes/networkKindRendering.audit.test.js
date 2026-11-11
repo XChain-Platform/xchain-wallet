@@ -47,9 +47,8 @@ describe.each(FILES)('%s network-label rendering', (file) => {
         for (const badge of badges) expect(badge).toContain('showName={false}');
     });
 
-    it('suppresses network-kind text in every chain picker', () => {
+    it('suppresses network-kind text in every remaining chain picker', () => {
         const pickers = [...codeOf(file).matchAll(/<ChainPicker\b[\s\S]*?\/>/g)].map((match) => match[0]);
         for (const picker of pickers) expect(picker).toContain('hideNetworkKind');
-        expect(codeOf(file)).not.toContain('<NetworkField');
     });
 });

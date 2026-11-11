@@ -119,6 +119,7 @@ describe('the surface that loses a race on one reply reloads the session', () =>
         const reply = buildReplyEnvelope({
             kind: c.kind,
             fingerprint: fingerprintSessionRef({
+                chainId: session.chainId,
                 scheme: session.scheme,
                 threshold: session.threshold,
                 cosignerPubkeys: session.cosignerPubkeys,

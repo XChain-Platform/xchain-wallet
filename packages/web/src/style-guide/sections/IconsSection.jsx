@@ -17,7 +17,7 @@ import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 // a stable single icon).
 const ICON_NAMES = [
     'BackIcon', 'CheckIcon', 'XIcon', 'PlusIcon', 'MintIcon', 'SweepIcon', 'MenuIcon', 'MoreIcon',
-    'SendIcon', 'ReceiveIcon', 'SwapIcon', 'BroadcastIcon',
+    'SendIcon', 'ReceiveIcon', 'SwapIcon', 'BroadcastIcon', 'BellIcon',
     'ScanIcon', 'CameraIcon', 'CopyIcon', 'PasteIcon', 'SearchIcon', 'FilterIcon',
     'BookIcon', 'AddressIcon', 'UsersIcon',
     'LockIcon', 'UnlockIcon', 'KeyIcon', 'SignIcon', 'EyeIcon', 'EyeOffIcon',

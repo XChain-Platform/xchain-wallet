@@ -99,8 +99,8 @@ assert.ok(/Contracts can only be published on \$\{where\}/.test(formSrc),
 for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
     assert.ok(formSrc.includes(label), `DeployContractForm renders "${label}" button`);
 }
-assert.ok(/singleEncode \? 'Publish' : 'Preview'/.test(formSrc),
-    'DeployContractForm labels a single-transaction action as Publish');
+assert.ok(/variant="success"[\s\S]*?>\s*Publish contract\s*<\/Button>/.test(formSrc),
+    'DeployContractForm labels its main action Publish contract, green, in every mode');
 assert.ok(formSrc.includes('Contract published.'),
     'DeployContractForm confirms a successful publication');
 
@@ -210,8 +210,8 @@ assert.ok(/\[props\.onDeploy\]/.test(listSrc) || /props\.onDeploy/.test(listSrc)
     'ContractsList documents the onDeploy prop');
 assert.ok(/onDeploy\s*\}/.test(listSrc),
     'ContractsList destructures onDeploy');
-assert.ok(/onDeploy \?\s*\(?\s*<Button[\s\S]*?onClick=\{onDeploy\}[\s\S]*?\+ Publish contract/.test(listSrc),
-    'ContractsList renders the + Publish contract button only when onDeploy is passed');
+assert.ok(/onDeploy \?\s*\(?\s*<Button[\s\S]*?onClick=\{onDeploy\}[\s\S]*?Publish contract/.test(listSrc),
+    'ContractsList renders the Publish contract button only when onDeploy is passed');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

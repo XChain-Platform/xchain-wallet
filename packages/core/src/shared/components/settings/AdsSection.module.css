@@ -9,6 +9,19 @@
     min-width: 0;
 }
 
+/* Inside the Settings page card the shared nested-card rule (.card .card)
+   drops this card's padding, which put each chain's last line on the row
+   divider and the next chain's title straight under it (U33). The first
+   and last children carry the block inset instead, so the card rule itself
+   keeps the shared surface and the fields stay flush with the other rows. */
+.chain > :first-child {
+    margin-block-start: var(--xc-space-3);
+}
+
+.chain > :last-child {
+    margin-block-end: var(--xc-space-3);
+}
+
 .chainName {
     /* The title sits the section header gap above its fields, inside the
        form gap that separates the fields from each other. */

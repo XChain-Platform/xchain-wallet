@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, NetworkField, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -150,6 +150,8 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
  * @param {(sel: { chainId: string, address: string }) => void} [props.onEditPreferences]   PC-32: when supplied, the detail view's On-chain preferences card exposes an Edit affordance (shell wires it to <AddressPreferencesForm>)
  * @param {Record<string, boolean>} [props.addressUsageByKey]   picker mode only: chain-and-address keyed receive usage, so a used address is marked
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
+ * @param {boolean} [props.networkLocked]   picker mode only: the list stays on `networkFilter` and the network switch is hidden, for a form bound to one chain
+ * @param {(record: any, chainId: string) => string | null} [props.pickerUnavailableReason]   picker mode only: a non-empty reason disables that row and shows the reason on it
  */
 export function AddressList({
     walletId,
@@ -164,6 +166,8 @@ export function AddressList({
     onPick,
     pickerActions = [],
     addressUsageByKey = {},
+    networkLocked = false,
+    pickerUnavailableReason,
     title,
 }) {
     const { messaging, shell } = useMessaging();
@@ -802,8 +806,9 @@ export function AddressList({
                         </Button>
                     )}
                 >
-                    <ChainPicker
+                    <NetworkField
                         label={t('routes.addressList.coin')}
+                        help={t('addressList.advancedNetworkHelp')}
                         value={effectiveAdvancedChainId}
                         onChange={(nextChainId) => {
                             setAdvancedChainId(nextChainId);
@@ -812,7 +817,6 @@ export function AddressList({
                         }}
                         chainIds={wifChainIds}
                         chainRegistry={chainRegistry}
-                        hideNetworkKind
                         disabled={advancedBusy}
                     />
                     {advancedDescriptor ? (
@@ -851,7 +855,7 @@ export function AddressList({
                             setAdvancedError(null);
                         }}
                         onWheel={blurNumberInputOnWheel}
-                        hint={t('routes.addressList.useTheExactExternalIndex')}
+                        help={t('routes.addressList.useTheExactExternalIndex')}
                         disabled={advancedBusy}
                         autoFocus
                     />
@@ -892,8 +896,9 @@ export function AddressList({
                         </Button>
                     )}
                 >
-                        <ChainPicker
+                        <NetworkField
                             label={t('send.fields.chain')}
+                            help={t('addressList.wifNetworkHelp')}
                             value={wifChainId}
                             onChange={(cid) => {
                                 setWifChainId(cid);
@@ -906,7 +911,6 @@ export function AddressList({
                             }}
                             chainIds={wifChainIds}
                             chainRegistry={chainRegistry}
-                            hideNetworkKind
                             disabled={wifBusy}
                         />
                         {wifChainId ? (
@@ -953,7 +957,8 @@ export function AddressList({
                             {wifRevealed ? t('routes.addressList.hidePrivateKey') : t('routes.addressList.showPrivateKey')}
                         </Button>
                         <Input
-                            label={t('routes.addressList.labelOptional')}
+                            label={t('routes.addressList.label')}
+                            optional
                             value={wifLabel}
                             onChange={(e) => setWifLabel(e.target.value)}
                             placeholder={t('routes.addressList.eGColdStorage2024')}
@@ -964,7 +969,7 @@ export function AddressList({
                         <Input
                             type="password"
                             label={t('send.gated.passwordLabel')}
-                            hint={t('routes.addressList.requiredEvenWhileUnlockedYour')}
+                            help={t('routes.addressList.requiredEvenWhileUnlockedYour')}
                             value={wifPassword}
                             onChange={(e) => {
                                 setWifPassword(e.target.value);
@@ -980,6 +985,7 @@ export function AddressList({
                         <Checkbox
                             className={wifStyles.wifAck}
                             label={t('routes.addressList.iUnderstandThisKeyIs')}
+                            help={t('addressList.wifAckHelp')}
                             checked={wifWarningAck}
                             onChange={(e) => {
                                 setWifWarningAck(e.target.checked);
@@ -1004,7 +1010,7 @@ export function AddressList({
         <div className={local.addMenuWrap} ref={addMenuRef}>
             <Button
                 type="button"
-                variant="secondary"
+                variant="success"
                 size="sm"
                 icon={<Icon.PlusIcon />}
                 onClick={() => setAddMenuOpen((o) => !o)}
@@ -1315,7 +1321,12 @@ export function AddressList({
                         </span>
                     </div>
                     </>)}
-                    <div className={local.detailLabel} style={overCeiling ? undefined : { marginTop: 'var(--xc-space-3)' }}>{t('routes.addressList.label')}</div>
+                    <div className={local.detailLabel} style={overCeiling ? undefined : { marginTop: 'var(--xc-space-3)' }}>
+                        {t('routes.addressList.label')}
+                        {selected.record?.id ? (
+                            <InfoTip aria={t('routes.addressList.help', { label: t('routes.addressList.label') })} label={t('routes.addressList.labelHelp')} />
+                        ) : null}
+                    </div>
                     {selected.record?.id ? (
                         <div className={local.labelRow}>
                             <Input
@@ -1326,14 +1337,16 @@ export function AddressList({
                                 aria-label={t('receive.addressLabel')}
                                 autoComplete="off"
                             />
+                            {/* The label form's one forward action: green, named, with its icon even while unchanged. */}
                             <Button
                                 size="md"
-                                variant="primary"
+                                variant="success"
+                                icon={<Icon.SaveIcon />}
                                 loading={labelSaving}
                                 disabled={labelDraft.trim() === (selected.label || '')}
                                 onClick={saveLabel}
                             >
-                                {t('history.contact.save')}
+                                {t('receive.saveLabel')}
                             </Button>
                         </div>
                     ) : (
@@ -1512,7 +1525,6 @@ export function AddressList({
                         type="search"
                         enterKeyHint="search"
                         autoCapitalize="off"
-                        role="textbox"
                         placeholder={t('routes.addressList.search')}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
@@ -1522,7 +1534,7 @@ export function AddressList({
                         aria-label={t('routes.addressList.searchAddresses')}
                     />
                 </div>
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
+                {pickerMode && networkLocked ? null : <NetworkFilterDropdown value={network} onChange={setNetwork} iconOnly={!pickerMode} fieldTrigger={pickerMode} />}
             </>
         )}>
             <Tabs
@@ -1573,12 +1585,17 @@ export function AddressList({
                 {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     const used = addressUsageByKey[`${row.chainId}:${String(row.address || '').toLowerCase()}`] === true;
+                    const unavailable = pickerMode && row.record && pickerUnavailableReason
+                        ? pickerUnavailableReason(row.record, row.chainId) || null
+                        : null;
                     return (
                         <li key={row.key}>
                             <ListRow
                                 type="button"
+                                disabled={unavailable ? true : undefined}
                                 onClick={() => {
-                                    if (pickerMode && onPick && row.record) { onPick(row.record); return; }
+                                    if (unavailable) return;
+                                    if (pickerMode && onPick && row.record) { onPick(row.record, row.chainId); return; }
                                     setSelected(row);
                                     setLabelDraft(row.label || '');
                                 }}
@@ -1586,7 +1603,7 @@ export function AddressList({
                                 aria-busy="false"
                                 title={(
                                     <span className={local.addrRowMain}>
-                                        {(row.label || isActiveRow(row) || row.record?.hidden || (pickerMode && used)) ? (
+                                        {(row.label || isActiveRow(row) || row.record?.hidden || (pickerMode && used) || unavailable) ? (
                                             <span className={local.addrTopRow}>
                                                 <span className={local.addrLabel}>{row.label || ''}</span>
                                                 <span className={local.addrBadges}>
@@ -1598,6 +1615,9 @@ export function AddressList({
                                                     ) : null}
                                                     {pickerMode && used ? (
                                                         <span className={local.addrHidden}>{t('routes.addressList.used')}</span>
+                                                    ) : null}
+                                                    {unavailable ? (
+                                                        <span className={local.addrHidden}>{unavailable}</span>
                                                     ) : null}
                                                 </span>
                                             </span>
@@ -1637,7 +1657,7 @@ export function AddressList({
                             total: listedRows.length,
                         })}
                     </span>
-                    <Button type="button" variant="secondary" icon={null} onClick={showMoreAddresses}>
+                    <Button type="button" variant="secondary" icon={<Icon.ChevronDownIcon />} onClick={showMoreAddresses}>
                         {t('routes.addressList.showMoreAddresses')}
                     </Button>
                 </div>

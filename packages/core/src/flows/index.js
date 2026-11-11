@@ -360,6 +360,17 @@ export { createMultisigConfig } from './createMultisigConfig.js';
 export { getMultisigCosignerInfo, deriveCosignerKeys } from './multisigCosignerInfo.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
+    InsufficientMultisigSignaturesError,
+    assembleMultisigTx,
+    buildUnsignedMultisigSpend,
+    decodeMultisigSpend,
+    multisigSighash,
+} from './multisigSpend.js';
+export {
+    estimateMultisigSpendVsize,
+    startMultisigSend,
+} from './multisigSend.js';
+export {
     startMultisigSigningSession,
     getMultisigSigningSession,
     listMultisigSigningSessions,
@@ -373,6 +384,7 @@ export {
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
 export { signMultisigLocally } from './multisigSignLocally.js';
+export { importMultisigSigningRequest } from './multisigImportRequest.js';
 export { passiveCoSign } from './passiveCoSign.js';
 export { passiveCoSignForAccount, CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 export { provisionCoSignerAccount } from './provisionCoSignerAccount.js';
@@ -766,6 +778,7 @@ export {
     synthesizeDemoDispenses,
     synthesizeDemoOrders,
     synthesizeDemoSwaps,
+    demoMessaging,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

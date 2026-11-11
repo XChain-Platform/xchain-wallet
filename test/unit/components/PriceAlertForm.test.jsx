@@ -119,7 +119,8 @@ describe('PriceAlertForm', () => {
             onCreate={vi.fn().mockRejectedValue(new Error('Save failed'))}
         />);
         const button = screen.getByRole('button', { name: 'Add alert' });
-        expect(button.className).toMatch(/primary/);
+        expect(button.className).toMatch(/success/);
+        expect(button.querySelector('svg')).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Target price' }).className).toMatch(/input/);
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
@@ -170,7 +171,7 @@ describe('PriceAlertForm', () => {
         expect(screen.getByRole('textbox', { name: 'Target price' }).value).toBe('65000');
 
         fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '64000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
             chainId: 'bitcoin-mainnet',
@@ -189,5 +190,48 @@ describe('PriceAlertForm', () => {
         const coin = screen.getByLabelText('Coin');
         expect(coin.value).toBe('retired-mainnet');
         expect(screen.getByRole('option', { name: 'Retired (unavailable)' })).toBeTruthy();
+    });
+
+    it('submits a priced token ticker and shows its current market price', async () => {
+        const onCreate = vi.fn().mockResolvedValue(undefined);
+        render(<PriceAlertForm
+            lockedChainId="bitcoin-mainnet"
+            lockedTick="XCHAIN"
+            currentPrice={1.2}
+            onCreate={onCreate}
+        />);
+
+        expect(screen.getByText('XCHAIN')).toBeTruthy();
+        expect(screen.getByText('Current: $1.20')).toBeTruthy();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+
+        await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
+            chainId: 'bitcoin-mainnet',
+            tick: 'XCHAIN',
+            direction: 'above',
+            targetFiat: 2,
+            fiatCurrency: 'usd',
+        }));
+    });
+
+    it('explains why an unpriced token cannot have an alert', () => {
+        const onCreate = vi.fn();
+        render(<PriceAlertForm
+            lockedChainId="bitcoin-mainnet"
+            lockedTick="NOPRICE"
+            onCreate={onCreate}
+        />);
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '1' } });
+        expect(screen.getByText('NOPRICE has no market price yet. A price alert needs one.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
+        expect(onCreate).not.toHaveBeenCalled();
+    });
+
+    it('offers the held-token picker when a wallet is available', () => {
+        render(<PriceAlertForm walletId="wallet-1" onCreate={vi.fn()} />);
+
+        expect(screen.getByRole('button', { name: 'Choose a held token' })).toBeEnabled();
     });
 });

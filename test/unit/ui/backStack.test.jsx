@@ -16,9 +16,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, cleanup, fireEvent, screen, act } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import {
+    isBareSentinel,
     registerBackHandler,
     resetBackStackForTests,
     setRouteHistoryManaged,
+    takeSentinelForRoute,
     useNativeBackRoot,
 } from '../../../packages/core/src/ui/backStack.js';
 
@@ -236,6 +238,47 @@ describe('back stack', () => {
         expect(armed()).toBe(false);
         // Taking our own sentinel back out is not a Back press.
         expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('waits for its own Back to land before arming a sentinel for a new overlay', async () => {
+        // A header menu closes and the command palette it opened registers
+        // while the menu sentinel's Back is still in flight.
+        setRouteHistoryManaged(true);
+        const closeMenu = registerBackHandler(() => {});
+        await settle();
+        expect(armed()).toBe(true);
+        closeMenu();
+        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        const closePalette = registerBackHandler(() => {});
+        await settle();
+        expect(window.history.state).toEqual({ xcBack: true });
+        closePalette();
+        await settle();
+    });
+
+    it('lets a route opened from an overlay take its sentinel instead of popping the route', async () => {
+        setRouteHistoryManaged(true);
+        window.history.replaceState({ xcRoute: { view: 'home' } }, '');
+        const closePalette = registerBackHandler(() => {});
+        await settle();
+        expect(isBareSentinel(window.history.state)).toBe(true);
+        // The palette runs History: the route snapshot replaces the sentinel slot.
+        window.history.replaceState({ ...window.history.state, xcRoute: { view: 'history' } }, '');
+        takeSentinelForRoute();
+        closePalette();
+        await settle();
+        expect(window.history.state.xcRoute).toEqual({ view: 'history' });
+    });
+
+    it('never pops a route snapshot pushed over its sentinel', async () => {
+        setRouteHistoryManaged(true);
+        window.history.replaceState({ xcRoute: { view: 'home' } }, '');
+        const closePalette = registerBackHandler(() => {});
+        await settle();
+        window.history.pushState({ xcBack: true, xcRoute: { view: 'history' } }, '');
+        closePalette();
+        await settle();
+        expect(window.history.state.xcRoute).toEqual({ view: 'history' });
     });
 
     it('does not touch the history when one back screen replaces another', async () => {

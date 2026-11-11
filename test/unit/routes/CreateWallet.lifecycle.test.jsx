@@ -125,8 +125,8 @@ describe('CreateWallet lifecycle guards', () => {
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
 
         const createButton = screen.getByRole('button', { name: 'Create wallet' });
-        expect(createButton).toHaveClass(buttonStyles.primary);
-        expect(document.querySelectorAll(`.${buttonStyles.primary}`)).toHaveLength(1);
+        expect(createButton).toHaveClass(buttonStyles.success);
+        expect(document.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
     });
 
     it('keeps one generated phrase across both Back paths', () => {

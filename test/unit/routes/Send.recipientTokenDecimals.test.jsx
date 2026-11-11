@@ -102,7 +102,7 @@ function pickRowToken(tick) {
 }
 
 function rowAmount() {
-    return /** @type {HTMLInputElement} */ (screen.getByLabelText('Recipient 2 amount'));
+    return /** @type {HTMLInputElement} */ (screen.getByLabelText(/^Recipient 2 amount/));
 }
 
 describe('Send: an added recipient amount follows its token decimal places', () => {
@@ -128,7 +128,7 @@ describe('Send: an added recipient amount follows its token decimal places', () 
         pickRowToken('XCP');
         fireEvent.change(rowAmount(), { target: { value: '0.5' } });
         pickRowToken('XCP');
-        expect(rowAmount().value).toBe('0.5');
+        expect(rowAmount().value).toBe('0.50000000');
     });
 
     it('refuses a row amount past its token places once the row takes the first token', async () => {

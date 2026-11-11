@@ -65,8 +65,8 @@ describe('token issuance mobile layout', () => {
         const swap = readSource(migratedRoutes[1]);
         const order = readSource(migratedRoutes[2]);
 
-        expect(wizard).toMatch(/<ListRow[\s\S]*?className={styles\.templateCard}[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/);
-        expect(wizard).toMatch(/<AddressField\s+label="Transfer ownership to \(optional\)"/);
+        expect(wizard).toMatch(/<ListRow[\s\S]*?className={styles\.templateCard}[\s\S]*?data-template-title={t\.id}[\s\S]*?{t\.name}[\s\S]*?subtitle={t\.tagline}/);
+        expect(wizard).toMatch(/<AddressField\s+label="Transfer ownership to"\s+optional\b/);
         expect(wizard).toMatch(/<FormSection\s+title="Locks \(permanent\)"/);
         expect(wizard).toMatch(/<SectionHeader title="Token issued"/);
         expect(wizard).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);

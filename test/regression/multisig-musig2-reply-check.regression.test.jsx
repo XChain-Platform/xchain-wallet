@@ -102,8 +102,10 @@ async function atStepTwo(vault) {
     return { session: stepTwo, partials, xOnlyPublicKey };
 }
 
+// A cosigner fingerprints the request sessionRef, which names the session chain.
 function sessionRefOf(session) {
     return {
+        chainId: session.chainId,
         scheme: session.scheme,
         threshold: session.threshold,
         cosignerPubkeys: session.cosignerPubkeys,

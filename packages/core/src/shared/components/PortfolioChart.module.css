@@ -56,6 +56,15 @@
     font-size: var(--xc-text-sm);
 }
 
+.missingNotice {
+    min-block-size: calc(1.2 * var(--xc-text-xs));
+    margin-block-start: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+}
+
 /* A minimal toggle centred along the bottom of the chart: the row hugs its
    options and sits centred in the Home card's column and in the token detail
    chart slot alike, on one line. */
@@ -69,6 +78,13 @@
     max-width: 100%;
     margin-inline: auto;
     padding-top: 0;
+}
+
+/* Eight exclusive 44px-wide targets need 352px, which the compact chart
+   cannot provide. Home gives every option an equal share of the whole row;
+   the label inside each slot keeps the painted pill at its compact size. */
+.rangesSpread {
+    width: 100%;
 }
 
 .range {
@@ -90,9 +106,25 @@
     height: calc(var(--xc-space-6) + var(--xc-space-1));
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    text-transform: uppercase;
     color: var(--xc-text-muted);
     cursor: pointer;
+    border-radius: var(--xc-control-radius);
+    transition: color var(--xc-transition), background var(--xc-transition);
+}
+
+.rangeSlot {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 0;
+    background: transparent;
+}
+
+.rangeLabel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding-inline: var(--xc-control-pad-x-sm);
     border-radius: var(--xc-control-radius);
     transition: color var(--xc-transition), background var(--xc-transition);
 }
@@ -114,6 +146,11 @@
         width: max(100%, var(--xc-control-hit-min));
         height: max(calc(100% + var(--xc-space-2)), var(--xc-control-hit-min));
     }
+
+    .rangeSlot::before {
+        inset-inline-start: 0;
+        max-width: 100%;
+    }
 }
 
 .range:focus-visible {
@@ -125,6 +162,27 @@
 .rangeActive {
     background: var(--xc-accent-primary);
     color: var(--xc-on-accent);
+}
+
+.rangeSlot.rangeActive {
+    background: transparent;
+}
+
+/* The selected fill is painted behind the label by a pseudo-element, so the
+   painted chip stays part of the tab control rather than a filled box of its
+   own inside the chart card. */
+.rangeSlot .rangeLabel {
+    position: relative;
+    isolation: isolate;
+}
+
+.rangeSlot.rangeActive .rangeLabel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--xc-accent-primary);
 }
 
 .rangeActive:hover {

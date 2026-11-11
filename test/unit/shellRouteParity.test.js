@@ -555,6 +555,29 @@ describe('shell route parity', () => {
         }
     });
 
+    it('routes every shell token creation entry through the template wizard', () => {
+        for (const [shellName, shell] of Object.entries(SHELLS)) {
+            expect(shell.app, `${shellName} My tokens`).toContain(
+                "onIssue={() => setUnlockedView('wizard')}",
+            );
+            expect(shell.app, `${shellName} All actions`).toContain(
+                "onIssue: () => setUnlockedView('wizard')",
+            );
+            expect(shell.app, `${shellName} Manage token`).toContain(
+                "onIssueSubtoken={() => openForm('wizard')}",
+            );
+            expect(shell.app, `${shellName} Custom template`).toContain(
+                "onCustom={() => setUnlockedView('issue')}",
+            );
+            expect(shell.app, `${shellName} Custom form Back`).toContain(
+                "onBack={() => setUnlockedView('wizard')}",
+            );
+            expect(shell.app, `${shellName} direct issue entry`).not.toMatch(
+                /onIssue(?::|=).*setUnlockedView\('issue'\)/,
+            );
+        }
+    });
+
     it('keeps reachable unlocked views aligned or explicitly shell-only', () => {
         const routes = Object.fromEntries(Object.entries(SHELLS).map(([name, shell]) => [
             name,

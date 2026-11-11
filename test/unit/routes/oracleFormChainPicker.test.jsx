@@ -128,7 +128,7 @@ async function pickChain(utils, label) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('option', { name: new RegExp(`^${label}\\b`) }));
+        fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${label}\\b`) }));
         await drainMicrotasks();
     });
 }
@@ -165,7 +165,7 @@ describe('D-145: OracleForm chain picker', () => {
             fireEvent.click(field);
             await drainMicrotasks();
         });
-        expect(utils.getByRole('option', { name: /^Litecoin\b/ }),
+        expect(utils.getByRole('button', { name: /^Select Litecoin\b/ }),
             'a chain the wallet holds addresses on is not offered as a publishing chain')
             .toBeTruthy();
     });

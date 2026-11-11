@@ -100,7 +100,6 @@ describe('token, dispenser and stake screens word explorer load failures through
     // Each pattern is the raw explorer-read fallback that used to reach the screen.
     const SITES = [
         ['packages/core/src/shared/routes/TokenDetail.jsx', /set(?:Holders|Gated)Error\(err\?\.message/],
-        ['packages/core/src/shared/routes/ManageToken.jsx', /set(?:Holders|Listings|Orders|Swaps|Activity)Error\(err\?\.message/],
         ['packages/core/src/shared/routes/DispenserDetail.jsx', /setLoadError\(err\?\.message/],
         ['packages/core/src/shared/routes/StakeDetail.jsx', /setLoadError\(err\?\.message/],
         ['packages/core/src/shared/routes/DividendForm.jsx', /error: err\?\.message \|\| 'Failed to load holders\.'/],

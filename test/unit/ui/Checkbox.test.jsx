@@ -101,4 +101,20 @@ describe('<Checkbox>', () => {
             themes: ['light', 'dark'],
         }));
     });
+
+    it('draws a help tip beside the label without changing the name or toggling the box', () => {
+        const onChange = vi.fn();
+        render(<Checkbox label="Mark as artwork" help="Collectors see this file as the token's artwork." onChange={onChange} />);
+        const box = screen.getByRole('checkbox', { name: 'Mark as artwork' });
+        const tip = screen.getByRole('button', { name: 'About Mark as artwork' });
+        fireEvent.click(tip);
+        expect(box).not.toBeChecked();
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByText("Collectors see this file as the token's artwork.")).toBeInTheDocument();
+    });
+
+    it('draws no tip without help', () => {
+        render(<Checkbox label="Keep signed in" />);
+        expect(screen.queryByRole('button', { name: /^About / })).toBeNull();
+    });
 });

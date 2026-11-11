@@ -93,6 +93,50 @@
     --xc-button-hover-border: currentColor;
 }
 
+/* Button wraps non-text children in its label span. Make that actual content
+   wrapper the column, then keep each stop label on its own line. */
+.sliderTick > span:last-child {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+}
+
+.sliderTickTime,
+.sliderTickBlocks {
+    display: block;
+}
+
+/* Each stop line stays whole. A narrow slider (phones, the popup, large
+   text) shows the block count as the bare number under the time, so five
+   stops fit without touching; the Duration help tip says it counts blocks. */
+.sliderTickTime,
+.blocksFull,
+.blocksShort {
+    white-space: nowrap;
+}
+
+.blocksShort {
+    display: none;
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .sliderBlock {
+        container-type: inline-size;
+    }
+
+    @container (max-width: 440px) {
+        .blocksFull {
+            display: none;
+        }
+
+        .blocksShort {
+            display: inline;
+        }
+    }
+}
+
 .tick0 { inset-inline-start: calc(var(--duration-thumb) / 2); }
 .tick1 { inset-inline-start: calc(25% + var(--duration-thumb) / 4); }
 .tick2 { inset-inline-start: 50%; }

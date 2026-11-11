@@ -68,17 +68,16 @@ test('demo Swap and Create token use an inline guard without contacting an encod
     await test.step('Swap', async () => {
         await openPaletteRoute(page, 'Swap');
         await expect(page.getByRole('form', { name: 'Swap tokens', exact: true })).toBeVisible();
-        await expectDemoGuard(page, 'Review');
+        await expectDemoGuard(page, 'Create swap');
     });
 
     await test.step('Create token', async () => {
         await openPaletteRoute(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Custom/ }).click();
-        await expect(main.getByRole('form', { name: 'Choose token network' })).toBeVisible();
-        await expect(main.getByLabel('Fee paid by', { exact: true }))
-            .not.toHaveValue('', { timeout: 15_000 });
-        await expectDemoGuard(page, 'Next');
+        // Custom opens the full Issue token form (rulings U79 and U80).
+        await expect(main.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+        await expectDemoGuard(page, 'Reserve ticker');
     });
 
     expect(encoderRequests, 'demo actions must not request an encoder').toEqual([]);

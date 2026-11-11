@@ -36,8 +36,8 @@ function explorerError(message) {
     return err;
 }
 
-/** Mounts the form on a locked token whose holder read runs `holders`. */
-function mountDividend(holders) {
+/** Mounts the form; pass a null tick to exercise its unlocked token fields. */
+function mountDividend(holders, initialTick = TICK) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -55,7 +55,7 @@ function mountDividend(holders) {
         MessagingProvider,
         { shell: 'web', messaging },
         React.createElement(DividendForm, {
-            walletId: 'w', onBack() {}, initialChainId: CHAIN, initialTick: TICK,
+            walletId: 'w', onBack() {}, initialChainId: CHAIN, initialTick,
         }),
     ));
     return target.getHoldersForToken;
@@ -73,6 +73,14 @@ async function advanceHolderLookup(ms) {
 }
 
 describe('the Dividend holder-count hint on a failed holder read', () => {
+    it('renders form-specific help for its network and both token fields', async () => {
+        mountDividend(async () => ({ rows: [] }), null);
+
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Holder-of token' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Dividend token' })).toBeInTheDocument();
+    });
+
     it('shows one read sentence with no explorer URL for an explorer 502', async () => {
         vi.useFakeTimers();
         const holders = mountDividend(async () => {

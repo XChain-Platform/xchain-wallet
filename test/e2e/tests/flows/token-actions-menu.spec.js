@@ -9,24 +9,29 @@
 // contact legal@dankest.llc.
 
 // The web shell loads the action catalogue (every action's label and
-// description) together with the Token actions screen rather than at startup.
+// description) together with the All actions screen rather than at startup.
 // The screen must still list the catalogue's entries and each one must still
 // open its form.
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 
-test('Token actions lists the catalogue and opens the chosen form', async ({ page }) => {
+test('All actions lists the catalogue and opens the chosen form', async ({ page }) => {
     await createWallet(page);
     await openPaletteCommand(page, 'All actions');
 
     const main = page.getByRole('main');
-    // The screen title sits in the page header, outside the main landmark.
-    await expect(page.getByRole('heading', { name: 'Token actions', level: 1 })).toBeVisible();
+    // The screen title sits in the page header, outside the main landmark;
+    // the page is titled All actions (ruling U74).
+    await expect(page.getByRole('heading', { name: 'All actions', level: 1 })).toBeVisible();
     const issue = main.getByRole('button', { name: /^Issue token/ });
     await expect(issue).toBeVisible();
-    await expect(main.getByText('Create a new token with full control over all settings.')).toBeVisible();
+    await expect(main.getByText('Choose a template for a new token, including full custom settings.')).toBeVisible();
     await expect(main.getByRole('button', { name: /^Sign message/ })).toBeVisible();
 
+    // Issue token opens the template wizard, and its Custom template opens
+    // the full Issue token form (ruling U79).
     await issue.click();
+    await expect(page.getByRole('heading', { name: 'Issue a token', level: 1 })).toBeVisible();
+    await main.getByRole('button', { name: /^Custom\b/ }).click();
     await expect(page.getByRole('heading', { name: 'Issue token', level: 1 })).toBeVisible();
 });

@@ -76,8 +76,8 @@ assert.ok(/classifyRecipients\(\s*\n?\s*parts,\s*\n?\s*\{\s*coin: recipientCoin,
     'ListCreateForm validates pasted addresses against the active chain');
 assert.ok(/permanent public on-chain data/.test(createSrc),
     'ListCreateForm shows the pasted/contact-book address privacy line');
-assert.ok(/bigger transaction/.test(createSrc),
-    'ListCreateForm shows a fee-scales-with-member-count hint');
+assert.ok(/Each address adds to the transaction size and increases the network fee/.test(createSrc),
+    'ListCreateForm puts the fee-scales-with-member-count explanation in Addresses help');
 assert.ok(/isWatcherMode/.test(createSrc), 'ListCreateForm is watcher-mode aware (single tx: supported, not blocked)');
 assert.ok(/isHwSource/.test(createSrc), 'ListCreateForm checks for a hardware source');
 

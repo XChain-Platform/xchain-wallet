@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 // Direct module imports, not the flows barrel: the barrel keeps every flow
 // module in the startup bundle, and this screen is part of first paint.
@@ -624,6 +624,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                         type="submit"
                         variant="success"
                         block
+                        icon={<Icon.UnlockIcon />}
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
@@ -634,6 +635,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                             type="button"
                             variant="secondary"
                             block
+                            icon={<Icon.KeyIcon />}
                             onClick={handleBiometric}
                             disabled={busy || isLockedOut}
                         >
@@ -648,6 +650,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                             <Button
                                 type="button"
                                 variant="danger"
+                                icon={<Icon.TrashIcon />}
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
                                 {t('walletDetails.exitDemo')}
@@ -672,7 +675,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                 type="button"
                                 variant="link"
                                 size="sm"
-                                icon={null}
+                                icon={<Icon.LockIcon />}
                                 onClick={() => setForgotOpen(true)}
                                 aria-expanded={forgotOpen}
                                 aria-controls="locked-forgot-password-panel"
@@ -699,6 +702,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                             <Button
                                                 type="button"
                                                 variant="secondary"
+                                                icon={<Icon.KeyIcon />}
                                                 onClick={() => setRestoreLane('mnemonic')}
                                             >
                                                 {t('locked.useRecoveryPhrase')}
@@ -706,6 +710,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                             <Button
                                                 type="button"
                                                 variant="secondary"
+                                                icon={<Icon.UploadIcon />}
                                                 onClick={() => setRestoreLane('backup')}
                                             >
                                                 {t('locked.useBackupFile')}
@@ -722,7 +727,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                             <Input
                                                 type="text"
                                                 label={t('vaultUnavailable.wipeConfirm')}
-                                                hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
+                                                help={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                                 value={wipeConfirmText}
                                                 onChange={(e) => setWipeConfirmText(e.target.value)}
                                                 autoComplete="off"
@@ -732,6 +737,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                             <Button
                                                 type="button"
                                                 variant="danger"
+                                                icon={<Icon.TrashIcon />}
                                                 onClick={handleForgotPasswordWipe}
                                                 loading={wipeBusy}
                                                 disabled={wipeBusy || !isExactTypedConfirmation(wipeConfirmText, 'WIPE')}
@@ -778,6 +784,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                     revealable
                     name="password"
                     label={t('common.password')}
+                    help={t('locked.passwordHelp')}
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);

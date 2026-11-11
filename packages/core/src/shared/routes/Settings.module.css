@@ -55,28 +55,27 @@
     align-items: center;
 }
 
-.settingsSurface [data-settings-row] {
+.settingsSurface.settingsSurface [data-settings-row] {
     padding: var(--xc-settings-row-pad);
     box-shadow: inset 0 -1px var(--xc-settings-row-divider);
-}
-
-/* Notifications owns the price-alert composition. Keep that landed block's
-   nested cards and row spacing unchanged while the surrounding Settings list
-   adopts the shared surface. */
-.settingsSurface [data-xc-preserve-nested-cards] {
-    --xc-settings-row-gap: var(--xc-space-2);
-    --xc-settings-row-pad: var(--xc-card-pad);
-    --xc-settings-row-bg: var(--xc-card-bg);
-    --xc-settings-row-border: var(--xc-card-border);
-    --xc-settings-row-radius: var(--xc-card-radius);
-    --xc-settings-row-divider: transparent;
 }
 
 .settingsList {
     composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+}
+
+/* The list does not clip its overflow, so a row's help tip bubble can open past
+   the card edge; the end rows round their own corners to match the card. */
+.settingsList > :first-child {
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
+}
+
+.settingsList > :last-child {
+    border-end-start-radius: inherit;
+    border-end-end-radius: inherit;
 }
 
 .settingsList > * + * {
@@ -139,9 +138,9 @@
         max-width: 100%;
     }
 
-    /* Wrapping every flex row is harmless for block containers and keeps the
-       fallback independent of relational-selector support. */
-    .page div {
+    /* Keep field labels and their help tips together while other flex rows
+       remain free to wrap without relational-selector support. */
+    .page div:not([class*='labelRow']) {
         flex-wrap: wrap !important;
         min-width: 0;
         max-width: 100%;

@@ -224,14 +224,15 @@ async function walkExecute(page, viewport) {
     await expectScreen(page, viewport, `Call contract #${CONTRACT_INDEX}`);
 
     await main.getByLabel('amount (amount)', { exact: true }).fill(CALL_AMOUNT);
-    await main.getByRole('button', { name: /^Deposit \(optional\):/ }).click();
+    await main.getByRole('button', { name: /^Deposit:/ }).click();
     await expectScreen(page, viewport, 'Token to deposit');
     await main.getByLabel('Search coins or tokens').fill(DEPOSIT_TICK);
     await main.locator(`[data-balance-key="${FIXTURE_CHAIN}:${DEPOSIT_TICK}"]`).first().click();
     await main.getByRole('textbox', { name: /^Deposit amount/ }).fill(DEPOSIT_AMOUNT);
 
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
+    // Each form's main action names what it does (U63).
+    await main.getByRole('button', { name: 'Call contract', exact: true }).click();
     await expectReviewAtTop(page, viewport, 'Review contract call');
     await expect(definitionValue(main, 'Contract')).toHaveText(`#${CONTRACT_INDEX}`);
     await expect(definitionValue(main, 'Deposit')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
@@ -247,14 +248,14 @@ async function walkExecute(page, viewport) {
 async function walkDeploy(page, viewport) {
     await page.getByRole('button', { name: 'Back to contracts list' }).click();
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: '+ Publish contract', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish contract', exact: true }).click();
     await expectScreen(page, viewport, 'Publish contract');
 
     await main.getByLabel('Code source', { exact: true }).fill(DEPLOY_SOURCE);
     await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
-    await main.getByLabel('Constructor params (optional)', { exact: true }).fill(CALL_AMOUNT);
+    await main.getByLabel('Constructor params', { exact: true }).fill(CALL_AMOUNT);
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish contract', exact: true }).click();
 
     await expectReviewAtTop(page, viewport, 'Review publish');
     await expect(definitionValue(main, 'Name')).toHaveText('Review Contract');

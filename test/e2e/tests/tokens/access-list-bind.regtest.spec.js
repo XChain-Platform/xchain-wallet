@@ -379,7 +379,7 @@ async function publishAddressList(page, source, chooseMembers) {
     await expect(main, `the list form did not accept all ${members.length} addresses as valid for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
+    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');
@@ -446,7 +446,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     await expect(form).toContainText(`List #${listIndex}`);
     await expect(form).toContainText(`${memberCount} member${memberCount === 1 ? '' : 's'}`);
 
-    await form.getByRole('button', { name: /^(Update access lists|Preview)$/ }).click();
+    await form.getByRole('button', { name: 'Update access lists', exact: true }).click();
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(bound.action)).toBe('ISSUE');

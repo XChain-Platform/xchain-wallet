@@ -12,6 +12,9 @@ import { useId } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
+import { OptionalPill } from '../../ui/OptionalPill.jsx';
+import { fieldHelpName, resolveFieldRequirement } from '../../ui/fieldRequirement.js';
+import { InfoTip } from '../../ui/InfoTip.jsx';
 // Ahead of the field's own sheet, so the shared button base loads first and the
 // control's rules follow it; a CSS-file composes would inline a second copy of
 // Button.module.css that re-applies .btn over other buttons.
@@ -21,6 +24,7 @@ import inputStyles from '../../ui/Input.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/ui.js';
 
 /**
  * TokenField: the canonical inline token/asset selector for forms.
@@ -47,6 +51,8 @@ import '../../i18n/locales/en/send.js';
  * @param {boolean} [props.disabled]
  * @param {string} [props.error]                              error message shown below the control
  * @param {string} [props.id]
+ * @param {boolean} [props.optional]                         shows the shared Optional pill on the field label
+ * @param {import('react').ReactNode} [props.help]             help for this field on this form, shown from the label-row InfoTip as Input and Select do
  */
 export function TokenField({
     label = t('send.fields.token'),
@@ -57,10 +63,15 @@ export function TokenField({
     disabled = false,
     error,
     id,
+    optional = false,
+    help,
 }) {
     const autoId = useId();
     const controlId = id || autoId;
     const errorId = error ? `${controlId}-error` : undefined;
+    const requirement = resolveFieldRequirement({ label, optional });
+    const optionalPillId = requirement.isOptional ? `${controlId}-optional` : undefined;
+    const hasHelp = Boolean(label && help);
 
     const chainId = value?.chainId;
     const tick = value?.tick;
@@ -75,11 +86,24 @@ export function TokenField({
     const selectionText = hasValue
         ? `${tick}${chainName ? ` on ${chainName}` : ''}`
         : placeholder;
-    const accessibleName = label ? `${label}: ${selectionText}` : selectionText;
+    const accessibleName = requirement.label ? `${requirement.label}: ${selectionText}` : selectionText;
+    const describedBy = [optionalPillId, errorId].filter(Boolean).join(' ') || undefined;
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
-            {label ? <span className={styles.label}>{label}</span> : null}
+            {label && (requirement.isOptional || hasHelp) ? (
+                <div className={inputStyles.labelRow}>
+                    <span className={`${styles.label} ${inputStyles.label}`}>{requirement.label}</span>
+                    {requirement.isOptional ? <OptionalPill id={optionalPillId} /> : null}
+                    {hasHelp ? (
+                        <InfoTip
+                            className={inputStyles.labelHelp}
+                            label={help}
+                            aria={t('ui.field.about', { label: fieldHelpName(requirement.label) })}
+                        />
+                    ) : null}
+                </div>
+            ) : label ? <span className={styles.label}>{requirement.label}</span> : null}
             <button
                 type="button"
                 id={controlId}
@@ -87,7 +111,7 @@ export function TokenField({
                 onClick={onOpenPicker}
                 disabled={disabled}
                 aria-invalid={error ? 'true' : undefined}
-                aria-describedby={errorId}
+                aria-describedby={describedBy}
                 aria-label={accessibleName}
             >
                 {hasValue ? (

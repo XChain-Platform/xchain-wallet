@@ -57,7 +57,7 @@ describe('ImportWallet secret lifecycle', () => {
         fireEvent.change(screen.getByLabelText('WIF private key'), { target: { value: WIF } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByLabelText(/isn't recoverable from a recovery phrase/));
+        fireEvent.click(screen.getByRole('checkbox', { name: /isn't recoverable from a recovery phrase/ }));
         fireEvent.click(screen.getByRole('tab', { name: 'Recovery phrase' }));
 
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
@@ -69,7 +69,7 @@ describe('ImportWallet secret lifecycle', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
         expect(screen.getByLabelText('WIF private key')).toHaveValue('');
-        expect(screen.getByLabelText(/isn't recoverable from a recovery phrase/)).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /isn't recoverable from a recovery phrase/ })).not.toBeChecked();
     });
 
     it('locks same-tick submissions before the busy render commits', async () => {

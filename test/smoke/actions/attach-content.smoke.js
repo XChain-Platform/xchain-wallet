@@ -139,10 +139,10 @@ for (const [shell, msgPath] of [
 
 const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
 assert.ok(/onAttachContent/.test(manageSrc), 'ManageToken accepts onAttachContent');
-assert.ok(/id:\s*['"]attach-content['"]/.test(manageSrc),
+assert.ok(/id:\s*['"]artwork['"][^\n]*\.\.\.ownerAction\(options\.onAttachContent\)/.test(manageSrc),
     'ManageToken renders the Artwork action');
-assert.ok(/blockIssuerActions \? undefined : onAttachContent/.test(manageSrc),
-    'ManageToken hides Artwork from non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: blockIssuerActions \? undefined : handler,[\s\S]*?disabled: blockIssuerActions/.test(manageSrc),
+    'ManageToken disables owner actions for non-owners');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

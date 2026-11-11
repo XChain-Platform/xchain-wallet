@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormNotice, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FormNotice, FormPage, FormSection, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -36,9 +36,10 @@ import {
     advancedIssueWarnings,
 } from '../utils/issueAdvancedFields.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import { TICKER_HELP, TICKER_LIMIT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import {
     MAX_ISSUE_TEXT_LENGTH,
     issueDescriptionError,
@@ -49,6 +50,7 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import {
     hasAnyAddress,
     preferredSourceId,
@@ -67,6 +69,7 @@ import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
+import { FrogIcon } from './tokenWizardIcons.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -116,8 +119,9 @@ function isValidIssueAddress(value, descriptor) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onCustom]
  */
-export function TokenWizard({ walletId, onBack }) {
+export function TokenWizard({ walletId, onBack, onCustom }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const { offline: networkOffline } = useNetworkOffline({ walletId });
@@ -577,6 +581,63 @@ export function TokenWizard({ walletId, onBack }) {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [chainId, lookupTick, messaging, tickerLookupSupported]);
     const tickerTaken = !!lookupTick && tickerCheck.ticker === lookupTick && tickerCheck.status === 'taken';
+    const quoteActionData = useMemo(() => {
+        const resolvedTemplate = resolveTemplate(template);
+        const tickerSettled = !tickerLookupSupported
+            || (tickerCheck.ticker === lookupTick
+                && tickerCheck.status !== 'checking'
+                && tickerCheck.status !== 'taken');
+        const supplyDecimals = divisible && ['utility', 'subtoken', 'custom'].includes(template) ? 8 : 0;
+        const supplyReady = template === 'collectible'
+            || (isPositiveDecimal(supply)
+                && hasAmountPrecision(supply, supplyDecimals)
+                && !issueSupplyLimitError(supply));
+        const maxMintReady = !((template === 'utility' || template === 'custom') && maxMint.trim())
+            || (isPositiveDecimal(maxMint) && hasAmountPrecision(maxMint, divisible ? 8 : 0));
+        const editionReady = template !== 'edition'
+            || (isPositiveDecimal(maxMint)
+                && hasAmountPrecision(maxMint, 0)
+                && (!perAddressMax.trim() || (isPositiveDecimal(perAddressMax)
+                    && hasAmountPrecision(perAddressMax, 0)
+                    && compareDecimalStrings(perAddressMax, maxMint) !== -1))
+                && (!mintStartBlock.trim() || /^\d+$/.test(mintStartBlock.trim()))
+                && (!mintStopBlock.trim() || /^\d+$/.test(mintStopBlock.trim()))
+                && (!(mintStartBlock && mintStopBlock)
+                    || compareDecimalStrings(mintStopBlock, mintStartBlock) === 1));
+        const usesImageUrl = template === 'collectible' || template === 'edition';
+        const storedTextReady = !(usesImageUrl
+            ? issueImageUrlError(imageUrl)
+            : issueDescriptionError(description));
+        const advancedReady = template !== 'custom' || !validateAdvancedIssueFields(advanced, {
+            supply,
+            currentHeight,
+            callbackTickDecimals,
+        });
+        const ready = Boolean(chainId && fromAddress?.address && lookupTick)
+            && resolvedTemplate !== 'subtoken'
+            && !tickerGrammarError(name, { noun: 'Token name' })
+            && !actionTextSafetyError(description, 'Description')
+            && tickerSettled
+            && supplyReady
+            && maxMintReady
+            && editionReady
+            && (!(usesImageUrl) || Boolean(imageUrl.trim()))
+            && storedTextReady
+            && advancedReady
+            && (template !== 'custom' || !transferTo.trim() || isValidIssueAddress(transferTo, descriptor))
+            && (template !== 'custom' || !transferSupplyTo.trim()
+                || isValidIssueAddress(transferSupplyTo, descriptor));
+        return ready ? { action: 'ISSUE', params: actionParams } : null;
+    }, [template, tickerLookupSupported, tickerCheck, lookupTick, divisible, supply,
+        maxMint, perAddressMax, mintStartBlock, mintStopBlock, imageUrl, description,
+        advanced, currentHeight, callbackTickDecimals, chainId, fromAddress, name,
+        transferTo, transferSupplyTo, descriptor, actionParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     // A Details submit inside the debounce or the lookup is held and replayed
     // once the check settles. Editing the name or network, or leaving Details,
@@ -998,6 +1059,7 @@ export function TokenWizard({ walletId, onBack }) {
                 title="Fee paid by"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourceChosenFor(chainId);
@@ -1041,7 +1103,14 @@ export function TokenWizard({ walletId, onBack }) {
             renderTemplateStage({
                 notices: pageNotices,
                 progress: <WizardProgress stage={stage} />,
-                onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
+                onPick: (t) => {
+                    if (t === 'custom' && typeof onCustom === 'function') {
+                        onCustom();
+                        return;
+                    }
+                    setTemplate(resolveTemplate(t));
+                    setStage('chain');
+                },
             }),
         );
     }
@@ -1072,6 +1141,7 @@ export function TokenWizard({ walletId, onBack }) {
             notices: pageNotices,
             progress: <WizardProgress stage={stage} inline />,
             demoGuard,
+            chainId,
             template,
             name, setName,
             nameError: tickerTaken ? t('issue.tickerTaken', { ticker: lookupTick }) : undefined,
@@ -1090,6 +1160,8 @@ export function TokenWizard({ walletId, onBack }) {
             mintStartBlock, setMintStartBlock,
             mintStopBlock, setMintStopBlock,
             payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
+            protocolFeeQuote, protocolFeePending,
+            feeEstimate,
             advancedPanel: {
                 showAdvanced, setShowAdvanced,
                 lockChecks, setLockChecks,
@@ -1192,11 +1264,14 @@ export function TokenWizard({ walletId, onBack }) {
                         disabled={actionConfirm.composing || !networkAvailable}
                         title={!networkAvailable ? 'Creating a token needs a network connection' : undefined}
                     >
-                        Continue to confirmation
+                        Issue token
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
+                {isWatcherMode ? (
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                ) : null}
                 {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow label="Template" value={templateLabel(template)} />
@@ -1507,7 +1582,7 @@ const TEMPLATES = [
     {
         id: 'subtoken',
         name: 'Subtoken',
-        tagline: 'Named sub-token under a ticker you own.',
+        tagline: 'Named subtoken under a ticker you own.',
         interactive: true,
     },
     {
@@ -1518,6 +1593,15 @@ const TEMPLATES = [
     },
 ];
 
+const TEMPLATE_ICONS = {
+    meme: FrogIcon,
+    utility: Icon.GearIcon,
+    collectible: Icon.TokenIcon,
+    edition: Icon.TokenListIcon,
+    subtoken: Icon.LinkIcon,
+    custom: Icon.PencilIcon,
+};
+
 function renderTemplateStage({ onPick, progress, notices }) {
     // The step caption is the first row under the notices, inside the list
     // template like the form stages carry theirs inside FormPage.
@@ -1526,32 +1610,32 @@ function renderTemplateStage({ onPick, progress, notices }) {
             {progress}
             {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
-                {TEMPLATES.map((t) => (
-                    // Native list items preserve list semantics because the UI kit has no list-item primitive.
-                    <li key={t.id}>
-                        <ListRow
-                            type="button"
-                            className={styles.templateCard}
-                            title={t.name}
-                            subtitle={t.tagline}
-                            onClick={() => t.interactive && onPick(t.id)}
-                            disabled={!t.interactive}
-                            aria-disabled={!t.interactive}
-                            tooltip={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
-                        />
-                    </li>
-                ))}
+                {TEMPLATES.map((t) => {
+                    const TemplateIcon = TEMPLATE_ICONS[t.id];
+                    return (
+                        // Native list items preserve list semantics because the UI kit has no list-item primitive.
+                        <li key={t.id}>
+                            <ListRow
+                                type="button"
+                                className={styles.templateCard}
+                                title={(
+                                    <span className={styles.templateTitle} data-template-title={t.id}>
+                                        <span className={styles.templateIcon} aria-hidden="true">
+                                            <TemplateIcon />
+                                        </span>
+                                        {t.name}
+                                    </span>
+                                )}
+                                subtitle={t.tagline}
+                                onClick={() => t.interactive && onPick(t.id)}
+                                disabled={!t.interactive}
+                                aria-disabled={!t.interactive}
+                                tooltip={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
+                            />
+                        </li>
+                    );
+                })}
             </ul>
-            {/* dividends are not a template setting, and the
-                wizard used to imply they were by selling a "Community"
-                card on a promise every token already keeps. Saying it
-                once here is what stops an issuer from abandoning a
-                perfectly good token and paying a second ISSUE fee to
-                re-create it under the "right" template. */}
-            <p className={styles.stageHint}>
-                Any token you issue here can pay dividends to its holders later.
-                That is a property of every token, not something a template turns on.
-            </p>
         </ListPage>
     );
 }
@@ -1580,7 +1664,12 @@ function renderChainStage({
                 </Button>
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
+            <NetworkField
+                label="Network"
+                help={subtoken
+                    ? 'The chain the subtoken is created on. It must be the chain where its parent token lives.'
+                    : 'The chain the token is created on. The fee-paying address and the network fee are on this network.'}
+                value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
@@ -1591,7 +1680,7 @@ function renderChainStage({
                     onChange={() => {}}
                     onIconClick={onPickSource}
                     iconLabel="Choose source address"
-                    hint={subtoken
+                    help={subtoken
                         ? 'A subtoken can only be issued by the address that owns its parent.'
                         : undefined}
                 />
@@ -1639,6 +1728,7 @@ const TEMPLATE_FIELDS = {
 
 function renderDetailsStage({
     demoGuard, progress, notices = [],
+    chainId,
     template,
     name, setName, nameError,
     displayName, setDisplayName,
@@ -1656,8 +1746,10 @@ function renderDetailsStage({
     mintStartBlock, setMintStartBlock,
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
+    protocolFeeQuote, protocolFeePending,
+    feeEstimate,
     advancedPanel,
-    formError, onEdit, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onSubmit, submitLabel = 'Issue token', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1682,7 +1774,7 @@ function renderDetailsStage({
             {show.parentToken ? (
                 <Input
                     label="Parent ticker"
-                    hint={'An existing token you own, which can itself be a subtoken. '
+                    help={'An existing token you own, which can itself be a subtoken. '
                         + "The new token's full ticker will be PARENT.CHILD."}
                     value={parentToken}
                     onChange={(e) => setParentToken(e.target.value)}
@@ -1695,7 +1787,8 @@ function renderDetailsStage({
             {show.name ? (
                 <Input
                     label={resolved === 'subtoken' ? 'Subtoken name' : 'Token name (ticker)'}
-                    hint={TICKER_HINT}
+                    help={TICKER_HELP}
+                    hint={TICKER_LIMIT}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     autoCapitalize="off"
@@ -1707,8 +1800,9 @@ function renderDetailsStage({
             ) : null}
             {show.displayName ? (
                 <Input
-                    label="Display name (optional)"
-                    hint="Shown only in this wallet; not saved on-chain."
+                    label="Display name"
+                    optional
+                    help="Shown only in this wallet; not saved on-chain."
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     autoComplete="off"
@@ -1717,7 +1811,7 @@ function renderDetailsStage({
             {show.supply ? (
                 <Input
                     label={isEdition ? 'Edition size' : 'Supply'}
-                    hint={isEdition
+                    help={isEdition
                         ? 'How many copies will ever exist. This number is locked permanently when the edition is issued.'
                         : undefined}
                     inputMode="decimal"
@@ -1735,8 +1829,10 @@ function renderDetailsStage({
             ) : null}
             {show.description ? (
                 <Input
-                    label="Description (optional)"
-                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain.`}
+                    label="Description"
+                    optional
+                    help="Stored on-chain."
+                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     autoComplete="off"
@@ -1746,7 +1842,7 @@ function renderDetailsStage({
             {show.imageUrl ? (
                 <Input
                     label="Image URL"
-                    hint={isEdition
+                    help={isEdition
                         ? 'URL for the artwork shared by every copy. The URL is saved on-chain, so use a stable host such as IPFS.'
                         : "URL for the collectible's image. The URL is saved on-chain, so use a stable host such as IPFS."}
                     value={imageUrl}
@@ -1759,8 +1855,9 @@ function renderDetailsStage({
             ) : null}
             {show.maxMint ? (
                 <Input
-                    label={isEdition ? 'Copies per mint' : 'Max mint per transaction (optional)'}
-                    hint={isEdition
+                    label={isEdition ? 'Copies per mint' : 'Max mint per transaction'}
+                    optional={!isEdition}
+                    help={isEdition
                         ? 'How many copies one mint claims. Anyone can mint until the edition sells out.'
                         : 'Caps how much can be minted in one transaction.'}
                     inputMode="decimal"
@@ -1771,8 +1868,9 @@ function renderDetailsStage({
             ) : null}
             {show.perAddressMax ? (
                 <Input
-                    label="Limit per address (optional)"
-                    hint="The most copies any single address can mint in total. Leave blank for no limit."
+                    label="Limit per address"
+                    optional
+                    help="The most copies any single address can mint in total. Leave blank for no limit."
                     inputMode="decimal"
                     value={perAddressMax}
                     onChange={(e) => setPerAddressMax(e.target.value)}
@@ -1781,8 +1879,9 @@ function renderDetailsStage({
             ) : null}
             {show.mintStartBlock ? (
                 <Input
-                    label="Minting opens at block (optional)"
-                    hint="Block height when public minting starts. Leave blank to open immediately."
+                    label="Minting opens at block"
+                    optional
+                    help="Block height when public minting starts. Leave blank to open immediately."
                     inputMode="numeric"
                     value={mintStartBlock}
                     onChange={(e) => setMintStartBlock(e.target.value)}
@@ -1791,8 +1890,9 @@ function renderDetailsStage({
             ) : null}
             {show.mintStopBlock ? (
                 <Input
-                    label="Minting closes at block (optional)"
-                    hint="Block height when public minting ends. Leave blank to keep it open until sold out."
+                    label="Minting closes at block"
+                    optional
+                    help="Block height when public minting ends. Leave blank to keep it open until sold out."
                     inputMode="numeric"
                     value={mintStopBlock}
                     onChange={(e) => setMintStopBlock(e.target.value)}
@@ -1808,9 +1908,10 @@ function renderDetailsStage({
             ) : null}
             {show.transferTo ? (
                 <AddressField
-                    label="Transfer ownership to (optional)"
+                    label="Transfer ownership to"
+                    optional
                     icon="contacts"
-                    hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
+                    help="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the next field to send those too."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     onIconClick={() => onPickContact('owner')}
@@ -1821,9 +1922,10 @@ function renderDetailsStage({
             ) : null}
             {show.transferSupplyTo ? (
                 <AddressField
-                    label="Send the initial mint to (optional)"
+                    label="Send the initial mint to"
+                    optional
                     icon="contacts"
-                    hint="Leave blank to keep the minted tokens at the issuing address."
+                    help="Leave blank to keep the minted tokens at the issuing address."
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
                     onIconClick={() => onPickContact('supply')}
@@ -1835,12 +1937,22 @@ function renderDetailsStage({
             {resolved === 'custom' && advancedPanel ? (
                 <AdvancedIssuePanel {...advancedPanel} />
             ) : null}
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                tiers={feeEstimate ? { normal: feeEstimate } : null}
+                value={{ mode: 'normal' }}
                 coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
-            />
+                feeSelector={null}
+            >
+                <NativeFeeToggle
+                    checked={payFeeInNativeCoin}
+                    onChange={setPayFeeInNativeCoin}
+                    coinTicker={coinTicker}
+                    mandatory={nativeFeeMandatory}
+                />
+            </FeesCard>
         </FormPage>
     );
 }
@@ -1934,8 +2046,9 @@ function AdvancedIssuePanel({
                         description={<>A callback lets you later recall <strong>all</strong> of this token back to your address in one action, paying every holder a set amount of another token per unit they held. It can only be configured before any supply is distributed, so setting it during issuance guarantees it is available.</>}
                     >
                         <Input
-                            label="Callback token (optional)"
-                            hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
+                            label="Callback token"
+                            optional
+                            help="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
                             value={callbackTick}
                             onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
                             autoComplete="off"
@@ -1945,9 +2058,12 @@ function AdvancedIssuePanel({
                         />
                         <Input
                             label="Payout per unit"
+                            help={callbackTickDecimals != null
+                                ? `How much of ${callbackTick} each holder receives per unit they hold.`
+                                : 'How much of the callback token each holder receives per unit they hold.'}
                             hint={callbackTickDecimals != null
-                                ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
-                                : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
+                                ? `Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
+                                : 'Whole numbers only until the wallet can confirm the callback token is divisible.'}
                             inputMode="decimal"
                             value={callbackAmount}
                             onChange={(e) => setCallbackAmount(e.target.value)}
@@ -1955,9 +2071,8 @@ function AdvancedIssuePanel({
                         />
                         <Input
                             label="Callback allowed from block"
-                            hint={callbackBlockEstimate
-                                ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
-                                : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                            help="The earliest block height you can trigger the callback. Must be a future block."
+                            hint={callbackBlockEstimate ? `Est. ${callbackBlockEstimate}.` : undefined}
                             inputMode="numeric"
                             value={callbackBlock}
                             onChange={(e) => setCallbackBlock(e.target.value)}

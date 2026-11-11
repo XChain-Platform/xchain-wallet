@@ -269,9 +269,9 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('review names both chains, then sign', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Offer swap', exact: true }).click();
 
-            await expect(main, 'the Review button did not reach the review stage')
+            await expect(main, 'the Offer swap button did not reach the review stage')
                 .toContainText(/Offer to give/, { timeout: 30_000 });
             await expect(main).toContainText(
                 new RegExp(`Offer to give ${GIVE_AMOUNT} ${TICK} in exchange for ${GET_AMOUNT} ${TICK}`));
@@ -283,13 +283,10 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('img', { name: GET.chainLabel, exact: true }).first())
                 .toBeVisible();
 
-            // CONDITIONAL, and not out of caution: `SignCredentials` renders
-            // no password field at all when the signer pool is already
-            // rehydrated, showing "Wallet unlocked. No password needed."
-            // instead, and the form's submit gate agrees (`!signerReady &&
-            // password.length === 0`). An unconditional fill would wait out the
-            // full budget on a screen that is ready to sign. Same shape the
-            // betting lane settled on.
+            // Conditional: `SignCredentials` renders no password field when the
+            // signer pool is already rehydrated, and the submit gate agrees
+            // (`!signerReady && password.length === 0`), so an unconditional
+            // fill would wait out the full budget on a screen ready to sign.
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) {
                 await password.fill(PASSWORD);

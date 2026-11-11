@@ -87,17 +87,13 @@ function deferred() {
 }
 
 async function typeMemo(value) {
-    const memo = await screen.findByLabelText(/^Memo \(optional\)/);
+    const memo = await screen.findByLabelText(/^Memo$/);
     fireEvent.change(memo, { target: { value } });
     return memo;
 }
 
-function utf8Bytes(value) {
-    return new TextEncoder().encode(value).byteLength;
-}
-
 function clickReview() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Update preferences' }));
 }
 
 async function continueToConfirm(target) {
@@ -120,7 +116,7 @@ function expectWireShape(params) {
     if ('MEMO' in params) {
         expect(params.MEMO).not.toMatch(/[|;\u0000-\u001f\u007f-\u009f​‪-‮⁦-⁩]/);
         expect(params.MEMO).toBe(params.MEMO.trim());
-        expect(new TextEncoder().encode(params.MEMO).byteLength).toBeLessThanOrEqual(250);
+        expect(params.MEMO.length).toBeLessThanOrEqual(250);
     }
 }
 
@@ -128,10 +124,10 @@ afterEach(() => cleanup());
 
 describe('AddressPreferencesForm input', () => {
     const accepted = [
-        ['250 bytes of two-byte text', 'é'.repeat(125)],
-        ['250 bytes of CJK plus padding', '漢'.repeat(83) + 'a'],
-        ['250 bytes of emoji plus padding', '🚀'.repeat(62) + 'ab'],
-        ['combining marks', 'é'.repeat(80)],
+        ['250 accented characters', 'é'.repeat(250)],
+        ['250 CJK characters', '漢'.repeat(250)],
+        ['250 UTF-16 units of emoji', '🚀'.repeat(125)],
+        ['250 UTF-16 units of combining marks', 'é'.repeat(125)],
     ];
     for (const [name, value] of accepted) {
         it(`Review accepts a memo of ${name} and compose carries it exactly`, async () => {
@@ -148,9 +144,9 @@ describe('AddressPreferencesForm input', () => {
     }
 
     const refused = [
-        ['251 bytes of two-byte text', 'é'.repeat(125) + 'a', /251 bytes/],
-        ['252 bytes of CJK', '漢'.repeat(84), /252 bytes/],
-        ['252 bytes of emoji', '🚀'.repeat(63), /252 bytes/],
+        ['251 accented characters', 'é'.repeat(251), /251 characters/],
+        ['252 CJK characters', '漢'.repeat(252), /252 characters/],
+        ['252 UTF-16 units of emoji', '🚀'.repeat(126), /252 characters/],
         ['a zero-width space', 'pay​me', /zero-width/],
         ['a right-to-left override', 'abc‮def', /text-direction|direction/],
         ['an isolate mark', 'abc⁦def', /text-direction|direction/],
@@ -205,7 +201,7 @@ describe('AddressPreferencesForm input', () => {
 
     it('every field at its default still writes all three values', async () => {
         const { target } = mount();
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({ FEE_PREFERENCE: '2', REQUIRE_MEMO: '0', DISPENSER_PREFERENCE: '1' });
@@ -235,7 +231,7 @@ describe('AddressPreferencesForm input', () => {
     for (const [name, read] of oddReads) {
         it(`normalises an on-chain read with ${name} to a valid wire write`, async () => {
             const { target } = mount({ prefs: () => Promise.resolve(read) });
-            await screen.findByRole('button', { name: 'Review' });
+            await screen.findByRole('button', { name: 'Update preferences' });
             clickReview();
             const actionData = await continueToConfirm(target);
             expectWireShape(actionData.params);
@@ -248,7 +244,7 @@ describe('AddressPreferencesForm input', () => {
 describe('AddressPreferencesForm races', () => {
     it('a double click on Review runs one review and one compose', async () => {
         const { target } = mount();
-        const review = await screen.findByRole('button', { name: 'Review' });
+        const review = await screen.findByRole('button', { name: 'Update preferences' });
         fireEvent.click(review);
         fireEvent.click(review);
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
@@ -266,7 +262,7 @@ describe('AddressPreferencesForm races', () => {
         const held = deferred();
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? Promise.resolve(DEFAULTS) : held.promise; } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         fireEvent.click(screen.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }));
         await act(async () => { held.resolve(DEFAULTS); await held.promise; });
@@ -278,10 +274,10 @@ describe('AddressPreferencesForm races', () => {
 
     const lateMemos = [
         ['a|b', 'Memo cannot contain "|" or ";".'],
-        ['é'.repeat(125) + 'a', 'Memo is 251 bytes; the network accepts at most 250 bytes.'],
+        ['😀'.repeat(125) + 'a', 'Memo is 251 characters; the network accepts at most 250 characters.'],
     ];
     for (const [late, message] of lateMemos) {
-        it(`a memo edited while Review reads the baseline is checked before the write (${utf8Bytes(late)} bytes)`, async () => {
+        it(`a memo edited while Review reads the baseline is checked before the write (${late.length} characters)`, async () => {
             const held = deferred();
             let calls = 0;
             const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? Promise.resolve(DEFAULTS) : held.promise; } });
@@ -304,7 +300,7 @@ describe('AddressPreferencesForm races', () => {
             prefs: (args) => { reads.push(args.address); return Promise.resolve(args.address === OTHER ? ALL_SET : DEFAULTS); },
         });
         const view = render(element(target, ADDRESS));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         await screen.findByRole('form', { name: 'Review preferences' });
         view.rerender(element(target, OTHER));
@@ -349,7 +345,7 @@ describe('AddressPreferencesForm network reads', () => {
         const { target } = mount({
             prefs: () => { calls += 1; return calls === 2 ? Promise.reject(new Error('timeout')) : Promise.resolve(DEFAULTS); },
         });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         expect(await screen.findByText(/Could not re-check the current on-chain values: timeout/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
@@ -361,7 +357,7 @@ describe('AddressPreferencesForm network reads', () => {
         it(`a malformed prefill of ${name} leaves defaults and Review still works`, async () => {
             let calls = 0;
             const { target } = mount({ prefs: () => { calls += 1; return Promise.resolve(calls === 1 ? value : DEFAULTS); } });
-            await screen.findByRole('button', { name: 'Review' });
+            await screen.findByRole('button', { name: 'Update preferences' });
             await act(async () => { await Promise.resolve(); });
             expect(screen.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).checked).toBe(false);
             clickReview();
@@ -373,7 +369,7 @@ describe('AddressPreferencesForm network reads', () => {
     it('a malformed review read refuses Review rather than writing guesses', async () => {
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return Promise.resolve(calls === 1 ? DEFAULTS : null); } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         expect(await screen.findByText(/Could not re-check the current on-chain values/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
@@ -382,7 +378,7 @@ describe('AddressPreferencesForm network reads', () => {
     it('a prefill that never answers does not block Review', async () => {
         let calls = 0;
         const { target } = mount({ prefs: () => { calls += 1; return calls === 1 ? new Promise(() => {}) : Promise.resolve(DEFAULTS); } });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         clickReview();
         const actionData = await continueToConfirm(target);
         expectWireShape(actionData.params);
@@ -394,7 +390,7 @@ describe('AddressPreferencesForm network reads', () => {
             prefs: (args) => (args.address === ADDRESS ? first.promise : Promise.resolve(DEFAULTS)),
         });
         const view = render(element(target, ADDRESS));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         view.rerender(element(target, OTHER));
         await act(async () => { await Promise.resolve(); });
         await act(async () => { first.resolve(ALL_SET); await first.promise; });
@@ -414,7 +410,7 @@ describe('AddressPreferencesForm lifecycle', () => {
         // A lock replaces the route; unlock mounts it fresh.
         view.unmount();
         const again = render(element(target));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         const before = target.getAddressPreferences.mock.calls.length;
         clickReview();
@@ -434,7 +430,7 @@ describe('AddressPreferencesForm lifecycle', () => {
         view.unmount();
         await act(async () => { held.resolve(ALL_SET); await held.promise; });
         render(element(target));
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -443,7 +439,7 @@ describe('AddressPreferencesForm lifecycle', () => {
 describe('AddressPreferencesForm scale', () => {
     it('a wallet of 500 addresses with long labels renders with one preferences read', async () => {
         const { target } = mount({ count: 500 });
-        await screen.findByRole('button', { name: 'Review' });
+        await screen.findByRole('button', { name: 'Update preferences' });
         await act(async () => { await Promise.resolve(); });
         expect(target.getAddressesByChain).toHaveBeenCalledTimes(1);
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(1);

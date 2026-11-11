@@ -107,6 +107,22 @@ describe('shared settings row semantics', () => {
         expect(onChange).toHaveBeenCalledWith(false);
     });
 
+    it('names a toggle with a help tip by its label alone, even with the tip open', () => {
+        render(
+            <ToggleRow
+                label="Show pin button on rows"
+                help="A star pins or unpins the token on Home."
+                checked={false}
+                onChange={() => {}}
+            />,
+        );
+
+        const tip = screen.getByRole('button', { name: 'About Show pin button on rows' });
+        expect(screen.getByRole('switch', { name: 'Show pin button on rows' })).toBeTruthy();
+        fireEvent.click(tip);
+        expect(screen.getByRole('switch', { name: 'Show pin button on rows' })).toBeTruthy();
+    });
+
     it('gives appearance controls visible labels without repeating them in a description', () => {
         render(<AppearanceSection />);
 

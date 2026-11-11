@@ -67,11 +67,11 @@ describe('swap form expiration at review time', () => {
 
         const now = Date.now();
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localInput(new Date(now + 5 * 60_000)) } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create swap' })).toBeEnabled());
 
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(now + 60 * 60_000);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         expect(composeForConfirm).not.toHaveBeenCalled();
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/future date and time/i));

@@ -84,7 +84,7 @@ function mountFork({ getActionByTxid = vi.fn() } = {}) {
 }
 
 async function reviewAndPublishFirst() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
     const publish = await screen.findByRole('button', { name: /^Publish (add|remove)$/ });
     fireEvent.click(publish);
 }
@@ -99,7 +99,7 @@ describe('ListForkForm success transaction labels', () => {
         submitConfirmed.mockResolvedValueOnce({ txid: 'add-only-tx' });
         mountFork();
 
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
         await reviewAndPublishFirst();
 
         expect(await screen.findByText('Fork transaction')).toBeTruthy();
@@ -126,7 +126,7 @@ describe('ListForkForm success transaction labels', () => {
         mountFork({ getActionByTxid: vi.fn(() => indexed) });
 
         fireEvent.click(await screen.findByRole('checkbox', { name: 'REMOVE' }));
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'ADD' } });
         await reviewAndPublishFirst();
 
         expect(await screen.findByText('First transaction (add)')).toBeTruthy();

@@ -179,7 +179,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
     it('shows the network fee in the selected currency', async () => {
         mount({ ...COIN_DISPENSER, source: BUYER, address: BUYER });
         fireEvent.click(await screen.findByTitle('Change expiration or allow/block lists'));
-        expect(await screen.findByText(/€[0-9,.]+/)).toBeInTheDocument();
+        expect((await screen.findAllByText(/€[0-9,.]+/)).length).toBeGreaterThan(0);
         expect(document.body.textContent).not.toContain('$');
     });
 

@@ -229,7 +229,7 @@ test.describe('the PC-26 gated SEND guard', () => {
             await main.getByRole('checkbox', {
                 name: /I understand the encrypted file is published on-chain forever/,
             }).check();
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
 
             const reviewPassword = main.getByLabel('Password', { exact: true });
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {

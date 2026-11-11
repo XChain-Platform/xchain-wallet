@@ -30,7 +30,7 @@ describe('<Input revealable>', () => {
         const show = screen.getByRole('button', { name: 'Show password' });
 
         expect(field).toHaveAttribute('type', 'password');
-        expect(show.parentElement).toBe(field.parentElement);
+        expect(show.parentElement.parentElement).toBe(field.parentElement);
         expect(show).toHaveAttribute('aria-controls', field.id);
         expect(show).toHaveAttribute('aria-pressed', 'false');
 
@@ -84,8 +84,8 @@ describe('<Input revealable>', () => {
 
     it('reserves room for the button so typed text never runs under it', () => {
         const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
-        expect(css).toMatch(/\.controlHitArea > \.revealableInput\s*\{\s*padding-inline-end:/);
-        expect(css).toMatch(/\.revealToggle\s*\{[^}]*position: absolute;[^}]*top: 50%;/);
+        expect(css).toMatch(/\.controlHitArea > \.inputWithFieldAction\s*\{\s*padding-inline-end:/);
+        expect(css).toMatch(/\.controlActions\s*\{[^}]*position: absolute;[^}]*inset-block-start: 50%;/);
     });
 
     it.each([

@@ -119,7 +119,7 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'wrong' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
 
         expect(await screen.findByText('Incorrect wallet password.')).toBeTruthy();
         expect(biometric.register).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe('BiometricRow', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Enable' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Enable biometric unlock' }));
 
         expect(await screen.findByText('Sensor unavailable.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -148,7 +148,7 @@ describe('BiometricRow', () => {
 
         expect(await screen.findByRole('button', { name: 'Re-enrol' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Re-enrol' }));
-        expect(screen.getByText('Re-enrol biometric unlock')).toBeTruthy();
+        expect(screen.getAllByText('Re-enrol biometric unlock').length).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
@@ -163,7 +163,7 @@ describe('DuressPassphraseRow', () => {
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: current } });
         fireEvent.change(screen.getByLabelText('Duress passphrase'), { target: { value: pass } });
         fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: confirm } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
     }
 
     it('uses style-guide controls without changing accessible names', () => {
@@ -199,7 +199,7 @@ describe('DuressPassphraseRow', () => {
         expect(duress.set).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'correct' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
         expect(await screen.findByText(/Configured\. Entering this passphrase/)).toBeTruthy();
         expect(duress.set).toHaveBeenCalledWith('emergency-only');
     });

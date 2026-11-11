@@ -14,6 +14,7 @@ import {
     Button,
     ChainBadge,
     EmptyState,
+    Icon,
     ListPage,
     PageHeader,
     Screen,
@@ -21,6 +22,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { EmptyStateAsLineContext } from '../../ui/Screen.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -30,6 +32,7 @@ import { findListOwner } from '../../flows/listMembership.js';
 import { uniqueRows } from '../utils/pagedRows.js';
 import { listItemStatusText, listStatusText, listStatusTitle } from '../utils/listItemStatusText.js';
 import styles from './IssueTokenForm.module.css';
+import detailStyles from './ListDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MEMBERS_PAGE_SIZE = 25;
@@ -301,10 +304,10 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                         title={`Left out by the network (${rejected.length})`}
                         description="These items were sent but are not on the list: the network checks each item on its own."
                     />
-                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                    <ul className={detailStyles.itemList}>
                         {/* Say why in plain words; the raw verdict stays in the tooltip. */}
                         {rejected.map((e, i) => (
-                            <li key={i} title={listStatusTitle(e.status)} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
+                            <li key={i} title={listStatusTitle(e.status)} className={detailStyles.itemRow}>
                                 <code>{e.tick ?? e.address}</code>{` (${listItemStatusText(e.status)})`}
                             </li>
                         ))}
@@ -315,11 +318,11 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             {isFork && edits.length > 0 ? (
                 <>
                     <SectionHeader title="This fork's edit" />
-                    <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+                    <ul className={detailStyles.itemList}>
                         {edits.map((e, i) => {
                             const why = listItemStatusText(e.status);
                             return (
-                                <li key={i} title={why ? listStatusTitle(e.status) : undefined} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
+                                <li key={i} title={why ? listStatusTitle(e.status) : undefined} className={detailStyles.itemRow}>
                                     <code>{e.tick ?? e.address}</code>
                                     {why ? ` (${why})` : ''}
                                 </li>
@@ -338,7 +341,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             {canManage ? (
                 <div className={styles.actions}>
                     {onShare ? (
-                        <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                        <Button variant="secondary" icon={<Icon.UsersIcon />} onClick={() => onShare({ chainId, actionIndex })}>
                             Share list
                         </Button>
                     ) : null}
@@ -354,6 +357,7 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
                     ) : null}
                     <Button
                         variant="primary"
+                        icon={<Icon.PencilIcon />}
                         onClick={() => onFork({
                             chainId,
                             actionIndex,
@@ -383,19 +387,23 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
 function MemberList({ items, isTick, messaging, chainId }) {
     const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        // A plain line, not a page message: the page's notice is the ownership warning.
+        // Keep this as a section line: the page's notice may be the ownership warning.
         return (
-            <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                No list members. Addresses added to this list appear here.
-            </p>
+            <EmptyStateAsLineContext.Provider value>
+                <EmptyState
+                    titleAs="p"
+                    title="No list members"
+                    body="Addresses added to this list appear here."
+                />
+            </EmptyStateAsLineContext.Provider>
         );
     }
     const visibleItems = items.slice(0, visibleLimit);
     return (
         <>
-            <ul className={styles.detailsList} style={{ display: 'block', listStyle: 'none' }}>
+            <ul className={detailStyles.itemList}>
                 {visibleItems.map((item) => (
-                    <li key={String(item)} style={{ padding: '2px 0' }}>
+                    <li key={String(item)} className={detailStyles.itemRow}>
                         {isTick
                             ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
                             : <AddressText address={item} truncate={false} />}
@@ -407,6 +415,7 @@ function MemberList({ items, isTick, messaging, chainId }) {
                     <Button
                         type="button"
                         variant="secondary"
+                        icon={<Icon.ChevronDownIcon />}
                         onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
                     >
                         Load more members

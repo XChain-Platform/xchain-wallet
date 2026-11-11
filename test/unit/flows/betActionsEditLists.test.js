@@ -191,7 +191,7 @@ describe('OracleConsole owner-only open-feed editor', () => {
 
         await domAct(async () => {
             fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
-            fireEvent.click(buttonsNamed(utils, 'Review list edit')[0]);
+            fireEvent.click(buttonsNamed(utils, 'Update lists')[0]);
             await drain();
         });
         const compose = calls.find((call) => call.method === 'composeBetForConfirm');

@@ -28,6 +28,7 @@ describe('notifications public surface', () => {
             'resolveNotificationSound',
             'soundById',
             'withNotificationSound',
+            'createTokenPriceLookup',
         ].sort());
     });
 });

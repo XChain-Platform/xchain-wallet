@@ -51,7 +51,7 @@ describe('ContractsList states', () => {
 
         expect(await screen.findByText('No contracts yet')).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: /Publish contract/ })).toHaveLength(1);
-        expect(screen.getByRole('button', { name: '+ Publish contract' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Publish contract' })).toBeInTheDocument();
     });
 
     it('uses one page-level empty message when every contract section is empty', async () => {

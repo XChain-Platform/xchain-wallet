@@ -62,7 +62,8 @@ for (const size of SIZES) {
                 const button = page.getByRole('main').getByRole('button', { name: opener }).first();
                 await button.focus();
                 await page.keyboard.press('Enter');
-                await expect(page.getByLabel(field), 'focus is in the form').toBeFocused();
+                // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+                await expect(page.getByLabel(field, { exact: true }), 'focus is in the form').toBeFocused();
                 await page.keyboard.press('Escape');
                 await expect(page.getByRole('heading', { level: 1, name: title, exact: true }), 'the sub-page stays open').toBeVisible();
                 await expect(page.getByRole('main').getByRole('button', { name: opener }).first()).toBeFocused();

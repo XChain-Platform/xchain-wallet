@@ -78,10 +78,10 @@ function mount(currentItems) {
 }
 
 async function addAndReview(list) {
-    await screen.findByLabelText(/^Add addresses/);
+    await screen.findByLabelText('Add addresses');
     await new Promise((resolve) => setTimeout(resolve, 0));
-    fireEvent.change(screen.getByLabelText(/^Add addresses/), { target: { value: list.join('\n') } });
-    fireEvent.submit(screen.getByLabelText(/^Add addresses/).closest('form'));
+    fireEvent.change(screen.getByLabelText('Add addresses'), { target: { value: list.join('\n') } });
+    fireEvent.submit(screen.getByLabelText('Add addresses').closest('form'));
 }
 
 beforeEach(() => {

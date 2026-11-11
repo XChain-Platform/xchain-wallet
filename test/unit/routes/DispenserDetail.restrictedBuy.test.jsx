@@ -35,7 +35,6 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
-import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 const CHAIN = 'litecoin-mainnet';
 const BUYER = 'ltc1qbuyerbuyerbuyerbuyerbuyerbuyerbuyerbu';
@@ -231,9 +230,10 @@ describe('restricted dispenser, buyer view (D-148)', () => {
             addresses,
             lists: { 1690: list([BUYER, OWNER]) },
         });
-        const payerSelect = await screen.findByRole('combobox', { name: /Pay from/i });
-        expect(payerSelect).toHaveClass(inputStyles.input);
-        fireEvent.change(payerSelect, { target: { value: 'addr-2' } });
+        const payerField = await screen.findByRole('textbox', { name: /Pay from/i });
+        expect(payerField).toHaveAttribute('readonly');
+        fireEvent.click(screen.getByRole('button', { name: 'Choose payment address' }));
+        fireEvent.click(await screen.findByRole('button', { name: new RegExp(OTHER_BUYER) }));
         await expectSelectedPayerRefused();
     });
 
@@ -309,7 +309,7 @@ describe('restricted dispenser, buyer view (D-148)', () => {
             expect(buyButton()).toBeEnabled();
         });
         fireEvent.click(buyButton());
-        const password = await screen.findByLabelText(/Password/i);
+        const password = await screen.findByLabelText(/Password/i, { selector: 'input' });
         fireEvent.change(password, { target: { value: 'secret' } });
         buyerAllowed = false;
         fireEvent.click(screen.getByTestId('confirm-approve'));

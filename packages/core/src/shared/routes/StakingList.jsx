@@ -11,13 +11,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import {
-    isDemoWallet,
-    synthesizeDemoStaking,
-    synthesizeDemoContractStakes,
-} from '@xchain-wallet/core/flows';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
@@ -90,7 +86,9 @@ const VALIDATOR_COIN = 'bitcoin';
  * @param {() => void} props.onBack
  */
 export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake, onBack }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
 
     // Chains whose protocol accepts the contract-staking lane, i.e. every
@@ -166,41 +164,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             return;
         }
 
-        // Demo wallets skip the live explorer fan-out and render
-        // synthesized validator + contract positions.
-        if (isDemoWallet(walletId)) {
-            const demoState = {};
-            for (const cid of chainsWithAddresses) {
-                const owner = (addressesByChain?.[cid] || [])[0]?.address || '';
-                const { stakes, delegations, rewards } = synthesizeDemoStaking(cid);
-                const contract = synthesizeDemoContractStakes(cid);
-                demoState[cid] = {
-                    loading: false,
-                    rows: buildRows({
-                        chainId: cid,
-                        stakes: stakes.map((s) => ({ ...s, _ownerAddress: owner })),
-                        delegations,
-                        rewards,
-                        rewardClaims: [],
-                        contractStakes: contract.stakes.map((s) => ({ ...s, _ownerAddress: owner })),
-                        contractUnstakes: contract.unstakes.map((u) => ({ ...u, _ownerAddress: owner })),
-                    }),
-                    positions: {
-                        stakes: stakes.map((s) => ({ ...s, _ownerAddress: owner })),
-                        delegations,
-                        rewards,
-                        rewardClaims: [],
-                        contractStakes: contract.stakes.map((s) => ({ ...s, _ownerAddress: owner })),
-                        contractUnstakes: contract.unstakes.map((u) => ({ ...u, _ownerAddress: owner })),
-                    },
-                    rewards,
-                    rewardClaims: [],
-                    error: null,
-                };
-            }
-            setStateByChain(demoState);
-            return;
-        }
         if (offline) return;
 
         const initial = {};
@@ -311,7 +274,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 });
         }
         return () => { cancelled = true; };
-    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload, offline]);
+    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, stakingReload, offline]);
 
     // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
     // per chain; a failure leaves the height null and every countdown falls
@@ -319,7 +282,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [heightByChain, setHeightByChain] = useState(/** @type {Record<string, number|null>} */ ({}));
     useEffect(() => {
         let cancelled = false;
-        if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
+        if (!source.live || typeof messaging.getIndexerWatermark !== 'function') return undefined;
         for (const cid of chainsWithAddresses) {
             messaging.getIndexerWatermark({ chainId: cid })
                 .then((r) => {
@@ -329,7 +292,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 .catch(() => { /* countdown degrades to the end block alone */ });
         }
         return () => { cancelled = true; };
-    }, [chainsWithAddresses, messaging]);
+    }, [chainsWithAddresses, messaging, source.live]);
 
     // PC-47: what every validator address on every chain can claim right now.
     const claimable = useMemo(() => {
@@ -412,14 +375,14 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         />
     );
     // The page header holds only the title and Back, so New stake sits in the
-    // content's actions row. An empty list offers it from its EmptyState
-    // instead, so the screen never shows it twice.
-    const wrap = (children, { toolbar, notices, emptyOffersCreate = false } = {}) => (
+    // content's actions row as the page's one green main action. An empty
+    // list points at it rather than offering a second (blue) copy.
+    const wrap = (children, { toolbar, notices } = {}) => (
         <Screen variant={variant} header={header}>
             <ListPage
                 notices={notices}
-                actions={onNewStake && !emptyOffersCreate ? (
-                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
+                actions={onNewStake ? (
+                    <Button variant="success" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
                         New stake
                     </Button>
                 ) : null}
@@ -511,7 +474,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             Couldn't load some staking data. {loadErrors.join('; ')}
         </StatusMessage>
     ) : null;
-    const emptyOffersCreate = !anyLoading && allRows.length === 0 && loadErrors.length === 0 && Boolean(onNewStake);
 
     return wrap(
         <>
@@ -551,8 +513,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                             ? "No staking positions could be loaded, so try again later."
                             : "Staking positions created by this wallet appear here.")
                         : "Try a different search."}
-                    actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? "New stake" : undefined}
-                    onAction={allRows.length === 0 && loadErrors.length === 0 ? onNewStake : undefined}
                     titleAs="p"
                 />
             ) : (
@@ -579,7 +539,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             )}
         </>,
-        { toolbar, notices: loadErrorNotice, emptyOffersCreate },
+        { toolbar, notices: loadErrorNotice },
     );
 }
 

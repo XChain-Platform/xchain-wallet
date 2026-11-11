@@ -223,7 +223,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await main.getByRole('checkbox', {
                 name: /I understand the encrypted file is published on-chain forever/,
             }).check();
-            await main.getByRole('button', { name: 'Review', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
 
             // The review screen states threshold rows only when one is set;
             // confirming its absence here is the review-time half of the same

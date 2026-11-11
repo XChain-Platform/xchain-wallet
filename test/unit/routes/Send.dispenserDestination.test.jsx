@@ -251,7 +251,7 @@ describe('Send review: destination matches an open dispenser', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
-        fireEvent.change(screen.getByLabelText('Recipient 2 amount'), { target: { value: '9' } });
+        fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
         await flushTimers();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await flushTimers();
@@ -279,7 +279,7 @@ describe('Send review: destination matches an open dispenser', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
         fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
-        fireEvent.change(screen.getByLabelText('Recipient 2 amount'), { target: { value: '9' } });
+        fireEvent.change(screen.getByLabelText(/^Recipient 2 amount/), { target: { value: '9' } });
         await flushTimers();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await lookupSettled(messaging);

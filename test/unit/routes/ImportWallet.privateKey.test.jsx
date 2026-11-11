@@ -27,13 +27,37 @@ function renderLane(importMnemonic = vi.fn().mockResolvedValue({})) {
 
 function pickCoin(name) {
     fireEvent.click(screen.getByRole('button', { name: /^Coin network: / }));
-    fireEvent.click(within(screen.getByRole('listbox', { name: 'Coin network' }))
-        .getByRole('option', { name: new RegExp(`^${name}`) }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Coin network' }))
+        .getByRole('button', { name: `Select ${name}` }));
 }
 
 afterEach(cleanup);
 
 describe('ImportWallet private key preview', () => {
+    it('orders the fields network, type, key, address and shows the chain icon', () => {
+        renderLane();
+        fireEvent.change(screen.getByLabelText('WIF private key'), {
+            target: { value: wif('litecoin-mainnet') },
+        });
+        const network = screen.getByRole('button', { name: 'Coin network: Litecoin' });
+        expect(screen.getByRole('button', { name: 'About Coin network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^About I understand this key/ })).toBeInTheDocument();
+        const type = screen.getByLabelText('Private key type');
+        const key = screen.getByLabelText('WIF private key');
+        const address = screen.getByLabelText('Address');
+        const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(follows(network, type)).toBe(true);
+        expect(follows(type, key)).toBe(true);
+        expect(follows(key, address)).toBe(true);
+        expect(network.querySelector('img')).not.toBeNull();
+
+        fireEvent.click(network);
+        const dialog = screen.getByRole('dialog', { name: 'Coin network' });
+        expect(within(dialog).getAllByRole('button', { name: /^Select / }).map((b) => b.getAttribute('aria-label')))
+            .toEqual(['Select Bitcoin', 'Select Dogecoin', 'Select Litecoin']);
+        expect(dialog.querySelectorAll('img')).toHaveLength(3);
+    });
+
     it.each([
         ['litecoin-mainnet', 'Litecoin', 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9'],
         ['dogecoin-mainnet', 'Dogecoin', 'DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE'],

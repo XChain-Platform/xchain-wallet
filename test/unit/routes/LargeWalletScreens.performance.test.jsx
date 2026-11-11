@@ -179,7 +179,7 @@ describe('large wallet screens', () => {
         expect(performance.now() - startedAt).toBeLessThan(slowTimeout(1_500));
         expect(screen.getByText('100 of 300 addresses shown')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search addresses' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search addresses' }), {
             target: { value: 'Scale address 299' },
         });
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(1));

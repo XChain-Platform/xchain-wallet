@@ -155,12 +155,14 @@ for (const viewport of VIEWPORTS) {
 
                 await page.getByRole('button', { name: 'Rename wallet' }).click();
                 await expectScreen(page, 'Rename wallet', `${size} rename wallet`, { atTop: true });
-                const walletName = page.getByLabel('Wallet name');
+                const walletName = page.getByLabel('Wallet name', { exact: true });
                 await expect(walletName).toHaveValue(ORIGINAL_WALLET);
-                // The page header holds only the title and Back; Save closes the form.
-                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
+                // The page header holds only the title and Back; the form's main
+                // action names what it does (U63) and closes the form.
+                const renameWallet = page.getByRole('main').getByRole('button', { name: 'Rename wallet', exact: true });
+                await expect(renameWallet).toBeVisible();
                 await walletName.fill(RENAMED_WALLET);
-                await page.getByRole('button', { name: 'Save' }).click();
+                await renameWallet.click();
 
                 await expectScreen(page, 'Wallet details', `${size} renamed wallet details`, {
                     atTop: true,
@@ -193,9 +195,11 @@ for (const viewport of VIEWPORTS) {
 
                 await page.getByRole('button', { name: /^Rename / }).first().click();
                 await expectScreen(page, 'Rename account', `${size} rename account`, { atTop: true });
-                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
-                await page.getByLabel('Account name').fill(RENAMED_ACCOUNT);
-                await page.getByRole('button', { name: 'Save' }).click();
+                const renameAccount = page.getByRole('main').getByRole('button', { name: 'Rename account', exact: true });
+                await expect(renameAccount).toBeVisible();
+                // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+                await page.getByLabel('Account name', { exact: true }).fill(RENAMED_ACCOUNT);
+                await renameAccount.click();
 
                 await expectScreen(page, 'Accounts', `${size} renamed account picker`, {
                     atTop: true,
@@ -230,8 +234,11 @@ for (const viewport of VIEWPORTS) {
                 await page.getByRole('button', { name: 'I understand, continue' }).click();
 
                 await expectScreen(page, 'Show private key', `${size} private key password`);
-                await expect(page.getByLabel('Wallet password')).toBeVisible();
-                await page.getByLabel('Wallet password').fill(password);
+                // The label carries a help tip button named after it (U57), so the
+                // field is found by its textbox role.
+                const passwordField = page.getByRole('textbox', { name: 'Wallet password', exact: true });
+                await expect(passwordField).toBeVisible();
+                await passwordField.fill(password);
                 await page.getByRole('button', { name: 'Confirm password' }).click();
 
                 const reveal = page.getByRole('button', { name: 'Tap to reveal private key' });
@@ -284,7 +291,7 @@ for (const viewport of VIEWPORTS) {
                     name: `Remove ${RENAMED_WALLET}?`,
                 });
                 await expect(confirmation, 'removal confirmation names the wrong wallet').toBeVisible();
-                const confirmName = page.getByLabel('Confirm wallet name');
+                const confirmName = page.getByLabel('Confirm wallet name', { exact: true });
                 await expect(confirmName).toHaveAttribute('placeholder', RENAMED_WALLET);
                 const remove = page.getByRole('button', { name: 'Remove wallet', exact: true });
                 await expect(remove).toBeDisabled();

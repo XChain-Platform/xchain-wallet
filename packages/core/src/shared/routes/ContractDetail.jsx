@@ -312,6 +312,7 @@ export function ContractDetail({
                             style={{ padding: '0.25rem 0.5rem' }}
                             onClick={() => setStateExpanded((x) => !x)}
                             aria-expanded={stateExpanded}
+                            icon={<Icon.ChevronDownIcon style={stateExpanded ? { transform: 'rotate(180deg)' } : undefined} />}
                         >
                             {stateExpanded ? 'Collapse' : 'Expand'}
                         </Button>
@@ -395,7 +396,8 @@ export function ContractDetail({
                 <Section title="Actions">
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <Button
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.ContractIcon />}
                             onClick={onExecute ? () => onExecute({ chainId, contractActionIndex }) : undefined}
                             disabled={!onExecute}
                         >
@@ -420,6 +422,7 @@ export function ContractDetail({
                         {isStakeable ? (
                             <Button
                                 variant="secondary"
+                                icon={<Icon.StakeIcon />}
                                 onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
                                 disabled={!onStakeToContract}
                             >

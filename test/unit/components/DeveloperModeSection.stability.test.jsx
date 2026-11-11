@@ -176,7 +176,7 @@ describe('DeveloperModeSection unavailable actions', () => {
         fireEvent.change(screen.getByLabelText('Bitcoin Regtest activation password'), {
             target: { value: 'password' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
 
         expect(await screen.findByText('No active wallet is available for network activation.')).toBeTruthy();
     });
@@ -196,7 +196,7 @@ describe('DeveloperModeSection unavailable actions', () => {
         fireEvent.change(screen.getByLabelText('Bitcoin Regtest activation password'), {
             target: { value: 'password' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
 
         expect(await screen.findByText('Active')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Activate…' })).toBeNull();

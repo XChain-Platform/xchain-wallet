@@ -79,6 +79,13 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* A picker label that carries a help tip keeps the tip on the label line. */
+.pickerLabelRow {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 /* A labelled set of checkboxes inside a form: the label keeps the label gap
    to its options, and the options keep the label gap to each other. */
 .checkGroup {
@@ -244,6 +251,17 @@ select.picker {
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+.signingLinkBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.signingLinkBlock > .actions {
+    margin-top: 0;
 }
 
 /* Inside a form stack the form gap spaces the row; the margin above is for
@@ -431,16 +449,103 @@ select.picker {
     border-top: 0;
 }
 
-.linkPanels {
+.linkActions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+}
+
+.linkActionCard {
+    composes: card from '../../ui/Card.module.css';
+    min-width: 0;
+    margin: 0;
+}
+
+/* The legend floats to full width so it draws inside the card padding
+   instead of straddling the border, and the next block clears it. */
+.linkActionTitle {
+    float: inline-start;
+    inline-size: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin-block-end: var(--xc-space-3);
+    padding: 0;
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
+.linkActionTitle + * {
+    clear: both;
+}
+
+.linkActionNumber {
+    display: inline-grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.linkActionFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-3);
     min-width: 0;
 }
 
-.linkPanel {
+/* Both label rows share one height so the two controls start on one line.
+   The network column wraps NetworkField, so its label sits one level deeper. */
+.linkActionFields > :not(.linkActionNetwork) > :first-child,
+.linkActionNetwork > * > :first-child {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-block-size: var(--xc-space-6);
+}
+
+.linkActionNetwork {
     min-width: 0;
-    margin: 0;
+}
+
+.linkActionIndex {
+    font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.linkActionCheck {
+    margin-top: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.linkActionFound {
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
+.linkConnector {
+    display: grid;
+    place-items: center;
+    min-height: var(--xc-space-8);
+    color: var(--xc-text-muted);
+}
+
+.linkConnector svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.linkReviewAction {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
 }
 
 @media (min-width: 834px) {
@@ -461,9 +566,6 @@ select.picker {
         border-top: var(--xc-table-row-divider);
     }
 
-    .linkPanels {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }
 
 /* Confirmation headers omit the redundant chain-name pill. */
@@ -599,4 +701,143 @@ select.picker {
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
+}
+
+.requiredTag,
+.irreversibleTag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.25rem;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.requiredTag {
+    color: var(--xc-accent-text);
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    font-weight: 700;
+}
+
+.optionalSections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-top: calc(-1 * var(--xc-space-2));
+}
+
+.optionalSection {
+    composes: flush from '../../ui/Card.module.css';
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sectionHeader {
+    width: 100%;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: var(--xc-text);
+    text-align: start;
+    justify-content: flex-start;
+}
+
+.sectionHeader > span {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: var(--xc-space-2);
+    justify-content: flex-start;
+}
+
+.sectionIcon,
+.sectionChevron,
+.lockIcon,
+.lockIconOn {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+.sectionIcon {
+    color: var(--xc-accent-text);
+}
+
+.sectionTitle {
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.irreversibleTag {
+    color: var(--xc-warning-text);
+    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
+    font-weight: 700;
+}
+
+.sectionSummary {
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sectionChevron {
+    transition: transform var(--xc-transition);
+}
+
+.sectionChevronTrailing {
+    margin-inline-start: auto;
+}
+
+.sectionChevronOpen {
+    transform: rotate(180deg);
+}
+
+.sectionBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+.sectionBody[hidden] {
+    display: none;
+}
+
+.lockRows {
+    margin: calc(-1 * var(--xc-space-3));
+}
+
+.lockRow {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-1) var(--xc-space-3);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.lockRow:last-child {
+    border-bottom: 0;
+}
+
+.lockIconOn {
+    color: var(--xc-warning-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sectionChevron {
+        transition: none;
+    }
 }

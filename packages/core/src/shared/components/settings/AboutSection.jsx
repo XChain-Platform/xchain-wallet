@@ -15,7 +15,7 @@
 // muted "not yet published" hint instead of an inert link.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
 import { nativePlatformName } from '../../nativeShell.js';
@@ -50,6 +50,7 @@ import {
     sanitizeDiagnosticValue,
 } from '../../../flows/diagnosticDump.js';
 import { t } from '../../../i18n/index.js';
+import { formatRelativeTime } from '../../utils/dateTime.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -62,7 +63,12 @@ const PARAGRAPHS = {
 const PARAGRAPH = { margin: 0 };
 const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
 
-export function AboutSection() {
+/**
+ * @param {object} [props]
+ * @param {number | null} [props.balancesFetchedAt]  Unix ms of the last successful balance fetch;
+ *   Home's balance box no longer shows it (U72), so About does.
+ */
+export function AboutSection({ balancesFetchedAt = null } = {}) {
     const { shell, messaging } = useMessaging();
     const haptic = useHapticFeedback();
     const [busy, setBusy] = useState(false);
@@ -180,6 +186,13 @@ export function AboutSection() {
             </p>
             <Row label={t('settings.about.version')}>
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
+            </Row>
+            <Row label={t('settings.about.balancesUpdated')}>
+                <span style={balancesFetchedAt ? ROW_VALUE : ROW_VALUE_MUTED}>
+                    {balancesFetchedAt
+                        ? formatRelativeTime(balancesFetchedAt)
+                        : t('settings.about.balancesNotUpdated')}
+                </span>
             </Row>
             <Row label={t('settings.about.buildIdentifier')}>
                 <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
@@ -304,6 +317,7 @@ export function AboutSection() {
                         onClick={handleCopyDiagnostics}
                         loading={busy}
                         disabled={busy}
+                        icon={status ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
                     >
                         {status ? t('history.copy.copied') : t('settings.about.copyDiagnostics')}
                     </Button>
@@ -314,6 +328,7 @@ export function AboutSection() {
                     size="sm"
                     variant="secondary"
                     onClick={handleReportProblem}
+                    icon={<Icon.ExternalLinkIcon />}
                 >
                     {t('settings.about.reportAProblem')}
                 </Button>
@@ -398,6 +413,7 @@ function DocLink({ path, label }) {
         textAlign: 'start',
         overflowWrap: 'anywhere',
         minHeight: 'var(--xc-tap-min)',
+        fontSize: 'var(--xc-text-xs)',
     };
     return (
         <a

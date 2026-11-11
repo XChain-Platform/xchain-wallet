@@ -119,7 +119,7 @@ describe('swap form submit safety', () => {
 
         await fillSwap();
         expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
-        const review = screen.getByRole('button', { name: 'Review' });
+        const review = screen.getByRole('button', { name: 'Create swap' });
         expect(review).toBeDisabled();
         fireEvent.submit(review.closest('form'));
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -134,10 +134,10 @@ describe('swap form submit safety', () => {
         );
 
         await fillSwap();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create swap' })).toBeEnabled());
         const errors = screen.getAllByRole('alert');
         expect(errors).toHaveLength(1);
         expect(errors[0]).toHaveTextContent(/connection|try again/i);
@@ -146,7 +146,7 @@ describe('swap form submit safety', () => {
     it('locks and de-duplicates SwapForm while its exact terms compose', async () => {
         await expectOneLockedCompose({
             children: <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />,
-            actionName: 'Review',
+            actionName: 'Create swap',
             fill: fillSwap,
         });
     });
@@ -184,8 +184,8 @@ describe('swap form submit safety', () => {
             </MessagingProvider>,
         );
         await fillSwap();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        const action = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
+        const action = await screen.findByRole('button', { name: 'Create unsigned swap transaction' });
         const form = action.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -205,7 +205,7 @@ describe('swap form submit safety', () => {
         );
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
         const action = await screen.findByRole('button', { name: /Create unsigned transaction/ });
         const form = action.closest('form');
         fireEvent.submit(form);
@@ -215,7 +215,7 @@ describe('swap form submit safety', () => {
     });
 
     it.each([
-        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        ['over 250 characters', `${'😀'.repeat(125)}a`, /251 characters; the network accepts at most 250 characters/],
         // The shared action-text refusal answers first, before the memo's own check.
         ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
         ['a tab', 'a\tb', /Memo cannot contain control characters/],
@@ -228,7 +228,7 @@ describe('swap form submit safety', () => {
         );
         await fillSwap();
         fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: memo } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
@@ -242,7 +242,7 @@ describe('swap form submit safety', () => {
         );
         await fillSwap();
         fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: 'x'.repeat(250) } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
     });
 });

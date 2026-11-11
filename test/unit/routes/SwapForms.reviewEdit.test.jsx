@@ -113,7 +113,7 @@ describe('swap review editing', () => {
             </MessagingProvider>,
         );
 
-        const memo = await screen.findByLabelText('Memo (optional)');
+        const memo = await screen.findByLabelText('Memo');
         const disclosure = screen.getByRole('button', { name: 'Advanced options' });
         const controlledId = disclosure.getAttribute('aria-controls');
 
@@ -127,7 +127,7 @@ describe('swap review editing', () => {
         fireEvent.click(disclosure);
         expect(disclosure).toHaveAttribute('aria-expanded', 'true');
         expect(document.getElementById(controlledId)).toBeVisible();
-        expect(screen.getByLabelText('Receive at (optional)')).toBeVisible();
+        expect(screen.getByLabelText('Receive at')).toBeVisible();
     });
 
     it('treats a tiny plain decimal as positive without floating-point underflow', async () => {
@@ -144,7 +144,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '1');
 
         expect(screen.queryByText('Give amount must be a positive decimal number.')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Create swap' })).toBeEnabled();
     });
 
     it('blocks non-positive same-chain amounts before review', async () => {
@@ -160,7 +160,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '1');
 
         expect(await screen.findByText('Give amount must be a positive decimal number.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -179,7 +179,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '1');
 
         expect(await screen.findByText('Give amount is above your available ALPHA balance.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -195,14 +195,14 @@ describe('swap review editing', () => {
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'not an address' } });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'not an address' } });
         expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: BTC_ADDRESS.address } });
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: BTC_ADDRESS.address } });
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
             .toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -219,7 +219,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -236,7 +236,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
         expect(screen.getByText('1 ALPHA = 1.5 BETA')).toBeInTheDocument();
@@ -261,7 +261,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         await screen.findByRole('button', { name: 'Edit' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -284,11 +284,11 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
+        await screen.findByRole('button', { name: 'Create unsigned swap transaction' });
 
         vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-02T03:05'));
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned swap transaction' }));
         expect(await screen.findByText('Expiration must be in the future.')).toBeInTheDocument();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -304,7 +304,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '1000000000');
         setAmount('Get amount (BETA)', '1');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         expect(await screen.findByText('1 ALPHA = < 0.00000001 BETA')).toBeInTheDocument();
         expect(screen.queryByText('1 ALPHA = 0 BETA')).toBeNull();
@@ -325,9 +325,9 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
-        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: `  ${BTC_RECIPIENT}  ` } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  exact memo  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: `  ${BTC_RECIPIENT}  ` } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  exact memo  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
 
         const giveValue = await screen.findByText('2 ALPHA');
         const details = giveValue.closest('dl');
@@ -340,7 +340,7 @@ describe('swap review editing', () => {
         expect(within(details).getByText('exact memo')).toBeInTheDocument();
         expect(within(details).getAllByText('None')).toHaveLength(2);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned swap transaction' }));
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: expect.objectContaining({
                 params: expect.objectContaining({
@@ -369,8 +369,8 @@ describe('swap review editing', () => {
         setAmount('Give amount (ALPHA)', '4');
         setAmount('Get amount (BETA)', '5');
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: `  ${BTC_ADDRESS.address}  ` } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: '  exact memo  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  exact memo  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         await screen.findByRole('button', { name: 'Edit' });
         expect(screen.getByText('1 ALPHA = 1.25 BETA')).toBeInTheDocument();
@@ -385,7 +385,7 @@ describe('swap review editing', () => {
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('5');
         expect(screen.getByLabelText('Receive at')).toHaveValue(`  ${BTC_ADDRESS.address}  `);
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('  exact memo  ');
+        expect(screen.getByLabelText('Memo')).toHaveValue('  exact memo  ');
     });
 
     it('uses the cross-chain review header Back action to keep the populated form', async () => {
@@ -402,7 +402,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '4');
         setAmount('Get amount (BETA)', '5');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         await screen.findByRole('button', { name: 'Edit' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -427,11 +427,11 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '5');
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
+        await screen.findByRole('button', { name: 'Create unsigned cross-chain swap transaction' });
 
         vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-02T03:05'));
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned cross-chain swap transaction' }));
         expect(await screen.findByText('Expiration must be a future date and time.')).toBeInTheDocument();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -454,7 +454,7 @@ describe('swap review editing', () => {
 
         expect(await screen.findByText("Give token can be a name, or ^ followed by the token's number (^123)."))
             .toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -474,7 +474,7 @@ describe('swap review editing', () => {
         setAmount(/^Give amount/, '1');
         setAmount('Get amount (BETA)', '2');
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '   ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         expect(await screen.findByText('Enter the give and get tickers and amounts, or select ownership, before reviewing.'))
             .toBeInTheDocument();
@@ -484,7 +484,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
         setAmount('Give amount (ALPHA)', '1');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         expect(await screen.findByText('Enter a receive address on the get network.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
@@ -526,11 +526,11 @@ describe('swap review editing', () => {
             .toISOString().slice(0, 16);
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localExpiration } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-        await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
+        await screen.findByRole('button', { name: 'Create unsigned cross-chain swap transaction' });
 
         vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned cross-chain swap transaction' }));
 
         expect(await screen.findByText('Expiration must be a future date and time.')).toBeInTheDocument();
         expect(screen.getByLabelText('Give amount (ALPHA)')).toHaveValue('1');
@@ -557,7 +557,7 @@ describe('swap review editing', () => {
             .toISOString().slice(0, 16);
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localExpiration } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
 
@@ -581,7 +581,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '1000000000');
         setAmount('Get amount (BETA)', '1');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         expect(await screen.findByText('1 ALPHA = < 0.00000001 BETA')).toBeInTheDocument();
         expect(screen.queryByText('1 ALPHA = 0 BETA')).toBeNull();
@@ -612,7 +612,7 @@ describe('swap review editing', () => {
         setAmount('Give amount (ALPHA)', '4');
 
         fireEvent.click(screen.getByRole('button', { name: 'Give network: Dogecoin' }));
-        fireEvent.click(screen.getByRole('option', { name: /Bitcoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Bitcoin/ }));
         expect(screen.getByLabelText('Give amount')).toHaveValue('');
         expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token');
 
@@ -622,7 +622,7 @@ describe('swap review editing', () => {
         expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address);
 
         fireEvent.click(screen.getByRole('button', { name: 'Get network: Bitcoin' }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
         expect(screen.getByLabelText('Get amount')).toHaveValue('');
         expect(screen.getByLabelText('Receive at')).toHaveValue('');
         expect(screen.getByRole('button', { name: /Get token:/ })).toHaveTextContent('Select a token');
@@ -647,12 +647,12 @@ describe('swap review editing', () => {
         setAmount('Give amount (ALPHA)', '1');
         setAmount('Get amount (BETA)', '2');
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address));
-        const review = screen.getByRole('button', { name: 'Review' });
-        fireEvent.click(review);
+        const create = screen.getByRole('button', { name: 'Create cross-chain swap' });
+        fireEvent.click(create);
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
-        expect(review.closest('form')).toHaveAttribute('inert');
-        expect(review.closest('form')).toHaveAttribute('aria-busy', 'true');
+        expect(create.closest('form')).toHaveAttribute('inert');
+        expect(create.closest('form')).toHaveAttribute('aria-busy', 'true');
         await act(async () => { resolveCompose(null); });
     });
 
@@ -672,9 +672,9 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         setAmount('Give amount (ALPHA)', '1');
         setAmount('Get amount (BETA)', '2');
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
-        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const submit = await screen.findByRole('button', { name: 'Create unsigned cross-chain swap transaction' });
         const form = submit.closest('form');
         await act(async () => {
             form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -700,7 +700,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '1');
 
         expect(await screen.findByText('Give amount must be a positive decimal number.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -730,7 +730,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
         expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
             .toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -749,7 +749,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -768,7 +768,7 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
         fireEvent.click(screen.getByLabelText('Give this token\'s ownership (not a balance)'));
         fireEvent.click(screen.getByLabelText('Require the matcher to give that token\'s ownership'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
 
         expect(await screen.findByText('ownership of ALPHA')).toBeInTheDocument();
         expect(screen.getByText('ownership of BETA')).toBeInTheDocument();
@@ -797,7 +797,7 @@ describe('swap review editing', () => {
 
         expect(await screen.findByText('Give amount must be a whole number because ALPHA is indivisible.'))
             .toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -827,18 +827,18 @@ describe('swap review editing', () => {
         expect(await screen.findByText('Get amount must be a whole number because BETA is indivisible.'))
             .toBeInTheDocument();
         expect(msg.getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'ALPHA', demo: false });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
-    it('labels the full-wallet action as review and uses narrow-safe form sections', async () => {
+    it('labels the full-wallet action by outcome and uses narrow-safe form sections', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging({ walletMode: 'full' })}>
                 <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('button', { name: 'Review' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create swap' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
         expect(screen.getByRole('region', { name: 'You give' })).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'You get' })).toBeInTheDocument();

@@ -16,7 +16,7 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/pending.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { ActivityRow } from '../components/ActivityRow.jsx';
+import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { truncateAddress } from '../../ui/AddressText.jsx';
@@ -26,7 +26,7 @@ import {
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
-import { activityRowAmount } from '../utils/activityAmount.js';
+import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
 import styles from './History.module.css';
 import { DoubleChevron, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, historyAmountDirection, peerAddressOfEntry, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 import { DetailCard } from './HistoryDetailCard.jsx';
@@ -235,14 +235,16 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
         ? entry.receiveLabel
         : '';
     const nativeTick = tickerForDescriptor(d || { coin: coinOfChainId(entry.chainId) });
-    const rawTick = entry.raw?.tick ?? entry.raw?.TICK ?? entry.raw?.token;
+    const rawTick = activityRowTick(entry);
     const tick = String(settledAmount?.tick || rawTick || nativeTick || '?');
-    // A settled sweep or issue prints the amount Home prints, from the same
-    // formatter; its record carries base units.
-    const baseUnitAmount = !settledAmount && entry.blockIndex
-        && (actionKind === 'sweep' || actionKind === 'issue')
+    // Sweep and issue records carry base units, and market and dividend
+    // records carry the paid side; other actions keep the ticker alone.
+    const rowAmountShown = actionKind === 'sweep' || actionKind === 'issue'
+        || ['ORDER', 'SWAP', 'DIVIDEND'].includes(String(entry.action || '').toUpperCase());
+    const rowAmount = !settledAmount && rowAmountShown
         ? activityRowAmount(entry, { divisibility: recordDivisibility(entry.raw) })
         : '';
+    const rowAmountQualifier = activityRowAmountQualifier(entry);
     // An amount is a left-to-right figure in every locale: in a right-to-left
     // page its sign would otherwise land after the number ("1.5-").
     // Hidden balances mask the figure here as they do on Home and in the
@@ -261,9 +263,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
         >
             {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
-    ) : entry.blockIndex ? (baseUnitAmount ? (
+    ) : entry.blockIndex ? (rowAmount ? (
         <span data-history-amount="unknown" dir="ltr">
-            {balancesHidden ? '•••••' : baseUnitAmount} {tick}
+            {balancesHidden ? '•••••' : rowAmount} {tick}{rowAmountQualifier ? ` ${rowAmountQualifier}` : ''}
         </span>
     ) : tick) : (
         <>
@@ -284,8 +286,11 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
     const linkedTo = entry.link
         ? t('history.row.linkedTo', { ticker: entry.link.peerCoinTicker, index: entry.link.peerActionIndex })
         : '';
-    const rowDescription = entry.blockIndex ? [
-        t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) }),
+    const block = entry.blockIndex
+        ? t('history.row.block', { block: formatDecimalAmount(entry.blockIndex) })
+        : '';
+    const rowDescription = block ? [
+        block,
         chainTip ? t('history.row.confirmations', {
             count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
         }) : '',
@@ -307,6 +312,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 // reads "Stake" or "Contract call" rather than a bare "Other".
                 label={actionDisplayLabel(actionKind === 'other' ? entry.action : actionKind)
                     || actionDisplayLabel(entry.action)}
+                actionIcon={actionIconForAction(
+                    actionKind === 'send' || actionKind === 'receive' ? actionKind : entry.action,
+                )}
                 context={(
                     <>
                         {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}
@@ -324,6 +332,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                     pending: t('history.status.pending'),
                 }}
                 timestamp={entry.timestamp}
+                block={block || null}
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}

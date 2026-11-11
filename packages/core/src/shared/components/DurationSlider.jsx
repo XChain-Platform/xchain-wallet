@@ -148,15 +148,20 @@ export function DurationSlider({
                                 disabled={disabled}
                                 tabIndex={-1}
                             >
-                                <span>{preset
+                                <span className={styles.sliderTickTime}>{preset
                                     ? presetLabel(preset.id)
                                     : t('ui.feeSelector.custom')}</span>
                                 {preset ? (
                                     <span className={styles.sliderTickBlocks}>
-                                        {t('components.durationSlider.blocks', {
-                                            count: presetBlocks[id],
-                                            value: presetBlocks[id].toLocaleString('en-US'),
-                                        })}
+                                        <span className={styles.blocksFull}>
+                                            {t('components.durationSlider.blocks', {
+                                                count: presetBlocks[id],
+                                                value: presetBlocks[id].toLocaleString('en-US'),
+                                            })}
+                                        </span>
+                                        <span className={styles.blocksShort}>
+                                            {presetBlocks[id].toLocaleString('en-US')}
+                                        </span>
                                     </span>
                                 ) : null}
                             </Button>
@@ -166,6 +171,7 @@ export function DurationSlider({
                 {stop === 'custom' ? (
                     <Input
                         label={t('components.durationSlider.blocksLabel')}
+                        help={t('components.durationSlider.blocksHelp')}
                         inputMode="numeric"
                         value={value}
                         onChange={(event) => onChange(event.target.value)}

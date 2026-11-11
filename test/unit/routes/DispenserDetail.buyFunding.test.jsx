@@ -143,10 +143,10 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         await settle();
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
         // 3 fills = 15 MEMEVALID against a 12 balance.
-        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '3' } });
         expect(buyButton()).toBeDisabled();
         // 2 fills = 10 MEMEVALID, affordable.
-        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText(/^Fills/i), { target: { value: '2' } });
         expect(buyButton()).toBeEnabled();
     });
 
@@ -158,10 +158,10 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         expect(screen.getByTestId('buy-balance').className).toMatch(/hintLeft/);
         const max = screen.getByRole('button', { name: 'Use max available amount' });
         // Max sits inside the Fills field, as on every other amount field.
-        expect(screen.getByLabelText(/Fills/i).closest('[class*="amountFieldWrap"]')).toContainElement(max);
+        expect(screen.getByLabelText(/^Fills/i).closest('[class*="amountFieldWrap"]')).toContainElement(max);
         fireEvent.click(max);
         // floor(12 / 5) = 2, never 2.4 and never a float-misfloored 1.
-        expect(screen.getByLabelText(/Fills/i)).toHaveValue('2');
+        expect(screen.getByLabelText(/^Fills/i)).toHaveValue('2');
         expect(buyButton()).toBeEnabled();
     });
 
@@ -186,7 +186,7 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         });
         await settle();
         expect(screen.getByText(/90,071,992\.54740993 MEMEVALID available/)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/Fills/i), {
+        fireEvent.change(screen.getByLabelText(/^Fills/i), {
             target: { value: '9007199254740993' },
         });
         fireEvent.click(buyButton());

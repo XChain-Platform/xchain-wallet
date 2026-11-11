@@ -41,12 +41,19 @@ describe('multisig envelope edge branches', () => {
         ['non-array cosigners', { cosignerPubkeys: ALICE }],
         ['one cosigner', { cosignerPubkeys: [ALICE] }],
         ['fractional threshold', { threshold: 1.5 }],
-        ['empty PSBT', { psbtHex: '' }],
     ])('rejects a session with %s', (_label, patch) => {
         expect(() => buildRequestEnvelope({
             kind: 'multisig-request-nonce',
             sessionRef: { ...SESSION_REF, ...patch },
         })).toThrow(MultisigEnvelopeError);
+    });
+
+    it('preserves an empty PSBT so the import flow can refuse it in plain words', () => {
+        const envelope = buildRequestEnvelope({
+            kind: 'multisig-request-nonce',
+            sessionRef: { ...SESSION_REF, psbtHex: '' },
+        });
+        expect(envelope.sessionRef.psbtHex).toBe('');
     });
 
     it.each([

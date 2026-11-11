@@ -6,13 +6,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import chainPickerStyles from '../../../packages/core/src/ui/ChainPicker.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import tabsStyles from '../../../packages/core/src/ui/Tabs.module.css';
 import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
 import networkFilterDropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
+import betFeedsStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -50,10 +54,14 @@ function expectMediumInput(input) {
     expect(input.parentElement?.parentElement).toHaveClass(inputStyles.md);
 }
 
+function expectSmallInput(input) {
+    expect(input.parentElement?.parentElement).toHaveClass(inputStyles.sm);
+}
+
 afterEach(() => cleanup());
 
 describe('route control row alignment', () => {
-    it('keeps contract search medium and its chips and publish action compact', async () => {
+    it('keeps contract search, chips and publish action compact', async () => {
         mount(
             <ContractsList
                 walletId="wallet-1"
@@ -69,10 +77,28 @@ describe('route control row alignment', () => {
             }),
         );
 
-        expectMediumInput(await screen.findByLabelText('Filter contracts'));
+        expectSmallInput(await screen.findByLabelText('Filter contracts'));
         expect(screen.getByRole('tab', { name: 'All' })).toHaveClass(buttonStyles.sm);
         expect(screen.getByRole('tab', { name: 'Bitcoin' })).toHaveClass(buttonStyles.sm);
         expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.sm);
+    });
+
+    it('keeps the betting network field and status tabs on one control contract', async () => {
+        mount(
+            <BetFeedsList
+                walletId="wallet-1"
+                onBack={() => {}}
+                onOpenMarket={() => {}}
+            />,
+            messaging({
+                betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+        );
+
+        const network = await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(network.parentElement).toHaveClass(chainPickerStyles.md);
+        expect(network.parentElement?.parentElement).toHaveClass(betFeedsStyles.toolbarControl);
+        expect(screen.getByRole('tablist', { name: 'Filter betting markets' })).toHaveClass(tabsStyles.tabs);
     });
 
     it('keeps staking search and network filter on the md size', async () => {
@@ -88,7 +114,7 @@ describe('route control row alignment', () => {
         );
 
         expectMediumInput(await screen.findByLabelText('Search staking positions'));
-        const networkFilter = screen.getByRole('button', { name: 'Filter by network' });
+        const networkFilter = screen.getByRole('button', { name: /^Filter by network/ });
         expect(networkFilter.parentElement).toHaveClass(networkFilterStyles.md);
         expect(networkFilter.parentElement?.parentElement).toHaveClass(networkFilterDropdownStyles.md);
     });

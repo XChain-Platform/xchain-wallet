@@ -176,7 +176,7 @@ for (const viewport of VIEWPORTS) {
                 `${viewport.name} price and amount`,
             );
 
-            await order.getByRole('button', { name: 'Review' }).click();
+            await order.getByRole('button', { name: 'Place sell order' }).click();
             const review = main.getByRole('form', { name: 'Review order' });
             await expect(review).toBeVisible();
             await expect(reviewValue(review, 'Give')).toHaveText(`${SIZE} PEPECASH`);
@@ -208,7 +208,7 @@ for (const viewport of VIEWPORTS) {
             await expectScreen(page, 'PEPECASH/BTC', `${viewport.name} order review`);
             await expectMatchingLineHeights(
                 review.getByRole('button', { name: 'Edit order' })
-                    .or(review.getByRole('button', { name: 'Create unsigned transaction' })),
+                    .or(review.getByRole('button', { name: 'Place sell order' })),
                 `${viewport.name} review actions`,
             );
         });

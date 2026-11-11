@@ -29,6 +29,7 @@ const ROUTE_NAMES = [
     'MintForm',
     'MultisigCosignerShare',
     'MultisigCreate',
+    'MultisigSendForm',
     'MultisigSigningSession',
     'MyBets',
     'MyLists',
@@ -79,7 +80,20 @@ const ROUTE_NAMES = [
 const ROUTE_PROPS = Object.values(ROUTE_REGISTRY).reduce((props, route) => {
     if (!(route.component in props)) props[route.component] = route.minimalProps;
     return props;
-}, {});
+}, {
+    // Send renders this form in place when its source is a multisig, so it has
+    // no route entry; a 2-of-3 P2WSH multisig shows the whole send form.
+    MultisigSendForm: {
+        multisigConfigId: 'multisig-1',
+        multisig: {
+            multisigConfigId: 'multisig-1',
+            address: 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3',
+            scheme: 'p2wsh-multisig',
+            threshold: 2,
+            cosignerCount: 3,
+        },
+    },
+});
 
 const DEFAULT_PROPS = {
     walletId: 'wallet-1',

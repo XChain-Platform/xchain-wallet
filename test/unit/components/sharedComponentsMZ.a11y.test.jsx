@@ -371,7 +371,7 @@ describe('shared components M to Z accessibility', () => {
         const { container } = render(
             <NetworkFilterDropdown value="all" onChange={noop} />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Filter by network' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
         await expectNoSeriousAxeViolations(container);
     });
 

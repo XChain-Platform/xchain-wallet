@@ -213,7 +213,7 @@ describe('StakeForm network picker', () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         mountForm(vi.fn().mockResolvedValue([]), { getAddressesByChain: vi.fn().mockResolvedValue(held) });
         fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
-        const offered = screen.getAllByRole('option').map((o) => o.textContent);
+        const offered = screen.getAllByRole('button', { name: /^Select / }).map((o) => o.textContent);
         expect(offered.some((t) => /Bitcoin/.test(t))).toBe(true);
         expect(offered.some((t) => /Litecoin|Dogecoin/.test(t))).toBe(false);
     });

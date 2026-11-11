@@ -106,7 +106,9 @@ describe('create onboarding keyboard flow', () => {
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
 
         const expectedTabOrder = [
+            screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
+            screen.getByRole('button', { name: 'About Recovery phrase length' }),
             screen.getByRole('radio', { name: /^12 words/ }),
             screen.getByRole('switch', { name: /Use an extra passphrase/ }),
             screen.getByRole('button', { name: 'Extra passphrase help' }),
@@ -253,11 +255,14 @@ describe('import onboarding keyboard flow', () => {
             screen.getByRole('tab', { name: 'Recovery phrase' }),
             screen.getByRole('tab', { name: 'Private key' }),
             screen.getByRole('tab', { name: 'Encrypted backup' }),
-            // Scan QR sits on the phrase label row, so it precedes the box.
-            screen.getByRole('button', { name: 'Scan QR' }),
+            screen.getByRole('button', { name: 'About Recovery phrase' }),
             screen.getByLabelText('Recovery phrase'),
+            screen.getByRole('button', { name: 'Scan QR' }),
+            screen.getByRole('button', { name: 'About Wallet name' }),
             screen.getByLabelText('Wallet name'),
+            screen.getByRole('button', { name: 'About Password' }),
             screen.getByLabelText('Password'),
+            screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
             screen.getByRole('switch', { name: /wallet uses an extra passphrase/ }),
             screen.getByRole('button', { name: 'Extra passphrase help' }),

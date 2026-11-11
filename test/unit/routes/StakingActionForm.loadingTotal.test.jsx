@@ -73,7 +73,7 @@ describe('StakingActionForm while the total is loading', () => {
         const messaging = mountForm({ getStakesForAddress: vi.fn(never) }, 'unstake');
         const amount = await screen.findByLabelText(/^Amount/);
         await screen.findByText('Loading…');
-        fireEvent.change(screen.getByLabelText(/Signing public key/i), { target: { value: PK } });
+        fireEvent.change(screen.getByLabelText(/Signing public key/i, { selector: 'input, select' }), { target: { value: PK } });
         fireEvent.change(amount, { target: { value: '1' } });
         const button = screen.getByRole('button', { name: 'Unstake' });
         expect(button).toBeDisabled();

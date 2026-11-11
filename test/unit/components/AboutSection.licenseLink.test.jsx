@@ -19,6 +19,7 @@ describe('About: license link', () => {
         expect(link.style.fontFamily).toBe('');
         expect(link.style.display).toBe('inline-block');
         expect(link.style.textAlign).toBe('start');
+        expect(link.style.fontSize).toBe('var(--xc-text-xs)');
         expect(link.textContent).toBe('License file ↗');
     });
 });

@@ -83,14 +83,14 @@ describe('confirmation password cleanup', () => {
         fireEvent.click(screen.getByRole('checkbox', {
             name: /I understand the encrypted file is published on-chain forever/,
         }));
-        // Review opens the confirm screen directly: its Reject and Approve are
+        // Publish opens the confirm screen directly: its Reject and Approve are
         // the only sign step, so the password is typed there.
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish file' }));
         fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
         expect(screen.queryByRole('button', { name: /Sign and publish|Sign on/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Publish file' }));
         expect(await screen.findByLabelText('Password')).toHaveValue('');
     });
 
@@ -101,18 +101,18 @@ describe('confirmation password cleanup', () => {
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
             target: { value: 'MEMBER' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
 
         await rejectConfirmation();
     });
 });
 
 describe('primary action validation', () => {
-    it('asks for a file when gated publish Review is pressed', async () => {
+    it('asks for a file when gated publish is pressed', async () => {
         mount(GatedPublishForm, {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', issuerAddress: FROM.address, onBack() {},
         });
-        const action = await screen.findByRole('button', { name: 'Review' });
+        const action = await screen.findByRole('button', { name: 'Publish file' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -125,7 +125,7 @@ describe('primary action validation', () => {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
         await screen.findByLabelText('Tokens (one per line)');
-        const action = screen.getByRole('button', { name: 'Review list' });
+        const action = screen.getByRole('button', { name: 'Save roster' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

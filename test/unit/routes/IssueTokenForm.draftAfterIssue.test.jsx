@@ -73,8 +73,8 @@ describe('Issue token draft after a confirmed issuance', () => {
         const messaging = makeMessaging();
         mount(messaging);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'ONCEONLY' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.change(screen.getByLabelText('Initial mint (optional)'), { target: { value: '100' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
+        fireEvent.change(screen.getByLabelText('Initial mint'), { target: { value: '100' } });
         await waitFor(() => expect(savedDraftKeys()).toHaveLength(1));
 
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
@@ -97,7 +97,7 @@ describe('Issue token draft after a confirmed issuance', () => {
         const messaging = makeMessaging();
         mount(messaging);
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'KEEPME' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
         await waitFor(() => expect(savedDraftKeys()).toHaveLength(1));
 
         fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));

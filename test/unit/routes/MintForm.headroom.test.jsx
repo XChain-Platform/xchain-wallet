@@ -126,7 +126,7 @@ function mountMint({
 // The label carries the active unit ("Amount (S18PROBE)"); anchoring on
 // the start keeps it off the Max button's "Use max available amount".
 const amountField = () => screen.findByLabelText(/^Amount\b/);
-const submitButton = () => screen.getByRole('button', { name: /^(Mint|Preview)$/ });
+const submitButton = () => screen.getByRole('button', { name: 'Mint' });
 
 afterEach(() => {
     cleanup();
@@ -134,6 +134,13 @@ afterEach(() => {
 });
 
 describe('MintForm sizes off mint headroom, not holdings', () => {
+    it('renders form-specific help for its network and token fields', async () => {
+        mountMint({ initialTick: null });
+
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
+    });
+
     it('reads 0 available for a token sitting at its supply cap', async () => {
         mountMint();
         expect(await screen.findByText(/0 S18PROBE available to mint/)).toBeInTheDocument();
@@ -251,10 +258,12 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
     it('keeps an indivisible mint out of review when the amount has decimals', async () => {
         const messaging = mountMint({ totalSupply: '1200' });
         await screen.findByText(/3,800 S18PROBE available to mint/);
+        // The field knows the token's precision, so it refuses the fraction
+        // as it is typed (U61) and the stored amount never takes it.
         fireEvent.change(await amountField(), { target: { value: '1.5' } });
         fireEvent.click(submitButton());
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Amount must be a whole number because S18PROBE is indivisible.');
+            .toHaveTextContent('Amount can have at most 0 decimal places.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -262,7 +271,7 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         const messaging = mountMint({ totalSupply: '1200' });
         await screen.findByText(/3,800 S18PROBE available to mint/);
         fireEvent.change(await amountField(), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Destination (optional)'), {
+        fireEvent.change(screen.getByLabelText('Destination'), {
             target: { value: 'not-an-address' },
         });
         fireEvent.click(submitButton());
@@ -321,7 +330,7 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         'bitcoin-mainnet',
         'litecoin-mainnet',
         'dogecoin-mainnet',
-    ])('does not offer or compose a native protocol fee on %s', async (chainId) => {
+    ])('offers no protocol-fee control or native fee output on %s', async (chainId) => {
         const messaging = mountMint({ chainId, totalSupply: '1200' });
         await screen.findByText(/3,800 S18PROBE available to mint/);
         expect(screen.queryByLabelText(/protocol fee/i)).not.toBeInTheDocument();
@@ -330,6 +339,6 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         fireEvent.click(submitButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         const request = messaging.composeForConfirm.mock.calls[0][0];
-        expect(request.encoderOpts).not.toHaveProperty('payFeeInNativeCoin');
+        expect(request.encoderOpts.payFeeInNativeCoin).toBeUndefined();
     });
 });

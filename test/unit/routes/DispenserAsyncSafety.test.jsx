@@ -65,6 +65,20 @@ afterEach(() => {
 });
 
 describe('dispenser async safety', () => {
+    it('renders form-specific help for its network and token fields', async () => {
+        const messaging = commonMessaging({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC_CHAIN]: [SOURCE] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC_CHAIN]: SOURCE }),
+        });
+        render(provider(
+            <DispenserForm walletId="wallet-a" initialChainId={BTC_CHAIN} onBack={() => {}} />,
+            messaging,
+        ));
+
+        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
+    });
+
     it('shows plain validation copy for a malformed dispenser ID without querying the indexer', async () => {
         const getDispenserByActionIndex = vi.fn();
         const messaging = commonMessaging({
@@ -101,7 +115,7 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create' });
+        const create = await screen.findByRole('button', { name: 'Create dispenser' });
         await waitFor(() => expect(create).toBeEnabled());
 
         const form = create.closest('form');
@@ -130,7 +144,7 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create' });
+        const create = await screen.findByRole('button', { name: 'Create dispenser' });
         await waitFor(() => expect(create).toBeEnabled());
         fireEvent.click(create);
         await waitFor(() => expect(messaging.generateDispenserAddress).toHaveBeenCalledOnce());
@@ -235,8 +249,8 @@ describe('dispenser async safety', () => {
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
-        const form = screen.getByRole('textbox').closest('form');
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
+        const form = screen.getByRole('searchbox').closest('form');
         await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).toBeEnabled());
         fireEvent.submit(form);
         fireEvent.submit(form);
@@ -257,8 +271,8 @@ describe('dispenser async safety', () => {
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
         await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
-        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
-        fireEvent.submit(screen.getByRole('textbox').closest('form'));
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
+        fireEvent.submit(screen.getByRole('searchbox').closest('form'));
         await waitFor(() => expect(messaging.getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
 
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
@@ -371,7 +385,7 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Create' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create dispenser' }));
 
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
         const form = submit.closest('form');

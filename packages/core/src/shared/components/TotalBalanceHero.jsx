@@ -13,12 +13,11 @@ import { Icon } from '@xchain-wallet/core/ui';
 import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
-import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { isDemoWallet } from '../../flows/demoMode.js';
-import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import styles from './TotalBalanceHero.module.css';
 import {
     formatFiatAmount as formatFiatValue,
@@ -42,39 +41,32 @@ import '../../i18n/locales/en/components.js';
  *
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
- * @param {string | null} [props.walletId]       the wallet these rows belong to; only used to tell a demo wallet apart, which prices itself from its own fixtures instead of the live oracle
+ * @param {string | null} [props.walletId]       the wallet whose data source supplies prices
  * @param {'all' | string} props.networkFilter
- * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
+ * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Dates saved data while offline.
  * @param {number | null} [props.pricesFetchedAt] Unix ms of the oldest live price used by the total.
  * @param {() => void} [props.onRefresh]          refreshes balances and any expired prices.
  * @param {boolean} [props.refreshing]            whether a manual refresh is running.
- * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter row's checked state
- * @param {() => void} [props.onToggleFilter]    when provided, adds a filter toggle row to the menu
  * @param {() => void} [props.onCommandPalette]  when provided, adds a search row that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, adds a lock row. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
     const labelId = useId();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
-    // The demo wallet prices its synthetic test-network holdings on purpose.
-    const testCoinsOnly = !isDemoWallet(walletId)
+    // A source that prices test coins treats those holdings as portfolio data.
+    const testCoinsOnly = !source.pricesTestCoins
         && rowsWithChain.length > 0
         && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
-    const { total, priceUnavailable } = useMemo(() => {
-        const sum = sumFiatValue(rows);
-        const meaningful = (rows || []).filter(hasNonZeroQuantity);
-        const meaningfulSum = sumFiatValue(meaningful);
-        return {
-            ...sum,
-            priceUnavailable: meaningful.length > 0 && meaningfulSum.priced === 0,
-        };
-    }, [rows]);
+    const { total } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
-    const { messaging } = useMessaging();
     const fiatCurrency = String(settings?.fiatCurrency || 'USD').toUpperCase();
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
+    const [coinPrimary, setCoinPrimary] = useState(false);
+    const online = useOnlineStatus();
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -85,31 +77,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const nativeChainIds = useMemo(() => {
         const set = new Set();
         for (const r of rows || []) {
-            if (r?.kind === 'native' && isMainnetChainId(r.chainId)) {
+            if (r?.kind === 'native' && (source.pricesTestCoins || isMainnetChainId(r.chainId))) {
                 set.add(r.chainId);
             }
         }
         return Array.from(set);
-    }, [rows]);
+    }, [rows, source.pricesTestCoins]);
     const nativeChainKey = nativeChainIds.join(',');
-
-    // A demo wallet prices itself from its own fixtures. Every other
-    // number in this hero is synthetic, so a LIVE 24h move applied to
-    // imaginary holdings was never the honest version of this line: it
-    // made a third-party request from a wallet whose whole design is to
-    // fetch nothing, and whether that request landed before a screenshot
-    // decided whether the change line was there at all - which moved the
-    // entire card 24px and was the last thing keeping two store-listing
-    // captures of one tree from matching.
-    const isDemo = isDemoWallet(walletId);
 
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
         if (nativePriceMap !== undefined) return undefined;
-        if (isDemo) {
-            setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
-            return undefined;
-        }
         if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
             setPriceMap({});
             return undefined;
@@ -123,7 +101,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
     const effectivePriceMap = nativePriceMap ?? priceMap;
 
     // Compute 24h delta: for each native row with a known change pct,
@@ -174,33 +152,51 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
     // A holding without a price adds nothing to the total and no status
     // text: a price simply shows when one exists.
-    const showMeta = !hidden && (testCoinsOnly
-        ? hasUpdate
-        : (hasChange || hasUpdate));
+    const showMeta = !hidden && (hasChange || (!online && hasUpdate));
     // A row whose balance read failed carries no number, so the headline
     // cannot sum it as zero: with nothing else priced the total is unknown,
     // and beside priced rows it is a floor, the way the row itself says.
     const unreadRows = (rows || []).filter((row) => row?.unavailable === 'all' || row?.unavailable === 'partial');
     const balanceUnread = unreadRows.length > 0 && Number(total) === 0;
     const balanceFloor = unreadRows.length > 0 && !balanceUnread ? 'At least ' : '';
-    const balanceDisplay = testCoinsOnly
+    // The swap row shows the total in a coin instead of fiat: the filtered
+    // network's coin, or BTC across every network, priced from the same
+    // native price map as the change line. Without that price it stays off.
+    const unitRow = (rows || []).find((row) => row?.kind === 'native' && typeof row.chainId === 'string'
+        && (networkFilter !== 'all' || row.chainId.startsWith('bitcoin-'))) || null;
+    const unitTick = unitRow ? String(unitRow.tick || '').toUpperCase() : '';
+    const unitPrice = unitRow ? Number(effectivePriceMap[unitRow.chainId]?.priceFiat) : NaN;
+    const canShowInCoin = !testCoinsOnly && !balanceUnread
+        && Boolean(unitTick) && Number.isFinite(unitPrice) && unitPrice > 0;
+    const showInCoin = coinPrimary && canShowInCoin;
+    const coinAmount = showInCoin
+        ? new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(Number(total) / unitPrice)
+        : null;
+    const balanceDisplay = showInCoin
+        ? `${balanceFloor}${coinAmount}`
+        : testCoinsOnly
         ? 'Test coins have no value'
         : balanceUnread
             ? 'Balance unavailable'
-            : priceUnavailable
-                ? 'Price unavailable'
-                : `${balanceFloor}${formatFiatAmount(total, fiatCurrency, fiatLocale, true)}`;
-    const balanceSpeech = testCoinsOnly
+            : `${balanceFloor}${formatFiatAmount(total, fiatCurrency, fiatLocale, true)}`;
+    const balanceSpeech = showInCoin
+        ? `${balanceFloor}${coinAmount} ${unitTick}`
+        : testCoinsOnly
         ? 'Test coins have no value'
         : balanceUnread
             ? 'Balance unavailable'
-            : priceUnavailable
-                ? 'Price unavailable'
-                : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
-    const balanceIsMessage = testCoinsOnly || priceUnavailable || balanceUnread;
+            : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
+    const balanceIsMessage = testCoinsOnly || balanceUnread;
     // The hero's own toggles, the same rows a token's balance hero offers;
     // a checked row means the chart or the balance is on screen.
     const heroMenuItems = [
+        !testCoinsOnly ? {
+            id: 'swap',
+            label: t('components.totalBalanceHero.showIn', { unit: showInCoin ? fiatCurrency : (unitTick || 'BTC') }),
+            Icon: Icon.SwapIcon,
+            onSelect: () => setCoinPrimary((value) => !value),
+            disabled: !canShowInCoin,
+        } : null,
         !testCoinsOnly ? {
             id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, onSelect: toggleChartVisible, checked: chartVisible,
         } : null,
@@ -224,9 +220,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         } : null,
         typeof onCommandPalette === 'function' ? {
             id: 'search', label: t('components.leftNav.openCommandPalette'), Icon: Icon.SearchIcon, onSelect: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
-        } : null,
-        typeof onToggleFilter === 'function' ? {
-            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, onSelect: onToggleFilter, checked: Boolean(filterOpen),
         } : null,
         typeof onLockWallet === 'function' ? {
             id: 'lock', label: t('home.lockWallet'), Icon: Icon.LockIcon, onSelect: onLockWallet,
@@ -257,7 +250,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             <span className={styles.amountValue}>
                                 {balanceDisplay}
                             </span>
-                            {!testCoinsOnly && !priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
+                            {!testCoinsOnly ? <span className={styles.amountCode}>{showInCoin ? unitTick : fiatCurrency}</span> : null}
                         </>
                     )}
                 </div>
@@ -285,7 +278,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             </span>
                         ) : null}
                     </span>
-                    {hasUpdate ? (
+                    {!online && hasUpdate ? (
                         <StalenessLabel
                             lastSyncedAt={portfolioUpdatedAt}
                             warnAfterMs={5 * 60_000}
@@ -327,15 +320,6 @@ function oldestStalePriceTimestamp(rows) {
         if (oldest === null || timestamp < oldest) oldest = timestamp;
     }
     return oldest;
-}
-
-function hasNonZeroQuantity(row) {
-    try {
-        return BigInt(row?.quantity ?? 0) !== 0n;
-    } catch {
-        const quantity = Number(row?.quantity);
-        return Number.isFinite(quantity) && quantity !== 0;
-    }
 }
 
 // Per-row fiat value used by the 24h-change accumulator. Mirrors the

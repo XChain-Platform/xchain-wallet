@@ -102,13 +102,13 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         // The token-list body renders (its own textarea), and the address-list
         // disclosure is not among it: a token list is never an ALLOW_LIST/
         // BLOCK_LIST binding target, so the warning would be a false alarm here.
-        await screen.findByLabelText('Tokens (one per line)');
+        await screen.findByLabelText('Tokens');
         expect(screen.queryByText(FORECLOSURE_TEXT)).not.toBeInTheDocument();
     });
 
     it('the disclosure appears and disappears live when the user switches List type', async () => {
         mount({ initialType: '1' });
-        await screen.findByLabelText('Tokens (one per line)');
+        await screen.findByLabelText('Tokens');
         expect(screen.queryByText(FORECLOSURE_TEXT)).not.toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('List type'), { target: { value: '2' } });
@@ -127,12 +127,12 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
 
     it('keeps a symbol ticker spelling selected from the token picker', async () => {
         mount({ initialType: '1', tokenTick: 'MiXeD!' });
-        const textarea = await screen.findByLabelText('Tokens (one per line)');
+        const textarea = await screen.findByLabelText('Tokens');
         expect(textarea).toHaveAttribute('autocapitalize', 'off');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:[\s,]|$)/));
 
-        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('MiXeD!');
+        expect(await screen.findByLabelText('Tokens')).toHaveValue('MiXeD!');
     });
 });

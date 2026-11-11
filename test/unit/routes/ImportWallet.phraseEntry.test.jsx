@@ -79,7 +79,7 @@ describe('ImportWallet recovery phrase entry', () => {
         const action = screen.getByRole('button', { name: 'Import' });
         const phrase = screen.getByLabelText('Recovery phrase');
 
-        expect(phrase).toHaveAccessibleDescription(/Enter a standard recovery phrase with 12, 15, 18, 21, or 24 words/);
+        expect(phrase).toHaveAccessibleDescription('0 words entered');
         expect(action).toBeDisabled();
         expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
         expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
@@ -95,11 +95,17 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(action).not.toHaveAttribute('aria-describedby');
     });
 
-    it('names the accepted word counts once, in the hint and not again in the live count', () => {
+    it('moves static phrase guidance into the help tip and keeps the live count under the field', () => {
         renderImport();
-        const description = screen.getByLabelText('Recovery phrase').getAttribute('aria-describedby')
+        const phrase = screen.getByLabelText('Recovery phrase');
+        const description = phrase.getAttribute('aria-describedby')
             .split(' ').map((id) => document.getElementById(id)?.textContent || '').join(' ');
-        expect(description.match(/12, 15, 18, 21, or 24/g)).toHaveLength(1);
+        const tip = screen.getByRole('button', { name: 'About Recovery phrase' });
+        const tipText = document.getElementById(tip.getAttribute('aria-describedby')).textContent;
+
+        expect(description).toBe('0 words entered');
+        expect(tipText).toContain('Enter a recovery phrase with 12, 15, 18, 21, or 24 words.');
+        expect(tipText).toContain('Drop a .txt file with your recovery phrase to load it here.');
         expect(screen.getByText('0 words entered')).toBeTruthy();
     });
 
@@ -210,21 +216,19 @@ describe('ImportWallet recovery phrase entry', () => {
     });
 
     it.each([['import', renderImport], ['FreeWallet import', renderFreeWallet]])(
-        'puts Scan QR beside the %s phrase label, with the live count below the hint',
+        'puts Scan QR inside the %s phrase box, with the live count below the field',
         (_name, renderScreen) => {
             renderScreen();
             const textarea = screen.getByLabelText('Recovery phrase');
             const box = textarea.parentElement;
             const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
 
-            expect(box.contains(scan)).toBe(false);
-            expect(scan.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement.contains(scan)).toBe(true);
+            expect(box).toContainElement(scan);
+            expect(document.querySelector('label[for="xc-mnemonic"]').parentElement).not.toBe(scan.parentElement);
 
             const status = document.getElementById('xc-mnemonic-status');
-            const hint = document.getElementById(`${textarea.id}-hint`);
             expect(box.contains(status)).toBe(false);
-            expect(hint.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(textarea.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
             expect(status).toHaveTextContent(/0 (\/ 12 )?words/);
 
             fireEvent.click(scan);

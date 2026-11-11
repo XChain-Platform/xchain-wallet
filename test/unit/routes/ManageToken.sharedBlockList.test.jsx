@@ -53,11 +53,7 @@ async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}
 }
 
 async function sharedBlockListRow() {
-    // The More menu renders once the owner lookup settles, after the marker text.
-    const moreButton = await screen.findByRole('button', { name: 'More' });
-    expect(moreButton).toHaveAttribute('aria-busy', 'false');
-    fireEvent.click(moreButton);
-    const row = screen.getByRole('menuitem', { name: 'Use a shared block list' });
+    const row = await screen.findByRole('button', { name: 'Shared block list' });
     expect(row).toHaveAttribute('aria-busy', 'false');
     return row;
 }
@@ -69,13 +65,11 @@ describe('ManageToken shared block list action', () => {
             tokenInfo: { locks: { description: true } },
             onUpdateDescription,
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
-
-        const description = screen.getByRole('menuitem', { name: 'Description' });
+        const description = await screen.findByRole('button', { name: 'Description' });
         expect(description).toBeDisabled();
         expect(description).toHaveAttribute(
             'title',
-            'The description is permanently locked and cannot be updated.',
+            "The description is permanently locked and can't be updated.",
         );
         fireEvent.click(description);
         expect(onUpdateDescription).not.toHaveBeenCalled();
@@ -99,21 +93,16 @@ describe('ManageToken shared block list action', () => {
         expect(onAccessLists).toHaveBeenCalledTimes(1);
     });
 
-    it('is absent when neither handler is passed', async () => {
+    it('is disabled when neither handler is passed', async () => {
         await renderManage();
-        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
-
-        expect(screen.queryByRole('menuitem', { name: 'Use a shared block list' })).toBeNull();
+        expect(await screen.findByRole('button', { name: 'Shared block list' })).toBeDisabled();
     });
 
-    it('is absent for a non-owner', async () => {
+    it('is disabled for a non-owner without showing an owner warning', async () => {
         await renderManage({ isOwner: false, onUseSharedBlockList: vi.fn() });
         await waitFor(() => {
-            expect(screen.getByText(/hold the token's issuer address/i)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Shared block list' })).toBeDisabled();
         });
-        const moreButton = screen.queryByRole('button', { name: 'More' });
-        if (moreButton) fireEvent.click(moreButton);
-
-        expect(screen.queryByText('Use a shared block list')).toBeNull();
+        expect(screen.queryByText(/hold the token's issuer address/i)).toBeNull();
     });
 });

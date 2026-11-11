@@ -64,7 +64,7 @@ function pendingRecord(stage) {
     };
 }
 
-function mountAirdrop({ overrides = {}, resumeId = null } = {}) {
+function mountAirdrop({ overrides = {}, resumeId = null, lockedToken = true } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -83,7 +83,11 @@ function mountAirdrop({ overrides = {}, resumeId = null } = {}) {
         MessagingProvider,
         { shell: 'web', messaging },
         React.createElement(AirdropForm, {
-            walletId: 'w', resumeId, initialChainId: CHAIN, initialTick: 'XCHAIN', onBack() {},
+            walletId: 'w',
+            resumeId,
+            initialChainId: CHAIN,
+            initialTick: lockedToken ? 'XCHAIN' : undefined,
+            onBack() {},
         }),
     ));
     return messaging;
@@ -105,13 +109,17 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); vi.useRealTimers(); });
 
 describe('AirdropForm page templates', () => {
-    it('orders the token, amount and destination fields and uses the approved destination names', async () => {
-        mountAirdrop();
+    it('starts with Network and From, then orders the U90 fields and keeps Addresses functional', async () => {
+        mountAirdrop({ lockedToken: false });
         await flushTimers();
 
+        const network = screen.getByRole('button', { name: /^Network:/ });
+        const from = screen.getByLabelText('From');
         const token = screen.getByText('Token to drop').parentElement;
         const amount = screen.getByLabelText(/^Per-recipient amount/);
         const destination = screen.getByLabelText(/^Airdrop to/);
+        expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(token.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(amount.compareDocumentPosition(destination) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(Array.from(destination.options).map((option) => option.textContent)).toEqual([
@@ -119,9 +127,64 @@ describe('AirdropForm page templates', () => {
             'Existing list',
             'Token holders',
         ]);
+        expect(destination).toHaveValue('paste');
+        expect(screen.getByRole('textbox', { name: 'Recipients' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Upload a CSV or text file' })).toBeInTheDocument();
 
         fireEvent.change(destination, { target: { value: 'existing' } });
         expect(screen.queryByText('Existing list', { selector: 'label' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Recipients' })).toBeNull();
+
+        fireEvent.change(destination, { target: { value: 'paste' } });
+        expect(screen.getByRole('textbox', { name: 'Recipients' })).toBeInTheDocument();
+    });
+
+    it('shows the AIRDROP Fees card in the compose form', async () => {
+        mountAirdrop();
+        await flushTimers();
+
+        const fees = document.querySelector('[data-fees-card]');
+        expect(fees).not.toBeNull();
+        expect(fees.querySelector('[data-fees-row="network"]')).not.toBeNull();
+        expect(fees.querySelector('[data-fees-row="protocol"]')).not.toBeNull();
+        expect(fees.querySelector('[data-fees-row="total"]')).not.toBeNull();
+    });
+
+    it('uses the approved main action and form-specific field help', async () => {
+        mountAirdrop();
+        await flushTimers();
+
+        const review = screen.getByRole('button', { name: 'Review recipients' });
+        expect(review.className).toMatch(/success/);
+        expect(review.querySelector('svg')).not.toBeNull();
+
+        const fromTip = screen.getByRole('button', { name: 'About From' });
+        expect(document.getElementById(fromTip.getAttribute('aria-describedby')).textContent)
+            .toBe('The address that sends the airdrop. It must hold the token and pays the fees.');
+        const recipientsTip = screen.getByRole('button', { name: 'About Recipients' });
+        expect(document.getElementById(recipientsTip.getAttribute('aria-describedby')).textContent)
+            .toBe('Enter or upload the recipient addresses for this airdrop. A new address list is published first, then the airdrop is sent to that list.');
+
+        fireEvent.change(screen.getByLabelText(/^Airdrop to/), { target: { value: 'holders' } });
+        const tokensTip = screen.getByRole('button', { name: 'About Tokens (one per line)' });
+        expect(document.getElementById(tokensTip.getAttribute('aria-describedby')).textContent)
+            .toContain('Enter one token ticker per line. A new token list is published first');
+        expect(screen.getByRole('button', { name: 'Add from token picker' }).querySelector('svg'))
+            .not.toBeNull();
+    });
+
+    it('gives the invalid-recipient toggle its state-specific icon', async () => {
+        mountAirdrop();
+        await flushTimers();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Recipients' }), {
+            target: { value: 'not-an-address' },
+        });
+        await flushTimers();
+
+        const show = screen.getByRole('button', { name: 'Show 1 invalid' });
+        expect(show.querySelector('svg')).not.toBeNull();
+        fireEvent.click(show);
+        expect(screen.getByRole('button', { name: 'Hide 1 invalid' }).querySelector('svg')).not.toBeNull();
     });
 
     it('builds one matching description for named and derived list rows', () => {
@@ -211,8 +274,17 @@ describe('AirdropForm page templates', () => {
         const tokenRow = screen.getByRole('button', {
             name: 'PEPE and DANKEST holders, token list, 2 tokens',
         });
-        expect(addressRow.closest('[data-test-template="list"]')).not.toBeNull();
+        const listCard = addressRow.closest('ul');
+        expect(listCard).not.toBeNull();
+        expect(listCard.className).toMatch(/abList|flush/);
+        expect(tokenRow.closest('ul')).toBe(listCard);
+        expect(listCard.closest('[data-test-template="list"]')).not.toBeNull();
+        expect(addressRow).toHaveTextContent('Team wallets, address list, 1 address');
+        expect(tokenRow).toHaveTextContent('PEPE and DANKEST holders, token list, 2 tokens');
         expect(addressRow.querySelector('svg')).not.toBeNull();
         expect(tokenRow.querySelector('svg')).not.toBeNull();
+        fireEvent.click(tokenRow);
+        await flushTimers();
+        expect(screen.getByText('PEPE and DANKEST holders, token list, 2 tokens')).toBeTruthy();
     });
 });

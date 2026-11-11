@@ -275,7 +275,7 @@ describe('main flow browser-storage privacy', () => {
         fireEvent.change(screen.getByLabelText('Wallet password'), {
             target: { value: PASSWORD },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await screen.findByText(PHRASE);
         cleanup();
 

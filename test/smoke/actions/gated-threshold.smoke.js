@@ -90,8 +90,9 @@ assert.match(host, /gatedSendReadiness\(\{[\s\S]*?to: req\.to,\s*\n\s*amount: re
 
 // ---- 2e. Publisher form: field behind the gate -------------------------
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
-assert.match(form, /gateMinAmountScheduledHeight\(chainId\)/, 'form reads the scheduled height (null = hidden)');
-assert.match(form, /getIndexerWatermark\(\{ chainId \}\)/, 'scheduled chains check the live watermark');
+// The form network follows the picked gate token, so the threshold reads that chain.
+assert.match(form, /gateMinAmountScheduledHeight\(selectedChainId\)/, 'form reads the scheduled height (null = hidden)');
+assert.match(form, /getIndexerWatermark\(\{ chainId: selectedChainId \}\)/, 'scheduled chains check the live watermark');
 assert.match(form, /\{thresholdActive \? \(/, 'threshold input renders only when ACTIVE');
 // The copy lives in the English locale; the form renders it through t().
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));

@@ -64,7 +64,7 @@ describe('list create validation', () => {
         fireEvent.change(await screen.findByLabelText('Addresses'), {
             target: { value: `${ADDRESS.address}\nnot-an-address` },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByText('Review list')).toBeNull();
@@ -77,10 +77,10 @@ describe('list create validation', () => {
         }, messagingWith(DOGE));
         const ticks = Array.from({ length: 34 }, (_, index) => `${'A'.repeat(247)}${String(index).padStart(3, '0')}`);
 
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: ticks.join('\n') },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(await screen.findByText(/This list has 34 tokens \(8,\d{3} bytes\), but one action holds 8,192 bytes, which fits 32 of them\. Remove 2 tokens\./)).toBeTruthy();
         expect(screen.queryByText('Review list')).toBeNull();
@@ -92,7 +92,7 @@ describe('list create validation', () => {
             walletId: 'wallet-1', chainId: BTC, initialType: '1', onBack() {},
         }, messaging);
 
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'XCHAIN' },
         });
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
@@ -101,7 +101,7 @@ describe('list create validation', () => {
         fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
             target: { value: '1.123456789' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
         expect(screen.queryByText('Review list')).toBeNull();
@@ -113,17 +113,17 @@ describe('list create validation', () => {
             walletId: 'wallet-1', chainId: BTC, initialType: '1', onBack() {},
         }, messagingWith(BTC));
 
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(await screen.findByLabelText('Tokens'), {
             target: { value: 'XCHAIN' },
         });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), {
+        fireEvent.change(screen.getByLabelText('Memo'), {
             target: { value: 'season two' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('XCHAIN');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('season two');
+        expect(await screen.findByLabelText('Tokens')).toHaveValue('XCHAIN');
+        expect(screen.getByLabelText('Memo')).toHaveValue('season two');
         expect(screen.queryByText('Review list')).toBeNull();
     });
 });
@@ -159,8 +159,8 @@ describe('list edit validation and review', () => {
 
     it('refuses a malformed list reference before review', async () => {
         const messaging = mountTokenEdit('-1');
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(await screen.findByText('List reference must be a positive whole number.')).toBeTruthy();
         expect(screen.queryByText('Review list edit')).toBeNull();
@@ -169,12 +169,12 @@ describe('list edit validation and review', () => {
 
     it('shows plain copy and stays on the form when the list freshness read fails', async () => {
         const messaging = mountTokenEdit();
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
         messaging.getListByActionIndex.mockRejectedValue(Object.assign(
             new Error('Explorer returned HTTP 502 for /BTC/api/lists/2700'),
             { name: 'SDKExplorerError' },
         ));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(await screen.findByText(/service that reads the chain is temporarily unavailable/)).toBeTruthy();
         expect(screen.queryByText(/\/BTC\/api\/lists/)).toBeNull();
@@ -183,28 +183,28 @@ describe('list edit validation and review', () => {
 
     it('keeps form values and cancels the click when Back leaves review', async () => {
         mountTokenEdit();
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'ADD' } });
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'season two' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'ADD' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
-        expect(await screen.findByLabelText(/Add tokens/)).toHaveValue('ADD');
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('season two');
-        expect(screen.getByRole('button', { name: 'Review' })).toBeTruthy();
+        expect(await screen.findByLabelText('Add tokens')).toHaveValue('ADD');
+        expect(screen.getByLabelText('Memo')).toHaveValue('season two');
+        expect(screen.getByRole('button', { name: 'Publish edit' })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
     });
 
     it('refuses an empty custom fee rate before review', async () => {
         const messaging = mountTokenEdit();
 
-        fireEvent.change(await screen.findByLabelText(/Add tokens/), { target: { value: 'NEW' } });
+        fireEvent.change(await screen.findByLabelText('Add tokens'), { target: { value: 'NEW' } });
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
         fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
             target: { value: '' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
 
         expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.queryByText('Review list edit')).toBeNull();
@@ -237,14 +237,14 @@ describe('list edit validation and review', () => {
             onDone() {},
         }, messaging);
 
-        const additions = await screen.findByLabelText(/Add tokens/);
+        const additions = await screen.findByLabelText('Add tokens');
         fireEvent.change(additions, { target: { value: 'NEW\nnew\nKEEP\nBAD TICK' } });
         expect(screen.getByText(/1 duplicate removed/).textContent).toMatch(/1 already on the list/);
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Remove 1 invalid token name before reviewing.')).toBeTruthy();
 
         fireEvent.change(additions, { target: { value: 'NEW\nnew\nKEEP' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Members after edit')).toBeTruthy();
         expect(screen.getByText('Review added items')).toBeTruthy();
         expect(screen.getByText('NEW')).toBeTruthy();

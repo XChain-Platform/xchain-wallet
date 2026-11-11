@@ -9,3 +9,11 @@
     padding-top: var(--xc-section-gap);
     border-top: 1px solid var(--xc-border);
 }
+
+.legend {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
+    font-weight: 600;
+}

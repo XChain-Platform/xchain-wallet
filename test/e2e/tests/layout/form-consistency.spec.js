@@ -49,7 +49,7 @@ const sizeKey = (v) => `${v.width}x${v.height}${v.fontScale ? `-text${v.fontScal
 
 /** Palette destinations that open a form (or a form-bearing list). */
 const PALETTE_ROUTES = [
-    'Issue a token directly', 'Add to an existing token', 'Burn supply', 'Move balances, ownerships',
+    'Add to an existing token', 'Burn supply', 'Move balances, ownerships',
     'Post a message on-chain', 'Price a token in a currency', 'Sell a token at a fixed rate',
     'Distribute to holders', 'Send to many recipients', 'Publish an address or token list',
     'Public or token-gated on-chain file', 'Route this address', 'Send a token to another chain',
@@ -328,7 +328,12 @@ function formFaults() {
             // The asset and market pickers draw a Button as a card (a design call).
             // From FreeWallet wears the FreeWallet character's colour (U69).
             const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton');
-            if (sharedClass(btn, 'primary') && !asCard && cs.backgroundColor !== accent) {
+            // Pair an offline signer is slate #334155 by the operator's carousel pick (U69, 2026-11-10).
+            const offlineSigner = sharedClass(btn, 'pairSignerButton');
+            if (offlineSigner && cs.backgroundColor !== 'rgb(51, 65, 85)') {
+                faults.push(`${name(btn)}: offline signer fill ${cs.backgroundColor}, ruled slate rgb(51, 65, 85)`);
+            }
+            if (sharedClass(btn, 'primary') && !asCard && !offlineSigner && cs.backgroundColor !== accent) {
                 faults.push(`${name(btn)}: primary fill ${cs.backgroundColor}, token ${accent}`);
             }
             if (sharedClass(btn, 'danger') && cs.backgroundColor !== danger) {
@@ -388,6 +393,16 @@ async function walk(page, size, out) {
         for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
         if (!(await palette(page, dest))) { results.push({ route: dest, skipped: true, faults: [], counts: {} }); continue; }
         await record(dest);
+    }
+    // The token entry opens the template wizard (Guided issuance wizard above),
+    // and the full Issue form is its Custom template (ruling U79).
+    for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
+    if (await palette(page, 'Choose a token template')) {
+        await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
+        await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+        await record('Issue token');
+    } else {
+        results.push({ route: 'Issue token', skipped: true, faults: [], counts: {} });
     }
     // Screens reached from the navigation rather than the palette, and the
     // forms their add buttons open.

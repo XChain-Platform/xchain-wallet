@@ -69,7 +69,7 @@ describe('ParallelComposer queued rows', () => {
         const advancedAction = vi.fn().mockRejectedValue(queuedError);
         mount({ messagingOverrides: { advancedAction } });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and send queue' }));
         fireEvent.click(await screen.findByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));

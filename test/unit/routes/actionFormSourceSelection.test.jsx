@@ -383,7 +383,8 @@ describe('bespoke forms source default', () => {
                 getDispenses: vi.fn().mockResolvedValue({ data: [] }),
             },
         });
-        const select = await screen.findByRole('combobox');
-        await waitFor(() => expect(select.value).toBe(ADDR_ACTIVE.id));
+        const field = await screen.findByRole('textbox', { name: 'Pay from' });
+        await waitFor(() => expect(field.value).toBe(ADDR_ACTIVE.address));
+        expect(field).toHaveAttribute('readonly');
     });
 });

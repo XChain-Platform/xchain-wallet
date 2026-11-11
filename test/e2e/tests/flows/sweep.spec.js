@@ -44,9 +44,12 @@ async function gotoPalette(page, title) {
 async function expectMatchingInlineControlHeights(page, label) {
     const mismatches = await page.getByRole('main').evaluate((main) => {
         // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        // Skip the "?" help tip on a field label (U57): it is part of the label, held to
+        // the tap minimum rather than a control height, not a control in a row.
+        const isHelpTip = (el) => el.tagName === 'BUTTON' && el.textContent.trim() === '?';
         const controls = [...Array.from(main.querySelectorAll(
             'button, input:not([type="hidden"]), select, textarea',
-        )).filter((el) => !el.closest('[aria-hidden="true"]'))].flatMap((element) => {
+        )).filter((el) => !el.closest('[aria-hidden="true"]') && !isHelpTip(el))].flatMap((element) => {
             const style = getComputedStyle(element);
             const box = element.getBoundingClientRect();
             if (style.display === 'none' || style.visibility === 'hidden'
@@ -105,6 +108,12 @@ async function expectScreenLayout(page, heading, label) {
     await expectMatchingInlineControlHeights(page, label);
 }
 
+// The label carries a help tip button named after it (U57), so the field is
+// found by its textbox role.
+function wifField(page) {
+    return page.getByRole('textbox', { name: 'WIF private key', exact: true });
+}
+
 async function checkPrivateKeyScrubbing(page, label) {
     await page.goto('/');
     await dismissIntroCarousel(page);
@@ -112,11 +121,11 @@ async function checkPrivateKeyScrubbing(page, label) {
     await page.getByRole('tab', { name: 'Private key' }).click();
     await expectScreenLayout(page, /Import (?:a )?private key/, `${label} private-key import`);
 
-    await page.getByLabel('WIF private key').fill(TEST_WIF);
+    await wifField(page).fill(TEST_WIF);
     await page.getByRole('tab', { name: 'Recovery phrase' }).click();
     await page.getByRole('tab', { name: 'Private key' }).click();
 
-    const keyIsCleared = await page.getByLabel('WIF private key').inputValue() === '';
+    const keyIsCleared = await wifField(page).inputValue() === '';
     expect(keyIsCleared, `${label}: the WIF remains in the field after leaving its import lane`)
         .toBe(true);
     await page.getByRole('button', { name: 'Back to wallet setup' }).click();
@@ -172,7 +181,11 @@ for (const viewport of VIEWPORTS) {
             .toBeVisible({ timeout: 30_000 });
         await expect(main.getByRole('checkbox', { name: /^Token ownerships \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
-        await expect(main.getByText(/PEPECASH/).first()).toBeVisible();
+        // Each category shows only its checkbox, count and description, with
+        // no item list (ruling U83), so the held tokens are not named here.
+        await expect(main.getByText(/PEPECASH/)).toHaveCount(0);
+        await expect(main.getByRole('alert').filter({ hasText: 'Sweep moves everything selected at once.' }))
+            .toContainText('The counts are a snapshot; the sweep moves whatever the address holds when it confirms.');
         await expectScreenLayout(page, 'Sweep address', `${viewport.name} populated sweep preview`);
 
         const scrolled = await main.evaluate((element) => {
@@ -181,7 +194,7 @@ for (const viewport of VIEWPORTS) {
         });
         expect(scrolled, `${viewport.name}: the populated sweep form did not scroll`)
             .toBeGreaterThan(0);
-        await main.getByRole('button', { name: 'Preview', exact: true }).click();
+        await main.getByRole('button', { name: 'Sweep', exact: true }).click();
 
         const review = main.getByRole('form', { name: 'Review sweep' });
         await expect(review).toBeVisible({ timeout: 30_000 });

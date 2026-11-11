@@ -269,7 +269,6 @@ describe('translations', () => {
             ))
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
-        expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
         expect(en['send.destination.placeholder']).toBe('Enter an address or name…');
     });
 
@@ -283,7 +282,6 @@ describe('translations', () => {
             signerBody: en['home.signer.body'],
             argumentCount: en['execute.review.args'],
             arguments: en['execute.params'],
-            optionalArguments: en['execute.paramsOptional'],
             argumentHint: en['execute.paramsHint'],
             savedPackKey: en['gatedPublish.watcherSavedKey'],
             watcherPackKey: en['gatedPublish.watcherHint'],
@@ -293,16 +291,15 @@ describe('translations', () => {
         }).toEqual({
             networkSettings: 'Open network settings',
             unavailable: 'Not available',
-            watcher: 'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
+            watcher: 'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
             multisigAvailability: 'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
             signerRegion: 'Signer mode home',
             signerBody: "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
             argumentCount: '{count, plural, one { with # argument} other { with # arguments}}',
             arguments: 'Arguments',
-            optionalArguments: 'Arguments (optional)',
             argumentHint: 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
-            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
-            watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
+            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction on your offline signer, then broadcast it from a wallet that can send it to the network.',
+            watcherPackKey: 'Watcher mode: this prepares the transaction for your offline signer. The pack key stays in this wallet either way.',
             importOptions: 'Wallet import options',
             historySearch: 'Search by action, address, token, transaction ID, or memo…',
             peerError: "Couldn't load the linked transaction. Try again.",
@@ -419,11 +416,10 @@ describe('translations', () => {
     });
 
     it.each([
-        [0, '0 / 10 bytes', 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', 'You can include up to 0 recipients in one payment. Create another payment for any additional recipients.', '0 of 0 history items shown', '0 Confirmations'],
-        [1, '1 / 10 byte', 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', 'You can include up to 1 recipient in one payment. Create another payment for any additional recipients.', '1 of 1 history item shown', '1 Confirmation'],
-        [3, '3 / 10 bytes', 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', 'You can include up to 3 recipients in one payment. Create another payment for any additional recipients.', '3 of 3 history items shown', '3 Confirmations'],
-    ])('pluralizes translated count copy for %i', (count, memo, recipients, maximum, shown, confirmations) => {
-        expect(t('send.memoCount', { used: count, max: 10 })).toBe(memo);
+        [0, 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', 'You can include up to 0 recipients in one payment. Create another payment for any additional recipients.', '0 of 0 history items shown', '0 Confirmations'],
+        [1, 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', 'You can include up to 1 recipient in one payment. Create another payment for any additional recipients.', '1 of 1 history item shown', '1 Confirmation'],
+        [3, 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', 'You can include up to 3 recipients in one payment. Create another payment for any additional recipients.', '3 of 3 history items shown', '3 Confirmations'],
+    ])('pluralizes translated count copy for %i', (count, recipients, maximum, shown, confirmations) => {
         expect(t('send.recipient.total', { total: '5 XCP', count })).toBe(recipients);
         expect(t('send.recipient.maximum', { count })).toBe(maximum);
         expect(t('history.itemsShown', { shown: count, total: count })).toBe(shown);
@@ -437,10 +433,6 @@ describe('translations', () => {
         expect(t('balanceList.hiddenTokens.show', { count: 2 })).toBe('Show 2 hidden tokens');
         expect(t('transactionStatus.confirmations', { count: 1 })).toBe('1 confirmation');
         expect(t('transactionStatus.confirmations', { count: 2 })).toBe('2 confirmations');
-        expect(t('manageToken.officialProjectNoun', { count: 1 })).toBe('project.');
-        expect(t('manageToken.officialProjectNoun', { count: 2 })).toBe('projects.');
-        expect(t('manageToken.subassetCount', { count: 1 })).toBe('Subasset (1)');
-        expect(t('manageToken.subassetCount', { count: 2 })).toBe('Subassets (2)');
     });
 
     it.each([
@@ -481,10 +473,14 @@ describe('translations', () => {
             ['commandPalette.actionQueue.title', 'parallelComposer.title', 'settings.developer.actionQueue'],
             // A shared reachability retry label and the settings backup checker.
             ['common.checking', 'settings.backup.checking'],
+            // The token list editor's field label and the Home Tokens tab.
+            ['components.tickItemsEditor.tokens', 'home.tabs.tokens'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
             ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
+            // Every action form's From field (U60): Execute contract and Send.
+            ['execute.caller', 'send.fields.from'],
             // The governance page title and the settings notification label.
             ['governance.title', 'settings.notifications.governancePolls'],
             // The History status filter header and the parallel composer's status-pill label prefix.
@@ -492,15 +488,19 @@ describe('translations', () => {
             ['home.receive', 'uri.intent.receive'],
             // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
             ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
+            // The Issue form's supply cap field and Manage token's supply cap lock.
+            ['issue.maxSupply', 'routes.manageToken.lockMaxSupply'],
+            // The Issue form's Description section header and Manage token's description action and detail row.
+            ['issue.section.description', 'routes.manageToken.description'],
+            // The issue section's empty summary and the shortcut help's unset binding state.
+            ['issue.summary.notSet', 'keyboard.shortcutHelp.notSet'],
+            // The issue list summary and the duress settings action.
+            ['issue.summary.set', 'settings.duress.set'],
             // The raw action tool in the palette and Settings.
             ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
-            // Opening a managed token and opening a developer tool.
-            ['routes.manageToken.open', 'settings.developer.open'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
-            // Leads the blocked-site pattern hint and the biometric unlock sentence.
-            ['settings.biometric.use', 'settings.connectedSites.blockPatternLead'],
         ]);
     });
 

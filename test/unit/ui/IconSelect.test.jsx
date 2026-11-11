@@ -56,4 +56,26 @@ describe('<IconSelect>', () => {
         render(<IconSelect label="Encryption" value="" options={[]} placeholder="Choose mode" onChange={() => {}} />);
         expect(screen.getByRole('button', { name: 'Encryption: Choose mode' })).toBeInTheDocument();
     });
+
+    it('renders contextual help from the label row', () => {
+        render(
+            <IconSelect
+                label="Encryption"
+                help="Choose who can read this message."
+                value="private"
+                options={OPTIONS}
+                onChange={() => {}}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'About Encryption' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Choose who can read this message.');
+    });
+
+    it('renders no help affordance when help is absent', () => {
+        render(<IconSelect label="Encryption" value="private" options={OPTIONS} onChange={() => {}} />);
+
+        expect(screen.queryByRole('button', { name: 'About Encryption' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
 });

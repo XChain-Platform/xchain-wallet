@@ -123,10 +123,10 @@ async function stageIssue(page, tick, description) {
     await selectVenueChain(main, 'Network');
     await main.getByLabel('Ticker').fill(tick);
     await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-    await main.getByLabel('Description (optional)').fill(description);
+    await main.getByLabel('Description', { exact: true }).fill(description);
     // Watcher mode is the branch that gets a review stage at all: full mode
     // composes straight onto the confirm screen (single-encode).
-    await main.getByRole('button', { name: 'Preview', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
     await expect(main.getByRole('button', { name: 'Create transaction for signing', exact: true }),
         'the form did not reach the watcher review stage')
         .toBeVisible({ timeout: 30_000 });

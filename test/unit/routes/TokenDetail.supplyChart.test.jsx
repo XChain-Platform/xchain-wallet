@@ -53,9 +53,16 @@ function renderDetail({ history, quantity = '100', onBuy = vi.fn(), withHistory 
     return { messaging, onBuy };
 }
 
+function revealSupplyHistory() {
+    fireEvent.click(screen.getByRole('button', { name: 'More info' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Supply over time' }));
+}
+
 describe('TokenDetail supply chart', () => {
     it('draws the chart from getSupplyHistory', async () => {
         const { messaging } = renderDetail({ history: [{ height: 1, supply: 10 }, { height: 2, supply: 50 }, { height: 3, supply: 80 }] });
+        expect(screen.queryByText('Supply over time')).toBeNull();
+        revealSupplyHistory();
         const chart = await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ });
         expect(chart.querySelector('path').getAttribute('d')).toMatch(/^M0\.0 80\.0 L150\.0 /);
         expect(messaging.getSupplyHistory).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'SUPPLYPROBE' });
@@ -63,6 +70,7 @@ describe('TokenDetail supply chart', () => {
 
     it('labels decimal supply history as whole-token units', async () => {
         renderDetail({ history: [{ height: 1, supply: '1.25' }, { height: 2, supply: '2.5' }] });
+        revealSupplyHistory();
 
         expect(await screen.findByRole('img', {
             name: 'Supply of SUPPLYPROBE over time, latest 2.5',
@@ -71,6 +79,7 @@ describe('TokenDetail supply chart', () => {
 
     it('hides the chart for fewer than two points or a missing lookup', async () => {
         const first = renderDetail({ history: [{ height: 1, supply: 10 }] });
+        revealSupplyHistory();
         await waitFor(() => expect(first.messaging.getSupplyHistory).toHaveBeenCalled());
         expect(screen.queryByRole('img', { name: /Supply of/ })).toBeNull();
         cleanup();
@@ -105,11 +114,13 @@ describe('TokenDetail supply chart', () => {
             </MessagingProvider>
         );
         const view = render(tree('OLD'));
+        revealSupplyHistory();
         expect(await screen.findByRole('img', { name: /Supply of OLD over time/ })).toBeTruthy();
 
         view.rerender(tree('NEW'));
         expect(screen.queryByRole('img', { name: /Supply of OLD over time/ })).toBeNull();
         expect(screen.queryByRole('img', { name: /Supply of NEW over time/ })).toBeNull();
+        revealSupplyHistory();
 
         await act(async () => {
             resolveNext([{ height: 3, supply: 30 }, { height: 4, supply: 40 }]);
@@ -165,8 +176,8 @@ describe('TokenDetail Exchange action', () => {
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
-    it('is absent when the shell has no trading surface', () => {
+    it('is disabled when the shell has no trading surface', () => {
         renderDetail({ history: [], onBuy: null });
-        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Exchange' })).toBeDisabled();
     });
 });

@@ -93,7 +93,7 @@ async function reachDetails() {
 }
 
 async function approveFromReview() {
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
     await screen.findByTestId('confirm-modal');
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
     fireEvent.click(screen.getByTestId('confirm-approve'));

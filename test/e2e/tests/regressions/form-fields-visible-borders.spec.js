@@ -48,19 +48,22 @@ async function gotoPaletteRoute(page, name) {
 // one before it measures the inline action.
 async function selectHeldGiveToken(page) {
     const main = page.getByRole('main');
-    const network = main.getByRole('button', { name: /^Give and get network:/ });
+    const network = main.getByRole('button', { name: /^Network:/ });
     await expect(network).toBeVisible();
-    if (await network.getAttribute('aria-label') !== 'Give and get network: Bitcoin') {
+    if (await network.getAttribute('aria-label') !== 'Network: Bitcoin') {
         await network.click();
-        await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
-        await expect(network).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: 'Select Bitcoin' }).click();
+        await expect(network).toHaveAttribute('aria-label', 'Network: Bitcoin');
     }
     await selectNamedToken(page, 'Give token', {
         chainId: 'bitcoin-mainnet',
         chainLabel: 'Bitcoin',
         tick: 'PEPECASH',
     });
-    await expect(main.getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+    // Every amount field carries Max (disabled when nothing is held), so look in You give.
+    await expect(main.getByRole('region', { name: 'You give' })
+        .getByRole('button', { name: 'Use max available amount' })).toBeVisible();
 }
 
 async function expectVisibleFieldsHaveBorders(page, label) {

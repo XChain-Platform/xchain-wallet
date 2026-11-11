@@ -20,6 +20,7 @@ import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const PUBKEY = 'a'.repeat(64);
+const WATCHER_HINT = 'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.';
 const VALID_ADDRESS = 'bc1qdevmockabcdef';
 const ADDRESS_ROW = {
     id: 'addr-1',
@@ -109,7 +110,7 @@ describe('staking chooser and list read states', () => {
         await screen.findByRole('listitem');
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
         // The chain filter stays (operator ruling); it names chains, never network kinds.
-        expect(screen.getByRole('button', { name: 'Filter by network' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
     });
 
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
@@ -301,10 +302,11 @@ describe('stake amount and review state', () => {
         );
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.23000000' } });
         fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review stake' }));
         expect(await screen.findByText(/Stake 1.23000000 XCHAIN for signing public key/)).toBeInTheDocument();
         expect(screen.getByText('After 6 BTC blocks')).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
@@ -393,9 +395,17 @@ describe('staking action load and review state', () => {
         );
         await screen.findByText('10 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '4.50000000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        // U57: the claim explanation lives in the Amount help tip, not a loose paragraph.
+        const claimTip = Array.from(document.querySelectorAll('[role="tooltip"]'))
+            .find((tip) => /Claimed rewards land in your balance/.test(tip.textContent));
+        expect(claimTip).toBeTruthy();
+        expect(Array.from(document.querySelectorAll('form p')).some((p) => /Claimed rewards land/.test(p.textContent))).toBe(false);
+        // U63: the named action carries an icon.
+        expect(screen.getByRole('button', { name: 'Review claim rewards' }).querySelector('svg')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Review claim rewards' }));
         expect(await screen.findByText(/Claim 4.50000000 XCHAIN/)).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
@@ -499,10 +509,11 @@ describe('delegation validation and review state', () => {
         );
         const key = 'B'.repeat(64);
         fireEvent.change(await screen.findByLabelText('New signing pubkey'), { target: { value: key } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review delegate signing key' }));
 
         expect(await screen.findByText(key.toLowerCase())).toBeInTheDocument();
         expect(screen.getByText('Network fee')).toBeInTheDocument();
+        expect(screen.getByText(WATCHER_HINT)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByLabelText('New signing pubkey')).toHaveValue(key);
@@ -582,7 +593,7 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
             );
             fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
             fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
-            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Review stake' }));
             expect(await screen.findByRole('form', { name: 'Review stake' })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
 
@@ -599,7 +610,7 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
             await screen.findByText('10 XCHAIN available');
-            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Review unstake' }));
             expect(await screen.findByRole('form', { name: 'Review unstake' })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
 

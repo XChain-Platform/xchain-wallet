@@ -7,6 +7,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoSignerProvision } from '../../../packages/core/src/shared/routes/CoSignerProvision.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onPick }) => (
+        <button type="button" onClick={() => onPick({ id: 'address-1' })}>Pick wallet key</button>
+    ),
+}));
 
 const CHAIN = 'bitcoin-mainnet';
 const WALLET_ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -39,6 +46,11 @@ function mount(getAddressesByChain) {
             <CoSignerProvision walletId="wallet-1" onBack={() => {}} />
         </MessagingProvider>,
     );
+}
+
+function pickWalletKey() {
+    fireEvent.click(screen.getByRole('button', { name: "Choose this wallet's key" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pick wallet key' }));
 }
 
 afterEach(() => cleanup());
@@ -83,28 +95,33 @@ describe('CoSignerProvision states', () => {
         }));
 
         expect(await screen.findByLabelText("This wallet's key")).toBeInTheDocument();
-        const disclosure = screen.getByText('How agent accounts work').closest('details');
-        expect(disclosure).toHaveProperty('open', false);
-        expect(disclosure).toHaveTextContent('refuses requests outside it');
-        expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
+        expect(screen.queryByText('How agent accounts work')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: "About This wallet's key" }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent('shares a 2-of-2 Bitcoin address');
+        expect(screen.getByRole('button', { name: 'About Agent public key' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Account name' })).toBeInTheDocument();
+        const create = screen.getByRole('button', { name: 'Create agent account' });
+        expect(create).toBeDisabled();
+        expect(create).toHaveClass(buttonStyles.success);
+        expect(create.querySelector('svg')).not.toBeNull();
         expect(screen.getByRole('button', { name: 'Network: Bitcoin' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
     });
 
     it('validates policy addresses before review with plain copy', async () => {
         mount(vi.fn().mockResolvedValue(addresses('address-1')));
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: '+ Add recipient' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add recipient' }));
         fireEvent.change(screen.getByLabelText('Address 1'), { target: { value: 'not-an-address' } });
 
         expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Create agent account' })).toBeDisabled();
         expect(screen.queryByRole('heading', { name: 'Review agent account' })).toBeNull();
     });
 
@@ -125,17 +142,19 @@ describe('CoSignerProvision states', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY.toUpperCase() },
         });
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: '  Treasury agent  ' } });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review agent account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
 
         expect(await screen.findByRole('heading', { name: 'Review agent account' })).toBeInTheDocument();
+        const reviewedCreate = screen.getByRole('button', { name: 'Create agent account' });
+        expect(reviewedCreate).toHaveClass(buttonStyles.success);
+        expect(reviewedCreate.querySelector('svg')).not.toBeNull();
         expect(screen.getByText('Treasury agent')).toBeInTheDocument();
         expect(screen.getByText(AGENT_KEY)).toBeInTheDocument();
         expect(screen.getByText('["SEND"]')).toBeInTheDocument();
@@ -145,12 +164,12 @@ describe('CoSignerProvision states', () => {
         expect(provisionCoSignerAccount).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to form' }));
-        expect(await screen.findByLabelText("This wallet's key")).toHaveValue('address-1');
+        expect(await screen.findByLabelText("This wallet's key")).toHaveValue(WALLET_ADDRESS);
         expect(screen.getByLabelText('Agent public key')).toHaveValue(AGENT_KEY.toUpperCase());
         expect(screen.getByLabelText('Account name')).toHaveValue('  Treasury agent  ');
         expect(screen.getByRole('checkbox', { name: 'Send' })).toBeChecked();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Review agent account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create agent account' }));
         await waitFor(() => expect(provisionCoSignerAccount).toHaveBeenCalledWith({
             walletId: 'wallet-1',
@@ -184,21 +203,20 @@ describe('CoSignerProvision states', () => {
             ],
         }));
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
         for (const key of ['02' + otherKey, '03' + otherKey]) {
             fireEvent.change(screen.getByLabelText('Agent public key'), {
                 target: { value: key },
             });
             expect(await screen.findByText('The agent key must differ from every key in this wallet.')).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
+            expect(screen.getByRole('button', { name: 'Create agent account' })).toBeDisabled();
         }
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Review agent account' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create agent account' })).toBeEnabled());
     });
 
     it('filters developer errors from provisioning', async () => {
@@ -214,14 +232,13 @@ describe('CoSignerProvision states', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review agent account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create agent account' }));
 
         expect(await screen.findByText('Failed to create the agent account.')).toBeInTheDocument();
@@ -242,14 +259,13 @@ describe('CoSignerProvision states', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        const review = screen.getByRole('button', { name: 'Review agent account' });
+        const review = screen.getByRole('button', { name: 'Create agent account' });
         await waitFor(() => expect(review).not.toBeDisabled());
         fireEvent.click(review);
         fireEvent.click(await screen.findByRole('button', { name: 'Create agent account' }));
@@ -272,7 +288,7 @@ describe('CoSignerProvision states', () => {
             aggregateAddress: 'bc1pold',
         }));
         expect(screen.queryByText('Agent account created')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Create agent account' })).toBeDisabled();
     });
 });
 
@@ -318,14 +334,13 @@ describe('CoSignerProvision lays out every state through FormPage', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
-            target: { value: 'address-1' },
-        });
+        await screen.findByLabelText("This wallet's key");
+        pickWalletKey();
         fireEvent.change(screen.getByLabelText('Agent public key'), {
             target: { value: AGENT_KEY },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Review agent account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create agent account' }));
 
         const title = await screen.findByText('Agent account created');
@@ -334,5 +349,8 @@ describe('CoSignerProvision lays out every state through FormPage', () => {
         expect(form).toHaveTextContent('Treasury agent');
         expect(form).toHaveTextContent('Fund this address');
         expect(form.contains(screen.getByRole('button', { name: 'Done' }))).toBe(true);
+        const done = screen.getByRole('button', { name: 'Done' });
+        expect(done).toHaveClass(buttonStyles.success);
+        expect(done.querySelector('svg')).not.toBeNull();
     });
 });

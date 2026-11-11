@@ -72,15 +72,16 @@ export function WatcherExport({ result }) {
                     rows={6}
                     className={styles.machineText}
                     style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    fieldAction={(
+                        <CopyButton
+                            key={psbtHex}
+                            value={psbtHex}
+                            label={t('components.watcherResultPanel.copyHex')}
+                            ariaLabel={t('components.watcherResultPanel.copyUnsignedTransactionHex')}
+                            iconOnly
+                        />
+                    )}
                 />
-                <div className={styles.successTxidRow}>
-                    <CopyButton
-                        key={psbtHex}
-                        value={psbtHex}
-                        label={t('components.watcherResultPanel.copyHex')}
-                        ariaLabel={t('components.watcherResultPanel.copyUnsignedTransactionHex')}
-                    />
-                </div>
             </div>
             <div className={styles.successTxidBlock}>
                 <RadioGroup

@@ -32,7 +32,7 @@
 import { useEffect, useRef } from 'react';
 import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
 import { normalizeRouteParams, RESUMABLE_VIEWS } from '../utils/lastViewMemory.js';
-import { setRouteHistoryManaged } from '../../ui/backStack.js';
+import { isBareSentinel, setRouteHistoryManaged, takeSentinelForRoute } from '../../ui/backStack.js';
 import { useToast } from '../components/ToastHost.jsx';
 
 const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
@@ -204,8 +204,17 @@ export function useLastView({
             ...(window.history.state || {}),
             xcRoute: routeSnapshot(walletId, networkRef.current, route),
         };
-        if (historyKey.current === null) window.history.replaceState(state, '');
-        else window.history.pushState(state, '');
+        if (historyKey.current === null) {
+            window.history.replaceState(state, '');
+        } else if (isBareSentinel(window.history.state)) {
+            // An overlay's Back sentinel (the command palette, a menu) is on
+            // top: the route takes its slot, so the overlay closing cannot
+            // pop the route it just opened.
+            window.history.replaceState(state, '');
+            takeSentinelForRoute();
+        } else {
+            window.history.pushState(state, '');
+        }
         historyKey.current = routeKey;
     }, [walletId, currentView, routeKey, sessionActive]);
 

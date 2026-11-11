@@ -138,10 +138,10 @@ describe('wallet list metadata forms', () => {
 
         await screen.findByLabelText('From');
         fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: MEMBER } });
-        fireEvent.change(await screen.findByLabelText('Name (optional)'), {
+        fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: '🙂'.repeat(16) },
         });
-        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: '🙂'.repeat(128) },
         });
 
@@ -177,8 +177,8 @@ describe('wallet list metadata forms', () => {
         await screen.findByLabelText('From');
         await waitFor(() => expect(messaging.getActionFormats).toHaveBeenCalled());
         fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: MEMBER } });
-        expect(screen.queryByLabelText('Name (optional)')).toBeNull();
-        expect(screen.queryByLabelText('Description (optional)')).toBeNull();
+        expect(screen.queryByLabelText('Name')).toBeNull();
+        expect(screen.queryByLabelText('Description')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
 
         await waitFor(() => expect(confirmRun).toHaveBeenCalledTimes(1));
@@ -249,13 +249,13 @@ describe('wallet list metadata forms', () => {
             }),
         );
 
-        await screen.findByLabelText('Name (empty means unchanged)');
+        await screen.findByLabelText('Name');
         expect(screen.getByText(/shared-list edit fee/i)).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Clear name' }));
-        fireEvent.change(screen.getByLabelText('Description (empty means unchanged)'), {
+        fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'New description' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         await waitFor(() => expect(ownerRun).toHaveBeenCalledTimes(1));
         expect(ownerRun.mock.calls[0][0].actionData.params).toEqual({
@@ -289,10 +289,10 @@ describe('wallet list metadata forms', () => {
             }),
         );
 
-        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+        fireEvent.change(await screen.findByLabelText('Add addresses'), {
             target: { value: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         expect(await screen.findByText('Treasury (List #2700)')).toBeTruthy();
 
         cleanup();

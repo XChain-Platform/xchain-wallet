@@ -23,7 +23,7 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainPicker, CopyButton, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, CopyButton, FormPage, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -303,8 +303,8 @@ export function SignMessageForm({ walletId, onBack }) {
             <Screen variant={variant} header={header}>
                 <ListPage>
                     <StatusMessage variant="status">
-                        This watch-only wallet cannot sign messages. Open the message in a
-                        Full-mode or Signer-mode wallet to sign it.
+                        This watch-only wallet cannot sign messages. Open the message on
+                        your offline signer to sign it.
                     </StatusMessage>
                 </ListPage>
             </Screen>
@@ -344,7 +344,8 @@ export function SignMessageForm({ walletId, onBack }) {
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.SignIcon />}
                     loading={signing}
                     disabled={signing}
                 >
@@ -352,24 +353,23 @@ export function SignMessageForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            <div className={styles.networkField}>
-                <ChainPicker
-                    chainIds={chainIds}
-                    chainRegistry={chainRegistry}
-                    value={chainId || ''}
-                    disabled={signing}
-                    onChange={(nextChainId) => {
-                        setAddressId(null);
-                        setChainId(nextChainId);
-                        clearSignature();
-                        if (error) setError(null);
-                    }}
-                    label="Network"
-                    hideNetworkKind
-                />
-            </div>
+            <NetworkField
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+                value={chainId || ''}
+                disabled={signing}
+                onChange={(nextChainId) => {
+                    setAddressId(null);
+                    setChainId(nextChainId);
+                    clearSignature();
+                    if (error) setError(null);
+                }}
+                label="Network"
+                help="The network for the address whose key signs this message. Changing it also changes the available signing addresses."
+            />
             <AddressField
                 label="Address"
+                help="The address whose key signs the message. Anyone can check the signature against this address."
                 icon="addresses"
                 value={selectedAddress?.address || ''}
                 placeholder="Choose an address"
@@ -382,6 +382,7 @@ export function SignMessageForm({ walletId, onBack }) {
             <Textarea
                 id="sign-message-text"
                 label="Message"
+                help="The exact text to sign. Any change to it, even a space, makes the signature fail to verify."
                 value={message}
                 disabled={signing}
                 onChange={(e) => {
@@ -394,7 +395,14 @@ export function SignMessageForm({ walletId, onBack }) {
                 aria-label="Message"
             />
             <div className={styles.signatureField}>
-                <span className={styles.signatureLabel}>Signature</span>
+                <div className={styles.signatureLabelRow}>
+                    <span className={styles.signatureLabel}>Signature</span>
+                    <InfoTip
+                        className={styles.signatureHelp}
+                        label="The signature for this message and address. Share it with the message and the address so others can verify it."
+                        aria="About Signature"
+                    />
+                </div>
                 <div
                     className={styles.signatureBox}
                     role="textbox"
@@ -406,7 +414,7 @@ export function SignMessageForm({ walletId, onBack }) {
                             <CopyButton
                                 value={signature}
                                 label="Copy signature"
-                                appearance="filled"
+                                iconOnly
                             />
                         </span>
                     ) : null}
@@ -423,6 +431,7 @@ export function SignMessageForm({ walletId, onBack }) {
                     id="sign-message-password"
                     type="password"
                     label="Password"
+                    help="Your wallet password. It unlocks the key that signs this message and is not stored."
                     value={password}
                     error={passwordError}
                     autoComplete="current-password"
@@ -444,6 +453,12 @@ export function SignMessageForm({ walletId, onBack }) {
                 title="Sign with address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={(nextChainId) => {
+                    setAddressId(null);
+                    setChainId(nextChainId);
+                    clearSignature();
+                    if (error) setError(null);
+                }}
                 onPick={(address) => {
                     setAddressId(address.id);
                     clearSignature();

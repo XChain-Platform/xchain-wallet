@@ -69,11 +69,11 @@ describe('TokenWizard recipient fields', () => {
 
         fireEvent.click(screen.getAllByRole('button', { name: 'Open address book' })[0]);
         fireEvent.click(await screen.findByText('Alice'));
-        expect(await screen.findByLabelText('Transfer ownership to (optional)')).toHaveValue(OWNER);
+        expect(await screen.findByLabelText('Transfer ownership to')).toHaveValue(OWNER);
 
         fireEvent.click(screen.getAllByRole('button', { name: 'Open address book' })[1]);
         fireEvent.click(await screen.findByText('Bob'));
-        expect(await screen.findByLabelText('Send the initial mint to (optional)')).toHaveValue(HOLDER);
-        expect(screen.getByLabelText('Transfer ownership to (optional)')).toHaveValue(OWNER);
+        expect(await screen.findByLabelText('Send the initial mint to')).toHaveValue(HOLDER);
+        expect(screen.getByLabelText('Transfer ownership to')).toHaveValue(OWNER);
     });
 });

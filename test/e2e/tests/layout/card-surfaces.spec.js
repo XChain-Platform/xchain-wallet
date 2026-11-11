@@ -45,7 +45,7 @@ const ROUTES = [
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive') },
     { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions') },
     { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses') },
-    { label: 'Issue a token', open: (page) => palette(page, 'Issue a token directly') },
+    { label: 'Issue a token', open: issueForm },
     { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button').filter({ hasText: /\// })) },
     { label: 'Dispenser detail', open: (page) => openFirst(page, 'Dispensers', page.getByRole('main').locator('li').getByRole('button')) },
     { label: 'My orders', open: (page) => palette(page, 'My orders') },
@@ -71,8 +71,21 @@ async function palette(page, destination) {
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').fill(destination);
-    await dialog.getByRole('option').filter({ hasText: destination }).first().click();
+    // A renamed entry fails here by name instead of a click that waits out the test.
+    const option = dialog.getByRole('option').filter({ hasText: destination }).first();
+    await expect(option, `the palette offers "${destination}"`).toBeVisible();
+    await option.click();
     await expect(dialog).toBeHidden();
+}
+
+/**
+ * The palette's token entry opens the template wizard, and the full Issue
+ * form is its Custom template (ruling U79).
+ */
+async function issueForm(page) {
+    await palette(page, 'Choose a token template');
+    await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
+    await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
 }
 
 /** Opens a section and then the first item its list offers. */
@@ -88,8 +101,10 @@ async function settingsSection(page, name) {
     // Settings reopens on the last section; step back to the list first.
     const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
     if (await back.count()) await back.click();
-    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
-    await expect(page.getByRole('button', { name: 'Back to settings' }).first()).toBeVisible();
+    // By the row text: a field help tip is named 'About <label>' (U57), so a name
+    // pattern such as ^About would match the first tip instead of the About row.
+    await page.getByRole('main').getByRole('button').filter({ hasText: new RegExp(`^\\s*${name}`) }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 }
 
 /** Opens a Settings section and then one of its inline forms by the row's action. */
@@ -133,7 +148,8 @@ function rowListFaults() {
         return ['Top', 'Right', 'Bottom', 'Left'].every((side) => cs[`border${side}Style`] === 'solid'
             && cs[`border${side}Width`] === '1px' && cs[`border${side}Color`] === borderColor);
     };
-    const rows = [...main.querySelectorAll('ul > li > button')].filter((el) => el.getBoundingClientRect().height > 40);
+    const rows = [...main.querySelectorAll('button[data-activity-row], button[data-history-row]')]
+        .filter((el) => el.getBoundingClientRect().height > 40);
     const pad = getComputedStyle(document.documentElement).getPropertyValue('--xc-card-pad').trim();
     const faults = [];
     for (const row of rows) {
@@ -295,6 +311,8 @@ for (const viewport of VIEWPORTS) {
             measured += result.cards;
             faults.push(...result.faults.map((fault) => `${route.label}: ${fault}`));
             if (route.rows) {
+                // The rows load after the route opens; measure once the first one is drawn.
+                await expect(page.getByRole('main').locator('button[data-activity-row], button[data-history-row]').first()).toBeVisible();
                 const list = await page.evaluate(rowListFaults);
                 expect(list.rows, `${route.label} shows activity rows to measure`).toBeGreaterThan(1);
                 faults.push(...list.faults.map((fault) => `${route.label}: ${fault}`));
@@ -341,9 +359,20 @@ test('the Locked screen and its forgot-password panel share the card rules at ev
 test('every card in the confirm stack is the same width at every size', async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
     await createWallet(page);
-    await palette(page, 'Prove address ownership');
-    await page.getByLabel(/^Message/).first().fill('Card width check');
-    await page.getByRole('button', { name: /^(Review|Sign|Continue)/ }).filter({ visible: true }).first().click();
+    // Sign message signs in place with no approval page (ruling U92), so an
+    // order review opens the confirm stack instead.
+    await palette(page, 'Create order');
+    const main = page.getByRole('main');
+    await main.getByRole('region', { name: 'You get', exact: true })
+        .getByRole('group', { name: 'Asset type', exact: true })
+        .getByRole('radio', { name: 'A token' }).check();
+    const tickers = main.getByLabel('Ticker', { exact: true });
+    await tickers.first().fill('PEPECASH');
+    await tickers.last().fill('XCP');
+    const amounts = main.getByLabel('Amount', { exact: true });
+    await amounts.first().fill('2');
+    await amounts.last().fill('1');
+    await main.getByRole('button', { name: 'Place order', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);

@@ -169,15 +169,14 @@ describe('Home native rows on a real wallet', () => {
         expect(calls.some((u) => u.includes('/BTC/api/price_snapshots/FINALIZED/status'))).toBe(true);
     });
 
-    it('shows price unavailable instead of zero while a funded coin price loads', async () => {
+    it('shows a numeric zero while a funded coin price loads', async () => {
         const { release } = venue();
         mount({ balances: balancesOf({ 'bitcoin-mainnet': ['BTC', '50000000'] }) });
 
-        expect(within(hero()).getByText('Price unavailable')).toBeInTheDocument();
-        expect(within(hero()).queryByText('$0.00')).toBeNull();
+        expect(within(hero()).getByText('$0.00')).toBeInTheDocument();
+        expect(within(hero()).getByLabelText('0.00 US dollars')).toBeInTheDocument();
         release();
         await waitFor(() => expect(within(hero()).getByText('$40,000.00')).toBeInTheDocument());
-        expect(within(hero()).queryByText('Price unavailable')).toBeNull();
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
     });
 });
@@ -225,7 +224,7 @@ describe('Home test-network fiat', () => {
         expect(screen.queryByRole('region', { name: 'Portfolio performance' })).toBeNull();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).not.toHaveTextContent('$');
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toHaveTextContent('$0.00');
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toBeInTheDocument();
         expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
     });
@@ -312,11 +311,11 @@ describe('Home token rows on a real wallet', () => {
         await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
-        expect(within(hero()).getByText(/Updated/)).toBeInTheDocument();
+        expect(within(hero()).queryByText(/Updated/)).toBeNull();
         const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
         expect(unknown).toBeTruthy();
         expect(within(unknown).queryByText('MARKET')).toBeNull();
-        expect(unknown.textContent).not.toContain('$');
+        expect(unknown.textContent).toContain('$0.00');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
         expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
 
@@ -355,6 +354,7 @@ describe('Home token rows on a real wallet', () => {
         expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({
             chainId: 'bitcoin-mainnet',
             tick: 'UNKNOWN',
+            fiatRate: null,
         }));
     });
 });

@@ -121,7 +121,7 @@ describe('useActionForm chain default follows the last-used chain', () => {
             ),
         );
         expect(await screen.findByRole('button', { name: /^Network: Dogecoin/ })).toBeInTheDocument();
-        const from = await screen.findByLabelText('From address');
+        const from = await screen.findByLabelText('From');
         await waitFor(() => expect(from.value).toBe(ADDR_DOGE.address));
     });
 
@@ -148,6 +148,11 @@ describe('useActionForm chain default follows the last-used chain', () => {
         ticker.focus();
         await user.tab();
         expect(document.activeElement).toHaveAccessibleName('Trade ownership of this ticker (not a balance)');
+        await user.tab();
+        expect(document.activeElement).toHaveAccessibleName('About Trade ownership of this ticker (not a balance)');
+        await user.tab();
+        // The amount's help tip sits on its label row, ahead of the input.
+        expect(document.activeElement).toHaveAccessibleName('About Amount');
         await user.tab();
         const giveAmount = screen.getByLabelText('Amount');
         expect(document.activeElement).toBe(giveAmount);

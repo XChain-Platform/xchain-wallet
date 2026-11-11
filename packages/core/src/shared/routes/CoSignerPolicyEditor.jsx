@@ -19,7 +19,16 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    Checkbox,
+    FormPage,
+    FormSection,
+    InfoTip,
+    Input,
+    Select,
+    Switch,
+} from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -321,7 +330,6 @@ function previewActions(text) {
     }));
 }
 
-const legendStyle = { fontWeight: 600, padding: '0 var(--xc-space-2)' };
 const helpStyle = { fontSize: '0.85em', color: 'var(--xc-text-muted)', margin: '0 0 var(--xc-space-2) 0' };
 const rowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
 const pickerStyle = {
@@ -362,11 +370,10 @@ export function CoSignerPolicyEditor({ value, onChange }) {
         <FormPage as="div" sectioned label="Agent spending policy">
             <FormSection title="Policy rules">
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Allowed actions</legend>
-                <p style={helpStyle}>
-                    Which actions may the agent sign? Tick each one. The agent can never
-                    sign an action that is not ticked.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Allowed actions</span>
+                    <InfoTip label="Choose which actions the agent may sign. The agent can never sign an action that is not selected." aria="About allowed actions" />
+                </legend>
                 <div style={pickerStyle} role="group" aria-label="Actions">
                     {ACTION_CHOICES.map(({ key, label }) => (
                         <Checkbox
@@ -407,12 +414,10 @@ export function CoSignerPolicyEditor({ value, onChange }) {
             </fieldset>
 
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Per-action amount limits</legend>
-                <p style={helpStyle}>
-                    Cap how much the agent may move in a single action, per token. Pick
-                    the action from the ones allowed above, and use * as the token to
-                    cover every token. Optional.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Per-action amount limits</span>
+                    <InfoTip label="Optionally cap how much the agent may move in one action for a specific token or for every token." aria="About per-action amount limits" />
+                </legend>
                 {draft.maxPerAction.map((row, i) => {
                     const rowAction = String(row.action || '').trim().toUpperCase();
                     const stray = rowAction !== '' && !actionPreview.some((a) => a.key === rowAction);
@@ -422,6 +427,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                 stays the exact protocol name the co-signer matches on). */}
                             <Select
                                 label="Action"
+                                help="Choose one of the actions allowed above. This amount limit applies only when the agent requests that action."
                                 value={rowAction}
                                 onChange={(e) => patchRow('maxPerAction', i, { action: e.target.value })}
                                 error={stray ? "This limit won't apply until you pick one of the allowed actions." : undefined}
@@ -440,6 +446,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             </Select>
                             <Input
                                 label="Token"
+                                help="Enter the token ticker this action limit covers, or * to cover every token."
                                 value={row.tick}
                                 onChange={(e) => patchRow('maxPerAction', i, { tick: e.target.value })}
                                 placeholder="*"
@@ -448,6 +455,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                 balance (there is no wallet balance to cap against here). */}
                             <AmountField
                                 label="Max amount"
+                                help="Set the largest amount of this token the agent may move in one requested action."
                                 amount={row.cap}
                                 tick={row.tick}
                                 onAmountFieldChange={(rawValue) => {
@@ -461,16 +469,15 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     );
                 })}
                 <Button type="button" variant="secondary" onClick={() => addRow('maxPerAction', { action: '', tick: '*', cap: '' })}>
-                    + Add limit
+                    Add limit
                 </Button>
             </fieldset>
 
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Rolling limit</legend>
-                <p style={helpStyle}>
-                    Cap total activity over a rolling time window (for example, at most
-                    10 actions per 24 hours). Optional.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Rolling limit</span>
+                    <InfoTip label="Turn this on to cap the agent's total activity over a moving time window, such as 10 actions per 24 hours." aria="About the rolling limit" />
+                </legend>
                 <Switch
                     label="Enforce a rolling limit"
                     checked={draft.windowEnabled}
@@ -481,6 +488,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                         <div style={rowStyle}>
                             <Input
                                 label="Window length (hours)"
+                                help="Set how many hours of recent agent activity each rolling limit includes."
                                 value={draft.windowHours}
                                 onChange={(e) => set({ windowHours: e.target.value.replace(/[^\d.]/g, '') })}
                                 inputMode="decimal"
@@ -488,6 +496,8 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             />
                             <Input
                                 label="Max actions per window"
+                                help="Optionally cap the total number of agent actions allowed during each rolling window."
+                                optional
                                 value={draft.windowMaxActions}
                                 onChange={(e) => set({ windowMaxActions: e.target.value.replace(/\D/g, '') })}
                                 inputMode="numeric"
@@ -498,12 +508,14 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             <div key={i} style={rowStyle}>
                                 <Input
                                     label="Token"
+                                    help="Enter the token ticker whose total amount is capped during each rolling window."
                                     value={row.tick}
                                     onChange={(e) => patchRow('windowPerTick', i, { tick: e.target.value })}
                                     placeholder="XCHAIN"
                                 />
                                 <Input
                                     label="Max total per window"
+                                    help="Set the largest total amount of this token the agent may move during one rolling window."
                                     value={row.cap}
                                     onChange={(e) => patchRow('windowPerTick', i, { cap: e.target.value })}
                                     inputMode="decimal"
@@ -513,29 +525,29 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             </div>
                         ))}
                         <Button type="button" variant="secondary" onClick={() => addRow('windowPerTick', { tick: '', cap: '' })}>
-                            + Add per-token rolling limit
+                            Add per-token rolling limit
                         </Button>
                     </>
                 ) : null}
             </fieldset>
 
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Extra-confirmation threshold</legend>
-                <p style={helpStyle}>
-                    Flag requests above this amount with a warning on the approval
-                    screen. Every request already asks for your approval; this just
-                    highlights large ones. Optional.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Extra-confirmation threshold</span>
+                    <InfoTip label="Optionally highlight requests above a token amount on the approval screen. Every request still asks for your approval." aria="About extra-confirmation thresholds" />
+                </legend>
                 {draft.confirmAbove.map((row, i) => (
                     <div key={i} style={rowStyle}>
                         <Input
                             label="Token"
+                            help="Enter the token ticker whose large requests should receive an extra warning."
                             value={row.tick}
                             onChange={(e) => patchRow('confirmAbove', i, { tick: e.target.value })}
                             placeholder="XCHAIN"
                         />
                         <Input
                             label="Warn above"
+                            help="Set the token amount above which the approval screen highlights the request as large."
                             value={row.amount}
                             onChange={(e) => patchRow('confirmAbove', i, { amount: e.target.value })}
                             inputMode="decimal"
@@ -545,20 +557,20 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     </div>
                 ))}
                 <Button type="button" variant="secondary" onClick={() => addRow('confirmAbove', { tick: '', amount: '' })}>
-                    + Add threshold
+                    Add threshold
                 </Button>
             </fieldset>
 
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Allowed recipients</legend>
-                <p style={helpStyle}>
-                    Restrict the agent to paying only these addresses. Leave empty to
-                    allow any recipient. Optional.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Allowed recipients</span>
+                    <InfoTip label="Optionally restrict the agent to paying only the listed recipient addresses. With no addresses listed, any recipient is allowed." aria="About allowed recipients" />
+                </legend>
                 {draft.allowedDestinations.map((row, i) => (
                     <div key={i} style={rowStyle}>
                         <Input
                             label={`Address ${i + 1}`}
+                            help="Enter a recipient address the agent is allowed to pay."
                             value={row.address}
                             onChange={(e) => patchRow('allowedDestinations', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
@@ -568,28 +580,29 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     </div>
                 ))}
                 <Button type="button" variant="secondary" onClick={() => addRow('allowedDestinations', { address: '' })}>
-                    + Add recipient
+                    Add recipient
                 </Button>
             </fieldset>
 
             <fieldset className={styles.fieldset} style={fieldsetStyle}>
-                <legend style={legendStyle}>Allowed transaction outputs</legend>
-                <p style={helpStyle}>
-                    Anti-drain guard: the signed transaction may only pay these
-                    addresses, optionally up to a maximum value each (in the chain's
-                    base units). Leave empty to rely on the checks above. Optional.
-                </p>
+                <legend className={styles.legend}>
+                    <span>Allowed transaction outputs</span>
+                    <InfoTip label="Optionally add an anti-drain guard so every signed transaction output must use a listed address and stay within its maximum value in the chain's base units." aria="About allowed transaction outputs" />
+                </legend>
                 {draft.allowedOutputs.map((row, i) => (
                     <div key={i} style={rowStyle}>
                         <Input
                             label={`Output address ${i + 1}`}
+                            help="Enter an address that may appear as an output in a transaction the agent asks this wallet to sign."
                             value={row.address}
                             onChange={(e) => patchRow('allowedOutputs', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
                             autoComplete="off"
                         />
                         <Input
-                            label="Max value (optional)"
+                            label="Max value"
+                            help="Optionally set the largest value this output may receive, measured in the Bitcoin network's base units."
+                            optional
                             value={row.maxValue}
                             onChange={(e) => patchRow('allowedOutputs', i, { maxValue: e.target.value.replace(/\D/g, '') })}
                             inputMode="numeric"
@@ -599,7 +612,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     </div>
                 ))}
                 <Button type="button" variant="secondary" onClick={() => addRow('allowedOutputs', { address: '', maxValue: '' })}>
-                    + Add output
+                    Add output
                 </Button>
             </fieldset>
             </FormSection>

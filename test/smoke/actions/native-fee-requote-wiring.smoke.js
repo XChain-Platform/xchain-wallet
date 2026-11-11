@@ -40,6 +40,10 @@ assert.ok(host.includes("host.register('action.requoteNativeFee'"),
     'the host must register action.requoteNativeFee');
 assert.match(host, /sdk\.quoteNativeFee\(actionString/,
     'the re-quote must price the composed action string, not a re-derived one');
+assert.ok(host.includes("host.register('action.quoteProtocolFee'"),
+    'the host must register action.quoteProtocolFee');
+assert.match(host, /sdk\.quoteNativeFee\(\s*\{ action: actionData\.action, params: actionData\.params \}/,
+    'the live quote must price the draft action through the SDK');
 
 // --- 2. every shell exposes it ----------------------------------------
 
@@ -50,6 +54,8 @@ for (const shell of [
 ]) {
     assert.ok(read(...shell).includes("'action.requoteNativeFee'"),
         `${shell.join('/')} must expose action.requoteNativeFee`);
+    assert.ok(read(...shell).includes("'action.quoteProtocolFee'"),
+        `${shell.join('/')} must expose action.quoteProtocolFee`);
 }
 
 // --- 3. the hook refuses rather than signing --------------------------

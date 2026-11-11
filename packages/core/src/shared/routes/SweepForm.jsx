@@ -11,7 +11,7 @@
 import { t } from '../../i18n/index.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -36,7 +36,9 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -47,7 +49,7 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { markMigrationSwept } from '../../flows/migrationSweeps.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -411,6 +413,19 @@ export function SweepForm({
         if (memo.trim().length > 0) p.MEMO = memo.trim();
         return p;
     }, [destTrimmed, flags, memo]);
+    const quoteActionData = useMemo(() => {
+        const trimmed = memo.trim();
+        const memoValid = !/[|;]/.test(trimmed) && !memoLengthError(trimmed);
+        if (!chainId || !fromAddress || !destTrimmed || destFormatError
+            || destTrimmed === fromAddress.address || selectedCount === 0 || !memoValid) return null;
+        return { action: 'SWEEP', params: actionParams };
+    }, [actionParams, chainId, destFormatError, destTrimmed, fromAddress, memo, selectedCount]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     // Flow-shaped opts for the software / HW submit paths (the watcher
     // path encodes from `actionParams` instead; useActionForm keeps the
@@ -852,9 +867,7 @@ export function SweepForm({
                 {sweepReviewNotices}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -876,7 +889,7 @@ export function SweepForm({
                 )}
                 <Input
                     label="Type SWEEP to confirm"
-                    hint={t('common.typedConfirmationSweepHint')}
+                    help={t('common.typedConfirmationSweepHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -908,7 +921,7 @@ export function SweepForm({
                         {sweepWarnings}
                         <Input
                             label='Type "SWEEP" to confirm'
-                            hint={t('common.typedConfirmationSweepReviewHint')}
+                            help={t('common.typedConfirmationSweepReviewHint')}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"
@@ -932,6 +945,7 @@ export function SweepForm({
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     clearFormError();
@@ -949,6 +963,7 @@ export function SweepForm({
                 title="Destination address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => {
                     setDestination(a.address);
                     clearFormError();
@@ -985,7 +1000,7 @@ export function SweepForm({
                     loading={confirmAction.composing}
                     disabled={!fromAddress || confirmAction.composing}
                 >
-                    {!isWatcherMode ? 'Sweep' : 'Preview'}
+                    Sweep
                 </Button>
             )}
         >
@@ -1000,13 +1015,13 @@ export function SweepForm({
                     ) : null}
                 </dl>
             ) : (
-                <ChainPicker
+                <NetworkField
                     label="Network"
+                    help="The chain whose holdings are swept. The From and destination addresses and fees are on this network."
                     value={chainId}
                     onChange={setChainId}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
-                    hideNetworkKind
                 />
             )}
 
@@ -1026,6 +1041,7 @@ export function SweepForm({
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address being emptied. Everything selected below moves out of it, and it pays the network fee."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -1042,7 +1058,7 @@ export function SweepForm({
             {migrateLane ? (
                 <Input
                     label="Destination address"
-                    hint={`The matching address in ${migrateTo.name || 'the new wallet'}.`}
+                    help={`The matching address in ${migrateTo.name || 'the new wallet'}.`}
                     value={destination}
                     onChange={() => {}}
                     readOnly
@@ -1054,7 +1070,7 @@ export function SweepForm({
             ) : (
                 <AddressField
                     label="Destination address"
-                    hint="Where every selected holding (and released escrow) is credited."
+                    help="Where every selected holding (and released escrow) is credited."
                     icon="addresses"
                     ref={destinationRef}
                     iconLabel="Choose destination address"
@@ -1150,7 +1166,7 @@ export function SweepForm({
                             <Input
                                 type="password"
                                 label="Wallet password (key recovery scan)"
-                                hint="Scans this wallet's on-chain messages for the missing unlock keys and stores them in the vault."
+                                help="Scans this wallet's on-chain messages for the missing unlock keys and stores them in the vault."
                                 value={scanPassword}
                                 onChange={(e) => {
                                     setScanPassword(e.target.value);
@@ -1187,6 +1203,7 @@ export function SweepForm({
                                     unopenable in the new wallet.
                                 </>
                             )}
+                            help="Confirms you accept that missing unlock keys can make the listed gated content permanently inaccessible after the sweep."
                             checked={ackMissingKeys}
                             onChange={(e) => {
                                 setAckMissingKeys(e.target.checked);
@@ -1207,14 +1224,22 @@ export function SweepForm({
             ) : null}
 
             <Input
-                label="Memo (optional)"
+                label="Memo"
+                help="An optional public note stored on-chain with this sweep. Anyone can read it."
+                optional
+                maxLength={MAX_MEMO_LENGTH}
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); clearFormError(); }}
                 autoComplete="off"
             />
 
-            {feeTiers ? (
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -1222,8 +1247,10 @@ export function SweepForm({
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                ) : null}
+            >
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            </FeesCard>
             </FormSection>
         </FormPage>,
     );

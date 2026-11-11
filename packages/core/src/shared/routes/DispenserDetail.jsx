@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
+    AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
     FieldNote,
     FormSection, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select,
     StatusMessage,
@@ -22,6 +22,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { t } from '../../i18n/index.js';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { PreflightPanel } from '../components/PreflightPanel.jsx';
@@ -29,7 +30,9 @@ import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountF
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import {
     estimateNativeSendFeeTiers,
@@ -37,9 +40,6 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
-import { coinToFiatExact } from '../../flows/priceLookup.js';
-import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
-import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import * as branding from '../../branding/branding.js';
@@ -72,6 +72,7 @@ import {
 import { boundListIndex, editListConflict } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import {
     DISPENSER_PRICE_STALE_MESSAGE,
@@ -197,6 +198,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [buyerAddressId, setBuyerAddressId] = useState(
         /** @type {string | null} */ (null),
     );
+    const [buyerAddressPickerOpen, setBuyerAddressPickerOpen] = useState(false);
 
     // Refill (DISPENSER v2 edit: top up GIVE_ESCROW) mirrors the cancel flow.
     const [refillStage, setRefillStage] = useState(
@@ -329,18 +331,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         value: actionIndex,
         settings,
     });
-    const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const feeFiatRate = useFiatRate({
-        chainCoin: descriptor?.coin,
-        fiatCurrency,
-        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        enabled: descriptor?.networkKind === 'mainnet',
-    });
-    const fiatForFee = useMemo(() => (coinAmount) => {
-        const value = coinToFiatExact(coinAmount, feeFiatRate);
-        if (value == null || !(Number(value) > 0)) return null;
-        return formatFiatAmount(value, feeFiatRate?.fiatCurrency || fiatCurrency);
-    }, [feeFiatRate, fiatCurrency]);
     const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     const feeCoinTicker = descriptor?.coin
         ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
@@ -368,9 +358,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }, []);
     const feeSelector = feeTiers ? (
         <FeeSelector
+            chainId={chainId}
             label="Network fee"
             coinTicker={feeCoinTicker}
-            formatFiat={fiatForFee}
             tiers={feeTiers}
             value={feePick}
             onChange={(next) => {
@@ -380,7 +370,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
         />
     ) : null;
-
     // Load the dispenser action + wallet addresses (to detect ownership)
     // in parallel. Recent dispenses come on a best-effort basis;
     // failure there still lets the user see the dispenser metadata.
@@ -399,6 +388,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         setHeldAddresses([]);
         setBuyerAddresses([]);
         setBuyerAddressId(null);
+        setBuyerAddressPickerOpen(false);
         if (!/^\d+$/.test(String(actionIndex || ''))) {
             setLoadError('Dispenser ID must be a whole number.');
             setLoading(false);
@@ -1217,6 +1207,84 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         currentAllowList,
         currentBlockList,
     });
+    const refillQuoteParams = useMemo(() => {
+        const amount = refillAmount.trim();
+        const ready = /^\d+(?:\.\d+)?$/.test(amount)
+            && compareAmounts(amount, '0') === 1
+            && !tokenAmountPrecisionError(amount, {
+                divisibility: refillDivisibility,
+                tick: giveTick,
+                noun: 'Refill amount',
+            })
+            && compareAmounts(amount, giveAmount) !== -1
+            && refillBalance != null
+            && !exceedsBalance(amount, refillBalance)
+            && !(refillCount.remaining <= 0 && refillCount.exact);
+        return ready ? {
+            VERSION: '2',
+            DISPENSER_ACTION_INDEX: String(actionIndex),
+            GIVE_ESCROW: amount,
+        } : null;
+    }, [refillAmount, refillDivisibility, giveTick, giveAmount, refillBalance, refillCount, actionIndex]);
+    const editQuoteParams = useMemo(() => {
+        const params = { VERSION: '2', DISPENSER_ACTION_INDEX: String(actionIndex) };
+        const expiration = editExpiration.trim();
+        if (expiration) {
+            const unix = localInputToUnix(expiration);
+            if (!unix || unix <= Math.floor(Date.now() / 1000)) return null;
+            params.EXPIRATION = String(unix);
+        }
+        const allowList = editAllowList.trim();
+        if (allowList) {
+            if (!/^\d+$/.test(allowList)) return null;
+            params.ALLOW_LIST = allowList;
+        }
+        const blockList = editBlockList.trim();
+        if (blockList) {
+            if (!/^\d+$/.test(blockList)) return null;
+            params.BLOCK_LIST = blockList;
+        }
+        if (params.EXPIRATION === undefined && params.ALLOW_LIST === undefined
+            && params.BLOCK_LIST === undefined) return null;
+        return editListConflictText ? null : params;
+    }, [actionIndex, editExpiration, editAllowList, editBlockList, editListConflictText]);
+    const quoteActionData = useMemo(() => {
+        if (!ownerAddress?.address) return null;
+        if (cancelStage === 'confirm' || cancelStage === 'submitting') {
+            return { action: 'DISPENSER', params: cancelParams };
+        }
+        if ((refillStage === 'confirm' || refillStage === 'submitting') && refillQuoteParams) {
+            return { action: 'DISPENSER', params: refillQuoteParams };
+        }
+        if ((editStage === 'confirm' || editStage === 'submitting') && editQuoteParams) {
+            return { action: 'DISPENSER', params: editQuoteParams };
+        }
+        return null;
+    }, [ownerAddress, cancelStage, cancelParams, refillStage, refillQuoteParams,
+        editStage, editQuoteParams]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: ownerAddress?.address,
+        actionData: quoteActionData,
+    });
+    const feeCard = (
+        <FeesCard
+            chainId={chainId}
+            quote={protocolFeeQuote}
+            pending={protocolFeePending}
+            feeSelector={feeSelector}
+        >
+            <NativeFeeToggle
+                {...nativeFee.toggleProps}
+                onChange={(next) => {
+                    nativeFee.toggleProps.onChange(next);
+                    clearOwnerActionErrors();
+                }}
+                coinTicker={feeCoinTicker}
+            />
+        </FeesCard>
+    );
 
     // Turn a failed sign into house copy; the thrown text survives only as the fallback.
     // A refusal this screen raised itself is already house copy, so it is shown as written.
@@ -1392,10 +1460,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setError(ownerActionRefusal(liveStatus, action));
             return false;
         }
-        if (isDemoWallet) return true;
         try {
-            // The open check guards the owner action's signature, so it reads fresh.
-            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex, fresh: true }));
+            // Demo dispensers have no chain row to refresh, but their loaded
+            // fixture still passes through the same status check as live data.
+            const fresh = isDemoWallet
+                ? dispenser
+                : pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex, fresh: true }));
             const freshStatus = flowsLib.dispenserLiveState(fresh).status;
             if (freshStatus === 'open') return true;
             if (fresh) setDispenser(fresh);
@@ -1548,6 +1618,28 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!action) return wrap(<EmptyState title="Dispenser not found" body="It may have been closed or not indexed yet." />);
 
+    if (buyerAddressPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Pay from"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                unavailableReason={(address) => (
+                    buyerAddresses.some((buyer) => buyer.id === address.id)
+                        ? null
+                        : 'This address cannot sign a payment.'
+                )}
+                onPick={(address) => {
+                    setBuyerAddressId(address.id);
+                    setBuyerAddressPickerOpen(false);
+                }}
+                onBack={() => setBuyerAddressPickerOpen(false)}
+            />
+        );
+    }
+
     // The confirm page stands in for whichever owner form opened it; that
     // form's state stays intact behind it, so Reject lands back on it.
     if (ownerLane.open) {
@@ -1672,7 +1764,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.PlusIcon />}
                         loading={refillStage === 'submitting'}
                         disabled={refillBalance == null || (refillCount.remaining <= 0 && refillCount.exact)}
                     >
@@ -1697,7 +1790,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
                 <AmountField
                     label="Refill amount"
-                    hint={`Amount of ${giveTick} to add to escrow.`}
+                    help={`Amount of ${giveTick} to add to escrow.`}
                     amount={refillAmount}
                     tick={giveTick || ''}
                     divisibility={refillDivisibility}
@@ -1718,22 +1811,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ? `${formatWithThousands(refillBalance)} ${giveTick || ''} available`.replace(/\s+/g, ' ')
                         : null}
                 />
-                {feeSelector}
-                {/* Off Bitcoin this is mandatory, so the toggle renders
-                    as a disclosure rather than a choice - the same treatment the
-                    other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle
-                    {...nativeFee.toggleProps}
-                    onChange={(next) => {
-                        nativeFee.toggleProps.onChange(next);
-                        clearOwnerActionErrors();
-                    }}
-                    coinTicker={feeCoinTicker}
-                />
+                {feeCard}
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : null}
             </FormPage>,
@@ -1793,20 +1874,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={<Icon.PencilIcon />}
                         loading={editStage === 'submitting'}
                         disabled={Boolean(editListConflictText)}
                     >
-                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Edit dispenser'}
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Update dispenser'}
                     </Button>
                 )}
             >
                 <Input
                     type="datetime-local"
                     label="New expiration"
+                    optional
+                    help={currentExpiration
+                        ? 'Enter a new date to reschedule the automatic close, or leave blank to keep it.'
+                        : 'Enter a date to schedule an automatic close, or leave blank to keep none.'}
                     hint={currentExpiration
-                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close, or leave blank to keep it.`
-                        : 'No expiration set. Enter a date to schedule an automatic close, or leave blank to keep none.'}
+                        ? `Current: ${formatUnixDate(currentExpiration)}.`
+                        : 'No expiration set.'}
                     value={editExpiration}
                     onChange={(e) => { setEditExpiration(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1814,7 +1900,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Allow list"
                     inputMode="numeric"
-                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser, or leave blank to keep it.`}
+                    optional
+                    help="Enter a list number to limit who can trigger this dispenser, or leave blank to keep it."
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}.`}
                     value={editAllowList}
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1827,7 +1915,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Block list"
                     inputMode="numeric"
-                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it, or leave blank to keep it.`}
+                    optional
+                    help="Enter a list number to bar addresses from triggering it, or leave blank to keep it."
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}.`}
                     value={editBlockList}
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1852,22 +1942,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {editListConflictText && editListConflictText !== editError ? (
                     <FieldNote variant="error">{editListConflictText}</FieldNote>
                 ) : null}
-                {feeSelector}
-                {/* Off Bitcoin this is mandatory, so the toggle renders
-                    as a disclosure rather than a choice - the same treatment the
-                    other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle
-                    {...nativeFee.toggleProps}
-                    onChange={(next) => {
-                        nativeFee.toggleProps.onChange(next);
-                        clearOwnerActionErrors();
-                    }}
-                    coinTicker={feeCoinTicker}
-                />
+                {feeCard}
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : null}
             </FormPage>,
@@ -1912,6 +1990,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button
                         type="submit"
                         variant="danger"
+                        icon={<Icon.XIcon />}
                         loading={cancelStage === 'submitting'}
                         disabled={cancelStage === 'submitting'}
                     >
@@ -1938,22 +2017,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <FormNotice variant="warning" role="alert" lines={decodedCancel.warnings} />
                 ) : null}
                 {closeEscrowNote}
-                {feeSelector}
-                {/* Off Bitcoin this is mandatory, so the toggle renders
-                    as a disclosure rather than a choice - the same treatment the
-                    other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle
-                    {...nativeFee.toggleProps}
-                    onChange={(next) => {
-                        nativeFee.toggleProps.onChange(next);
-                        clearOwnerActionErrors();
-                    }}
-                    coinTicker={feeCoinTicker}
-                />
+                {feeCard}
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : null}
             </FormPage>,
@@ -2378,29 +2445,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             {' '}confirms and the dispenser is still open.
                         </p>
                         {listWarnings}
-                        {buyerAddresses.length > 1 ? (
-                            <Select
+                        {buyerAddress ? (
+                            <AddressField
                                 label="Pay from"
-                                value={buyerAddressId || ''}
-                                onChange={(e) => setBuyerAddressId(e.target.value)}
-                                className={local.buyerAddressSelect}
-                            >
-                                {/* Native options remain because Select accepts option children. */}
-                                {buyerAddresses.map((a) => (
-                                    <option key={a.id} value={a.id}>{a.address}</option>
-                                ))}
-                            </Select>
-                        ) : buyerAddress ? (
-                            <p>
-                                Paying from <AddressText address={buyerAddress.address} />
-                            </p>
+                                help="Wallet address that sends the payment for this dispenser purchase."
+                                icon="addresses"
+                                value={buyerAddress.address}
+                                readOnly
+                                onChange={() => {}}
+                                onIconClick={() => setBuyerAddressPickerOpen(true)}
+                                iconLabel="Choose payment address"
+                            />
                         ) : null}
                         {/* Max and Paste sit inside the field, as on every other
                             amount; a separate full-width Max button under it
                             read as a second action on a phone. */}
                         <AmountField
                             label="Fills"
-                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                            help={`Number of whole dispenser fills to buy. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
                             amount={fills}
                             onAmountFieldChange={(rawValue) => setFills(String(rawValue).replace(/,/g, ''))}
                             onMax={onMaxFills}
@@ -2447,14 +2509,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ) : null}
                         {ownerLane.isWatcherMode ? (
                             <p className={styles.hintLeft}>
-                                Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                                Signer-mode wallet, then broadcast from a Full-mode wallet.
+                                {t('common.watcherBuildsUnsigned')}
                             </p>
                         ) : null}
                         {demoGuard.note}
                         {demoGuard.dialog}
                         <Button
-                            variant="primary"
+                            variant="success"
+                            icon={<Icon.TokenIcon />}
                             onClick={beginBuy}
                             loading={buyStage === 'submitting' || buyConfirm.composing}
                             disabled={demoGuard.blocked || fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr

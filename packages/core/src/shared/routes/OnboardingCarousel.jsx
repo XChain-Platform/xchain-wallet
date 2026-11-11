@@ -168,11 +168,11 @@ export function OnboardingCarousel({
     const navigation = (
         <>
             {atLast ? (
-                <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
+                <Button variant="success" onClick={handleFinish} icon={<Icon.CheckIcon />}>
                     {t('onboarding.carousel.getStarted')}
                 </Button>
             ) : (
-                <Button variant="primary" onClick={() => goTo(index + 1)} icon={null}>
+                <Button variant="success" onClick={() => goTo(index + 1)} icon={<Icon.ForwardIcon />}>
                     {t('onboarding.carousel.next')}
                 </Button>
             )}
@@ -202,7 +202,7 @@ export function OnboardingCarousel({
                         })}
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
+                        <Button variant="success" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
                             {t('onboarding.carousel.getStarted')}
                         </Button>
                     </div>

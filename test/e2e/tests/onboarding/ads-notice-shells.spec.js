@@ -88,7 +88,8 @@ async function assertNotice(page) {
 async function createToNotice(page) {
     await page.getByRole('button', { name: 'Create new wallet' }).click();
     await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
-    await page.getByLabel(/^Confirm( password)?$/).fill(DEFAULT_PASSWORD);
+    // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
+    await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(DEFAULT_PASSWORD);
     const next = page.getByRole('button', { name: 'Next' });
     await expect(next).toBeEnabled({ timeout: 30_000 });
     await next.click();
@@ -133,9 +134,9 @@ for (const { shell, width, height } of SHELLS) {
             await dismissIntroCarousel(page);
             await page.getByRole('button', { name: 'Import wallet' }).click();
             await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
-            await page.getByLabel('Wallet name').fill('Notice Import');
+            await page.getByLabel('Wallet name', { exact: true }).fill('Notice Import');
             await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
-            await page.getByLabel(/^Confirm( password)?$/).fill(DEFAULT_PASSWORD);
+            await page.getByRole('textbox', { name: /^Confirm( password)?$/ }).fill(DEFAULT_PASSWORD);
             await page.getByRole('button', { name: 'Import' }).click();
             await assertNotice(page);
             await continueToHome(page);

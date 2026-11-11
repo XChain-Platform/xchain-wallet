@@ -5,7 +5,6 @@ import {
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     REGTEST_TICKER,
     selectVenueChain,
     switchToRegtest,
@@ -34,14 +33,8 @@ async function approveAndReadTxid(page) {
 }
 
 // MINT has no gas-schedule entry: /feequote?action=MINT answers xchainFee 0 and
-// requiredFeeNative 0 on RBTC, RLTC and RDOGE alike. Paying the protocol fee in
-// the native coin therefore has to produce a valid MINT with NO fee output, since
-// applyNativeFeePreflight builds none for a zero quote. The spec pins that
-// behaviour rather than a positive fee the chain never charges.
-function nativeFeeToggle(scope) {
-    const name = new RegExp(`^Pay protocol fee in ${REGTEST_TICKER} instead of XCHAIN`);
-    return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
-}
+// requiredFeeNative 0 on every chain. The form offers no protocol-fee switch,
+// and the indexed action carries no fee output.
 
 test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     test.use({ actionTimeout: 30_000 });
@@ -68,8 +61,8 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
             await selectVenueChain(main);
             await main.getByLabel('Ticker').fill(TICK);
             await main.getByLabel('Supply', { exact: true }).fill('1000');
-            await main.getByLabel('Initial mint (optional)').fill(String(INITIAL_MINT));
-            await main.getByLabel('Max mint per transaction (optional)').fill('100');
+            await main.getByLabel('Initial mint', { exact: true }).fill(String(INITIAL_MINT));
+            await main.getByLabel('Max mint per transaction', { exact: true }).fill('100');
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
             await expectConfirmModal(page, 'the ISSUE');
@@ -80,7 +73,7 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
             await unlockAfterReload(page, PASSWORD);
         });
 
-        await test.step('enable native-fee payment and approve the composed MINT', async () => {
+        await test.step('compose MINT without a protocol-fee switch', async () => {
             await openPaletteCommand(page, 'Mint supply');
             const main = page.getByRole('main');
             await expect(main.getByRole('textbox', { name: /^Amount/ }))
@@ -90,17 +83,10 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
             await selectPickerAsset(page, TICK);
             await main.getByRole('textbox', { name: /^Amount/ }).fill(String(MINT_AMOUNT));
 
-            if (REGTEST_COIN === 'RBTC') {
-                // Bitcoin keeps an XCHAIN fee lane, so paying in BTC is a choice.
-                const toggle = nativeFeeToggle(main);
-                await expect(toggle, 'the Mint form has no native-fee toggle').toBeVisible();
-                if (!(await toggle.isChecked())) await toggle.click();
-                await expect(toggle).toBeChecked();
-            } else {
-                // LTC and DOGE have no XCHAIN fee lane, so the row is a statement.
-                await expect(main.getByText(`Protocol fees are paid in ${REGTEST_TICKER}`, { exact: true }))
-                    .toBeVisible();
-            }
+            const name = new RegExp(`^Pay protocol fee in ${REGTEST_TICKER} instead of XCHAIN`);
+            const toggle = main.getByRole('switch', { name })
+                .or(main.getByRole('checkbox', { name })).first();
+            await expect(toggle, 'MINT exposes a protocol-fee switch').toHaveCount(0);
             await main.getByRole('button', { name: 'Mint', exact: true }).click();
             await expectConfirmModal(page, 'the MINT');
         });

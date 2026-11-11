@@ -58,7 +58,7 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /\{isWatcherMode \? \([\s\S]+?Watcher mode/,
+    /\{isWatcherMode \? \([\s\S]+?t\('common\.watcherBuildsUnsigned'\)/,
     'review stage shows watcher-mode hint copy',
 );
 assert.match(

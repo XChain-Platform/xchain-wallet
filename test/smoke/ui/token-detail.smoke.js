@@ -100,7 +100,9 @@ assert.ok(/\.rowClickable\b/.test(blCss),
 const htSrc = readFileSync(join(components, 'HomeTabs.jsx'), 'utf8');
 assert.ok(/onSelectToken\b/.test(htSrc),
     'HomeTabs accepts onSelectToken');
-const htOccurrences = (htSrc.match(/onSelectToken=\{onSelectToken\}/g) || []).length;
+// The Tokens tab forwards through selectListedToken, which restores the real
+// (possibly null) fiat rate that the list's $0.00 display row replaced (U72).
+const htOccurrences = (htSrc.match(/onSelectToken=\{(?:onSelectToken|onSelectToken \? selectListedToken : undefined)\}/g) || []).length;
 assert.ok(htOccurrences >= 3,
     'HomeTabs forwards onSelectToken into all three balance tabs (got ' + htOccurrences + ')');
 

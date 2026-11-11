@@ -227,8 +227,9 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        pressEnter(await screen.findByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+        pressEnter(await screen.findByRole('button', { name: 'Place buy order' }));
+        expect(await screen.findByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
 
         expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -253,8 +254,8 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "Couldn't place this order. Something went wrong. Try again.",
@@ -262,7 +263,7 @@ describe('PlaceOrderPanel validation', () => {
         expect(document.body).not.toHaveTextContent('node.invalid');
         expect(screen.getByText('Give 6 BTC, get 3 XCHAIN')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
 
         expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(2);
@@ -277,7 +278,7 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        pressEnter(await screen.findByRole('button', { name: 'Review' }));
+        pressEnter(await screen.findByRole('button', { name: 'Place buy order' }));
         expect(await screen.findByRole('button', { name: 'Edit order' })).toBeInTheDocument();
         expect(screen.getAllByText(ADDRESS.address)).toHaveLength(2);
         expect(screen.getByText('Settlement address')).toBeInTheDocument();
@@ -298,7 +299,7 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
 
         expect(fireEvent.click(await screen.findByRole('button', { name: 'Edit order' }))).toBe(false);
         expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
@@ -317,7 +318,7 @@ describe('PlaceOrderPanel validation', () => {
         const setTimer = vi.spyOn(globalThis, 'setTimeout').mockImplementationOnce(() => 424242);
         const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
         try {
-            fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
             expect(setTimer).toHaveBeenCalled();
             cleanup();
             expect(clearTimer).toHaveBeenCalledWith(424242);
@@ -347,8 +348,8 @@ describe('PlaceOrderPanel validation', () => {
         );
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Place buy order' }));
 
         view.rerender(
             <MessagingProvider shell="desktop" messaging={messaging}>

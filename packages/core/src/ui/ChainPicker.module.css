@@ -40,6 +40,26 @@
     color: var(--xc-text-muted);
 }
 
+/* A label with a help tip: the tip sits beside the label text. No margin
+   here, since .wrap already spaces the label row from the control. */
+.labelRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.labelRow > .label {
+    min-width: 0;
+}
+
+.labelHelp {
+    flex: none;
+    /* The row gap spaces the tip; drop the tip's own start margin, as Input does. */
+    margin-inline-start: 0;
+}
+
 /* The trigger follows the shared text-control dimensions while keeping the
    fuller ticker and network-kind detail in the dropdown rows. */
 .trigger {

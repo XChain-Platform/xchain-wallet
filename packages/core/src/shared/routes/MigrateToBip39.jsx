@@ -45,6 +45,7 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { NAME_MAX_LENGTH } from '../../util/display_name.js';
 import {
     dismissMigrationSweeps,
     pendingMigrationSweeps,
@@ -386,8 +387,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     those balances separately and keep enough for network fees.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack} icon={<Icon.BackIcon />}>Not now</Button>
-                    <Button variant="primary" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
+                    <Button variant="success" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
                         Continue
                     </Button>
                 </div>
@@ -406,14 +406,15 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 key="migrate-backup"
                 label="Back up new recovery phrase"
                 actions={(
-                    <>
-                        <Button type="button" variant="secondary" onClick={handleBackFromBackup}>
-                            Start over
-                        </Button>
-                        <Button type="button" variant="primary" disabled={!wroteItDown} onClick={handleStartVerify}>
-                            Verify recovery phrase
-                        </Button>
-                    </>
+                    <Button
+                        type="button"
+                        variant="success"
+                        disabled={!wroteItDown}
+                        onClick={handleStartVerify}
+                        icon={<Icon.VerifyIcon />}
+                    >
+                        Verify recovery phrase
+                    </Button>
                 )}
             >
                 <p style={explainParagraphStyle}>
@@ -446,12 +447,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </>
                 )}
                 actions={(
-                    <>
-                        <Button type="button" variant="secondary" onClick={() => setStage('backup')}>
-                            Back to phrase
-                        </Button>
-                        <Button type="submit" variant="primary">Create BIP39 wallet</Button>
-                    </>
+                    <Button type="submit" variant="success" icon={<Icon.CheckIcon />}>
+                        Create BIP39 wallet
+                    </Button>
                 )}
             >
                 <p style={explainParagraphStyle}>
@@ -463,6 +461,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     <Input
                         key={position}
                         label={`Word ${position}`}
+                        help={`Type word ${position} of the new recovery phrase you just wrote down.`}
                         value={quizAnswers[position] || ''}
                         onChange={(event) => {
                             setQuizAnswers((previous) => ({
@@ -558,6 +557,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                 {!swept && row.next && onSweepChain && newWalletId ? (
                                                     <Button
                                                         variant="secondary"
+                                                        icon={<Icon.SweepIcon />}
                                                         onClick={() => onSweepChain({
                                                             legacyWalletId,
                                                             newWalletId,
@@ -582,9 +582,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 ) : null}
                 <div className={styles.actions}>
                     {addressesReady && unsweptCount > 0 ? (
-                        <Button variant="secondary" onClick={handleDismiss}>Dismiss list</Button>
+                        <Button variant="secondary" onClick={handleDismiss} icon={<Icon.XIcon />}>
+                            Dismiss list
+                        </Button>
                     ) : null}
-                    <Button variant="primary" onClick={handleDone}>Finish</Button>
+                    <Button variant="success" onClick={handleDone} icon={<Icon.CheckIcon />}>
+                        Finish
+                    </Button>
                 </div>
             </ListPage>,
         );
@@ -598,7 +602,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={<Icon.KeyIcon />}
                 >
                     Generate recovery phrase
                 </Button>
@@ -606,14 +611,16 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         >
             <Input
                 label="New wallet name"
+                help="Names the new BIP39 wallet in wallet lists on this device."
                 value={name}
+                maxLength={NAME_MAX_LENGTH}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"
             />
             <Input
                 type="password"
                 label="Password"
-                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the new wallet on this device.`}
+                help={`Encrypts the new wallet on this device. Use at least ${MIN_PASSWORD_LENGTH} characters.`}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -624,6 +631,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             <Input
                 type="password"
                 label="Confirm password"
+                help="Type the same password again to confirm the new wallet password."
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);

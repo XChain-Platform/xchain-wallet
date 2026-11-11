@@ -72,13 +72,50 @@ describe('DisplaySection', () => {
     it('uses the shared medium control size across the watched-token row', async () => {
         setup();
 
-        const chain = await screen.findByRole('combobox', { name: 'Token network' });
+        const chain = await screen.findByRole('button', { name: /^Network:/ });
         const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
         const action = screen.getByRole('button', { name: 'Watch token' });
         expect(screen.getByRole('group', { name: 'Display settings' })).toHaveClass(formStyles.fullWidth);
-        expect(chain.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(chain.parentElement.className).toMatch(/(?:^|\s)_?md_/);
         expect(ticker.parentElement.parentElement).toHaveClass(inputStyles.md);
         expect(action).toHaveClass(buttonStyles.md);
+    });
+
+    it('puts written help tips on every balance and row-affordance setting', async () => {
+        setup();
+
+        await screen.findByRole('button', { name: 'About Hide small balances' });
+        const tips = [
+            ['Hide small balances', 'Pinned and escrowed balances stay visible.'],
+            ['Hide unknown tokens', 'Collapse tokens without a name or image'],
+            ['Small-balance threshold', "Use each network's relay limit"],
+            ['Balance number format', 'Change displayed formatting without changing stored or submitted values.'],
+            ['Show pin button on rows', 'A star pins or unpins the token on Home.'],
+            ['Show hide button on rows', "Moves the token to Home's Hidden section."],
+        ];
+
+        for (const [label, copy] of tips) {
+            const trigger = screen.getByRole('button', { name: `About ${label}` });
+            fireEvent.click(trigger);
+            expect(within(trigger.parentElement).getByRole('tooltip')).toHaveTextContent(copy);
+        }
+    });
+
+    it('offers the standard network field, a labelled ticker with help, and a green Watch token with an icon', async () => {
+        setup({ pinnedTokens: ['bitcoin-mainnet:XCP'], hiddenTokens: ['bitcoin-mainnet:PEPE'] });
+        const network = await screen.findByRole('button', { name: /^Network:/ });
+        expect(screen.queryByRole('combobox', { name: 'Token network' })).toBeNull();
+        expect(network.getAttribute('aria-haspopup')).toBe('dialog');
+        const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
+        expect(ticker.closest('form')).toHaveTextContent('Ticker');
+        expect(screen.getByRole('button', { name: /^About Ticker$/i })).toBeTruthy();
+        const watch = screen.getByRole('button', { name: 'Watch token' });
+        expect(watch).toHaveClass(buttonStyles.success);
+        expect(watch.querySelector('svg')).not.toBeNull();
+        for (const name of ['Move up bitcoin-mainnet:XCP', 'Reset list preferences', 'Reset to defaults', 'Unhide all']) {
+            const button = screen.queryByRole('button', { name: new RegExp(name.replace('bitcoin-mainnet:XCP', 'XCP'), 'i') });
+            expect(button?.querySelector('svg')).not.toBeNull();
+        }
     });
 
     it('uses the shared form surface for equal-height watched-token controls', async () => {
@@ -270,7 +307,8 @@ describe('DisplaySection', () => {
         expect(screen.getAllByRole('option').map((option) => option.textContent))
             .not.toContain('Dogecoin (testnet)');
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Token network' }), { target: { value: 'dogecoin-testnet' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin testnet/i }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
 

@@ -34,6 +34,8 @@ import {
     LayoutList as LucideLayoutList,
     ThumbsUp as LucideThumbsUp,
     ThumbsDown as LucideThumbsDown,
+    ArrowUpToLine as LucideArrowUpToLine,
+    Minus as LucideMinus,
 } from 'lucide-react';
 
 // The rendered size comes from the svg[data-xc-icon] rule in tokens.css
@@ -79,6 +81,10 @@ export function PlusIcon() {
             <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
     );
+}
+
+export function MinusIcon() {
+    return <LucideMinus {...LUCIDE_PROPS} />;
 }
 
 export function MintIcon() {
@@ -299,6 +305,11 @@ export function ThumbsDownIcon() {
     return <LucideThumbsDown {...LUCIDE_PROPS} />;
 }
 
+// An arrow rising to a bar: fill the field up to the most it can hold.
+export function MaxIcon() {
+    return <LucideArrowUpToLine {...LUCIDE_PROPS} />;
+}
+
 export function HandshakeIcon() {
     return <LucideHandshake {...LUCIDE_PROPS} />;
 }
@@ -364,7 +375,7 @@ const LABEL_MAP = [
     [/^contacts?\b/, AddressIcon],
     [/^advanced\b/, GearIcon],
     [/^parallel\b|^cross-chain\b/, SwapIcon],
-    [/^info\b|^about\b|^help\b|^why\b/, InfoIcon],
+    [/^learn more\b|^info\b|^about\b|^help\b|^why\b/, InfoIcon],
     [/^open\b|^launch\b|^view in\b|^go to\b/, ExternalLinkIcon],
 ];
 
@@ -748,6 +759,15 @@ export function ClockIcon() {
         <svg {...STROKE_PROPS}>
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
+        </svg>
+    );
+}
+
+export function BellIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
     );
 }

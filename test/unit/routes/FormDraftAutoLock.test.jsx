@@ -99,7 +99,7 @@ describe('form drafts across auto-lock', () => {
         fireEvent.change(screen.getByLabelText(/Recipient 2 address/i), {
             target: { value: 'bc1qsecondrecipient0000000000000000000000000' },
         });
-        fireEvent.change(screen.getByLabelText(/Recipient 2 amount/i), {
+        fireEvent.change(screen.getByLabelText(/Recipient 2 amount/i, { selector: 'input' }), {
             target: { value: '1.25' },
         });
         fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
@@ -134,7 +134,7 @@ describe('form drafts across auto-lock', () => {
             expect(screen.getByLabelText(/Recipient 2 address/i)).toHaveValue(
                 'bc1qsecondrecipient0000000000000000000000000',
             );
-            expect(screen.getByLabelText(/Recipient 2 amount/i)).toHaveValue('1.25');
+            expect(screen.getByLabelText(/Recipient 2 amount/i, { selector: 'input' })).toHaveValue('1.25');
             expect(screen.getByRole('switch', { name: /different token/i })).toBeChecked();
         });
         expect(messaging.sendToken).not.toHaveBeenCalled();

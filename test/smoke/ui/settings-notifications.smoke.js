@@ -75,7 +75,9 @@ const idx = settingsSrc.indexOf("id: 'notifications'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'panel'/);
 assert.match(block, /Component:\s*NotificationsSection/);
-assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*\}/, 'threads the active walletId into the section');
+assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*,?/, 'threads the active walletId into the section');
+// The price-alert token picker opens as the Settings screen itself (U17), so Settings hands the section its screen setter.
+assert.match(block, /onTokenPickerScreenChange:\s*setTokenPickerScreen/, 'lets the price-alert picker take over the Settings screen');
 
 // §46 price-alert manager: the toggle now has a real CRUD surface under
 // it, hard-gated on the privacy price-data opt-out.

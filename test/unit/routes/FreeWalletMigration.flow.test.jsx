@@ -66,6 +66,7 @@ describe('FreeWallet onboarding migration flow', () => {
         expect(screen.getByLabelText('Wallet name')).toHaveValue('FreeWallet');
         expect(screen.queryByRole('tab')).not.toBeInTheDocument();
         expect(screen.getByText('0 / 12 words')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import' }).className).toMatch(/success/);
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), {
             target: { value: BIP39_24_WORD_PHRASE },

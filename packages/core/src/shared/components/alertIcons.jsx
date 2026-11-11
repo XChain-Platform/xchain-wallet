@@ -3,8 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+const ICON_SIZE = 18;
+
 function Svg({ children }) {
-    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
+    return <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" data-xc-icon="" style={{ display: 'block' }}>{children}</svg>;
 }
 
 export const DoubleCheckIcon = () => <Svg><path d="m3 12 4 4L17 6" /><path d="m11 15 2 2 8-9" /></Svg>;

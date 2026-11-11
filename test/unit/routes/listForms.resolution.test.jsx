@@ -244,9 +244,9 @@ function mountFork(editResolutionActive, overrides = {}, repointHandlers) {
 // without a signer, which is the shortest real path to that step.
 async function forkToRepoint({ add = 'NEWTICK', memo = '' } = {}) {
     await screen.findByText(/Forking token list #2700/);
-    fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: add } });
-    if (memo) fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: memo } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: add } });
+    if (memo) fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
     await screen.findByText('Fork submitted');
 }
@@ -254,22 +254,22 @@ async function forkToRepoint({ add = 'NEWTICK', memo = '' } = {}) {
 describe('ListForkForm copy follows list-edit resolution', () => {
     it('under resolution says the edit becomes the list\'s current membership', async () => {
         mountFork(true);
-        const summary = await screen.findByText(/Forking token list #2700/);
-        expect(summary.textContent).toMatch(/becomes list #2700's current membership/);
-        expect(summary.textContent).not.toMatch(/never changes/);
+        await screen.findByText(/Forking token list #2700/);
+        expect(screen.getByText(/becomes list #2700's current membership/)).toBeTruthy();
+        expect(screen.queryByText(/never changes/)).toBeNull();
     });
 
     it('before activation keeps "#2700 itself never changes"', async () => {
         mountFork(false);
-        const summary = await screen.findByText(/Forking token list #2700/);
-        expect(summary.textContent).toMatch(/#2700 itself never changes/);
+        await screen.findByText(/Forking token list #2700/);
+        expect(screen.getByText(/#2700 itself never changes/)).toBeTruthy();
     });
 
     it('with the flag unknown names both rules instead of asserting either', async () => {
         mountFork(null);
-        const summary = await screen.findByText(/Forking token list #2700/);
-        expect(summary.textContent).toMatch(/Where list-edit resolution is active/);
-        expect(summary.textContent).not.toMatch(/never changes/);
+        await screen.findByText(/Forking token list #2700/);
+        expect(screen.getByText(/Where list-edit resolution is active/)).toBeTruthy();
+        expect(screen.queryByText(/never changes/)).toBeNull();
     });
 
     it('under resolution omits the repoint rail and the "stays live" warning', async () => {
@@ -315,10 +315,11 @@ describe('ListForkForm signs from the list owner', () => {
     it('defaults FROM to the root creator when the wallet holds it, with no warning', async () => {
         const messaging = mountOwnerFork(byChainWithOwner);
         await screen.findByText(/Forking token list #3069/);
-        await waitFor(() => expect(screen.getByText(/Signed from/).textContent).toContain(OWNER.address.slice(0, 6)));
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
+        expect(screen.queryByText(/Signed from/)).toBeNull();
         expect(screen.queryByText(/which is not an address in this wallet/)).toBeNull();
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].from.address).toBe(OWNER.address);
@@ -329,8 +330,8 @@ describe('ListForkForm signs from the list owner', () => {
         const warning = await screen.findByText(/not an address in this wallet/);
         expect(warning.textContent).toContain(OWNER.address.slice(0, 8));
         expect(warning.textContent).toMatch(/This wallet cannot edit it/);
-        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
-        expect(screen.queryByLabelText(/Add tokens/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish edit' })).toBeNull();
+        expect(screen.queryByLabelText('Add tokens')).toBeNull();
     });
 });
 
@@ -364,8 +365,8 @@ describe('owner-only list actions', () => {
         }, ownerActionMessaging());
 
         expect(await screen.findByText(/this wallet cannot share it/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
-        expect(screen.getByLabelText('Memo (optional)').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Share list' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Memo').disabled).toBe(true);
     });
 
     it('keeps direct transfer navigation disabled for an external owner', async () => {
@@ -374,8 +375,8 @@ describe('owner-only list actions', () => {
         }, ownerActionMessaging());
 
         expect(await screen.findByText(/this wallet cannot transfer it/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
-        expect(screen.getByLabelText('Destination').disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Transfer list' }).disabled).toBe(true);
+        expect(screen.getByLabelText('New owner').disabled).toBe(true);
     });
 });
 
@@ -395,8 +396,8 @@ describe('ListForkForm refuses to build on members that changed since it loaded'
             getListByActionIndex: vi.fn().mockResolvedValue(rowWith(['DOGESWAP', 'INJECTED', 'SWAPTEST'])),
         });
         await screen.findByText(/Forking token list #2700/);
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         const error = await screen.findByText(/List #2700 changed since this screen loaded/);
         expect(error.textContent).toMatch(/now has 3 members, not 2/);
         expect(screen.queryByRole('button', { name: 'Create unsigned transaction' })).toBeNull();
@@ -495,9 +496,9 @@ describe('List forms send an optional MEMO', () => {
     it('ListCreateForm puts the memo on the LIST v0 params and leaves it out when empty', async () => {
         const messaging = mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} },
             messagingWith(WATCHER));
-        fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), { target: { value: 'SWAPTEST' } });
-        fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: 'Our official tokens' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'Our official tokens' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         expect(await screen.findByText('Our official tokens')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
@@ -507,9 +508,9 @@ describe('List forms send an optional MEMO', () => {
 
     it('ListCreateForm refuses a memo with a protocol delimiter', async () => {
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith(WATCHER));
-        fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), { target: { value: 'SWAPTEST' } });
-        fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: 'a|b' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'a|b' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         expect(await screen.findByText(/Memo cannot contain \| or ;/)).toBeTruthy();
     });
 });
@@ -521,7 +522,7 @@ describe('ListCreateForm checks token items before publishing', () => {
     it('counts valid, duplicate and malformed names, and flags a tick the network does not know', async () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(tick === 'SWAPTEST' ? KNOWN : UNKNOWN));
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith({ getTokenInfo }));
-        const input = await screen.findByLabelText(/Tokens \(one per line\)/);
+        const input = await screen.findByLabelText('Tokens');
         vi.useFakeTimers();
         fireEvent.change(input, {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
@@ -559,8 +560,8 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
         mountFork(true, { signerReady: vi.fn().mockResolvedValue({ ready }) });
         await screen.findByText(/Forking token list #2700/);
         fireEvent.click(screen.getByRole('checkbox', { name: /DOGESWAP/ }));
-        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish edit' }));
         return screen.findByText(/two\s+transactions/);
     }
 
@@ -581,9 +582,9 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
             getGenesisForToken: vi.fn().mockResolvedValue({ action_index: 77 }),
         }));
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), { target: { value: 'SWAPTEST' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Save roster' }));
         const hint = await screen.findByText(/This is step 1 of 2/);
-        await waitFor(() => expect(hint.textContent).toMatch(/no password is needed/));
+        await waitFor(() => expect(hint.textContent).not.toMatch(/wallet unlocked|no password is needed/i));
     });
 
     it('ProjectRosterForm confirms and preflights both legs before signing', async () => {
@@ -607,7 +608,7 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
         });
         mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', issuerAddress: BY_CHAIN[DOGE][0].address, onBack() {} }, messaging);
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), { target: { value: 'SWAPTEST' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Save roster' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Publish list' }));
 
         const from = (await screen.findByTestId('confirm-source')).textContent;

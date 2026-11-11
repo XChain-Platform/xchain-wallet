@@ -13,6 +13,7 @@ import {
     Button,
     ChainBadge,
     EmptyState,
+    Icon,
     Input,
     ListPage,
     PageHeader,
@@ -227,7 +228,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             {unavailableDescriptors.map((descriptor, index) => (
                 <Fragment key={descriptor.id || index}>
                     {index === 0 ? null : ' '}
-                    <ChainBadge descriptor={descriptor} size="sm" />
+                    <ChainBadge descriptor={descriptor} size="sm" showName={false} />
                 </Fragment>
             ))}
             . Try again in a moment.
@@ -270,6 +271,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                             <Button
                                 type="button"
                                 variant="secondary"
+                                icon={<Icon.ChevronDownIcon />}
                                 onClick={() => setVisibleLimit((limit) => limit + PAGE_SIZE)}
                             >
                                 Load more
@@ -317,7 +319,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             ) : null}
             <dt className={styles.detailsLabel}>Home network</dt>
             <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
+                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : '?'}
             </dd>
             <dt className={styles.detailsLabel}>Home list index</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>
@@ -341,7 +343,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
                 <>
                     <dt className={styles.detailsLabel}>Select</dt>
                     <dd className={styles.detailsValue}>
-                        <Button type="button" variant="secondary" onClick={choose}>Choose list</Button>
+                        <Button type="button" variant="secondary" icon={<Icon.CheckIcon />} onClick={choose}>Choose list</Button>
                     </dd>
                 </>
             ) : null}

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    FieldNote,
+    FieldIconButton, FieldNote,
     Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
     ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
@@ -383,12 +383,12 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     }
 
     // The window title names the pairing lane the heading shows.
-    useDocumentTitleSection(lane.title || 'Pair a partner wallet');
+    useDocumentTitleSection(lane.title || 'Pair an offline signer');
     const header = (
         <PageHeader
             onBack={handleBack}
             backDisabled={busy}
-            title={lane.title || 'Pair a partner wallet'}
+            title={lane.title || 'Pair an offline signer'}
         />
     );
     const step = pairingStep(stage, Boolean(existingWalletId), Boolean(initialMode));
@@ -399,9 +399,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <ListPage>
                     <StepIndicator {...step} />
                     <div className={styles.overview}>
-                        <p>You are pairing an online wallet with an offline one.</p>
-                        <p>Choose what this device does, then set up the other device as its partner.</p>
-                        <p>Write the recovery phrase down once, then type it into each device separately. It never travels between them.</p>
+                        <p className={styles.fullWidthText}>You are pairing an online wallet with an offline one.</p>
+                        <p className={styles.fullWidthText}>Choose what this device does, then set up the other device as its partner.</p>
+                        <p className={styles.fullWidthText}>Write the recovery phrase down once, then type it into each device separately. It never travels between them.</p>
                     </div>
                     <div className={styles.roleChoices}>
                         <div className={styles.roleChoice}>
@@ -413,7 +413,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             >
                                 This device watches. Pair a signer
                             </Button>
-                            <p>This device stays online. It holds no keys that can sign, builds transactions, and shows balances.</p>
+                            <p className={styles.fullWidthText}>This device stays online. It holds no keys that can sign, builds transactions, and shows balances.</p>
                         </div>
                         <div className={styles.roleChoice}>
                             <Button
@@ -424,7 +424,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             >
                                 This device signs. Pair a watcher
                             </Button>
-                            <p>This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.</p>
+                            <p className={styles.fullWidthText}>This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.</p>
                         </div>
                     </div>
                 </ListPage>
@@ -450,7 +450,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         </StatusMessage>
                     ) : null}
                     actions={(
-                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+                        <Button
+                            type="submit"
+                            variant="success"
+                            icon={<Icon.ForwardIcon />}
+                            loading={busy}
+                            disabled={busy}
+                        >
                             Continue
                         </Button>
                     )}
@@ -464,7 +470,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     />
                     <Textarea
                         label="Shared recovery phrase"
-                        hint={lane.help}
+                        help={lane.help}
                         rows={3}
                         value={mnemonic}
                         onChange={(e) => setMnemonic(e.target.value)}
@@ -505,7 +511,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     sectioned
                     status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                     actions={(
-                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+                        <Button
+                            type="submit"
+                            variant="success"
+                            icon={<Icon.LinkIcon />}
+                            loading={busy}
+                            disabled={busy}
+                        >
                             {lane.cta || 'Pair'}
                         </Button>
                     )}
@@ -540,10 +552,14 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                     Copy the text below instead.
                                 </FieldNote>
                             )}
-                            <div style={CODE_BOX}>{localCode}</div>
-                            <CopyButton value={localCode} label="Copy pairing code" />
+                            <div className={styles.pairingCode} dir="ltr">
+                                <span className={styles.pairingCodeCopy}>
+                                    <CopyButton value={localCode} label="Copy pairing code" iconOnly />
+                                </span>
+                                {localCode}
+                            </div>
                             {localKeySetId ? (
-                                <p style={FINGERPRINT}>
+                                <p className={styles.fullWidthText} style={FINGERPRINT}>
                                     Key fingerprint: {localKeySetId.slice(0, 16)}
                                 </p>
                             ) : null}
@@ -577,12 +593,11 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         autoComplete="off"
                         spellCheck={false}
                         disabled={busy}
-                        labelAction={(
-                            <Button
-                                variant="ghost"
-                                size="sm"
+                        fieldAction={(
+                            <FieldIconButton
                                 icon={<Icon.ScanIcon />}
-                                aria-label={scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
+                                label={scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
+                                aria-pressed={scanning}
                                 onClick={() => {
                                     // A re-opened scanner starts from nothing: half a
                                     // set left over from a previous attempt would
@@ -609,14 +624,15 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     {verification?.message || 'Paired.'}
                 </StatusMessage>
                 {verification?.sharedChainIds?.length ? (
-                    <p style={COPY}>
+                    <p className={styles.fullWidthText} style={COPY}>
                         Matching networks: {verification.sharedChainIds.join(', ')}.
                     </p>
                 ) : null}
                 <div style={STACK}>
                     <Button
-                        variant="primary"
+                        variant="success"
                         block
+                        icon={<Icon.CheckIcon />}
                         onClick={() => { (typeof onPaired === 'function' ? onPaired : onBack)?.(); }}
                     >
                         Finish
@@ -668,7 +684,7 @@ function pairingStep(stage, hasExistingWallet, hasInitialMode) {
 
 function StepIndicator({ current, total }) {
     return (
-        <p aria-current="step" style={STEP_INDICATOR}>
+        <p className={styles.fullWidthText} aria-current="step" style={STEP_INDICATOR}>
             Step {current} of {total}
         </p>
     );
@@ -684,18 +700,6 @@ const COPY = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-sm)',
     maxWidth: 'none',
-};
-
-const CODE_BOX = {
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text-muted)',
-    background: 'var(--xc-surface-2)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-2)',
-    marginBlock: 'var(--xc-space-2)',
-    overflowWrap: 'anywhere',
 };
 
 const FINGERPRINT = {

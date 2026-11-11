@@ -97,8 +97,8 @@ async function buildWith(buildResult) {
     fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
     fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-    const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create cross-chain swap' }));
+    const submit = await screen.findByRole('button', { name: 'Create unsigned cross-chain swap transaction' });
     await act(async () => {
         submit.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
@@ -137,12 +137,13 @@ describe('CrossChainSwapForm page template', () => {
         expect(inListPage(note)).not.toBeNull();
     });
 
+    // The full compose-to-broadcast walk took 5.2 s once in a loaded 8-shard run.
     it('draws the broadcast result inside the ListPage template', async () => {
         await buildWith({ txid: 'swap-tx' });
         const heading = await screen.findByText('Cross-chain swap broadcast');
         expect(inListPage(heading)).not.toBeNull();
         expect(inListPage(screen.getByRole('button', { name: 'Done' }))).not.toBeNull();
-    });
+    }, 15_000);
 
     it('draws the unsigned result inside the ListPage template', async () => {
         await buildWith({ psbtHex: 'aa00' });

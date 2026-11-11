@@ -38,9 +38,9 @@ import {
     Select,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
+import { useDemoGuard, useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
@@ -49,6 +49,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
+import { FeesCard } from './FeesCard.jsx';
 import { ResultScreen } from './ResultScreen.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
@@ -58,6 +59,7 @@ import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import { normalizeAmountFieldInput, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './MarketTrading.module.css';
 import { t } from '../../i18n/index.js';
@@ -94,7 +96,8 @@ const EXPIRATION_PRESETS = [
  * @param {() => void} [props.onOrderPlaced]         refresh parent after placement
  */
 export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, prefillPick, onOrderPlaced }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const { messaging } = useWalletSource(walletId);
     const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
@@ -188,12 +191,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 // Pull balances alongside addresses so we can show the
                 // user how much of tick1 / tick2 they have available
                 // before they place the order.
-                let b;
-                if (flowsLib.isDemoWallet(walletId)) {
-                    b = flowsLib.synthesizeDemoBalances(byChain);
-                } else {
-                    b = await messaging.getWalletBalances(walletId);
-                }
+                const b = await messaging.getWalletBalances(walletId);
                 if (!cancelled) setBalances(b);
             } catch { /* surfaced via submit error on place */ }
             finally {
@@ -352,6 +350,44 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         if (typeof submitExpiration === 'number') p.EXPIRATION = String(submitExpiration);
         return p;
     }
+    const actionParams = useMemo(
+        () => buildParams(),
+        [coinTicker, expirationUnix, side, sizeText, tick1, tick2, total],
+    );
+
+    const quoteActionData = useMemo(() => {
+        if (!fromAddress || !total
+            || String(tick1).trim().toUpperCase() === String(tick2).trim().toUpperCase()) return null;
+        if ((price.trim().split('.')[1] || '').length > 18) return null;
+        const sizeAsset = assetFor(tick1);
+        if (tokenAmountPrecisionError(size, {
+            divisibility: sizeAsset?.divisibility
+                ?? (tick1.toUpperCase() === coinTicker ? 8 : tick1Info?.divisibility),
+            tick: tick1,
+            noun: 'Size',
+        })) return null;
+        const totalAsset = assetFor(tick2);
+        if (tokenAmountPrecisionError(total, {
+            divisibility: totalAsset?.divisibility
+                ?? (tick2.toUpperCase() === coinTicker ? 8 : tick2Info?.divisibility),
+            tick: tick2,
+            noun: 'Price and size total',
+        })) return null;
+        const giveAmount = side === 'buy' ? total : size.trim();
+        const giveAsset = side === 'buy' ? totalAsset : sizeAsset;
+        if (giveAsset && compareAmounts(giveAmount, giveAsset.available) === 1) return null;
+        if (expirationUnix === undefined
+            || (typeof expirationUnix === 'number'
+                && expirationUnix <= Math.floor(Date.now() / 1000))) return null;
+        return { action: 'ORDER', params: actionParams };
+    }, [actionParams, assetFor, coinTicker, expirationUnix, fromAddress, price, side,
+        size, tick1, tick1Info?.divisibility, tick2, tick2Info?.divisibility, total]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
 
     // §5.6 slice 3: software orders compose ONE PSBT host-side and
     // confirm it on the shared confirm page; hardware + watcher keep the
@@ -716,7 +752,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             disabled={!isWatcherMode && hw && hwStatus !== 'available'}
                         >
                             {isWatcherMode
-                                ? t('components.placeOrderPanel.createUnsignedTransaction')
+                                ? t('components.placeOrderPanel.placeOrder', { side })
                                 : hw
                                 ? t('send.review.sign')
                                 : t('components.placeOrderPanel.placeOrder', { side })}
@@ -753,7 +789,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 ) : null}
                 {isWatcherMode ? (
                     <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                        {t('components.placeOrderPanel.watcherModeBuildsAnUnsigned')}
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -820,7 +856,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     loading={accountLoading || actionConfirm.composing}
                     disabled={accountLoading || actionConfirm.composing}
                 >
-                    {singleEncode ? t('components.placeOrderPanel.placeOrder', { side }) : t('common.review')}
+                    {t('components.placeOrderPanel.placeOrder', { side })}
                 </Button>
             )}
         >
@@ -908,12 +944,22 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {summary}
                 </p>
             ) : null}
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
+            <FeesCard
+                chainId={chainId}
+                quote={protocolFeeQuote}
+                pending={protocolFeePending}
+                feeSelector={null}
+                tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                value={{ mode: 'normal' }}
                 coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
-            />
+            >
+                <NativeFeeToggle
+                    checked={payFeeInNativeCoin}
+                    onChange={setPayFeeInNativeCoin}
+                    coinTicker={coinTicker}
+                    mandatory={nativeFeeMandatory}
+                />
+            </FeesCard>
             {payFeeInNativeCoin ? (
                 <FieldNote variant="warning" role="alert">{NATIVE_FEE_WARNING}</FieldNote>
             ) : null}

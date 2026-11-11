@@ -25,7 +25,7 @@
  * THE CAMPAIGN'S OWN MAP SAYS WHY THERE ARE TWO OF THEM. Its widget table
  * records that forms pick a chain three different ways and that a grep for one
  * reports the others as "has no picker". `CrossChainSwapForm` uses two of the
- * three AT ONCE: `ChainPicker`s labelled `Give network` / `Get network`
+ * three AT ONCE: `NetworkField`s labelled `Give network` / `Get network`
  * (:628, :678) and `TokenField`s labelled `Give token` / `Get token`
  * (:646, :697). The frontier row for this area recorded that ONE helper was
  * missing; measured at HEAD it is two, and the second is the widget class that
@@ -36,7 +36,7 @@
 import { expect } from '@playwright/test';
 
 /**
- * Picks a NAMED chain in a `ChainPicker`, on a named NETWORK, and proves the
+ * Picks a named chain in a `NetworkField`, on a named network, and proves the
  * pick took.
  *
  * The venue-pinned sibling (`selectVenueChain`) is the one to use for any
@@ -72,16 +72,14 @@ export async function selectNamedChain(scope, field, chainLabel, networkKind = '
     if (((await trigger.getAttribute('aria-label')) || '') === want) return;
 
     await trigger.click();
-    // An option's accessible name is its label, its ticker and its network
-    // suffix run together ("Dogecoin DOGE · regtest"), so both halves are
-    // matched: the label alone would also select the mainnet entry sitting
-    // beside it whenever the wallet holds an address on one.
-    await scope.getByRole('option', {
-        name: new RegExp(`^${chainLabel}\\b`),
+    // The row's accessible name includes the network kind, so the visible
+    // label alone never silently picks a mainnet row beside a regtest row.
+    await trigger.page().getByRole('dialog', { name: field }).getByRole('button', {
+        name: new RegExp(`^Select ${chainLabel} ${networkKind}\\b`),
     }).first().click();
 
     // Assert the switch took, WHOLE. The picker closes on click whether or not
-    // the option was the one intended, so an unasserted click is a silent
+    // the row was the one intended, so an unasserted click is a silent
     // wrong-chain run - the same hazard `selectVenueChain` ends on, and the
     // reason both helpers end this way.
     await expect(trigger, `the "${field}" picker did not settle on ${chainLabel}`)

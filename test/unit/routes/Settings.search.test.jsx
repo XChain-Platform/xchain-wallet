@@ -19,6 +19,7 @@ import { MessagingContext } from '../../../packages/core/src/shared/MessagingCon
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 function mount(props = {}, loadedSettings = null) {
     const messaging = {
@@ -45,10 +46,25 @@ function searchFor(value) {
 
 afterEach(() => {
     cleanup();
+    localStorage.clear();
     delete window.xchainWalletUpdater;
 });
 
 describe('Settings search', () => {
+    it('shows the scoped balance update time in About beside release details', () => {
+        writeBalanceCache('wallet-1', null, {
+            balances: {},
+            fetchedAt: Date.now() - 5 * 60_000,
+        }, 'mainnet');
+        mount();
+
+        fireEvent.click(screen.getByRole('button', { name: /About/ }));
+
+        expect(screen.getByText('Balances updated')).toBeInTheDocument();
+        expect(screen.getByText('5 minutes ago')).toBeInTheDocument();
+        expect(screen.getByText('Version')).toBeInTheDocument();
+    });
+
     it('omits redundant inline descriptions and keeps useful ones compact', () => {
         mount();
 

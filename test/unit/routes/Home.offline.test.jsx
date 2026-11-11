@@ -76,7 +76,7 @@ describe('Home offline behavior', () => {
         mountHome(messaging, onSend, { onSwap, onCreateToken });
 
         await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
-        expect(screen.getByText(/^Updated /)).toBeTruthy();
+        expect(screen.queryByText(/^Updated /)).toBeNull();
 
         // A failed background read leaves the last successful rows and sync
         // time intact instead of returning Home to a loading state.

@@ -89,7 +89,7 @@ async function checkControls(page, pass) {
         await gotoSection(page, 'Messaging');
         await main.getByRole('button', { name: 'New conversation' }).click();
         await expectVisibleEdge('encryption select', main.getByRole('button', { name: /^Encryption:/ }), { surface: true });
-        await expectVisibleEdge('delivery network select', main.getByRole('button', { name: /^Delivery network:/ }), { surface: true });
+        await expectVisibleEdge('compose network field', main.getByRole('button', { name: /^Network:/ }), { surface: true });
     });
 
     await test.step(`${pass} / ChainPicker triggers`, async () => {

@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
@@ -716,9 +716,7 @@ export function ContractStakeForm({
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on
-                        your Signer-mode wallet, then bring the signed transaction to a Full-mode
-                        wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -774,6 +772,7 @@ export function ContractStakeForm({
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                lockNetwork
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -812,30 +811,22 @@ export function ContractStakeForm({
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={mode === 'stake' ? <Icon.StakeIcon /> : mode === 'unstake' ? <Icon.UnlinkIcon /> : <Icon.KeyIcon />}
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || actionConfirm.composing}
                 >
-                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
+                    {mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate key'}
                 </Button>
             )}
         >
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Target</dt>
-                <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
-                <dt className={styles.detailsLabel}>Cooldown</dt>
-                <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
-                <dt className={styles.detailsLabel}>Penalty destination</dt>
-                <dd className={styles.detailsValue}>
-                    {contractMeta.slashDestination
-                        ? <AddressText address={contractMeta.slashDestination} truncate={false} />
-                        : '(configured at deploy)'}
-                </dd>
-            </dl>
+            {/* The target contract pins the network, so the field is single-option. */}
+            <NetworkField label="Network" value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that stakes, unstakes or delegates, pays the network fee and signs."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -849,8 +840,22 @@ export function ContractStakeForm({
                 </FormNotice>
             )}
 
+            <dl className={styles.detailsList}>
+                <dt className={styles.detailsLabel}>Target</dt>
+                <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
+                <dt className={styles.detailsLabel}>Cooldown</dt>
+                <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
+                <dt className={styles.detailsLabel}>Penalty destination</dt>
+                <dd className={styles.detailsValue}>
+                    {contractMeta.slashDestination
+                        ? <AddressText address={contractMeta.slashDestination} truncate={false} />
+                        : '(configured at deploy)'}
+                </dd>
+            </dl>
+
             <RadioGroup
                 legend="Action"
+                help="Stake locks tokens into the contract under your signing key. Unstake starts the cooldown, after which the tokens return. Delegate moves the stake to a new signing key."
                 name="contract-stake-mode"
                 value={mode}
                 onChange={(value) => {
@@ -866,6 +871,7 @@ export function ContractStakeForm({
 
             <TokenField
                 label="Token"
+                help="The token staked in this contract. Stake and Unstake move this token; Delegate only rotates the signing key for the stake already there."
                 value={tick && chainId ? { chainId, tick } : null}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
@@ -873,7 +879,7 @@ export function ContractStakeForm({
             {mode === 'stake' || mode === 'unstake' ? (
                 <AmountField
                     label="Amount"
-                    hint={mode === 'stake'
+                    help={mode === 'stake'
                         ? "How much of the token to stake. Decimals must not exceed the token's precision."
                         : 'How much to unstake. Leave blank (or use Max) to unstake the full staked balance; the rest stays staked.'}
                     amount={amount}
@@ -905,7 +911,7 @@ export function ContractStakeForm({
 
             <Input
                 label={mode === 'delegate' ? 'New signing public key' : 'Signing public key'}
-                hint={mode === 'delegate'
+                help={mode === 'delegate'
                     ? '64-character hex-encoded Ed25519 public key to rotate to. Generate one offline; this wallet does not auto-generate validator keys.'
                     : mode === 'unstake'
                         ? '64-character hex-encoded Ed25519 public key identifying which contract-stake to begin cooldown for.'
@@ -920,6 +926,7 @@ export function ContractStakeForm({
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}

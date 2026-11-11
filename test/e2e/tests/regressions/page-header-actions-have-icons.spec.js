@@ -30,11 +30,14 @@ const CONTENT_ACTION_ROUTES = [
     // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
     { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
     { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
-    // The demo wallet owns no tokens, so the empty state offers Issue token; a list with rows offers Issue new token.
-    { paletteName: 'My tokens', heading: 'My tokens', actionName: /^Issue (new )?token$/ },
     { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
-    { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Save' },
-    { open: 'account-rename', heading: 'Rename account', actionName: 'Save' },
+    // Rename forms name their submit (U63).
+    { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Rename wallet' },
+    { open: 'account-rename', heading: 'Rename account', actionName: 'Rename account' },
+];
+
+const HEADER_ACTION_ROUTES = [
+    { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Create token' },
 ];
 
 async function openPaletteRoute(page, route) {
@@ -99,7 +102,37 @@ async function expectContentActionIcon(page, route, viewport) {
     ).toBe(true);
 }
 
-test('content actions have visible icons and accessible names and the page header holds none', async ({ page }) => {
+async function expectHeaderActionIcon(page, route, viewport) {
+    const heading = page.getByRole('heading', {
+        level: 1,
+        name: route.heading,
+        exact: true,
+    });
+    await expect(heading).toBeVisible();
+
+    const pageHeader = heading.locator('..').locator('..');
+    const trailingAction = pageHeader.locator(':scope > span:last-child button');
+    await expect(trailingAction).toHaveCount(1);
+
+    const action = pageHeader.getByRole('button', { name: route.actionName, exact: true });
+    await expect(action).toHaveCount(1);
+    await expect(action).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', {
+        name: 'Issue new token',
+        exact: true,
+    })).toHaveCount(0);
+
+    const iconSizes = await action.locator('svg').evaluateAll((icons) => icons.map((icon) => {
+        const box = icon.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+    }));
+    expect(
+        iconSizes.some(({ width, height }) => width >= 14 && height >= 14),
+        `${viewport.name} / ${route.heading}: header action needs an SVG at least 14px square`,
+    ).toBe(true);
+}
+
+test('page actions have visible icons and accessible names in their ruled locations', async ({ page }) => {
     test.slow();
     await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
@@ -111,6 +144,13 @@ test('content actions have visible icons and accessible names and the page heade
             await test.step(`${viewport.name} / ${route.heading} (content action)`, async () => {
                 await openRoute(page, route);
                 await expectContentActionIcon(page, route, viewport);
+            });
+        }
+
+        for (const route of HEADER_ACTION_ROUTES) {
+            await test.step(`${viewport.name} / ${route.heading} (header action)`, async () => {
+                await openRoute(page, route);
+                await expectHeaderActionIcon(page, route, viewport);
             });
         }
     }

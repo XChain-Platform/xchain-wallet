@@ -50,7 +50,7 @@ describe('Send memo characters', () => {
         fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
         fireEvent.click(screen.getByText('Advanced'));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'hi‮evil' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'hi‮evil' } });
 
         expect(screen.getAllByText('Memo cannot contain text-direction control characters.').length).toBeGreaterThan(0);
         fireEvent.click(sendButton());

@@ -112,7 +112,7 @@ describe('protocolFeeRowCopy', () => {
     it('offers the payment-mode switch on a network that has both lanes', () => {
         const copy = protocolFeeRowCopy({ coinTicker: 'BTC', mandatory: false });
         expect(copy.variant).toBe('toggle');
-        expect(copy.label).toBe('Pay protocol fee in BTC instead of XCHAIN');
+        expect(copy.label).toBe('Pay protocol fee in BTC');
     });
 
     // DEPLOY/EXECUTE are priced without a verdict, and the extra

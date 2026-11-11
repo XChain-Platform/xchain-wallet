@@ -258,14 +258,14 @@ async function openCreateReview(page) {
     await expect(page.getByRole('heading', { name: 'Token bets are placed in' })).toBeVisible();
     await page.getByRole('button', { name: /^Select Example Token on Bitcoin/ }).click();
 
-    await page.getByLabel('What is being bet on').fill('Will the XChain release ship this week?');
-    await page.getByLabel('Outcome 0').fill('Yes');
-    await page.getByLabel('Outcome 1').fill('No');
-    await page.getByLabel('Betting closes').fill(
+    await page.getByLabel('What is being bet on', { exact: true }).fill('Will the XChain release ship this week?');
+    await page.getByLabel('Outcome 0', { exact: true }).fill('Yes');
+    await page.getByLabel('Outcome 1', { exact: true }).fill('No');
+    await page.getByLabel('Betting closes', { exact: true }).fill(
         new Date(Date.now() + 86_400_000).toISOString().slice(0, 16),
     );
-    await page.getByLabel('Your fee (optional)').fill('2.5');
-    await page.getByLabel('Smallest bet allowed (optional)').fill('25');
+    await page.getByLabel('Your fee', { exact: true }).fill('2.5');
+    await page.getByLabel('Smallest bet allowed', { exact: true }).fill('25');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -291,7 +291,7 @@ for (const viewport of VIEWPORTS) {
         await openCreateReview(page);
         await expectScreenLayout(page, `${viewport.name} create market`);
 
-        const reviewButton = page.getByRole('button', { name: 'Review market', exact: true });
+        const reviewButton = page.getByRole('button', { name: 'Open market', exact: true });
         await reviewButton.scrollIntoViewIfNeeded();
         await reviewButton.click();
         const confirm = page.getByTestId('confirm-modal');

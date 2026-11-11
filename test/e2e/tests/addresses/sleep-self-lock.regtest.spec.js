@@ -55,7 +55,7 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(endLine).toBeVisible({ timeout: 30_000 });
             resumeBlock = Number((await endLine.innerText()).match(/block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
             expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'the duration has no readable end block').toBe(true);
-            await main.getByLabel('Memo (optional)').fill(MEMO);
+            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
             await expect(main).toContainText('This pauses XChain actions from your address.');

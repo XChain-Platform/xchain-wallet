@@ -19,7 +19,10 @@ import { cloneElement, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import cardStyles from '../../../ui/Card.module.css';
+import { InfoTip } from '../../../ui/InfoTip.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
+import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/ui.js';
 
 // A row's layout. The rows below draw their surface with the shared card
 // class (ui/Card.module.css), so a row inside a wide form card flattens.
@@ -65,6 +68,14 @@ export const ROW_COPY = {
     flex: '1 1 280px',
     minWidth: 'min(100%, 280px)',
 };
+const ROW_LABEL_LINE = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--xc-space-1)',
+};
+const preventSwitchLabelActivation = (event) => {
+    if (event.target.closest?.('button')) event.preventDefault();
+};
 // A secondary row action keeps the compact control's intrinsic dimensions.
 // The surrounding row supplies the touch target and may wrap the action, but
 // it never stretches the visible control to the row's height or width.
@@ -100,11 +111,12 @@ const HINTLESS_ROW = { rowGap: 'var(--xc-label-gap)' };
  *
  * @param {object} props
  * @param {string} props.label
+ * @param {import('react').ReactNode} [props.help]
  * @param {string} [props.hint]
  * @param {import('react').ReactElement} props.children
  * @param {boolean} [props.embedded]
  */
-export function SettingsFieldRow({ label, hint, children, embedded = false }) {
+export function SettingsFieldRow({ label, help, hint, children, embedded = false }) {
     const generatedId = useId();
     const controlId = children.props.id || `settings-field-${generatedId}`;
     const hintId = hint ? `${controlId}-hint` : undefined;
@@ -118,7 +130,14 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
     return (
         <div className={embedded ? undefined : cardStyles.card} style={hint ? rowStyle : { ...rowStyle, ...HINTLESS_ROW }}>
             <div style={ROW_COPY}>
-                <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
+                {help ? (
+                    <div style={ROW_LABEL_LINE}>
+                        <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
+                        <InfoTip label={help} aria={t('ui.field.about', { label })} />
+                    </div>
+                ) : (
+                    <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
+                )}
                 {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
             </div>
             <div data-settings-control="" style={CONTROL_SLOT}>{control}</div>
@@ -160,7 +179,7 @@ const ACTION_SLOT = {
  */
 export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', children }) {
     return (
-        <section className={cardStyles.card} data-settings-row="" style={ROW_LAYOUT}>
+        <section className={cardStyles.card} data-settings-row="" style={ROW}>
             <div style={ROW_COPY}>
                 <Heading style={ACTION_TITLE}>{label}</Heading>
                 {hint ? <p style={ACTION_HINT}>{hint}</p> : null}
@@ -175,6 +194,7 @@ export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', c
  *
  * @param {object} props
  * @param {string} props.label
+ * @param {import('react').ReactNode} [props.help]
  * @param {string} [props.hint]
  * @param {boolean} props.checked
  * @param {(next: boolean) => void} props.onChange
@@ -184,6 +204,7 @@ export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', c
  */
 export function ToggleRow({
     label,
+    help,
     hint,
     checked,
     onChange,
@@ -194,9 +215,16 @@ export function ToggleRow({
     return (
         <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW}>
             <Switch
-                label={label}
+                label={help ? (
+                    <span style={ROW_LABEL_LINE} onClickCapture={preventSwitchLabelActivation}>
+                        <span>{label}</span>
+                        <InfoTip label={help} aria={t('ui.field.about', { label })} />
+                    </span>
+                ) : label}
                 description={hint}
-                aria-label={accessibleLabel}
+                // The help tip sits inside the switch's label, so naming the switch
+                // from that label would add the tip's name and open text to it.
+                aria-label={accessibleLabel ?? (help ? label : undefined)}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}

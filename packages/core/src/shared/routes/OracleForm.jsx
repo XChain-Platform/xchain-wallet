@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -26,8 +27,7 @@ import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirm
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import {
     quoteDeviationPct,
     activationCountdownText,
@@ -41,7 +41,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -151,15 +151,25 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: native-coin protocol fee (PRICE is quotable); the
-    // authoritative price check runs at submit via applyNativeFeePreflight.
-    const nativeFee = useNativeFee(coinTicker);
+    // Keep the chain-required flag in every submit path without presenting a
+    // protocol-fee choice for this feeless action.
+    const nativeFee = nativeFeeForFeelessAction(coinTicker);
 
     // Empty until the user picks, so the quote's COIN follows the publishing
     // chain by default and keeps following it across a chain switch.
     const [coinPick, setCoinPick] = useState('');
     const priceCoin = coinPick || coinTicker;
     const crossChain = !!(priceCoin && coinTicker && priceCoin !== coinTicker);
+    // The priced token's network is picked with the standard network field,
+    // which speaks chainIds: each protocol coin maps to its chain on the
+    // publishing chain's network kind, and a pick maps back to the coin.
+    const priceChainIds = useMemo(() => PRICE_COINS.map((coinTick) => {
+        const chains = chainRegistry.supportedChains()
+            .filter((d) => tickerForCoin(d.coin) === coinTick);
+        const sameKind = chains.find((d) => d.networkKind === descriptor?.networkKind);
+        return (sameKind || chains[0])?.id;
+    }).filter(Boolean), [descriptor?.networkKind]);
+    const priceChainId = priceChainIds.find((id) => tickerForCoin(chainRegistry.get(id)?.coin) === priceCoin) || '';
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [fiat, setFiat] = useState('USD');
     const [value, setValue] = useState('');
@@ -596,8 +606,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 ) : null}
 
                 <p className={styles.hint}>
-                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    {t('common.watcherBuildsUnsigned')}
                 </p>
             </FormPage>,
         );
@@ -610,6 +619,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 title="Publishing address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={setChainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -640,7 +650,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
+                    {actionConfirm.composing ? 'Preparing review…' : 'Publish price'}
                 </Button>
             )}
         >
@@ -655,18 +665,19 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
               * chain is the separate COIN field below, and dispensers on any
               * chain may read this oracle, so the two need not match.
               */}
-            <ChainPicker
+            <NetworkField
                 label="Publishing network"
+                help="The chain your price updates are published on. It decides which address signs and pays the fee, and it becomes your oracle's identity."
                 value={chainId}
                 onChange={setChainId}
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
-                hideNetworkKind
             />
 
             {fromAddress ? (
                 <AddressField
-                    label="Publishing address (this is your oracle's identity)"
+                    label="Publishing address"
+                    help="The address that publishes prices. It is your oracle's identity: dispensers that use this oracle read the prices published from this address."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -715,19 +726,25 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     })}
                 </ul>
             )}
-            <Select
+            <NetworkField
                 label="Priced token network"
-                hint={crossChain
-                    ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
-                    : 'The network the priced token lives on. It can differ from the publishing network.'}
-                value={priceCoin}
-                onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
-            >
-                {PRICE_COINS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
+                help="The network the priced token lives on. It can differ from the publishing network."
+                value={priceChainId}
+                onChange={(nextChainId) => {
+                    const nextCoin = tickerForCoin(chainRegistry.get(nextChainId)?.coin);
+                    setCoinPick(nextCoin === coinTicker ? '' : nextCoin);
+                }}
+                chainIds={priceChainIds}
+                chainRegistry={chainRegistry}
+            />
+            {crossChain ? (
+                <p className={styles.hint}>
+                    {`Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`}
+                </p>
+            ) : null}
             <Input
                 label="Token ticker"
-                hint={`The ${priceCoin} token you are pricing.`}
+                help={`The ${priceCoin} token you are pricing. Its network can differ from the publishing network.`}
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 autoComplete="off"
@@ -736,7 +753,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             />
             <Select
                 label="Currency"
-                hint="Dispensers pricing in this currency can use this oracle."
+                help="Dispensers pricing in this currency can use this oracle."
                 value={fiat}
                 onChange={(e) => setFiat(e.target.value)}
             >
@@ -744,7 +761,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             </Select>
             <Input
                 label={`Price of one ${tick || 'token'} in ${fiat}`}
-                hint="Up to 8 decimal places."
+                help="The price published for one token in the selected currency, with up to 8 decimal places."
                 inputMode="decimal"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -767,17 +784,27 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 </p>
             ) : null}
             <Input
-                label="Usage fee (optional)"
-                hint="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
+                label="Usage fee"
+                optional
+                help="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
                 inputMode="decimal"
                 value={fee}
                 onChange={(e) => setFee(e.target.value)}
                 autoComplete="off"
             />
-            <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+            <Input
+                label="Memo"
+                optional
+                maxLength={MAX_MEMO_LENGTH}
+                help="A short note recorded on-chain with this price publication."
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+            />
 
             {feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -786,7 +813,6 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             </FormSection>
         </FormPage>,
     );
@@ -883,7 +909,7 @@ function OraclePublishNotes({
             {needsTypedConfirm ? (
                 <Input
                     label="Type PUBLISH to confirm"
-                    hint={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
+                    help={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
                     value={typedConfirm}
                     onChange={(e) => onTypedConfirmChange(e.target.value)}
                     autoComplete="off"

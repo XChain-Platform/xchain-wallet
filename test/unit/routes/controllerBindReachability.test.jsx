@@ -92,8 +92,10 @@ describe('D-153: the address-controller lane is reachable without a token', () =
         // With no token there is exactly one subject to offer, and it must be
         // the address one: a form defaulting to a token it was never given would
         // build an ISSUE v6 with an empty TICK.
-        const subject = screen.getByLabelText(/What to protect/);
+        // Owned tokens load after the form renders; until they do the Token
+        // option stays offered, so wait for the settled list.
+        const subject = screen.getByLabelText('What to protect', { selector: 'select' });
         expect(subject.value).toBe('address');
-        expect(Array.from(subject.options).map((o) => o.value)).toEqual(['address']);
+        await waitFor(() => expect(Array.from(subject.options).map((o) => o.value)).toEqual(['address']));
     });
 });

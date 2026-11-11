@@ -110,6 +110,25 @@ describe('layout sweep control rows', () => {
         ]);
     });
 
+    it('counts a label help tip as part of its label, but still fails a real control beside it', () => {
+        document.body.innerHTML = `
+            <div id="field-row" style="display: flex">
+                <label for="lang">Language</label>
+                <span><button id="tip" aria-label="About the language setting" aria-describedby="tip-text" aria-expanded="false" style="border: 0; background: transparent; border-radius: 0px; font-size: 11px">?</button><span id="tip-text" role="tooltip" hidden>The language the wallet uses.</span></span>
+                <select id="lang" style="border: 1px solid #888; border-radius: 8px; font-size: 14px"><option>English</option></select>
+                <button id="reset" style="border: 1px solid #888; border-radius: 4px; font-size: 11px">Reset</button>
+            </div>
+        `;
+        place(document.getElementById('tip'), rect(80, 6, 24, 24));
+        place(document.getElementById('lang'), rect(200, 0, 160, 36));
+        place(document.getElementById('reset'), rect(368, 4, 60, 28));
+
+        const findings = measureControlRows();
+        expect(findings).toHaveLength(1);
+        expect(findings[0].controls.map((control) => control.el)).toEqual(['select "English"', 'button "Reset"']);
+        expect(findings[0].problems).toEqual(['height', 'border-radius', 'font-size']);
+    });
+
     it('forms rows only inside one region and skips visually hidden controls', () => {
         document.body.innerHTML = `
             <div id="shell" style="display: flex">

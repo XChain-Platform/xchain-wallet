@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // A price kept from before a failed refresh stays on screen, but always with
-// its age: TokenDetail labels a kept token or coin rate, and the Home hero's
-// one freshness line covers a kept 24h move. A test network never shows fiat.
+// its age in TokenDetail. Home keeps update times out of the balance hero,
+// and a test network never shows fiat.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -123,27 +123,26 @@ describe('Home hero kept 24h move', () => {
                 />
             </MessagingProvider>,
         );
-        return screen.getByText(/^Updated/);
+        return screen.queryByText(/^Updated/);
     }
 
-    it('dates the freshness line from a kept 24h move', () => {
+    it('shows no freshness line for a kept 24h move', () => {
         const label = renderHero({
             priceFiat: 1000,
             change24hPct: 5,
             fetchedAt: now - 3 * HOUR_MS,
             stale: true,
         });
-        expect(label.textContent).toMatch(/3/);
-        expect(label.textContent).not.toMatch(/just now|0 ?s|now/i);
+        expect(label).toBeNull();
     });
 
-    it('keeps the freshness line current when the 24h move is fresh', () => {
+    it('shows no freshness line for a fresh 24h move', () => {
         const label = renderHero({
             priceFiat: 1000,
             change24hPct: 5,
             fetchedAt: now - 3 * HOUR_MS,
             stale: false,
         });
-        expect(label.textContent).not.toMatch(/3/);
+        expect(label).toBeNull();
     });
 });

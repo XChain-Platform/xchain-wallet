@@ -13,6 +13,7 @@ import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skelet
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
@@ -58,9 +59,10 @@ const DISPENSER_REFRESH_MS = 20000;
  * @param {() => void} props.onBack
  */
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    const source = useWalletSource(walletId);
+    const { messaging } = source;
     const variant = screenVariantFor(shell);
-    const isDemo = flowsLib.isDemoWallet(walletId);
     const { offline, recheck } = useNetworkOffline({ walletId });
     const { settings } = useSettings();
     const allowRemoteImages = Boolean(settings)
@@ -94,12 +96,12 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // standard wallet cadence lets an open row become closing or terminal as
     // soon as the explorer indexes the owner transaction.
     useEffect(() => {
-        if (!addressesByChain || flowsLib.isDemoWallet(walletId) || offline) return undefined;
+        if (!addressesByChain || !source.live || offline) return undefined;
         return startVisibleInterval(
             () => setDispensersReload((value) => value + 1),
             DISPENSER_REFRESH_MS,
         );
-    }, [addressesByChain, walletId, offline]);
+    }, [addressesByChain, source.live, offline]);
 
     useEffect(() => {
         let cancelled = false;
@@ -164,23 +166,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
         let cancelled = false;
 
-        // Demo wallet: no explorer to query; serve the fabricated dispensers
-        // owned by the first address on each chain.
-        if (isDemo) {
-            const demo = {};
-            for (const cid of chains) {
-                const first = (addressesByChain[cid] || [])
-                    .find((row) => typeof row?.address === 'string' && row.address.length > 0)
-                    ?.address;
-                demo[cid] = {
-                    loading: false,
-                    rows: first ? flowsLib.synthesizeDemoDispensers(cid, first) : [],
-                    error: null,
-                };
-            }
-            setDispensersByChain(demo);
-            return undefined;
-        }
         for (const cid of chains) {
             const addrs = (addressesByChain[cid] || [])
                 .map((a) => a.address)
@@ -250,7 +235,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload, offline]);
+    }, [addressesByChain, chainsWithAddresses, messaging, dispensersReload, offline]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -258,7 +243,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const countdownChains = [...new Set(Object.keys(cancelTimes)
         .map((key) => key.slice(0, key.lastIndexOf(':'))))].sort().join(',');
     useEffect(() => {
-        if (!countdownChains) return undefined;
+        if (!countdownChains || !source.live) return undefined;
         let stopped = false;
         let lastReadMs = -Infinity;
         const chains = countdownChains.split(',');
@@ -282,7 +267,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         tick();
         const timer = setInterval(tick, 60000);
         return () => { stopped = true; clearInterval(timer); };
-    }, [countdownChains, messaging]);
+    }, [countdownChains, messaging, source.live]);
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -298,8 +283,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
     // its price comes from the oracle's own feeds.
     const oracleEntries = useMemo(
-        () => isDemo ? [] : allRows.map((row) => ({ chainId: row.chainId, row })),
-        [allRows, isDemo],
+        () => source.live ? allRows.map((row) => ({ chainId: row.chainId, row })) : [],
+        [allRows, source.live],
     );
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
@@ -420,6 +405,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         value={network}
                         onChange={setNetwork}
                         announceNetworkCount
+                        iconOnly
                     />
                 </ListToolbar>
             )}

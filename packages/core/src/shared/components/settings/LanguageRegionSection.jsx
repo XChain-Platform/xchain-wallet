@@ -23,13 +23,12 @@
 // Both fields exist on the v1 Settings schema; no migration needed.
 
 import { useRef, useState } from 'react';
-import { Input, Select } from '@xchain-wallet/core/ui';
+import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
     ROW,
     ROW_COPY,
-    ROW_HINT,
     ROW_VALUE,
     SettingsLoadError,
     STACK,
@@ -197,7 +196,10 @@ export function LanguageRegionSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>{t('settings.languageRegion.language')}</span>
+                    <span style={ROW_VALUE}>
+                        {t('settings.languageRegion.language')}{' '}
+                        <InfoTip aria={t('settings.help.langRegion.languageLabel')} label={t('settings.help.langRegion.language')} />
+                    </span>
                 </div>
                 <div data-settings-control="">
                     <Select
@@ -215,8 +217,10 @@ export function LanguageRegionSection() {
             </div>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
-                    <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
+                    <span style={ROW_VALUE}>
+                        {t('settings.languageRegion.fiatCurrency')}{' '}
+                        <InfoTip aria={t('settings.help.langRegion.fiatCurrencyLabel')} label={t('settings.help.langRegion.fiatCurrency')} />
+                    </span>
                 </div>
                 {/* Tabbing out of the field or out of any option closes the list; otherwise it stays open over the rows the focus moved to. */}
                 <div data-settings-fill="" style={CONTROLS} onBlur={closeCurrencyPickerOnFocusLeave}>

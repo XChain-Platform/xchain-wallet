@@ -32,7 +32,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, InfoTip, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
@@ -152,7 +152,7 @@ function PermissionRow({ permission, setPermission }) {
             : 'Allowed. Use the categories below to choose which notifications you receive.';
         if (extensionSupported) {
             action = (
-                <Button type="button" size="sm" icon={null} onClick={revoke} disabled={requesting} aria-busy={requesting}>
+                <Button type="button" size="sm" icon={<Icon.LockIcon />} onClick={revoke} disabled={requesting} aria-busy={requesting}>
                     {requesting ? t('settings.notifications.revoking') : t('settings.notifications.revokePermission')}
                 </Button>
             );
@@ -161,7 +161,7 @@ function PermissionRow({ permission, setPermission }) {
         hint = t('settings.notifications.blockedHint');
     } else if (permission !== 'checking') {
         action = (
-            <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>
+            <Button type="button" size="sm" variant="success" icon={<Icon.BellIcon />} onClick={request} disabled={requesting} aria-busy={requesting}>
                 {requesting ? t('settings.notifications.requesting') : (extensionSupported ? t('settings.notifications.allowNotifications') : t('settings.notifications.requestPermission'))}
             </Button>
         );
@@ -240,8 +240,9 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
 /**
  * @param {object} props
  * @param {string | null | undefined} [props.walletId]  active wallet; scopes the price-alert manager
+ * @param {(screen: import('react').ReactNode | null) => void} [props.onTokenPickerScreenChange]
  */
-export function NotificationsSection({ walletId } = {}) {
+export function NotificationsSection({ walletId, onTokenPickerScreenChange } = {}) {
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
@@ -293,6 +294,7 @@ export function NotificationsSection({ walletId } = {}) {
                     walletId={walletId}
                     settings={settings}
                     enabled={!permissionBlocksDelivery && Boolean(notificationFlags.priceAlerts)}
+                    onTokenPickerScreenChange={onTokenPickerScreenChange}
                 />
             ) : null}
         </div>
@@ -394,7 +396,13 @@ function SoundsBlock({ settings, update }) {
                         return (
                             <div key={family.key} style={STACK}>
                                 <div style={ALERT_ROW}>
-                                    <span>{family.label}</span>
+                                    <span>
+                                        {family.label}{' '}
+                                        <InfoTip
+                                            aria={t('settings.help.notifications.soundHelpLabel', { label: family.label })}
+                                            label={t('settings.help.notifications.soundHelp', { label: family.label })}
+                                        />
+                                    </span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
                                         <Select
                                             aria-label={t('settings.notifications.sound', { label: family.label })}
@@ -412,7 +420,7 @@ function SoundsBlock({ settings, update }) {
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
-                                                icon={null}
+                                                icon={<Icon.PlayIcon />}
                                                 aria-label={t('settings.notifications.previewSound', { label: family.label })}
                                                 disabled={picked === SOUND_NONE}
                                                 onClick={() => onPreview(picked)}
@@ -489,6 +497,7 @@ function QuietHoursRow({ settings, update }) {
                             id="quiet-hours-start"
                             label={t('send.fields.from')}
                             type="time"
+                            help={t('settings.help.notifications.quietStart')}
                             value={qh.start}
                             onChange={(e) => onTimeChange('start', e.target.value)}
                         />
@@ -496,6 +505,7 @@ function QuietHoursRow({ settings, update }) {
                             id="quiet-hours-end"
                             label={t('send.fields.to')}
                             type="time"
+                            help={t('settings.help.notifications.quietEnd')}
                             value={qh.end}
                             onChange={(e) => onTimeChange('end', e.target.value)}
                         />
@@ -538,8 +548,9 @@ const ALERT_ROW = {
  * @param {string | null | undefined} props.walletId
  * @param {import('../../../schemas/settings.js').Settings} props.settings
  * @param {boolean} props.enabled
+ * @param {(screen: import('react').ReactNode | null) => void} [props.onTokenPickerScreenChange]
  */
-function PriceAlertsManager({ walletId, settings, enabled }) {
+function PriceAlertsManager({ walletId, settings, enabled, onTokenPickerScreenChange }) {
     const {
         alerts,
         loading,
@@ -617,7 +628,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
                         <span>
-                            {coinLabelForChain(a.chainId)}{' '}
+                            {a.tick || coinLabelForChain(a.chainId)}{' '}
                             {a.direction === 'above' ? t('settings.notifications.risesAbove') : t('settings.notifications.fallsBelow')}{' '}
                             {formatThreshold(a.targetFiat, a.fiatCurrency)}
                             {a.status === 'triggered' ? (
@@ -637,7 +648,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                     type="button"
                                     size="sm"
                                     variant="ghost"
-                                    icon={null}
+                                    icon={<Icon.RefreshIcon />}
                                     disabled={busyId !== null}
                                     onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
                                 >
@@ -648,9 +659,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 type="button"
                                 size="sm"
                                 variant="ghost"
-                                icon={null}
+                                icon={<Icon.PencilIcon />}
                                 disabled={busyId !== null}
-                                aria-label={t('settings.notifications.editPriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
+                                aria-label={t('settings.notifications.editPriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}
                                 onClick={() => { setEditingId(a.id); setActionError(null); }}
                             >
                                 {t('common.edit')}
@@ -659,12 +670,12 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 type="button"
                                 size="sm"
                                 variant="danger"
-                                icon={null}
+                                icon={<Icon.XIcon />}
                                 disabled={busyId !== null}
-                                aria-label={t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
+                                aria-label={t('settings.notifications.removePriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}
                                 onClick={async () => {
                                     const confirmed = await confirmDialog.confirm({
-                                        title: `${t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}?`,
+                                        title: `${t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: a.tick || coinLabelForChain(a.chainId) })}?`,
                                         confirmLabel: t('settings.notifications.delete'),
                                         danger: true,
                                     });
@@ -674,9 +685,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                         if (editingId === a.id) setEditingId(null);
                                     }, setBusyId, setActionError);
                                 }}
-                            >
-                                {t('settings.notifications.delete')}
-                            </Button>
+                            />
                         </span>
                     </div>
                 ))
@@ -686,6 +695,8 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}
+                    walletId={walletId}
+                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     onCreate={editingAlert ? async (input) => {
                         await updateAlert(editingAlert.id, input);
                         setEditingId(null);
@@ -693,6 +704,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     fiatCurrency={editingAlert?.fiatCurrency || fiatCurrency}
                     initialAlert={editingAlert || undefined}
                     onCancel={editingAlert ? () => setEditingId(null) : undefined}
+                    onTokenPickerScreenChange={onTokenPickerScreenChange}
                 />
             ) : null}
             {confirmDialog.request ? (

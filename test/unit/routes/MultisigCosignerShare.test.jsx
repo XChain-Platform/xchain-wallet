@@ -23,7 +23,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     screenVariantFor: () => 'full',
 }));
 
-const { MultisigCosignerShare } = await import(
+const { MultisigCosignerShare, unavailableAddressReason } = await import(
     '../../../packages/core/src/shared/routes/MultisigCosignerShare.jsx');
 
 const ADDRESSES = [
@@ -46,16 +46,32 @@ const VALUE_TEST_IDS = [
     'cosigner-share-account-path',
 ];
 
+let pickerSelection = 'address-1';
+
+function ShareHarness({ addresses = ADDRESSES, ...props }) {
+    const [addressId, setAddressId] = React.useState('');
+    return (
+        <MultisigCosignerShare
+            walletId="wallet-1"
+            addresses={addresses}
+            chainId="bitcoin-mainnet"
+            addressId={addressId}
+            onAddressChange={setAddressId}
+            onOpenAddressPicker={() => setAddressId(pickerSelection)}
+            {...props}
+        />
+    );
+}
+
 function mount(props = {}) {
     return render(
-        <MultisigCosignerShare walletId="wallet-1" addresses={ADDRESSES} {...props} />,
+        <ShareHarness {...props} />,
     );
 }
 
 function selectAddress(value = 'address-1') {
-    fireEvent.change(screen.getByLabelText('Address to share'), {
-        target: { value },
-    });
+    pickerSelection = value;
+    fireEvent.click(screen.getByRole('button', { name: 'Choose address to share' }));
 }
 
 function expectNoValues() {
@@ -67,6 +83,7 @@ function expectNoValues() {
 beforeEach(() => {
     toDataURL.mockReset();
     toDataURL.mockResolvedValue('data:image/png,cosigner-share');
+    pickerSelection = 'address-1';
     messaging = { getMultisigCosignerInfo: vi.fn().mockResolvedValue(INFO) };
 });
 
@@ -77,37 +94,24 @@ afterEach(() => {
 });
 
 describe('MultisigCosignerShare address selection', () => {
-    it('lists the placeholder and each address without inventing a label', () => {
+    it('shows a read-only address field with its picker control', () => {
         mount();
 
-        const options = screen.getAllByRole('option');
-        expect(options.map((option) => option.textContent.trim())).toEqual([
-            'Select address',
-            'bc1qlabelled · Savings',
-            'bc1qunlabelled',
-        ]);
+        const field = screen.getByLabelText('Address to share');
+        expect(field).toHaveAttribute('readonly');
+        expect(field).toHaveAttribute('placeholder', 'Select address');
+        expect(screen.queryByRole('combobox', { name: 'Address to share' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Choose address to share' })).toBeTruthy();
         expect(messaging.getMultisigCosignerInfo).not.toHaveBeenCalled();
     });
 
-    it('marks watch-only, hardware, and imported-key addresses unavailable', () => {
-        mount({
-            addresses: [
-                { id: 'hd', address: 'bc1qhd', source: 'hd' },
-                { id: 'watch', address: 'bc1qwatch', source: 'watch-only' },
-                { id: 'trezor', address: 'bc1qtrezor', source: 'trezor' },
-                { id: 'ledger', address: 'bc1qledger', source: 'ledger' },
-                { id: 'wif', address: 'bc1qwif', source: 'imported-wif' },
-            ],
-        });
-
-        const options = screen.getAllByRole('option');
-        expect(options[1]).not.toBeDisabled();
-        expect(options[2]).toBeDisabled();
-        expect(options[2]).toHaveTextContent('watch-only, unavailable');
-        expect(options[3]).toBeDisabled();
-        expect(options[3]).toHaveTextContent('hardware, export on device');
-        expect(options[4]).toBeDisabled();
-        expect(options[5]).toBeDisabled();
+    it('keeps the unavailable reason for every unsupported signer type', () => {
+        expect(unavailableAddressReason({ source: 'hd' })).toBeNull();
+        expect(unavailableAddressReason({ source: 'watch-only' })).toBe('Watch-only, unavailable');
+        expect(unavailableAddressReason({ source: 'trezor' })).toBe('Hardware, export on device');
+        expect(unavailableAddressReason({ source: 'ledger' })).toBe('Hardware, export on device');
+        expect(unavailableAddressReason({ source: 'imported-wif' })).toBe('Imported key, unavailable');
+        mount();
         expect(screen.getByText(/Only addresses from a software wallet can be shared here/i)).toBeTruthy();
     });
 
@@ -128,8 +132,7 @@ describe('MultisigCosignerShare address selection', () => {
         expect(await screen.findByTestId('cosigner-share-account-public-key')).toBeTruthy();
 
         view.rerender(
-            <MultisigCosignerShare
-                walletId="wallet-1"
+            <ShareHarness
                 addresses={[{ id: 'testnet-address', address: 'tb1qtestnet' }]}
             />,
         );

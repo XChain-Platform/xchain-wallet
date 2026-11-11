@@ -22,9 +22,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { PairPartnerWallet } from '../../../packages/core/src/shared/routes/PairPartnerWallet.jsx';
+import pairStyles from '../../../packages/core/src/shared/routes/PairPartnerWallet.module.css';
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     buildPairingPayload,
     encodePairingPayload,
@@ -77,7 +79,7 @@ function mount(messaging, props = {}) {
 }
 
 function fill(labelRe, value) {
-    fireEvent.change(screen.getByLabelText(labelRe), { target: { value } });
+    fireEvent.change(screen.getByLabelText(labelRe, { selector: 'input, textarea' }), { target: { value } });
 }
 
 // Walk role -> seed -> exchange. Returns once the exchange stage's own
@@ -128,22 +130,60 @@ describe('PairPartnerWallet: role stage', () => {
         const step = screen.getByText('Step 1 of 4');
         const overview = screen.getByText('You are pairing an online wallet with an offline one.');
         expect(step.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(overview).toHaveClass(pairStyles.fullWidthText);
 
         const watcher = screen.getByRole('button', { name: /This device watches\. Pair a signer/i });
         expect(watcher.nextElementSibling).toHaveTextContent(
             'This device stays online. It holds no keys that can sign, builds transactions, and shows balances.',
         );
+        expect(watcher.nextElementSibling).toHaveClass(pairStyles.fullWidthText);
         const signer = screen.getByRole('button', { name: /This device signs\. Pair a watcher/i });
         expect(signer.nextElementSibling).toHaveTextContent(
             'This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.',
         );
+        expect(signer.nextElementSibling).toHaveClass(pairStyles.fullWidthText);
         expect(screen.getByText(/Write the recovery phrase down once/)).toBeInTheDocument();
+    });
+
+    it('renders every forward action as a successful icon button', async () => {
+        const messaging = mkMessaging();
+        mount(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        const continueButton = screen.getByRole('button', { name: 'Continue' });
+        expect(continueButton).toHaveClass(buttonStyles.success);
+        expect(continueButton.querySelector('svg')).not.toBeNull();
+
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(continueButton);
+        });
+
+        const pairButton = screen.getByRole('button', { name: 'Pair a signer' });
+        expect(pairButton).toHaveClass(buttonStyles.success);
+        expect(pairButton.querySelector('svg')).not.toBeNull();
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
+        await act(async () => {
+            fireEvent.click(pairButton);
+        });
+
+        const finishButton = screen.getByRole('button', { name: 'Finish' });
+        expect(finishButton).toHaveClass(buttonStyles.success);
+        expect(finishButton.querySelector('svg')).not.toBeNull();
     });
 
     it('offers both halves of the pair', () => {
         mount(mkMessaging());
         expect(screen.getByRole('button', { name: /This device watches\. Pair a signer/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /This device signs\. Pair a watcher/i })).toBeInTheDocument();
+    });
+
+    it('titles the role screen Pair an offline signer', () => {
+        mount(mkMessaging());
+        expect(screen.getByRole('heading', { name: 'Pair an offline signer' })).toBeInTheDocument();
+        expect(screen.queryByText(/Pair a partner wallet/i)).toBeNull();
     });
 
     it('titles the screen for the picked role', () => {
@@ -293,7 +333,7 @@ describe('PairPartnerWallet: seed stage', () => {
         });
 
         expect(screen.getByRole('alert')).toHaveTextContent('This device already has a wallet');
-        expect(screen.getByLabelText(/Shared recovery phrase/i)).toHaveValue('');
+        expect(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' })).toHaveValue('');
         expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
         expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
@@ -348,7 +388,9 @@ describe('PairPartnerWallet: seed stage', () => {
 describe('PairPartnerWallet: exchange stage', () => {
     it('shows this wallet\'s code for the partner to scan', async () => {
         await reachExchange(mkMessaging());
-        expect(screen.getByText('XCW-PAIR:ZmFrZQ')).toBeInTheDocument();
+        const codeBox = screen.getByText('XCW-PAIR:ZmFrZQ');
+        expect(codeBox).toBeInTheDocument();
+        expect(codeBox).toContainElement(screen.getByRole('button', { name: 'Copy pairing code' }));
     });
 
     // A default wallet has three mainnet chains and a ~1900-character
@@ -548,7 +590,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /pair a watcher/i }));
-        expect(screen.getByLabelText(/Shared recovery phrase/i)).toHaveValue('');
+        expect(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' })).toHaveValue('');
         expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
         expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
         fireEvent.click(screen.getByRole('button', { name: /back/i }));

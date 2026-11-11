@@ -40,9 +40,8 @@
 // "fix" is to print a fee on everything, which trades a silent
 // understatement for a confident lie on the many actions that charge nothing
 // (BROADCAST, MINT, DESTROY, SLEEP,... -). BROADCAST is priced at
-// exactly zero by this venue's own schedule, so it is driven in BOTH lanes and
-// must stay silent in both, and its coin cost on chain must be the miner fee
-// alone - a stray fee output would show up there even if no screen mentioned it.
+// exactly zero by this venue's own schedule, so its form must expose no fee
+// lane and its coin cost on chain must be the miner fee alone.
 //
 // PRE-FLIGHT: ISSUE is priced, so the venue needs a usable BTC/USD snapshot;
 // global setup's `seedPrices()` guarantees one or fails naming the
@@ -518,12 +517,12 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             expect(Number(quote?.xchainFee)).toBe(0);
         });
 
-        const composeBroadcast = async (message, nativeFee) => {
+        const composeBroadcast = async (message) => {
             await openPaletteCommand(page, 'Broadcast a message');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             await main.getByLabel('Message').fill(message);
-            await setFeeLane(main, nativeFee);
+            await expect(feeToggle(main), 'BROADCAST exposes a protocol-fee switch').toHaveCount(0);
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
@@ -531,8 +530,8 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
         };
 
-        await test.step('the XCHAIN lane claims no charge on an unpriced action', async () => {
-            await composeBroadcast(`no fee here ${STAMP}`, false);
+        await test.step('the form shows no fee switch or charge', async () => {
+            await composeBroadcast(`no fee here ${STAMP}`);
             await expect(page.getByTestId('confirm-protocol-fee'),
                 'the screen states a protocol fee on an action this venue prices at zero, which is '
                 + 'the opposite failure and just as wrong')
@@ -544,11 +543,11 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
 
-        await test.step('the native lane attaches nothing, on screen or on chain', async () => {
-            await composeBroadcast(`no fee here either ${STAMP}`, true);
+        await test.step('a second compose attaches nothing on screen or on chain', async () => {
+            await composeBroadcast(`no fee here either ${STAMP}`);
             await expect(page.getByTestId('confirm-protocol-fee')).toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
-                'the native lane projects a coin protocol fee for an action that charges none')
+                'the confirmation projects a coin protocol fee for an action that charges none')
                 .toBeNull();
 
             const minerSats = await screenNetworkFeeSats(page);

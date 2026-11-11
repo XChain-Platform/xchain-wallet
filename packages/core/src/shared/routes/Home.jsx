@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline } from '../hooks/useOnlineStatus.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
@@ -43,11 +44,11 @@ import {
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { takeInterruptedView } from '../utils/lastViewMemory.js';
-import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { readHistoryCache } from '../utils/historyCache.js';
 import { historyResponseRows, normalizeHistoryRow, recentActivityEntries } from '../utils/historyRow.js';
+import { loadDefiPositions as readDefiPositions } from '../hooks/useDefiPositions.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
@@ -200,7 +201,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  */
 export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
     useNativeExitRoot();
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     // The quick actions are Send, Receive, Exchange and More actions at every
@@ -229,6 +230,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
+    const source = useWalletSource(activeWalletId);
+    const { messaging } = source;
     const [interruptedAction, setInterruptedAction] = useState(
         /** @type {'send' | 'swap' | null} */ (null),
     );
@@ -254,10 +257,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';
-    // A demo wallet's fixtures are not live data and cannot spend.
-    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-    const sourceLive = !isDemoActive;
-    const canSpend = !isDemoActive;
+    // The wallet source says what the active wallet's data can do: sample
+    // data is not live and cannot spend.
+    const { live: sourceLive, canSpend } = source;
     const quickActionsReason = isWatcherMode
         ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
         : null;
@@ -346,7 +348,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     );
     const recentActivityRequestRef = useRef(/** @type {string | null} */ (null));
     const loadRecentActivity = useCallback(() => {
-        if (!activeWalletId || !activeNetwork || !sourceLive) return;
+        if (!activeWalletId || !activeNetwork) return;
         if (recentActivityRequestRef.current === recentActivityScope) return;
         recentActivityRequestRef.current = recentActivityScope;
         const scope = recentActivityScope;
@@ -357,7 +359,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             if (recentActivityRequestRef.current !== scope) return;
             setRecentActivityState({ scope, entries, failed });
         };
-        if (!isNavigatorOnline()
+        // Sample data needs no network; a live wallet offline keeps its saved rows.
+        if ((sourceLive && !isNavigatorOnline())
             || typeof messaging.getAddressesByChain !== 'function'
             || typeof messaging.getAddressHistory !== 'function') {
             land(cachedEntries, !cachedEntries);
@@ -389,6 +392,32 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             .catch(() => land(cachedEntries, !cachedEntries));
     }, [activeWalletId, activeAccountId, activeNetwork, sourceLive, messaging, recentActivityScope]);
     const recentActivity = recentActivityState?.scope === recentActivityScope ? recentActivityState : null;
+    // The DeFi tab follows the same lazy read model as Activity. One address
+    // list read fans into a fixed set of position reads for every address.
+    // Demo mode changes only `messaging`, so sample and live wallets land in
+    // this state through the same loader and component.
+    const defiPositionsScope = `${activeWalletId || ''}:${activeAccountId || ''}:${activeNetwork || ''}`;
+    const [defiPositionsState, setDefiPositionsState] = useState(
+        /** @type {{ scope: string, positions: any[] | null, failed: boolean } | null} */ (null),
+    );
+    const defiPositionsRequestRef = useRef(/** @type {string | null} */ (null));
+    const loadDefiPositions = useCallback(() => {
+        if (!activeWalletId || !activeNetwork) return;
+        if (defiPositionsRequestRef.current === defiPositionsScope) return;
+        defiPositionsRequestRef.current = defiPositionsScope;
+        const scope = defiPositionsScope;
+        setDefiPositionsState({ scope, positions: null, failed: false });
+        readDefiPositions({ messaging, walletId: activeWalletId, accountId: activeAccountId })
+            .then(({ positions, failed }) => {
+                if (defiPositionsRequestRef.current !== scope) return;
+                setDefiPositionsState({ scope, positions, failed });
+            })
+            .catch(() => {
+                if (defiPositionsRequestRef.current !== scope) return;
+                setDefiPositionsState({ scope, positions: [], failed: true });
+            });
+    }, [activeWalletId, activeAccountId, activeNetwork, messaging, defiPositionsScope]);
+    const defiPositions = defiPositionsState?.scope === defiPositionsScope ? defiPositionsState : null;
     const backupReminderHasFunds = useMemo(() => hasBackupReminderFunds(
         buildBalanceRows(balancesView, chainRegistry, activeByChain),
     ), [balancesView, activeByChain]);
@@ -771,13 +800,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         }
 
         try {
-            // Cluster J FOLLOWUP 1: synthesize fabricated balances
-            // for the demo wallet so Home / Send / Receive feel
-            // populated. Uses the wallet's real address records so
-            // the rest of the app sees the same address-rooted
-            // shape it would for a funded wallet.
-            // loadDisplayBalances holds that branch so the palette shows the same.
-            const b = await loadDisplayBalances(messaging, walletId, accountId);
+            // The selected source returns the same balance shape for sample
+            // data and live data, so every downstream row follows one path.
+            const b = await messaging.getWalletBalances(walletId, accountId);
             if (!isCancelled()) {
                 // A read can LAND and still be rate limited: the aggregator
                 // reports a refused address as that entry's `error` string
@@ -978,7 +1003,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // document is hidden so a backgrounded wallet isn't burning SDK/indexer
     // calls for no viewer.
     useEffect(() => {
-        if (!activeWalletId) return undefined;
+        if (!activeWalletId || !sourceLive) return undefined;
         let cancelled = false;
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
@@ -1035,7 +1060,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             window.removeEventListener('focus', onVisibilityOrFocus);
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
-    }, [activeWalletId, activeAccountId, loadHomeData, offline]);
+    }, [activeWalletId, activeAccountId, loadHomeData, offline, sourceLive]);
 
     // Reconnect immediately after either the device or wallet services recover.
     // The quiet refresh preserves cached rows until fresh data lands.
@@ -1043,7 +1068,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     useEffect(() => {
         const reconnected = wasOfflineRef.current && !offline;
         wasOfflineRef.current = offline;
-        if (!reconnected || !activeWalletId) return;
+        if (!reconnected || !activeWalletId || !sourceLive) return;
         if (pollThrottleRef.current.isInFlight()) return;
         pollThrottleRef.current.reset();
         pollThrottleRef.current.start();
@@ -1053,7 +1078,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             isCancelled: () => cancelled,
         });
         return () => { cancelled = true; };
-    }, [offline, activeWalletId, activeAccountId, loadHomeData]);
+    }, [offline, activeWalletId, activeAccountId, loadHomeData, sourceLive]);
 
     // Cancellation for the re-load the countdown fires, and it deliberately
     // does NOT ride the ticking effect's own flag: reaching zero clears
@@ -1474,6 +1499,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         recentActivity={recentActivity?.entries ?? null}
                         recentActivityFailed={recentActivity?.failed === true}
                         onActivityOpen={loadRecentActivity}
+                        defiPositions={defiPositions?.positions ?? null}
+                        defiPositionsFailed={defiPositions?.failed === true}
+                        onDefiOpen={loadDefiPositions}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
                         pinnedKeys={pinnedKeys}

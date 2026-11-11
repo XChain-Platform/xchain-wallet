@@ -353,7 +353,11 @@ export function PairSignerForm({
         return wrap(
             <FormPage
                 label="Pair hardware signer"
-                actions={<Button variant="ghost" onClick={handleCancel}>Cancel</Button>}
+                actions={(
+                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={handleCancel}>
+                        Cancel
+                    </Button>
+                )}
             >
                 <StepIndicator current={2} />
                 <p className={styles.summary}>
@@ -377,12 +381,19 @@ export function PairSignerForm({
                     <div className={styles.actions}>
                         <Button
                             variant="danger"
+                            icon={<Icon.UnlinkIcon />}
                             loading={unpairingId === savedRecord.id}
                             onClick={() => handleUnpair(savedRecord)}
                         >
                             {unpairingId === savedRecord.id ? 'Unpairing' : 'Unpair'}
                         </Button>
-                        <Button variant="primary" onClick={onPaired || onBack}>Done</Button>
+                        <Button
+                            variant="success"
+                            icon={<Icon.CheckIcon />}
+                            onClick={onPaired || onBack}
+                        >
+                            Finish pairing
+                        </Button>
                     </div>
                 )}
             >
@@ -423,17 +434,24 @@ export function PairSignerForm({
             ]}
             actions={(
                 <>
-                    <Button variant="ghost" onClick={handleCancel} disabled={stage === 'saving'}>
+                    <Button
+                        variant="ghost"
+                        icon={<Icon.XIcon />}
+                        onClick={handleCancel}
+                        disabled={stage === 'saving'}
+                    >
                         Cancel
                     </Button>
                     <Button
                         type="submit"
                         variant="success"
-                        icon={<Icon.SaveIcon />}
+                        icon={verdict?.status === 'unsupported'
+                            ? <Icon.ExternalLinkIcon />
+                            : <Icon.UsbIcon />}
                         loading={stage === 'saving'}
                         disabled={verdict?.status === 'unsupported'}
                     >
-                        {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Save'}
+                        {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Pair signer'}
                     </Button>
                 </>
             )}
@@ -457,7 +475,7 @@ export function PairSignerForm({
             </dl>
             <Input
                 label="Label"
-                hint="Shows wherever this signer appears in the UI."
+                help="Shows wherever this signer appears in the UI."
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 autoComplete="off"
@@ -524,6 +542,7 @@ function PairedDeviceList({ records, unpairingId, onUnpair }) {
                         <Button
                             size="sm"
                             variant="ghost"
+                            icon={<Icon.UnlinkIcon />}
                             loading={unpairingId === record.id}
                             onClick={() => onUnpair(record)}
                         >

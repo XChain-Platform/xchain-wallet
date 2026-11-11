@@ -151,7 +151,7 @@ assert.ok(
 );
 assert.ok(/label=\{restoreDeviceLabel\(mode\)\}/.test(iw),
     'backup restore keeps mode-specific device-password guidance on the field');
-assert.ok(/hint=\{restoreDeviceHint\(mode\)\}/.test(iw),
-    'backup restore keeps the mode-specific explanation beside its field');
+assert.ok(/help=\{restoreDeviceHint\(mode\)\}/.test(iw),
+    'backup restore keeps the mode-specific explanation in its field help tip');
 
 console.log('backup-add-mode smoke OK');

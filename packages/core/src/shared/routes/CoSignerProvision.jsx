@@ -28,13 +28,14 @@ import {
     Screen,
     PageHeader,
     Button,
+    AddressField,
     Input,
-    Select,
-    ChainPicker,
+    NetworkField,
     CopyButton,
     AddressText,
     FormPage,
     StatusMessage,
+    Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -48,6 +49,7 @@ import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
 import styles from './IssueTokenForm.module.css';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -95,6 +97,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
 
     const [daemonAddressId, setDaemonAddressId] = useState('');
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [agentPubkey, setAgentPubkey] = useState('');
     const [name, setName] = useState('Agent account');
     const [policyDraft, setPolicyDraft] = useState(emptyPolicyDraft());
@@ -283,13 +286,34 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         );
     }
 
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="This wallet's key"
+                walletId={walletId}
+                chainId={chainId}
+                onChainChange={handleChainChange}
+                onPick={(address) => {
+                    setDaemonAddressId(address.id);
+                    setSourcePickerOpen(false);
+                }}
+                onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
     if (stage === 'done') {
         const account = result;
         return wrap(
             <FormPage
                 label="Agent account created"
                 actions={(
-                    <Button variant="primary" onClick={() => (onDone ? onDone(account?.id) : onBack())}>
+                    <Button
+                        variant="success"
+                        icon={onDone ? <Icon.ForwardIcon /> : <Icon.CheckIcon />}
+                        onClick={() => (onDone ? onDone(account?.id) : onBack())}
+                    >
                         {onDone ? 'View account' : 'Done'}
                     </Button>
                 )}
@@ -377,44 +401,37 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                     variant="primary"
                     disabled={Boolean(composeError)}
                 >
-                    Review agent account
+                    Create agent account
                 </Button>
             )}
         >
-            <details>
-                <summary>How agent accounts work</summary>
-                <p className={styles.hint}>
-                    An automated agent shares a 2-of-2 address with this wallet. This wallet signs requests that
-                    fit the policy and refuses requests outside it. Agent accounts support Bitcoin networks.
-                </p>
-            </details>
-            <ChainPicker
+            <NetworkField
                 label="Network"
+                help="The Bitcoin network for the shared 2-of-2 agent account. This wallet's key must come from an address on this network."
                 value={chainId}
                 onChange={handleChainChange}
                 chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
                 chainRegistry={chainRegistry}
             />
 
-            <Select
+            <AddressField
                 label="This wallet's key"
-                value={daemonAddressId}
-                onChange={(e) => setDaemonAddressId(e.target.value)}
-                hint="One of your addresses on this network. Its public key becomes this wallet's half of the pair."
-            >
-                <option value="">Select address</option>
-                {chainAddresses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                        {a.address}{a.label ? ` · ${a.label}` : ''}
-                    </option>
-                ))}
-            </Select>
+                icon="addresses"
+                value={daemonAddress?.address || ''}
+                readOnly
+                onChange={() => {}}
+                onIconClick={() => setSourcePickerOpen(true)}
+                iconLabel="Choose this wallet's key"
+                placeholder="Select address"
+                help="An automated agent shares a 2-of-2 Bitcoin address with this wallet. This wallet signs requests that fit the policy and refuses requests outside it. Pick one of your addresses on this network; its public key becomes this wallet's half of the pair."
+            />
 
             <Input
                 label="Agent public key"
                 value={agentPubkey}
                 onChange={(e) => setAgentPubkey(e.target.value.trim())}
                 placeholder="02abcdef…"
+                help="Enter the agent's compressed public key: 66 hexadecimal characters starting with 02 or 03. The agent shows this key when you set up its wallet connection."
             />
 
             <Input
@@ -422,6 +439,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Agent account"
+                help="Give this agent account a local label that only you see in this wallet."
             />
 
             <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />

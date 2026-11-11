@@ -28,6 +28,7 @@ import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
+import { FEE_BEARING_ACTIONS, isFeeBearingAction } from '../../flows/feeBearingActions.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -106,6 +107,44 @@ function formatReviewDecoded(decoded) {
         return { ...detail, value: formatted };
     });
     return { ...decoded, summary, details };
+}
+
+// True only when the composed action is positively known to carry no protocol
+// fee. An unnamed action, or a variant name built on a fee-bearing one
+// (ORDER_MATCH, a DEPLOY chunk), is not known, and ISSUE is treated as fee
+// bearing because the envelope does not say whether it creates a token.
+function composedActionName(composed) {
+    const carriers = [composed];
+    const seen = new Set();
+    for (let index = 0; index < carriers.length; index += 1) {
+        const carrier = carriers[index];
+        if (!carrier || typeof carrier !== 'object' || seen.has(carrier)) continue;
+        seen.add(carrier);
+
+        const direct = typeof carrier.action === 'string' ? carrier.action.trim() : '';
+        if (direct) return direct;
+        const fromString = typeof carrier.actionString === 'string'
+            ? carrier.actionString.split('|')[0].trim()
+            : '';
+        if (fromString) return fromString;
+
+        // The generic host envelope uses the fields above. Request-preserving
+        // adapters keep actionData, while decoded and two-transaction adapters
+        // can put the action on an envelope, commit, or reveal record instead.
+        for (const key of ['actionData', 'decoded', 'envelope', 'commit', 'reveal']) {
+            if (carrier[key] && typeof carrier[key] === 'object') carriers.push(carrier[key]);
+        }
+    }
+    return '';
+}
+
+function isKnownFreeAction(composed) {
+    const raw = composedActionName(composed);
+    const name = String(raw || '').trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) return false;
+    if (name === 'ISSUE') return false;
+    if (isFeeBearingAction(name)) return false;
+    return !FEE_BEARING_ACTIONS.some((fee) => name.startsWith(`${fee}_`));
 }
 
 function reportWithoutUnverifiedNativeFeeWarning(report) {
@@ -296,9 +335,10 @@ export function ConfirmActionModal({
         ? formatProtocolFee(protocolFee.amount)
         : null;
     const reportedProtocolFee = report?.quote?.xchainFee;
-    const protocolFeeKnownFree = reportedProtocolFee !== undefined
-        && reportedProtocolFee !== null
-        && /^0+(?:\.0+)?$/.test(String(reportedProtocolFee).trim());
+    const protocolFeeKnownFree = composed?.protocolFeeKnownFree === true
+        || (reportedProtocolFee !== undefined
+            && reportedProtocolFee !== null
+            && /^0+(?:\.0+)?$/.test(String(reportedProtocolFee).trim()));
     const paysProtocolFeeNatively = Number(composed?.quote?.requiredFeeSats) > 0
         || Number(composed?.protocolFeeSats) > 0;
     const nativeProtocolFeeSats = paysProtocolFeeNatively
@@ -317,7 +357,8 @@ export function ConfirmActionModal({
         && !reportLoading
         && !protocolFee
         && !protocolFeeKnownFree
-        && !paysProtocolFeeNatively;
+        && !paysProtocolFeeNatively
+        && !isKnownFreeAction(composed);
     // The SDK advisory is action-based and does not know whether these bytes
     // contain a native-coin fee output. The exact fee row above is the one
     // reliable disclosure: it renders once when an output is present and is

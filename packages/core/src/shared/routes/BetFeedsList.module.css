@@ -15,10 +15,24 @@
     margin-bottom: 0;
 }
 
+/* The network field already shares the tabs' medium height and control
+   radius. Use the tabs' small control type token on this row as well. */
+.toolbarControl.toolbarControl > * {
+    --chain-picker-font-size: var(--xc-control-font-sm);
+}
+
 .toolbarActions {
     flex: 0 1 18rem;
     min-width: min(100%, 14rem);
     align-items: center;
+}
+
+@media (max-width: 420px) {
+    .toolbarActions {
+        flex: 1 1 100%;
+        min-width: 0;
+        width: 100%;
+    }
 }
 
 .marketList {

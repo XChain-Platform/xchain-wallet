@@ -112,7 +112,7 @@ describe('ContactsList for one person with many addresses', () => {
         });
         await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'jdog' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         expect(await screen.findByText('A contact named "JDog" already exists.')).toBeTruthy();
         expect(messaging.saveContact).not.toHaveBeenCalled();
         expect(messaging.store.size).toBe(1);
@@ -127,7 +127,7 @@ describe('ContactsList for one person with many addresses', () => {
         await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice\u202Eevil\u2066x' } });
         expect(screen.getByLabelText('Name').value).toBe('Aliceevilx');
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalled());
         expect(messaging.saveContact.mock.calls[0][0].input.name).toBe('Aliceevilx');
     });

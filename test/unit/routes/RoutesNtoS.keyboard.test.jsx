@@ -130,14 +130,19 @@ describe('N through S route keyboard flows', () => {
         await user.type('Savings');
         expect(name).toHaveValue('Savings');
 
-        // Back leads the page, then the field, then Save closes the form.
+        // Back leads the page, then the field's help tip, then the field, then
+        // Rename account closes the form.
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Account name' }));
         await user.tab({ shift: true });
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to previous screen' }));
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
+        // The label's help tip sits between Back and the field.
+        await expectTab(user, screen.getByRole('button', { name: 'About Account name' }));
         await expectTab(user, name);
-        await expectTab(user, screen.getByRole('button', { name: 'Save' }));
+        await expectTab(user, screen.getByRole('button', { name: 'Rename account' }));
         await user.keyboard('{Enter}');
         await waitFor(() => expect(onRenamed).toHaveBeenCalledWith({
             id: 'account-1',
@@ -159,6 +164,7 @@ describe('N through S route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
+        await expectTab(user, screen.getByRole('button', { name: 'About Or paste it here' }));
         const paste = screen.getByLabelText('Or paste it here');
         await expectTab(user, paste);
         await user.type(ADDRESS);

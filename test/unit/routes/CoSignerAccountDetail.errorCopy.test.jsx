@@ -153,7 +153,7 @@ describe('CoSignerAccountDetail async state', () => {
 
         await screen.findByText('Treasury agent');
         fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
         expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe('CoSignerAccountDetail async state', () => {
 
         await screen.findByText('Treasury agent');
         fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
         expect(await screen.findByText(/changed after you opened the editor/i)).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
@@ -218,7 +218,7 @@ describe('CoSignerAccountDetail async state', () => {
         await screen.findByText('Treasury agent');
         fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
         fireEvent.change(screen.getByLabelText('Account name'), { target: { value: 'Renamed agent' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Update policy' }));
 
         await waitFor(() => expect(updateCoSignerAccount).toHaveBeenCalledWith({
             id: 'acct-1',

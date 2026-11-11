@@ -50,7 +50,7 @@ function mount(revealMnemonicRequest) {
 async function revealSeed() {
     fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
     await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 }
 
@@ -118,7 +118,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         expect(guard).toHaveBeenLastCalledWith(true);
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 
         const sheet = document.querySelector('[data-xc-recovery-sheet]');
@@ -161,7 +161,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
         view.rerender(
             <MessagingProvider shell="popup" messaging={{ revealMnemonicRequest }}>
                 <BackupSection activeWallet={{ id: 'w2', name: 'Hot' }} />
@@ -280,7 +280,7 @@ describe('BackupSection reveal: a failed password check', () => {
     async function submitWrongPassword() {
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'typo' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal phrase' }));
     }
 
     it.each(['AeadAuthError', 'InvalidPasswordError'])('says the password is wrong for %s, not the cipher text', async (name) => {

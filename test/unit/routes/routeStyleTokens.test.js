@@ -22,13 +22,13 @@ const obligations = readRouteCss('ObligationsView');
 
 describe('route style tokens', () => {
     it('uses control, icon, type, and radius tokens for matching dimensions', () => {
-        expect(input).toContain('min-height: var(--xc-control-h-sm);');
-        expect(input).toContain('width: calc(var(--xc-control-h-md) - var(--xc-space-1));');
+        // In-field actions (U53) size the reveal toggle and every field icon to the shared tap target.
+        expect(input).toContain('min-inline-size: var(--xc-tap-min);');
+        expect(input).toContain('min-block-size: var(--xc-tap-min);');
 
-        expect(manageToken).toContain('width: var(--xc-icon-xs);');
+        expect(manageToken).toContain('width: var(--xc-icon-md);');
         expect(manageToken).toContain('width: var(--xc-icon-sm);');
-        expect(manageToken).toContain('min-height: calc(var(--xc-space-6) + var(--xc-space-1));');
-        expect(manageToken).toContain('font-size: var(--xc-text-xs);');
+        expect(manageToken).toContain('min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6) + var(--xc-space-3));');
         expect(manageToken).not.toMatch(/var\(--xc-radius-[^)]+,\s*\d+px\)/);
 
         expect(messagingInbox).toContain('width: var(--xc-icon-sm);');
@@ -46,12 +46,9 @@ describe('route style tokens', () => {
         expect(locked).toMatch(
             /\/\* The brand mark has no matching size token at its default presentation width\. \*\/\s*width: 96px;/,
         );
-        expect(input).toMatch(
-            /\/\* This half-grid inset keeps the toggle centered inside the input border\. \*\/\s*inset-inline-end: 2px;/,
-        );
-        expect(manageToken).toMatch(
-            /\/\* The slim progress track has no matching control or spacing token\. \*\/\s*height: 6px;/,
-        );
+        // The in-field action strip is inset by a spacing token, so no raw pixel inset remains.
+        expect(input).toMatch(/\.controlActions\s*\{[^}]*inset-inline-end: var\(--xc-space-1\);/s);
+        expect(input).not.toContain('inset-inline-end: 2px;');
         expect(messagingInbox).toMatch(
             /\/\* Half-grid spacing keeps the two conversation lines visually connected\. \*\/\s*gap: 2px;/,
         );

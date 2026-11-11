@@ -8,19 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { actionTextSafetyError, MAX_MEMO_BYTES } from './actionTextSafety.js';
+import { actionTextSafetyError, MAX_MEMO_LENGTH } from './actionTextSafety.js';
 
 // The chain's MEMO length ceiling, checked at the form so an overlong memo is
 // refused before compose instead of by the pre-flight or, on the legacy lane,
 // by the indexer after the fee is spent.
 
 /**
- * Longest MEMO the indexer accepts, in UTF-8 bytes. Copied from xchain-indexer
+ * Longest MEMO the indexer accepts, in UTF-16 units. Copied from xchain-indexer
  * src/config/token_limits.js (`config['MAX_MEMO_LENGTH'] = 250`); every action
- * handler there refuses a longer one with `invalid: MEMO (length)`, for
- * example src/actions/list.js validateFields. Change both together.
+ * handler checks `String(value).length` and refuses a longer one with
+ * `invalid: MEMO (length)`. Change both together.
  */
-export const MAX_MEMO_LENGTH = MAX_MEMO_BYTES;
+export { MAX_MEMO_LENGTH };
 
 /**
  * Hint under every optional Memo field. It replaced "Protocol rejects | or ;.",
@@ -30,19 +30,19 @@ export const MAX_MEMO_LENGTH = MAX_MEMO_BYTES;
 export const MEMO_HINT = 'A public note saved on the blockchain with this action. It cannot contain | or ;.';
 
 /**
- * Size of text after the UTF-8 encoding used for transaction data.
+ * Number of UTF-16 units in the text sent on the wire, matching the indexer.
  *
  * @param {string | null | undefined} value
  * @returns {number}
  */
-export function utf8ByteLength(value) {
-    return new TextEncoder().encode(String(value ?? '')).byteLength;
+export function memoLength(value) {
+    return String(value ?? '').length;
 }
 
 /**
  * The form error for a memo the chain would refuse as too long, or null when
  * it fits. Pass the memo exactly as it goes on the wire (the forms trim it),
- * since that is the text the indexer measures after UTF-8 encoding.
+ * since that is the text the indexer measures with String.length.
  *
  * @param {string | null | undefined} memo
  * @returns {string | null}
@@ -50,9 +50,9 @@ export function utf8ByteLength(value) {
 export function memoLengthError(memo) {
     const safetyError = actionTextSafetyError(memo, 'Memo');
     if (safetyError) return safetyError;
-    const bytes = utf8ByteLength(memo);
-    if (bytes <= MAX_MEMO_LENGTH) return null;
-    return `Memo is ${bytes} bytes; the network accepts at most ${MAX_MEMO_LENGTH} bytes.`;
+    const length = memoLength(memo);
+    if (length <= MAX_MEMO_LENGTH) return null;
+    return `Memo is ${length} characters; the network accepts at most ${MAX_MEMO_LENGTH} characters.`;
 }
 
 // C0 and C1 control characters (NUL, tab, line breaks, escape and the rest) plus the

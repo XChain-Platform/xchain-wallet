@@ -241,7 +241,7 @@ describe('ExecuteContractForm argument validation', () => {
     it('shows blank positional arguments in manual mode', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
-        fireEvent.change(screen.getByLabelText('Arguments (optional)'), { target: { value: 'first||third' } });
+        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'first||third' } });
         fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
 
         await waitFor(() => {
@@ -257,9 +257,10 @@ describe('ExecuteContractForm argument validation', () => {
             target: { value: '{"enabled":true}' },
         });
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '2.5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
 
         expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
+        expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(await screen.findByRole('form', { name: 'Call contract' })).toBeInTheDocument();
@@ -274,7 +275,7 @@ describe('ExecuteContractForm argument validation', () => {
             initialParamsText: '{"safe":true}|9007199254740993|hidden',
         });
 
-        expect(await screen.findByLabelText('Arguments (optional)'))
+        expect(await screen.findByLabelText('Arguments'))
             .toHaveValue('{"safe":true}|9007199254740993|hidden');
         expect(screen.queryByLabelText('config (json)')).toBeNull();
 
@@ -312,7 +313,7 @@ describe('ExecuteContractForm tick arguments', () => {
     it.each(['XCHAIN', 'Mixed-Case.sub', '^123'])('accepts the ticker %j', async (value) => {
         mount('watcher', 'config', tickAbi());
         fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
 
         expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
     });
@@ -343,7 +344,7 @@ describe('ExecuteContractForm link prefill against a declared method', () => {
     it('keeps every argument visible when the link carries more than the method declares', async () => {
         mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks|extra' });
 
-        expect(await screen.findByLabelText('Arguments (optional)')).toHaveValue('ann|thanks|extra');
+        expect(await screen.findByLabelText('Arguments')).toHaveValue('ann|thanks|extra');
         expect(screen.queryByLabelText('who (string)')).toBeNull();
     });
 
@@ -351,6 +352,6 @@ describe('ExecuteContractForm link prefill against a declared method', () => {
         mount('full', 'config', twoParamAbi(), { initialMethod: 'ping', initialParamsText: '' });
 
         expect(await screen.findByRole('button', { name: 'Enter method manually' })).toBeInTheDocument();
-        expect(screen.queryByLabelText('Arguments (optional)')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
     });
 });

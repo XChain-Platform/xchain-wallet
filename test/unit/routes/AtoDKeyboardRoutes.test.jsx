@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -147,10 +147,14 @@ describe('A-D route keyboard flows', () => {
         await waitFor(() => expect(name).toHaveFocus());
 
         await user.tab({ shift: true });
+        expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
+        await user.tab({ shift: true });
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
         await user.keyboard('{Enter}');
         expect(onBack).toHaveBeenCalledOnce();
 
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Account name' })).toHaveFocus();
         await user.tab();
         expect(name).toHaveFocus();
         await user.clear(name);
@@ -167,7 +171,7 @@ describe('A-D route keyboard flows', () => {
         });
     });
 
-    it('operates AddAddressModal fields with arrows and closes its picker with Escape', async () => {
+    it('operates AddAddressModal fields by keyboard and closes its picker with Escape', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();
         const onGenerated = vi.fn();
@@ -195,15 +199,26 @@ describe('A-D route keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(onClose).toHaveBeenCalledOnce();
 
+        // The Coin label's help tip comes before the field.
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'About Coin' })).toHaveFocus();
         await user.tab();
         expect(coin).toHaveFocus();
-        await user.keyboard('{ArrowDown}');
-        expect(screen.getByRole('listbox', { name: 'Coin' })).toBeInTheDocument();
+        await user.keyboard('{Enter}');
+        expect(screen.getByRole('dialog', { name: 'Coin' })).toBeInTheDocument();
         await user.keyboard('{Escape}');
-        expect(screen.queryByRole('listbox', { name: 'Coin' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Coin' })).toBeNull();
         expect(coin).toHaveFocus();
 
-        await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+        await user.keyboard('{Enter}');
+        const picker = screen.getByRole('dialog', { name: 'Coin' });
+        await user.tab();
+        expect(within(picker).getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: /^Select Bitcoin/ })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: /^Select Litecoin/ })).toHaveFocus();
+        await user.keyboard('{Enter}');
         expect(coin).toHaveAccessibleName(/^Coin: Litecoin/);
 
         await user.tab();

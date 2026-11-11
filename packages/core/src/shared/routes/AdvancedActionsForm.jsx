@@ -11,9 +11,11 @@
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
+import { isFeeBearingAction } from '../../flows/feeBearingActions.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -44,6 +46,7 @@ import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import {
     BTC_EXCLUSIVE_ACTIONS,
     COMMON_ACTIONS,
@@ -96,6 +99,23 @@ export function fieldLabel(base) {
     // keeps the name the SDK lists.
     if (base === 'RESUME_BLOCK') return t('routes.advancedActions.resumeBlock');
     return base;
+}
+
+/**
+ * The SDK introspection surface provides field names and whether a field is a
+ * repeated list, but no prose descriptions. Keep that raw type information in
+ * the label help so even fields added by a future SDK release explain what the
+ * composer sends.
+ *
+ * @param {string} fieldName SDK field name, including a possible rest prefix
+ * @returns {string}
+ */
+export function rawFieldHelp(fieldName) {
+    const base = baseFieldName(fieldName);
+    if (fieldName.startsWith(REST_PREFIX)) {
+        return `Raw values for ${fieldLabel(base)}, sent as a list. Enter one value per line or separate values with commas.`;
+    }
+    return `Raw value for ${fieldLabel(base)}, sent as text.`;
 }
 
 // VERSION is auto-selected by the SDK's FormatSelector, never
@@ -369,6 +389,23 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         () => buildParams(fields, values, version),
         [fields, values, version],
     );
+    const feeBearingAction = isFeeBearingAction(action, { newToken: action === 'ISSUE' });
+    const quoteActionData = useMemo(() => {
+        if (!feeBearingAction || !action || formats === null || !fromAddress?.address) return null;
+        const hasInput = fields.length === 0
+            || Object.keys(actionParams).some((key) => key !== 'VERSION');
+        if (!hasInput || (fields.length > 0 && validation?.valid !== true)) return null;
+        if (!isActionDataOfferedInBuild({ action, params: actionParams }, { hasDexSurface })) return null;
+        return { action, params: actionParams };
+    }, [feeBearingAction, action, formats, fromAddress?.address, fields, actionParams,
+        validation, hasDexSurface]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+        enabled: feeBearingAction,
+    });
 
     // Destroy, a lock and an address lock cannot be undone: the confirm page asks for the typed word the
     // dedicated forms ask for, and opening the confirm page starts the typing over.
@@ -388,6 +425,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     const handleFieldChange = useCallback((field, rawValue) => {
         setValues((prev) => ({ ...prev, [field]: rawValue }));
+        setValidation(null);
         setBlankField(null);
     }, []);
 
@@ -680,7 +718,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -698,7 +736,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 actions={(
                     <Button
                         type="submit"
-                        variant="primary"
+                        variant="success"
+                        icon={isWatcherMode ? <Icon.DownloadIcon /> : <Icon.KeyIcon />}
                         loading={stage === 'submitting'}
                         disabled={
                             isWatcherMode
@@ -740,9 +779,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -792,7 +829,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 extraCredentials={confirmWord ? (
                     <Input
                         label={`Type "${confirmWord}" to confirm`}
-                        hint={t('common.typedConfirmationAdvancedHint', { word: confirmWord })}
+                        help={t('common.typedConfirmationAdvancedHint', { word: confirmWord })}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -809,6 +846,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 title="From address"
                 walletId={walletId}
                 chainId={chainId}
+                onChainChange={handleChainChange}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -830,21 +868,23 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             actions={(
                 <Button
                     type="submit"
-                    variant="primary"
+                    variant="success"
+                    icon={singleEncode ? <Icon.KeyIcon /> : <Icon.ForwardIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || (!!action && formats === null)}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
-                        : singleEncode ? 'Sign action' : 'Preview'}
+                        : 'Sign action'}
                 </Button>
             )}
         >
-            <ChainPicker label="Network" value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
+            <NetworkField label="Network" help="The chain where the raw action is recorded. The available actions, From address, and fees follow this network." value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
                     label="From"
+                    help="The address that signs and pays for this action. Tap the icon to pick another of your addresses."
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
@@ -860,6 +900,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
             <Select
                 label="Action"
+                help="Pick any XChain action to compose it from its raw fields. Actions marked (dedicated form available) also have a guided form, which is easier to use."
                 className={styles.picker}
                 value={action}
                 onChange={(e) => handleActionChange(e.target.value)}
@@ -897,9 +938,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             {action && formats && Object.keys(formats).length > 1 ? (
                 <Select
                     label="Format version"
+                    help="Choose the raw SDK format version for this action. Auto-select lets the SDK choose a compatible version from the fields you provide."
                     className={styles.picker}
                     value={version}
-                    onChange={(e) => setVersion(e.target.value)}
+                    onChange={(e) => { setVersion(e.target.value); setValidation(null); }}
                 >
                     <option value="">Auto-select (recommended)</option>
                     {Object.keys(formats).map((v) => (
@@ -924,7 +966,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     return (
                         <Textarea
                             key={fieldName}
-                            label={`${fieldLabel(base)} (one per line or comma-separated)`}
+                            label={fieldLabel(base)}
+                            help={rawFieldHelp(fieldName)}
                             className={styles.picker}
                             value={raw}
                             onChange={(e) => handleFieldChange(base, e.target.value)}
@@ -940,6 +983,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     <Input
                         key={fieldName}
                         label={fieldLabel(base)}
+                        help={rawFieldHelp(fieldName)}
                         value={raw}
                         error={blankField === base ? `Enter a value for ${base}.` : undefined}
                         onChange={(e) => handleFieldChange(base, e.target.value)}
@@ -955,8 +999,31 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 <FieldNote variant="warning" role="alert" lines={validation.errors.map((err) => formatValidationError(err))} />
             ) : null}
 
-            {feeTiers ? (
+            {isFeeBearingAction(action, { newToken: action === 'ISSUE' }) ? (
+                <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
+                    <FeeSelector
+                        chainId={chainId}
+                        label="Network fee"
+                        coinTicker={coinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null} nativeSwitch={action !== 'BATCH'}>
+                    {action !== 'BATCH' ? (
+                        <NativeFeeToggle
+                            checked={payFeeInNativeCoin}
+                            onChange={setPayFeeInNativeCoin}
+                            coinTicker={coinTicker}
+                            mandatory={nativeFeeMandatory}
+                            unverified={action === 'DEPLOY' || action === 'EXECUTE'}
+                        />
+                    ) : null}
+                </FeesCard>
+            ) : feeTiers ? (
                 <FeeSelector
+                    chainId={chainId}
                     label="Network fee"
                     coinTicker={coinTicker}
                     tiers={feeTiers}
@@ -965,13 +1032,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-
-            <NativeFeeToggle
-                checked={payFeeInNativeCoin}
-                onChange={setPayFeeInNativeCoin}
-                coinTicker={coinTicker}
-                mandatory={nativeFeeMandatory}
-            />
 
         </FormPage>,
     );

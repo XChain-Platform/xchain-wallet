@@ -310,7 +310,7 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
         await expect(toggle).toBeChecked();
     }
 
-    await main.getByRole('button', { name: 'Edit dispenser' }).click();
+    await main.getByRole('button', { name: 'Update dispenser' }).click();
     await expectConfirmModal(page);
     await waitForIndexerAtTip();
     await page.getByTestId('confirm-approve').click();

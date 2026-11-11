@@ -188,12 +188,12 @@ describe('shared list route state boundaries', () => {
         );
 
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
-        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'first list' } });
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'first list' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Build another' }));
 
         expect(screen.getByRole('checkbox', { name: 'Token list #101' })).not.toBeChecked();
-        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Memo')).toHaveValue('');
     });
 
     it('surfaces a synchronous union address failure through the load error', async () => {

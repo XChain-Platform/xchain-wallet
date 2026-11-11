@@ -50,9 +50,10 @@ describe('shared route dark-mode colors', () => {
 
     it('keeps warning, send-gate, and official-region borders visible in dark mode', () => {
         const send = routeCss('Send');
-        // The official-token notice is the shared success message, so its
-        // border is the success row's own; the send warnings are the shared
-        // warning message, so theirs is the warning row's.
+        // Official project membership is a Details row on Token detail, not a
+        // bordered notice; the shared success message keeps its own border.
+        // The send warnings are the shared warning message, so theirs is the
+        // warning row's.
         const detail = readFileSync('packages/core/src/shared/routes/TokenDetail.jsx', 'utf8');
         const message = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
         expect(send).not.toMatch(/^\.warnings\s*\{/m);
@@ -61,7 +62,8 @@ describe('shared route dark-mode colors', () => {
         // border is the info row's own.
         expect(send).not.toMatch(/\.testSendGate\s*\{/);
         expect(message).toMatch(/\.row\.info\s*\{[^}]*border:\s*1px solid var\(--xc-info/s);
-        expect(detail).toMatch(/<StatusMessage variant="success">\s*This token is an official token/);
+        expect(detail).toMatch(/<DetailRow label="Projects">/);
+        expect(detail).not.toMatch(/This token is an official token/);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*border:\s*1px solid var\(--xc-success/s);
         expect(message).toMatch(/\.row\.success\s*\{[^}]*background:\s*var\(--xc-success-bg/s);
         for (const border of ['--xc-warning', '--xc-info', '--xc-success']) {
@@ -69,12 +71,12 @@ describe('shared route dark-mode colors', () => {
         }
     });
 
-    // The composer send control is the kit primary Button: its focus ring is
+    // The composer send control is the kit success Button: its focus ring is
     // drawn outside the accent fill, on the raised footer surface.
     it('keeps the composer focus ring above 3:1 against the surface it is drawn on', () => {
         const inbox = readFileSync('packages/core/src/shared/routes/MessagingInbox.jsx', 'utf8');
         const button = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
-        expect(inbox).toMatch(/<Button type="submit" variant="primary"[^>]*aria-label="Send message"/);
+        expect(inbox).toMatch(/<Button type="submit" variant="success"[^>]*aria-label="Send message"/);
         expect(routeCss('MessagingInbox')).not.toMatch(/\.composerSend\b/);
         expect(button).toMatch(/\.btn:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\)[^}]*outline-offset:\s*2px/s);
         for (const theme of [light, dark]) {

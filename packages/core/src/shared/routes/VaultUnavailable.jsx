@@ -59,7 +59,7 @@
 // to put a one-tap destructive button under their thumb.
 
 import { useState } from 'react';
-import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
@@ -215,7 +215,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                         </p>
 
                         {offersRetry ? (
-                            <Button type="button" variant="primary" block onClick={() => { void handleRetry(); }}>
+                            <Button type="button" variant="success" block icon={<Icon.RefreshIcon />} onClick={() => { void handleRetry(); }}>
                                 {t('common.tryAgain')}
                             </Button>
                         ) : null}
@@ -234,6 +234,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 type="button"
                                 variant="primary"
                                 block
+                                icon={<Icon.TrashIcon />}
                                 onClick={() => setWipeOpen(true)}
                                 aria-expanded="false"
                                 aria-controls="vault-unavailable-wipe-panel"
@@ -246,7 +247,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 type="button"
                                 variant="secondary"
                                 size="sm"
-                                icon={null}
+                                icon={<Icon.KeyIcon />}
                                 style={{ alignSelf: 'center' }}
                                 onClick={() => setWipeOpen(true)}
                                 aria-expanded="false"
@@ -272,7 +273,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 <Input
                                     type="text"
                                     label={t('vaultUnavailable.wipeConfirm')}
-                                    hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
+                                    help={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                     value={confirmText}
                                     onChange={(e) => setConfirmText(e.target.value)}
                                     autoComplete="off"
@@ -283,6 +284,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     type="button"
                                     variant="danger"
                                     block
+                                    icon={<Icon.TrashIcon />}
                                     onClick={handleWipe}
                                     loading={busy}
                                     disabled={busy || !isExactTypedConfirmation(confirmText, 'WIPE')}

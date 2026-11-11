@@ -1,0 +1,26 @@
+/* One rounded card for the current members, a hairline between rows. */
+.memberList {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.memberList li + li {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.memberRow {
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-3);
+    overflow-wrap: anywhere;
+}
+
+.membersLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}

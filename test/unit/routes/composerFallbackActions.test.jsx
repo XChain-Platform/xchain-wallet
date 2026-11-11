@@ -112,7 +112,7 @@ describe('BatchComposerForm fallback action list', () => {
         expect(options).toEqual([...COMMON_ACTIONS].filter((a) => a !== 'BATCH' && a !== 'FILE').sort());
     });
 
-    it('blocks Review when a network switch strands a queued Bitcoin-only step', async () => {
+    it('blocks Batch when a network switch strands a queued Bitcoin-only step', async () => {
         const messaging = messagingWith(vi.fn(async () => { throw new Error('sdk down'); }), BTC);
         messaging.getAddressesByChain = vi.fn(async () => ({ [BTC]: [FROM], [LTC]: [{ ...FROM, id: 'address-2' }] }));
         render(
@@ -123,10 +123,10 @@ describe('BatchComposerForm fallback action list', () => {
         await actionOptions();
         const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
-        // The chain is a ChainPicker: open it and choose Litecoin.
+        // Open the Network field and choose Litecoin.
         fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Batch' }).disabled).toBe(true);
     });
 });

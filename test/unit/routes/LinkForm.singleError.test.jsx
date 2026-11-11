@@ -43,13 +43,14 @@ describe('LinkForm error banner', () => {
             </MessagingProvider>,
         );
 
-        const inputs = await screen.findAllByLabelText('Action to reference');
+        const inputs = await screen.findAllByLabelText('Action number');
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
         await waitFor(() => expect(screen.getByRole('alert'))
-            .toHaveTextContent('Could not verify the action on the network A'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+            .toHaveTextContent('Could not verify Action 1'));
+        // Both lookups have to settle before the button stops reading "Looking up actions…".
+        fireEvent.click(await screen.findByRole('button', { name: 'Link actions' }));
 
-        expect(screen.getAllByText(/Could not verify the action on the network A/)).toHaveLength(1);
+        expect(screen.getAllByText(/Could not verify Action 1/)).toHaveLength(1);
     });
 });

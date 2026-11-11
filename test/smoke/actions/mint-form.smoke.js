@@ -140,8 +140,8 @@ assert.ok(
     'MintForm renders the SHARED confirm screen (the adapter that carries the §5.2.5 exact fee and §5.2.3 deltas), not its own modal copy',
 );
 assert.ok(
-    /\? 'Mint' : 'Preview'/.test(src),
-    'the primary button reads the action verb on the confirm path',
+    />\s*Mint\s*<\/Button>/.test(src),
+    'the primary button reads the action verb on every wallet mode',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),

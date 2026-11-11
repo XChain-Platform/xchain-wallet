@@ -9,24 +9,31 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { AddressField, Button, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { FeesCard } from '../components/FeesCard.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
+import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { AmountField } from '../components/AmountField.jsx';
 import { preferredSourceId } from '../addressSelection.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     compareDecimalStrings,
     divideDecimalStrings,
+    formatWithThousands,
     multiplyDecimalStrings,
     roundDecimalString,
     trimAmountTail,
@@ -36,6 +43,7 @@ import { outcomeLabelsOf, outcomePhrase, safeOutcomeLabel } from '../utils/betOu
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './IssueTokenForm.module.css';
+import local from './BetFeedDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -210,8 +218,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
     const [amount, setAmount] = useState('');
+    const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
+    const [stakeBalance, setStakeBalance] = useState(/** @type {string | null} */ (null));
+    const [stakeBalanceDivisibility, setStakeBalanceDivisibility] = useState(/** @type {number | null} */ (null));
     const [password, setPassword] = useState('');
     const [projected, setProjected] = useState(/** @type {any} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
@@ -289,6 +301,39 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const stakeTokenInfo = useTokenInfo({
+        chainId,
+        tick: feed?.tick,
+        skip: !feed?.tick,
+    });
+    useEffect(() => {
+        let cancelled = false;
+        setStakeBalance(null);
+        setStakeBalanceDivisibility(null);
+        const tick = String(feed?.tick || '').trim().toUpperCase();
+        if (!fromAddress?.address || !tick || typeof messaging.getAddressBalances !== 'function') {
+            return undefined;
+        }
+        messaging.getAddressBalances(chainId, fromAddress.address)
+            .then((sdkShape) => {
+                if (cancelled || !sdkShape || typeof sdkShape !== 'object'
+                    || (!sdkShape.native && !Array.isArray(sdkShape.tokens))) return;
+                const balance = (decoderLib.balancesFromSdk(sdkShape) || [])
+                    .find((entry) => String(entry?.tick || '').trim().toUpperCase() === tick);
+                const rawAsset = String(sdkShape.native?.tick || '').trim().toUpperCase() === tick
+                    ? sdkShape.native
+                    : (sdkShape.tokens || []).find(
+                        (entry) => String(entry?.tick || '').trim().toUpperCase() === tick,
+                    );
+                const divisibility = Number(rawAsset?.divisibility);
+                setStakeBalance(balance?.unknown ? null : String(balance?.amount ?? '0'));
+                setStakeBalanceDivisibility(
+                    Number.isInteger(divisibility) && divisibility >= 0 ? divisibility : null,
+                );
+            })
+            .catch(() => { /* Max stays disabled when this address's balance cannot be read. */ });
+        return () => { cancelled = true; };
+    }, [chainId, feed?.tick, fromAddress?.address, messaging]);
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -300,6 +345,10 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // miner fee, and never joins the pool.
     const coinTicker = protocolCoinTickerFor(chainId);
     const nativeFee = useNativeFee(chainId);
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     // A real ref, not `{ current: password }`: Approve runs from the closure
@@ -362,6 +411,31 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         };
     }
 
+    // The host's placeBetParams builder produces this validated BET v2 map.
+    // It is used only for the display quote; compose and submit continue to use
+    // the host builder above as the signing authority.
+    const quoteActionData = useMemo(() => {
+        if (!fromAddress || !feed || outcome === null
+            || outcome < 0 || outcome >= outcomeLabels.length
+            || betAmountError(amount, feed.min_amount)) return null;
+        return {
+            action: 'BET',
+            params: {
+                version: 2,
+                feedActionIndex: String(feedIndex).trim(),
+                outcome: String(outcome),
+                amount: String(amount).trim(),
+                memo: '',
+            },
+        };
+    }, [amount, feed, feedIndex, fromAddress, outcome, outcomeLabels.length]);
+    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+        messaging,
+        chainId,
+        source: fromAddress?.address,
+        actionData: quoteActionData,
+    });
+
     function sourceDescriptor() {
         return {
             address: fromAddress.address,
@@ -398,6 +472,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     async function placeBet() {
         if (!fromAddress) { setFormError('No address on this network to bet from.'); return; }
         if (outcome === null) { setFormError('Choose an outcome.'); return; }
+        if (amountPrecisionError) { setFormError(amountPrecisionError); return; }
         const amountProblem = betAmountError(amount, feed?.min_amount);
         if (amountProblem) { setFormError(amountProblem); return; }
         if (submitLockRef.current) return;
@@ -466,7 +541,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     }
 
     // The error leads the page, above the market's terms, so a phone that tapped
-    // Review bet from the bottom of the form is taken to it.
+    // Place bet from the bottom of the form is taken to it.
     useEffect(() => {
         if (!formError) return;
         document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
@@ -508,6 +583,25 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 // replacing it, so the screen that verifies intent names the
                 // side being backed.
                 outcomeLabels={outcomeLabels}
+            />
+        );
+    }
+
+    // The market fixes the network, so the picker stays on this chain. The
+    // market's own oracle address cannot bet on it, so that row is disabled.
+    if (sourcePickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="From address"
+                walletId={walletId}
+                chainId={chainId}
+                lockNetwork
+                unavailableReason={(a) => (feed && String(a.address) === String(feed.source)
+                    ? 'This address runs this market, so it cannot bet on it.'
+                    : null)}
+                onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
+                onBack={() => setSourcePickerOpen(false)}
             />
         );
     }
@@ -565,6 +659,19 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         </>
     ) : null;
 
+    const fromField = fromAddress ? (
+        <AddressField
+            label="From"
+            icon="addresses"
+            value={fromAddress.address}
+            readOnly
+            onChange={() => {}}
+            onIconClick={() => setSourcePickerOpen(true)}
+            iconLabel="Choose source address"
+            help="The address that places this bet and receives any payout. It must hold the stake in this market's token, and it cannot be the address that runs the market."
+        />
+    ) : null;
+
     return wrap(
         <>
             <SectionHeader
@@ -586,7 +693,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                     type="button"
                                     variant="link"
                                     size="sm"
-                                    icon={null}
+                                    icon={<Icon.AddressIcon />}
                                     onClick={() => onOpenOracle(chainId, feed.source)}
                                 >
                                     {feed.source}
@@ -612,7 +719,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             : 'The resolution window has ended. The protocol refunds every bet automatically when the network records the expiry; bettors do not submit a claim.'}
                     </p>
                     {resolveWindowOpen && ownsMarket && onSettleMarket ? (
-                        <Button variant="primary" onClick={onSettleMarket}>Settle this market</Button>
+                        <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onSettleMarket}>Settle this market</Button>
                     ) : null}
                 </div>
             ) : null}
@@ -716,10 +823,13 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 letting the chain refuse it would cost the user a fee for nothing. */}
             {feed.feed_status === 'open' ? (
                 fromAddress && feed.source === fromAddress.address ? (
-                    <p className={styles.hint}>
-                        You run this market, so you cannot bet on it. That rule exists because an oracle
-                        who could bet on its own result would decide the result.
-                    </p>
+                    <>
+                        {fromField}
+                        <p className={styles.hint}>
+                            You run this market, so you cannot bet on it. That rule exists because an oracle
+                            who could bet on its own result would decide the result.
+                        </p>
+                    </>
                 ) : (
                     <>
                         <SectionHeader as="h3" title="Place a bet" />
@@ -728,14 +838,15 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             onSubmit={(event) => event.preventDefault()}
                             actions={(
                                 <Button
-                                    variant="primary"
+                                    variant="success"
+                                    icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.TokenIcon />}
                                     loading={submitting || actionConfirm.composing}
                                     disabled={demoGuard.blocked || submitting || actionConfirm.composing}
                                     onClick={placeBet}
                                 >
                                     {actionConfirm.composing
                                         ? 'Preparing review…'
-                                        : isWatcherMode ? 'Create unsigned transaction' : 'Review bet'}
+                                        : isWatcherMode ? 'Create unsigned transaction' : 'Place bet'}
                                 </Button>
                             )}
                         >
@@ -743,13 +854,19 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 side of the bet the money lands on and the only other signal
                                 is the button's background colour. A screen reader announced
                                 two identical "Yes" / "No" buttons with no selected state. */}
-                            <div role="group" aria-label="Outcome to back" className={styles.betWagerChoices}>
+                            {fromField}
+                            <div id={`bet-outcome-label-${String(feed.action_index)}`} className={local.groupLabel}>
+                                Outcome to back
+                                <InfoTip aria="About Outcome to back" label="Pick the result you think will happen. Everyone backing the winning outcome splits the whole pot, minus the oracle's fee." />
+                            </div>
+                            <div role="group" aria-label="Outcome to back" aria-describedby={`bet-outcome-label-${String(feed.action_index)}`} className={styles.betWagerChoices}>
                                 {outcomes.map((label, i) => {
                                     const outcomeText = safeOutcomeLabel(label) || `Outcome ${i}`;
                                     return (
                                         <Button
                                             key={i}
                                             style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'center' }}
+                                            icon={<Icon.CheckIcon />}
                                             variant={outcome === i ? 'primary' : 'ghost'}
                                             aria-pressed={outcome === i}
                                             onClick={() => setOutcome(i)}
@@ -759,12 +876,28 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                     );
                                 })}
                             </div>
-                            <Input
-                                label={`Stake${feed.tick ? ` (${feed.tick})` : ''}`}
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                inputMode="decimal"
-                                placeholder={feed.min_amount ? `min ${feed.min_amount}` : '0.0'}
+                            <AmountField
+                                label="Stake"
+                                help="How much to bet. A stake buys a share of the pot that every later bet re-divides, and payouts round down. Once confirmed, a bet cannot be cancelled or moved to another outcome."
+                                amount={amount}
+                                tick={feed.tick || ''}
+                                divisibility={stakeTokenInfo?.divisibility ?? stakeBalanceDivisibility}
+                                onAmountFieldChange={(rawValue) => {
+                                    setAmount(String(rawValue).replace(/,/g, ''));
+                                    setFormError(null);
+                                }}
+                                onValidationError={(fieldError) => {
+                                    setAmountPrecisionError(fieldError?.startsWith('Enter a valid decimal amount')
+                                        ? 'Enter a positive bet amount using digits and an optional decimal point.'
+                                        : fieldError);
+                                }}
+                                onMax={stakeBalance !== null
+                                    ? () => { setAmount(stakeBalance); setFormError(null); }
+                                    : undefined}
+                                maxDisabled={stakeBalance === null}
+                                balanceText={stakeBalance !== null && feed.tick
+                                    ? `${formatWithThousands(stakeBalance)} ${String(feed.tick).toUpperCase()} available`
+                                    : null}
                             />
                             {/* The one number the decision turns on. A parimutuel stake has no
                                 price the user can reason about on their own: it buys a share of a
@@ -802,19 +935,27 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                     </p>
                                 </div>
                             ) : null}
-                            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                            <FeesCard
+                                chainId={chainId}
+                                quote={protocolFeeQuote}
+                                pending={protocolFeePending}
+                                feeSelector={null}
+                                tiers={feeEstimate ? { normal: feeEstimate } : undefined}
+                                value={{ mode: 'normal' }}
+                                coinTicker={coinTicker}
+                            >
+                                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+                            </FeesCard>
                             {!isWatcherMode && !isHwSource && !signerReady ? (
                                 <Input
                                     label="Password"
+                                    help="Your wallet password, used to sign this bet. It never leaves this device."
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     autoComplete="current-password"
                                 />
                             ) : null}
-                            <p className={styles.hint}>
-                                Once confirmed, a bet cannot be cancelled or moved to another outcome.
-                            </p>
                         </FormPage>
                     </>
                 )

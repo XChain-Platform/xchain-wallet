@@ -102,9 +102,9 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // - INDEXER: a later change gives DEPLOY/EXECUTE a schedule-priced, verdict-free
 //     static quote, and the SDK reads its `valid:null` as payable-but-
 //     unverified rather than as a refusal.
-// - WALLET forms: put the useNativeFee/NativeFeeToggle lane on
-//     DeployContractForm and ExecuteContractForm (mandatory wherever there is
-//     no XCHAIN lane) and pointed the DEPLOY form chain list at THIS list.
+// - WALLET forms: show the Fees card on DeployContractForm and
+//     ExecuteContractForm, with the native fee mandatory wherever there is no
+//     XCHAIN lane, and point the DEPLOY form chain list at THIS list.
 // - FEE PLACEMENT: a later change moved the fee output onto the phase-2 reveal (the
 // transaction the indexer checks) and a later change kept it declared to the
 //     phase-1 build so the commit reserves its value; see flows/nativeFeeLane.

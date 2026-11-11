@@ -272,10 +272,10 @@ describe('MySwapsView: settled status', () => {
         const utils = await open(messaging);
         const row = rowFor(section(utils, 'Open swaps'), 706);
         fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-        fireEvent.change(utils.getByLabelText('New expiration (optional)'), {
+        fireEvent.change(utils.getByLabelText('New expiration'), {
             target: { value: '2099-01-02T03:04' },
         });
-        fireEvent.click(utils.getByRole('button', { name: 'Edit swap' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Update swap' }));
 
         expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
         expect(cancelReader).toHaveBeenCalledTimes(2);

@@ -64,16 +64,23 @@ describe('List member blocks', () => {
         'packages/core/src/shared/routes/ListDetail.jsx',
         'packages/core/src/shared/routes/ListForkForm.jsx',
     ])('%s draws no bullets outside its member box', (file) => {
-        const lists = read(file).match(/<ul className=\{styles\.detailsList\}[^>]*>/g) || [];
+        const lists = read(file).match(/<ul className=\{[^}]*\}[^>]*>/g) || [];
         expect(lists.length).toBeGreaterThan(0);
-        for (const tag of lists) expect(tag).toMatch(/listStyle:\s*'none'/);
+        // A list is either inline-styled without bullets or a card class that sets list-style: none.
+        const cardClasses = /(itemList|memberList)\}/;
+        for (const tag of lists) expect(tag).toMatch(new RegExp(`listStyle:\\s*'none'|${cardClasses.source}`));
+        const css = read(file.replace('.jsx', '.module.css'));
+        for (const name of ['itemList', 'memberList']) {
+            if (new RegExp(`\\.${name}\\b`).test(css)) expect(rule(css, `.${name}`)).toMatch(/list-style:\s*none/);
+        }
     });
 });
 
 describe('Encrypted-session request actions', () => {
     it('outlines Decline and Message beside the filled Share my key', () => {
         const src = read('packages/core/src/shared/routes/MessagingInbox.jsx');
-        expect(src).toMatch(/<Button variant="secondary" onClick=\{onDecline\}/);
+        expect(src).toMatch(/<Button variant="secondary" icon=\{<Icon\.XIcon \/>\} onClick=\{onDecline\}/);
         expect(src).toMatch(/<Button variant="secondary" onClick=\{onMessage\}/);
+        expect(src).toMatch(/<Button variant="success" icon=\{<Icon\.KeyIcon \/>\} onClick=\{onShare\}/);
     });
 });

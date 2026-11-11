@@ -143,10 +143,10 @@ describe('ListRenameForm: every stage renders inside FormPage', () => {
     it('lays out the submitted result inside FormPage with Done in the actions row', async () => {
         laneRun.mockResolvedValue({ txid: TXID });
         const { container } = mount();
-        fireEvent.change(await screen.findByLabelText('Name (empty means unchanged)'), {
+        fireEvent.change(await screen.findByLabelText('Name'), {
             target: { value: 'Treasury' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rename list' }));
 
         const notice = await screen.findByText('List rename submitted.');
         expect(laneRun).toHaveBeenCalledTimes(1);

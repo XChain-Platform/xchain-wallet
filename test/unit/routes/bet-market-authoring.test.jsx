@@ -309,7 +309,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         await fillMarket(utils);
         await domAct(async () => {
             typeIn(utils, label, value);
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
 
@@ -332,8 +332,8 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            typeIn(utils, 'Your fee (optional)', pasted);
-            fireEvent.click(button(utils, /Review market/i));
+            typeIn(utils, 'Your fee', pasted);
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
 
@@ -412,7 +412,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         await fillMarket(utils);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
 
@@ -458,7 +458,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // No description yet: a DETAILS blob holding only a copy of LABEL is
         // wire weight for nothing, and the whole action shares one size ceiling.
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.params.details).toBeUndefined();
@@ -477,7 +477,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         const last = calls.filter((c) => c.method === 'composeBetForConfirm').pop();
@@ -496,7 +496,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home', 'Home'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -512,7 +512,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home, away or draw', 'Away'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -532,7 +532,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -556,7 +556,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -575,8 +575,8 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            typeIn(utils, 'Smallest bet allowed (optional)', minimum);
-            fireEvent.click(button(utils, /Review market/i));
+            typeIn(utils, 'Smallest bet allowed', minimum);
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -592,7 +592,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils, { outcomes: ['Home team wins', 'Away team wins'] });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
@@ -721,7 +721,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         const utils = await openMarket(messaging);
         await stakeOn(utils, 'Away', '5');
         expect(utils.queryByTestId('bet-projection')).toBeNull();
-        expect(button(utils, /Review bet/i)).toBeTruthy();
+        expect(button(utils, /Place bet/i)).toBeTruthy();
     });
 
     it('starts only one unsigned wager build when submit is pressed twice', async () => {
@@ -758,7 +758,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -774,7 +774,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -789,7 +789,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -807,7 +807,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -832,7 +832,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.builder).toBe('placeBetParams');
@@ -873,7 +873,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review resolve/i));
+            fireEvent.click(button(utils, /Publish result/i));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.builder).toBe('resolveMarketParams');
@@ -923,12 +923,10 @@ describe('BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
 
-        // The default 14-day market is FREE, and this form holds the
-        // quote that says so, so the row states that rather than promising an
-        // LTC payment that is never made. A statement either way, never a
-        // switch: there is nothing to choose between on this chain.
-        expect(utils.container.textContent).toContain('This action has no protocol fee');
-        expect(utils.queryByLabelText(/Pay protocol fee in LTC instead of XCHAIN/)).toBeNull();
+        expect(utils.container.textContent).toContain('0 LTC');
+        const feeSwitch = utils.getByLabelText('Pay protocol fee in LTC');
+        expect(feeSwitch.checked).toBe(true);
+        expect(feeSwitch.disabled).toBe(true);
 
         // Lengthen the publish window past the free days and the same row turns
         // definite, with the figure the quote returned.
@@ -938,11 +936,11 @@ describe('BET carries the native-coin fee lane', () => {
             });
             await drain();
         });
-        expect(utils.container.textContent).toContain('Protocol fee is paid in LTC');
-        expect(utils.container.textContent).not.toContain("This action's protocol fee is 0.165 XCHAIN.");
+        expect(utils.container.textContent).toContain('Priced at review');
+        expect(utils.container.textContent).not.toContain('0.165 LTC');
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
@@ -980,7 +978,7 @@ describe('BET carries the native-coin fee lane', () => {
         });
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         // Bitcoin settles the fee from an XCHAIN balance unless asked otherwise,
@@ -993,11 +991,11 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByLabelText('Pay protocol fee in BTC instead of XCHAIN'));
+            fireEvent.click(utils.getByLabelText('Pay protocol fee in BTC'));
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review market/i));
+            fireEvent.click(button(utils, /Open market/i));
             await drain();
         });
         expect(calls.filter((c) => c.method === 'composeBetForConfirm').pop().args.payFeeInNativeCoin)
@@ -1019,13 +1017,13 @@ describe('BET carries the native-coin fee lane', () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
         });
-        // Placing a bet IS priced (BET_PER_CREDIT), but this surface
-        // holds no quote for it, so the row states the chain's rule instead of
-        // asserting a charge it has not been given.
-        expect(utils.container.textContent).toContain('Protocol fees are paid in LTC');
+        expect(utils.container.textContent).toContain('Calculating');
+        const feeSwitch = utils.getByLabelText('Pay protocol fee in LTC');
+        expect(feeSwitch.checked).toBe(true);
+        expect(feeSwitch.disabled).toBe(true);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review bet/i));
+            fireEvent.click(button(utils, /Place bet/i));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');
@@ -1065,7 +1063,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Review resolve/i));
+            fireEvent.click(button(utils, /Publish result/i));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');

@@ -180,7 +180,7 @@ describe('CoinpayForm shared confirmation', () => {
         });
 
         expect(utils.getByText(message)).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: 'Pay order' }).disabled).toBe(true);
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -194,20 +194,20 @@ describe('CoinpayForm shared confirmation', () => {
 
         await step(() => fireEvent.change(customRate, { target: { value: '' } }));
         expect(utils.getByText('Choose a valid network fee before continuing.')).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: 'Pay order' }).disabled).toBe(true);
 
         await step(() => fireEvent.change(customRate, { target: { value: '2' } }));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
         expect(utils.getByText('Network fee rate').nextElementSibling.textContent)
             .toBe('2 DOGE/kB');
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
         expect(utils.getByRole('textbox', { name: 'Custom fee rate (DOGE/kB)' }).value).toBe('2');
-        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(false);
+        expect(utils.getByRole('button', { name: 'Pay order' }).disabled).toBe(false);
         expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
 
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Pay \d/ })));
         const compose = calls.find((call) => call.method === 'composeForConfirm');
         expect(compose.args.encoderOpts.feePerKb).toBe(200_000_000);
     });
@@ -262,9 +262,9 @@ describe('CoinpayForm shared confirmation', () => {
                 new Error('internal encoder failure at /private/wire/path'),
             ),
         });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
         await step(() => fireEvent.click(
-            utils.getByRole('button', { name: 'Continue to confirmation' }),
+            utils.getByRole('button', { name: /^Pay \d/ }),
         ));
 
         expect(utils.getByText(
@@ -289,9 +289,9 @@ describe('CoinpayForm shared confirmation', () => {
                 actionSummary: 'Pay 10 DOGE for match #648',
             }]),
         });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
         await step(() => fireEvent.click(
-            utils.getByRole('button', { name: 'Continue to confirmation' }),
+            utils.getByRole('button', { name: /^Pay \d/ }),
         ));
 
         expect(utils.getByText(/already on its way from this wallet/)).toBeTruthy();
@@ -336,7 +336,7 @@ describe('CoinpayForm shared confirmation', () => {
 
     it('shows the payer, recipient, amount, timestamp deadline, and expiry loss warning', async () => {
         const { utils } = await mount();
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
 
         expect(utils.getByText('From').nextElementSibling.textContent).toContain(PAYER.slice(0, 6));
         expect(utils.getByText('Paying to').nextElementSibling.textContent).toContain(PAYEE.slice(0, 6));
@@ -359,14 +359,14 @@ describe('CoinpayForm shared confirmation', () => {
             .toContain('This address has 5 DOGE');
         expect(utils.getByText(/Insufficient DOGE balance/).textContent)
             .toContain('payment and estimated network fee require 10.25 DOGE');
-        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: 'Pay order' }).disabled).toBe(true);
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
     });
 
     it('dry-runs the action and payment output before signing the composed PSBT', async () => {
         const { utils, calls } = await mount();
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Pay \d/ })));
 
         const compose = calls.find((call) => call.method === 'composeForConfirm');
         expect(compose.args.actionData).toEqual({
@@ -393,7 +393,8 @@ describe('CoinpayForm shared confirmation', () => {
 
     it('keeps watcher mode on the obligation-verifying unsigned builder', async () => {
         const { utils, calls } = await mount({ walletMode: 'watcher' });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
+        expect(utils.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
 
         const build = calls.find((call) => call.method === 'buildCoinpayPsbtRequest');
@@ -413,10 +414,10 @@ describe('CoinpayForm shared confirmation', () => {
             finishCompose = resolve;
         }));
         const { utils } = await mount(undefined, { composeForConfirm });
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay order' })));
 
-        fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
-        expect(utils.getByRole('button', { name: 'Continue to confirmation' }).getAttribute('aria-busy'))
+        fireEvent.click(utils.getByRole('button', { name: /^Pay \d/ }));
+        expect(utils.getByRole('button', { name: /^Pay \d/ }).getAttribute('aria-busy'))
             .toBe('true');
         expect(utils.getByText('Preparing payment for confirmation…')).toBeTruthy();
 

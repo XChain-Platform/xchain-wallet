@@ -10,10 +10,13 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
+import { InfoTip } from './InfoTip.jsx';
 import { useBackHandler } from './backStack.js';
+import { fieldHelpName } from './fieldRequirement.js';
 // Ahead of the select's own sheet, so the shared button base loads first and
 // the trigger's rules follow it; see Chip.jsx for why this is not `composes`.
 import buttonStyles from './Button.module.css';
+import inputStyles from './Input.module.css';
 import styles from './IconSelect.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
@@ -27,6 +30,7 @@ import '../i18n/locales/en/ui.js';
  *
  * @param {object} props
  * @param {string} [props.label]
+ * @param {import('react').ReactNode} [props.help] contextual help shown from the label-row InfoTip.
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange   receives the option value
  * @param {Array<{ value: string, label: string, sub?: string, icon?: import('react').ReactNode }>} props.options
@@ -36,6 +40,7 @@ import '../i18n/locales/en/ui.js';
  */
 export function IconSelect({
     label,
+    help,
     value,
     onChange,
     options = [],
@@ -109,10 +114,20 @@ export function IconSelect({
     const accessibleName = label
         ? `${label}: ${selected ? selected.label : placeholder}`
         : undefined;
+    const hasHelp = Boolean(label && help);
 
     return (
         <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
-            {label ? <span className={styles.label}>{label}</span> : null}
+            {hasHelp ? (
+                <div className={`${inputStyles.labelRow} ${styles.labelRow}`}>
+                    <span className={inputStyles.label}>{label}</span>
+                    <InfoTip
+                        className={inputStyles.labelHelp}
+                        label={help}
+                        aria={t('ui.field.about', { label: fieldHelpName(label) })}
+                    />
+                </div>
+            ) : label ? <span className={styles.label}>{label}</span> : null}
             <button
                 type="button"
                 ref={triggerRef}

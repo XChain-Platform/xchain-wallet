@@ -8,1280 +8,36 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { useEffect, useId, useState } from 'react';
+import { AddressText, Button, CopyButton, Icon, ListPage, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import tableStyles from '../components/DataTable.module.css';
-import { formatAmount } from '../components/BalanceList.jsx';
-import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
-import { isDemoWallet } from '../../flows/demoMode.js';
-import { RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
-import portfolioChartStyles from '../components/PortfolioChart.module.css';
-import { extractHolderRows } from '../utils/holderRows.js';
-import { readFailureMessage } from '../utils/readFailureMessage.js';
-import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
-import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
-    dispenserRateLabel,
-    enrichOfferRows,
-    formatDecimal,
-    offerAmounts,
-    offerLifecycle,
-    isDispenserPriceStale,
-    isOpenDispenserSelling,
-    isOpenOffer,
-} from '../utils/dispenserPricing.js';
+    BranchIcon,
+    BridgeIcon,
+    LightningIcon,
+    PictureIcon,
+    StorefrontIcon,
+    TagIcon,
+} from '../components/manageTokenIcons.jsx';
 import styles from './ManageToken.module.css';
-import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
-import { formatRelativeDateTime } from '../utils/dateTimeFormat.js';
+import { formatTokenQuantity } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import { UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
+import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/issue.js';
-import '../../i18n/locales/en/manageToken.js';
+import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/settings.js';
-import '../../i18n/locales/en/verifySignature.js';
+import '../../i18n/locales/en/ui.js';
+import '../../i18n/locales/en/walletDetails.js';
 
-const chainRegistry = registryLib.defaultRegistry();
-
-// PC-02: the seven independent ISSUE v3 lock flags (mirrors
-// TokenAdminForm's LOCK_FLAGS keys; see ISSUE.md "Version 3 - Edit
-// LOCK PARAMS"). Used only to gate the Lock action's visibility here.
+// The seven independent ISSUE v3 lock flags mirror TokenAdminForm.
 const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'description', 'sleep', 'callback'];
-
-/**
- * §40.5 Manage Token. Issuer-side detail page driven from the My
- * Tokens list. Distinct from §27.6 TokenDetail (which is the holder
- * POV with balance hero + send/receive). The single goal here is to
- * surface every capability §40.5 grants the issuer:
- *
- *   - Mint additional supply              (hidden only when LOCK_MINT is set; D-166)
- *   - Mint settings                       (edit ISSUE v2 mint-config fields; PC-01)
- *   - Destroy supply (burn)
- *   - Lock supply                         (hidden when already locked)
- *   - Update description
- *   - Transfer ownership
- *   - Create dispenser  (list for sale)
- *   - Pay dividend
- *   - Airdrop
- *   - Broadcast
- *
- * Each capability is rendered as a full-size icon button. The host
- * (web / popup / desktop App.jsx) wires each handler to the existing
- * §40 form route; back navigation returns here via the host's view
- * stack rather than via prop drilling, so the same pattern works for
- * all three shells.
- *
- * @param {object} props
- * @param {string} props.walletId
- * @param {string} props.chainId
- * @param {string} props.tick                       canonical ticker (uppercase)
- * @param {number | null} [props.divisibility]      fallback only; primary source is `assetInfo.divisibility`. Threaded from MyTokens for the (rare) case where the explorer strips decimals.
- * @param {() => void} props.onBack
- * @param {() => void} [props.onMint]
- * @param {() => void} [props.onDestroy]
- * @param {() => void} [props.onLock]
- * @param {() => void} [props.onMintSettings]         edit ISSUE v2 mint-configuration fields: MAX_MINT, MINT_SUPPLY, TRANSFER_SUPPLY, MINT_ADDRESS_MAX, MINT_START_BLOCK, MINT_STOP_BLOCK (PC-01)
- * @param {() => void} [props.onCallbackSettings]     edit ISSUE v4 callback config: CALLBACK_BLOCK / CALLBACK_TICK / CALLBACK_AMOUNT (PC-03; editable only pre-distribution)
- * @param {() => void} [props.onExecuteCallback]      force-recall all supply via CALLBACK (PC-03; owner-only, after CALLBACK_BLOCK)
- * @param {() => void} [props.onAccessLists]          set ISSUE v5 ALLOW_LIST / BLOCK_LIST access lists (PC-04)
- * @param {() => void} [props.onUseSharedBlockList]   select a shared block list, falling back to onAccessLists
- * @param {() => void} [props.onBridgeSettings]       set ISSUE v7 BRIDGE_CHAINS / MIN_DEPTH, or freeze both with LOCK_BRIDGE (P19)
- * @param {() => void} [props.onPauseToken]           pause/resume the token via SLEEP v1 (PC-05)
- * @param {() => void} [props.onUpdateDescription]
- * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
- * @param {() => void} [props.onGatedContent]        publish token-gated encrypted files (PC-25; atomic BATCH(FILE, MESSAGE-to-self))
- * @param {() => void} [props.onManageRoster]        publish/edit the project's official-token list (LIST + owner LINK)
- * @param {() => void} [props.onTransferOwnership]
- * @param {() => void} [props.onSellOwnership]       list this token's ownership (name) for sale via an ownership SWAP
- * @param {() => void} [props.onCreateDispenser]
- * @param {() => void} [props.onPayDividend]
- * @param {() => void} [props.onAirdrop]
- * @param {() => void} [props.onBroadcast]
- * @param {() => void} [props.onBindController]      bind/unbind a guard contract over this token (Phase F)
- * @param {() => void} [props.onViewActivity]       drill into History pre-filtered to this tick
- * @param {() => void} [props.onViewHolders]        drill into the full holders list (optional)
- * @param {(chainId: string, actionIndex: string | number) => void} [props.onOpenDispenser]   drill into a dispenser's detail page
- * @param {(creator: string | null) => void} [props.onIssuerResolved]   fires once `assetInfo.creator` is known so the host can stash it for form prefill (preferred From-address)
- */
-export function ManageToken({
-    walletId,
-    chainId,
-    tick,
-    divisibility: divisibilityProp = null,
-    onBack,
-    onMint,
-    onDestroy,
-    onLock,
-    onMintSettings,
-    onCallbackSettings,
-    onExecuteCallback,
-    onAccessLists,
-    onUseSharedBlockList,
-    onBridgeSettings,
-    onPauseToken,
-    onUpdateDescription,
-    onAttachContent,
-    onGatedContent,
-    onManageRoster,
-    onTransferOwnership,
-    onSellOwnership,
-    onCreateDispenser,
-    onPayDividend,
-    onAirdrop,
-    onBroadcast,
-    onBindController,
-    onViewActivity,
-    onViewHolders,
-    onOpenDispenser,
-    onIssuerResolved,
-}) {
-    const tabsId = useId();
-    const chartTabsId = useId();
-    const { messaging, shell } = useMessaging();
-    const variant = screenVariantFor(shell);
-    const descriptor = chainRegistry.get(chainId);
-
-    const assetInfo = useTokenInfo({ chainId, tick });
-
-    const locked = !!assetInfo?.locked;
-    // PC-02 lock matrix: the Lock action itself stays reachable as long
-    // as at least one of the seven independent ISSUE v3 locks is still
-    // open, unlike the coarse `locked` flag above (a subset of four,
-    // used only for the hero pill now that D-166 moved Mint onto LOCK_MINT).
-    // Every flag is one-way (see TokenAdminForm's LOCK_FLAGS), so once all
-    // seven are set there is nothing left for the Lock form to offer.
-    const tokenLocks = assetInfo?.locks || {};
-    const allLocksSet = LOCK_FLAG_KEYS.every((k) => !!tokenLocks[k]);
-    const totalSupply = assetInfo?.totalSupply ?? null;
-
-    // PC-05: current pause state of this tick (latest SLEEP row vs tip),
-    // for the hero "Paused" badge and to label the Pause/Resume action.
-    const [sleepRow, setSleepRow] = useState(/** @type {any | null} */ (null));
-    const [sleepHeight, setSleepHeight] = useState(/** @type {number | null} */ (null));
-    useEffect(() => {
-        if (!chainId || !tick) { setSleepRow(null); return undefined; }
-        if (typeof messaging?.sleepState !== 'function') return undefined;
-        let cancelled = false;
-        Promise.all([
-            messaging.sleepState({ chainId, query: tick, type: 'token' }).catch(() => null),
-            typeof messaging.getIndexerWatermark === 'function'
-                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
-                : Promise.resolve(null),
-        ]).then(([s, w]) => {
-            if (cancelled) return;
-            setSleepRow(s || null);
-            setSleepHeight(w && w.watermark != null ? Number(w.watermark) : null);
-        });
-        return () => { cancelled = true; };
-    }, [chainId, tick, messaging]);
-    const sleepState = flowsLib.interpretSleep(sleepRow ? sleepRow.resumeBlock : null, sleepHeight);
-    const maxSupply = assetInfo?.maxSupply ?? null;
-    const description = assetInfo?.description || null;
-    const owner = assetInfo?.creator || null;
-    // Prefer the indexer-supplied divisibility; fall back to whatever
-    // MyTokens threaded in via props when the explorer strips it.
-    const divisibility = (assetInfo?.divisibility != null && Number.isFinite(Number(assetInfo.divisibility)))
-        ? Number(assetInfo.divisibility)
-        : divisibilityProp;
-
-    // Holders panel: single page, surfacing count + top 5. The full
-    // list lives behind `onViewHolders` (host-routed).
-    const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
-    const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
-    useEffect(() => {
-        setHolders(null);
-        setHoldersError(null);
-        if (typeof messaging?.getHoldersForToken !== 'function') {
-            setHoldersError('Holders lookup is not available in this build.');
-            return undefined;
-        }
-        let cancelled = false;
-        messaging.getHoldersForToken({ chainId, tick })
-            .then((resp) => { if (!cancelled) setHolders(extractHolderRows(resp)); })
-            .catch((err) => { if (!cancelled) setHoldersError(readFailureMessage(err, 'load the holders')); });
-        return () => { cancelled = true; };
-    }, [messaging, chainId, tick]);
-
-    // Your-balance: aggregate balance of this tick across every
-    // address the wallet has on this chain. Drives the "You hold X (Y%)"
-    // sub-line in the Supply card. Null = still loading; '0' = none.
-    const [yourBalance, setYourBalance] = useState(/** @type {string | null} */ (null));
-    useEffect(() => {
-        if (typeof messaging?.getWalletBalances !== 'function') return undefined;
-        let cancelled = false;
-        messaging.getWalletBalances(walletId)
-            .then((byChain) => {
-                if (cancelled) return;
-                // getWalletBalances returns `Record<chainId, entry[]>` with raw
-                // atomic quantities - never the flat row array this used to
-                // parse for, which is why "You hold" read 0 for every token
-                // (D-75). sumTickOnChain owns that shape for every reader.
-                // A failed read, whole or for one address, leaves the holding
-                // unknown rather than reading as zero.
-                setYourBalance(chainReadFailed(byChain, chainId) ? null : sumTickOnChain(byChain, chainId, tick));
-            })
-            .catch(() => { if (!cancelled) setYourBalance(null); });
-        return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, tick]);
-
-    // Surface the on-chain issuer to the host as soon as we know it
-    // so per-form openers can default the From row to that address
-    // (and the owner gate has a real address to compare against).
-    useEffect(() => {
-        if (typeof onIssuerResolved === 'function') onIssuerResolved(owner || null);
-    }, [owner, onIssuerResolved]);
-
-    // Owner gate: true when one of the wallet's addresses on this
-    // chain matches the on-chain creator. Drives both the warning
-    // banner above the action grid and the hiding of issuer-only
-    // actions (Mint / Description / Transfer / Broadcast / Lock).
-    // null = unknown (loading or no creator on the indexer record).
-    // Shared with TokenDetail's "Manage token" gate so both surfaces
-    // agree on what counts as owning a tick; see useIsTokenIssuer.js.
-    const isOwner = useIsTokenIssuer({ messaging, walletId, chainId, issuerAddress: owner });
-
-    // Percentage of circulating supply the user holds. Returns null
-    // when supply isn't known yet so the renderer can hide the line.
-    const yourSharePct = useMemo(() => {
-        if (yourBalance == null || totalSupply == null) return null;
-        try {
-            const held = BigInt(yourBalance);
-            const supply = BigInt(String(totalSupply));
-            if (supply === 0n) return null;
-            // Compute share in basis-points (10000) for one decimal place
-            // of precision, then divide back down.
-            const bps = Number((held * 10000n) / supply);
-            return bps / 100;
-        } catch {
-            return null;
-        }
-    }, [yourBalance, totalSupply]);
-
-    // Open dispensers selling this tick FROM one of the user's
-    // addresses on this chain. Two parallel fetches: addresses (to
-    // know what counts as "yours") + all dispensers selling the tick
-    // (the explorer doesn't filter by source for token queries, so we
-    // filter client-side). Empty array → nothing listed.
-    const [listings, setListings] = useState(/** @type {any[] | null} */ (null));
-    const [listingsError, setListingsError] = useState(/** @type {string | null} */ (null));
-    useEffect(() => {
-        if (typeof messaging?.getDispensersForToken !== 'function') return undefined;
-        if (typeof messaging?.getAddressesByChain !== 'function') return undefined;
-        let cancelled = false;
-        Promise.all([
-            messaging.getAddressesByChain(walletId),
-            messaging.getDispensersForToken({ chainId, token: tick }),
-        ])
-            .then(([byChain, dispensersRaw]) => {
-                if (cancelled) return;
-                const mine = new Set();
-                for (const a of (byChain?.[chainId] || [])) {
-                    if (typeof a?.address === 'string') mine.add(a.address);
-                }
-                const rows = Array.isArray(dispensersRaw)
-                    ? dispensersRaw
-                    : (Array.isArray(dispensersRaw?.data) ? dispensersRaw.data : []);
-                // isOpenDispenserSelling() reads the explorer's string status
-                // labels ('valid'/'open', lifecycle first). The old check here did
-                // Number(status) !== 0 against that same string - Number()
-                // of a non-numeric label like "valid" is NaN, which always
-                // failed the !== 0 test, so every real dispenser was
-                // dropped and this tab could never show anything.
-                const open = rows.filter((d) => {
-                    if (!isOpenDispenserSelling(d, tick)) return false;
-                    const src = d.source || d.source_address || d.dispenser || d.dispenser_address;
-                    return !src || mine.has(src);
-                });
-                setListings(open);
-            })
-            .catch((err) => {
-                if (!cancelled) setListingsError(readFailureMessage(err, 'load your listings'));
-            });
-        return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, tick]);
-
-    // Tab content (orders / swaps / activity): loaded lazily on tab
-    // activation so the page paints quickly even if any one of these
-    // endpoints is slow.
-    const [activeTab, setActiveTab] = useState(/** @type {'dispensers' | 'orders' | 'swaps' | 'holders' | 'activity'} */ ('dispensers'));
-    const [orders, setOrders] = useState(/** @type {any[] | null} */ (null));
-    const [ordersError, setOrdersError] = useState(/** @type {string | null} */ (null));
-    const [swaps, setSwaps] = useState(/** @type {any[] | null} */ (null));
-    const [swapsError, setSwapsError] = useState(/** @type {string | null} */ (null));
-    const [activity, setActivity] = useState(/** @type {any[] | null} */ (null));
-    const [activityError, setActivityError] = useState(/** @type {string | null} */ (null));
-
-    useEffect(() => {
-        if (activeTab !== 'orders' || orders !== null) return undefined;
-        if (typeof messaging?.getOrdersForToken !== 'function') {
-            setOrders([]); return undefined;
-        }
-        let cancelled = false;
-        messaging.getOrdersForToken({ chainId, tick })
-            .then(async (resp) => {
-                if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                const enriched = await enrichOfferRows(rows, typeof messaging.getOrderDetail === 'function'
-                    ? (row) => messaging.getOrderDetail({ chainId, actionIndex: String(row.action_index) })
-                    : null);
-                if (!cancelled) setOrders(enriched.filter((row) => isOpenOffer(row)));
-            })
-            .catch((err) => { if (!cancelled) setOrdersError(readFailureMessage(err, 'load the orders')); });
-        return () => { cancelled = true; };
-    }, [activeTab, orders, messaging, chainId, tick]);
-
-    useEffect(() => {
-        if (activeTab !== 'swaps' || swaps !== null) return undefined;
-        if (typeof messaging?.getSwapsForToken !== 'function') {
-            setSwaps([]); return undefined;
-        }
-        let cancelled = false;
-        messaging.getSwapsForToken({ chainId, tick })
-            .then(async (resp) => {
-                if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                const enriched = await enrichOfferRows(rows, typeof messaging.getSwapDetail === 'function'
-                    ? (row) => messaging.getSwapDetail({ chainId, actionIndex: String(row.action_index) })
-                    : null);
-                if (!cancelled) setSwaps(enriched);
-            })
-            .catch((err) => { if (!cancelled) setSwapsError(readFailureMessage(err, 'load the swaps')); });
-        return () => { cancelled = true; };
-    }, [activeTab, swaps, messaging, chainId, tick]);
-
-    // Genesis (first ISSUE) + subassets: small read-only metadata
-    // section below the tabs. Fetched once on mount; both calls
-    // tolerate missing fields and return null/[] when the SDK lacks
-    // the underlying methods (dev mock falls through to []).
-    const [genesis, setGenesis] = useState(/** @type {any | null} */ (null));
-    const [subassets, setSubassets] = useState(/** @type {any[] | null} */ (null));
-    useEffect(() => {
-        if (typeof messaging?.getGenesisForToken !== 'function') return undefined;
-        let cancelled = false;
-        messaging.getGenesisForToken({ chainId, tick })
-            .then((row) => { if (!cancelled) setGenesis(row || null); })
-            .catch(() => { if (!cancelled) setGenesis(null); });
-        return () => { cancelled = true; };
-    }, [messaging, chainId, tick]);
-    useEffect(() => {
-        if (typeof messaging?.getSubassetsForToken !== 'function') return undefined;
-        let cancelled = false;
-        messaging.getSubassetsForToken({ chainId, tick })
-            .then((resp) => {
-                if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                setSubassets(rows);
-            })
-            .catch(() => { if (!cancelled) setSubassets([]); });
-        return () => { cancelled = true; };
-    }, [messaging, chainId, tick]);
-    const genesisInfo = useMemo(() => normalizeGenesisRow(genesis), [genesis]);
-    const subassetTicks = useMemo(() => {
-        if (!Array.isArray(subassets)) return [];
-        const out = [];
-        for (const raw of subassets) {
-            if (Array.isArray(raw)) {
-                if (typeof raw[3] === 'string' && raw[3]) out.push(raw[3]);
-            } else if (raw && typeof raw.tick === 'string' && raw.tick) {
-                out.push(raw.tick);
-            }
-        }
-        return out;
-    }, [subassets]);
-
-    useEffect(() => {
-        if (activeTab !== 'activity' || activity !== null) return undefined;
-        if (typeof messaging?.getHistoryForToken !== 'function') {
-            setActivity([]); return undefined;
-        }
-        let cancelled = false;
-        messaging.getHistoryForToken({ chainId, tick })
-            .then((resp) => {
-                if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                setActivity(rows);
-            })
-            .catch((err) => { if (!cancelled) setActivityError(readFailureMessage(err, 'load the activity')); });
-        return () => { cancelled = true; };
-    }, [activeTab, activity, messaging, chainId, tick]);
-
-    const supplyProgress = useMemo(() => {
-        const s = Number(totalSupply);
-        const m = Number(maxSupply);
-        if (!isFinite(s) || !isFinite(m) || m <= 0) return null;
-        return Math.max(0, Math.min(1, s / m));
-    }, [totalSupply, maxSupply]);
-
-    // Price chart: mirrors Home's PortfolioChart layout: single change
-    // line (▲/▼ absolute + percent) over a 40px sparkline plus the
-    // range-pill strip. No real token price history exists, so the line is
-    // synthesized (off `assetInfo.marketPrice`, native-coin denominated)
-    // for the demo wallet only; a real wallet shows an empty-state message
-    // instead, because the wallet never fabricates a number. Range
-    // selection reshuffles the synthesis seed the same way PortfolioChart
-    // does.
-    const isDemo = isDemoWallet(walletId);
-    // Only the demo wallet draws this chart, so it opens on the demo default.
-    const [chartRangeId, setChartRangeId] = useState(defaultRangeId(true));
-    const chartRange = CHART_RANGES.find((r) => r.id === chartRangeId)
-        || CHART_RANGES.find((r) => r.id === defaultRangeId(true));
-    const nativeTick = nativeTickerOf(descriptor);
-    const chartSeries = useMemo(() => {
-        if (!isDemo) return null;
-        const marketPriceNum = assetInfo?.marketPrice != null
-            ? Number(assetInfo.marketPrice)
-            : null;
-        if (marketPriceNum == null || !Number.isFinite(marketPriceNum) || marketPriceNum <= 0) {
-            return null;
-        }
-        const synth = synthesizeTokenChart(
-            `${chainId}|${tick}|native|${chartRange.id}`,
-            marketPriceNum,
-            chartRange.points,
-        );
-        return synth.sparkline;
-    }, [isDemo, assetInfo, chainId, tick, chartRange.id, chartRange.points]);
-    const chartChange = useMemo(() => {
-        if (!Array.isArray(chartSeries) || chartSeries.length < 2) return { delta: null, pct: null };
-        const start = chartSeries[0];
-        const end = chartSeries[chartSeries.length - 1];
-        const d = end - start;
-        const p = start > 0 ? (d / start) * 100 : null;
-        return { delta: d, pct: p };
-    }, [chartSeries]);
-
-    // Issuer-only vs anyone-with-balance actions. Mint / Description /
-    // Transfer / Broadcast / Lock require the calling address to match
-    // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
-    // balance and don't have that constraint.
-    const blockIssuerActions = isOwner !== true;
-    // ISSUE v7 LOCK_BRIDGE: consensus refuses any further BRIDGE_CHAINS /
-    // MIN_DEPTH edit once it is set, so the row stays visible and explains
-    // itself rather than vanishing. Only an explicit true freezes it: the
-    // projection leaves the flag null when the field is absent, which means
-    // "not known", and hiding the form on unknown would be a guess.
-    const bridgeFrozen = assetInfo?.lockBridge === true;
-    /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean, disabled?: boolean, disabledReason?: string }>} */
-    const actions = [
-        // D-166: gated on the flag that actually forbids a MINT, not on the
-        // coarse `locked` pill. That pill is an OR over description /
-        // max_supply / mint / mint_supply, and only one of those stops the
-        // MINT command: `mint.js` consults LOCK_MINT and nothing else here.
-        // LOCK_MAX_SUPPLY freezes the CAP while leaving every unit under it
-        // mintable, LOCK_MINT_SUPPLY covers mint-now-via-token-update, and
-        // LOCK_DESCRIPTION is metadata. Measured on chain: an edition with
-        // 90 of 100 unminted and its description frozen quotes MINT `valid`,
-        // while this page offered no way to do it.
-        { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: (tokenLocks.mint || blockIssuerActions) ? undefined : onMint },
-        // Unlike Mint (which submits a MINT command and is hidden once
-        // supply is locked), Mint settings edits ISSUE v2's own config
-        // fields and stays reachable regardless of the coarse `locked`
-        // flag: even a fully-locked token can still have an un-touched
-        // MINT_ADDRESS_MAX / window pair worth reviewing, and the panel
-        // itself explains + disables whichever fields their specific
-        // lock flags (LOCK_MAX_MINT / LOCK_MINT / LOCK_MINT_SUPPLY)
-        // actually cover (PC-01).
-        { id: 'mint-settings', label: 'Mint settings', Icon: Icon.GearIcon, onSelect: blockIssuerActions ? undefined : onMintSettings },
-        { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
-        { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: onPayDividend },
-        { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
-        {
-            id: 'description',
-            label: 'Description',
-            Icon: Icon.PencilIcon,
-            onSelect: blockIssuerActions ? undefined : onUpdateDescription,
-            disabled: !!tokenLocks.description,
-            disabledReason: 'The description is permanently locked and cannot be updated.',
-        },
-        { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
-        // PC-25: token-gated encrypted publishing. Owner-only by protocol
-        // (the indexer rejects gated FILEs from non-owners, FILE.md).
-        { id: 'gated-content', label: 'Gated content', Icon: Icon.KeyIcon, onSelect: blockIssuerActions ? undefined : onGatedContent },
-        { id: 'manage-roster', label: 'Official list', Icon: Icon.BookIcon, onSelect: blockIssuerActions ? undefined : onManageRoster },
-        { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
-        { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
-        { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
-        { id: 'bind-controller', label: 'Controller', Icon: Icon.LockIcon, onSelect: blockIssuerActions ? undefined : onBindController },
-        // PC-03 callback config (ISSUE v4). Owner-only; stays reachable
-        // regardless of the coarse `locked` flag (LOCK_CALLBACK and the
-        // pre-distribution gate are enforced inside the form).
-        { id: 'callback-settings', label: 'Callback settings', Icon: Icon.GearIcon, onSelect: blockIssuerActions ? undefined : onCallbackSettings },
-        // PC-04 access lists (ISSUE v5). Owner-only; sets ALLOW_LIST /
-        // BLOCK_LIST to published address lists.
-        { id: 'access-lists', label: 'Access lists', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : onAccessLists },
-        { id: 'shared-block-list', label: 'Use a shared block list', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : (onUseSharedBlockList ?? onAccessLists) },
-        // P19 bridge settings (ISSUE v7). Owner-only, gated like the rows
-        // above; the only entry point into the bridge-settings mode of
-        // TokenAdminForm from the token itself, since the Actions catalogue
-        // opens that form with no token in hand. Frozen by LOCK_BRIDGE it
-        // renders disabled WITH the reason rather than disappearing: an
-        // issuer who set the flag needs to see that it is what stops them.
-        {
-            id: 'bridge-settings',
-            label: 'Bridge',
-            Icon: Icon.LinkIcon,
-            onSelect: blockIssuerActions ? undefined : onBridgeSettings,
-            disabled: bridgeFrozen,
-            disabledReason: 'Bridge settings are frozen for this token and can never change.',
-        },
-        // PC-05: pause/resume the token (SLEEP v1). Owner-only; the form
-        // handles LOCK_SLEEP + the resume path. Label follows current state.
-        { id: 'pause-token', label: sleepState.paused ? 'Resume token' : 'Pause token', Icon: Icon.ClockIcon, onSelect: blockIssuerActions ? undefined : onPauseToken },
-        // PC-03 CALLBACK execution (danger): only offered once a callback
-        // is actually configured (callbackTick set). The after-CALLBACK_BLOCK
-        // timing gate + holder-payout preview live inside the form.
-        { id: 'execute-callback', label: 'Execute callback', Icon: Icon.TrashIcon, onSelect: (blockIssuerActions || !assetInfo?.callbackTick) ? undefined : onExecuteCallback, danger: true },
-        { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (allLocksSet || blockIssuerActions) ? undefined : onLock },
-        { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },
-    ];
-
-    const visibleActions = actions.filter((a) => typeof a.onSelect === 'function');
-    const primaryActions = visibleActions.slice(0, 3);
-    const overflowActions = visibleActions.slice(3);
-
-    // "More" dropdown: mirrors Home.jsx's quickAction More pattern.
-    // Close on outside click and Escape so the menu doesn't trap focus.
-    const [moreOpen, setMoreOpen] = useState(false);
-    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    useEffect(() => {
-        if (!moreOpen) return undefined;
-        const onClick = (e) => {
-            if (moreWrapRef.current?.contains(e.target)) return;
-            setMoreOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [moreOpen]);
-
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            backLabel={t('routes.manageToken.backToMyTokens')}
-            title={t('routes.manageToken.manageToken')}
-        />
-    );
-
-    const tabs = [
-        { id: 'dispensers', label: 'Dispensers' },
-        { id: 'orders',     label: 'Orders'     },
-        { id: 'swaps',      label: 'Swaps'      },
-        { id: 'holders',    label: 'Holders'    },
-        { id: 'activity',   label: 'Activity'   },
-    ];
-
-    return (
-        <Screen variant={variant} header={header}>
-            <ListPage className={styles.body}>
-                {/* Owner-mismatch banner: surfaces when the wallet
-                    holds the token but none of its addresses matches
-                    the on-chain creator. Issuer-only actions are
-                    auto-hidden below; the banner explains why. It is the
-                    first item of page content, as every notice is. */}
-                {isOwner === false ? (
-                    <StatusMessage variant="warning" role="status">
-                        {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
-                    </StatusMessage>
-                ) : null}
-                {/* A failed read (loadError) is an outage, which the failed panel
-                    states once; owner-only actions stay hidden either way. */}
-                {assetInfo && !assetInfo.loadError && !owner ? (
-                    <StatusMessage variant="warning" role="status">
-                        {UNKNOWN_TOKEN_ISSUER_MESSAGE}
-                    </StatusMessage>
-                ) : null}
-                {/* "Official token" notice: on a project registry's
-                    current roster (owner-attested; Project_Registry.md). */}
-                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                    <StatusMessage variant="success" role="status">
-                        {t('routes.manageToken.thisTokenIsAnOfficial')}{' '}
-                        {assetInfo.projects.map((p, i) => (
-                            <span key={p} className={styles.officialBannerProject}>
-                                {i > 0 ? ', ' : ''}{p}
-                            </span>
-                        ))}
-                        {' '}{t('manageToken.officialProjectNoun', { count: assetInfo.projects.length })}
-                    </StatusMessage>
-                ) : null}
-
-                <div className={styles.surface}>
-
-                {/* Hero: identity (no Total Balance; this is the issuer view). */}
-                <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
-                    <div className={styles.heroIconWrap}>
-                        <TickerIcon chainId={chainId} tick={tick} size={64} />
-                    </div>
-                    <div className={styles.heroMain}>
-                        {/* The badges sit in the title row's flow, pushed to
-                            its end, so a long ticker wraps them to the next
-                            line and a paused, locked token shows both. */}
-                        <div className={styles.heroTitleRow}>
-                            <h2 className={styles.heroTick}>{tick}</h2>
-                            <span className={styles.heroBadges}>
-                                {locked ? (
-                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
-                                        <Icon.LockIcon />{t('routes.manageToken.locked')}
-                                    </span>
-                                ) : (
-                                    <span className={`${styles.lockBadge} ${styles.lockBadgeUnlocked}`}>
-                                        <Icon.UnlockIcon />{t('routes.manageToken.unlocked')}
-                                    </span>
-                                )}
-                                {sleepState.paused ? (
-                                    <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? t('routes.manageToken.pausedIndefinitely') : (sleepState.resumeBlock ? t('routes.manageToken.pausedUntilBlock', { resumeBlock: sleepState.resumeBlock }) : t('routes.manageToken.paused'))}>
-                                        <Icon.LockIcon />{t('routes.manageToken.paused')}
-                                    </span>
-                                ) : null}
-                            </span>
-                        </div>
-                        {/* No chain name here: the icon and its chain overlay
-                            carry the network (operator ruling). */}
-                        {owner ? (
-                            <div className={styles.heroSub}>
-                                <span>{t('routes.manageToken.ownedBy')}</span>
-                                <AddressText address={owner} className={styles.heroOwner} />
-                                <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} />
-                            </div>
-                        ) : null}
-                        {description ? (
-                            <p className={styles.heroDescription}>{description}</p>
-                        ) : null}
-                    </div>
-                </section>
-
-                {/* Market panel: stats strip + chart placeholder. The
-                    chart slot is reserved for future supply / dispense-
-                    price history; today it shows an empty-state hint so
-                    the layout doesn't shift when data wires up later. */}
-                <section className={styles.marketPanel} aria-label={t('routes.manageToken.tokenStats')}>
-                    <div className={styles.statsStrip}>
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>
-                                {assetInfo ? t('routes.manageToken.supply', { value: locked ? 'Locked' : 'Unlocked' }) : t('issue.supply')}
-                            </span>
-                            <span className={styles.statValue}>
-                                {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
-                            </span>
-                            <span className={styles.statSub}>
-                                {maxSupply != null ? t('routes.manageToken.ofCap', { formatTokenQuantityValue: formatTokenQuantity(maxSupply, divisibility) }) : t('routes.manageToken.noCap')}
-                            </span>
-                        </div>
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>{t('routes.manageToken.youHold')}</span>
-                            <span className={styles.statValue}>
-                                {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '-'}
-                            </span>
-                            {/* yourBalance comes from getWalletBalances
-                                in raw atomic units, so formatAmount is
-                                the correct formatter here. */}
-                            <span className={styles.statSub}>
-                                {yourSharePct != null ? t('routes.manageToken.ofSupply', { value: yourSharePct.toFixed(1) }) : ' '}
-                            </span>
-                        </div>
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>{t('routes.manageToken.holders')}</span>
-                            <span className={styles.statValue}>
-                                {holders != null ? holders.length.toLocaleString() : '-'}
-                            </span>
-                            <span className={styles.statSub}>&nbsp;</span>
-                        </div>
-                        <div className={styles.stat}>
-                            <span className={styles.statLabel}>{t('routes.manageToken.openOffers')}</span>
-                            <span className={styles.statValue}>
-                                {listings != null ? listings.length.toLocaleString() : '-'}
-                            </span>
-                            <span className={styles.statSub}>&nbsp;</span>
-                        </div>
-                    </div>
-                    {supplyProgress != null ? (
-                        <div className={styles.supplyBar} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(supplyProgress * 100)}>
-                            <div className={styles.supplyBarFill} style={{ width: `${supplyProgress * 100}%` }} />
-                        </div>
-                    ) : null}
-
-                    {/* Sparkline + change line + range pills. Same shape
-                        as Home's PortfolioChart: single change row
-                        above a 40px Sparkline, then the range strip. */}
-                    {chartSeries ? (
-                        <>
-                            {chartChange.delta != null ? (
-                                <div
-                                    className={`${portfolioChartStyles.change} ${chartChange.delta > 0 ? portfolioChartStyles.changePositive : chartChange.delta < 0 ? portfolioChartStyles.changeNegative : portfolioChartStyles.changeNeutral}`}
-                                >
-                                    {chartChange.delta > 0 ? '▲' : chartChange.delta < 0 ? '▼' : '-'}{' '}
-                                    {formatNativeAmount(Math.abs(chartChange.delta))} {nativeTick}
-                                    {chartChange.pct != null && Number.isFinite(chartChange.pct)
-                                        ? ` (${chartChange.pct > 0 ? '+' : ''}${chartChange.pct.toFixed(2)}%)`
-                                        : ''}
-                                </div>
-                            ) : null}
-                            <div
-                                id={`${chartTabsId}-panel`}
-                                className={portfolioChartStyles.chart}
-                                role="tabpanel"
-                                aria-labelledby={`${chartTabsId}-tab-${chartRangeId}`}
-                            >
-                                <Sparkline series={chartSeries} height={40} />
-                            </div>
-                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label={t('routes.manageToken.chartRange')}>
-                                {/* Chart-range tabs stay native because Button does not implement tab semantics. */}
-                                {CHART_RANGES.map((r) => (
-                                    <button
-                                        key={r.id}
-                                        id={`${chartTabsId}-tab-${r.id}`}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={r.id === chartRangeId ? 'true' : 'false'}
-                                        aria-controls={`${chartTabsId}-panel`}
-                                        tabIndex={r.id === chartRangeId ? 0 : -1}
-                                        className={`${portfolioChartStyles.range} ${r.id === chartRangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                        onClick={() => setChartRangeId(r.id)}
-                                    >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <EmptyState
-                            title={isDemo ? t('routes.manageToken.noMarketDataYet') : t('routes.manageToken.noPriceHistoryYet')}
-                            body={t('routes.manageToken.indexedMarketActivityBuildsThis')}
-                            titleAs="p"
-                        />
-                    )}
-                </section>
-
-                {/* Action buttons: same 3-primary + More pattern as Home. */}
-                <div className={styles.manageGrid} role="group" aria-label={t('routes.manageToken.manageActions')}>
-                    {primaryActions.map((a) => (
-                        <Button
-                            key={a.id}
-                            type="button"
-                            variant={a.danger ? 'danger' : 'secondary'}
-                            size="sm"
-                            block
-                            icon={<a.Icon />}
-                            // A row the protocol has frozen stays on screen and
-                            // says why on hover, instead of being filtered out
-                            // like an action this wallet simply cannot sign.
-                            disabled={!!a.disabled}
-                            title={a.disabled ? a.disabledReason : undefined}
-                            onClick={a.onSelect}
-                        >
-                            {a.label}
-                        </Button>
-                    ))}
-                    {overflowActions.length > 0 ? (
-                        <div className={styles.manageMoreWrap} ref={moreWrapRef}>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                block
-                                icon={<Icon.MoreIcon />}
-                                aria-haspopup="menu"
-                                aria-expanded={moreOpen}
-                                onClick={() => setMoreOpen((o) => !o)}
-                            >
-                                {t('history.detail.more')}
-                            </Button>
-                            {moreOpen ? (
-                                <div className={styles.manageMoreMenu} role="menu">
-                                    {overflowActions.map((a) => (
-                                        <Button
-                                            key={a.id}
-                                            type="button"
-                                            role="menuitem"
-                                            data-destructive={a.danger ? 'true' : undefined}
-                                            variant={a.danger ? 'danger' : 'ghost'}
-                                            size="sm"
-                                            block
-                                            icon={<a.Icon />}
-                                            disabled={!!a.disabled}
-                                            title={a.disabled ? a.disabledReason : undefined}
-                                            onClick={() => { setMoreOpen(false); a.onSelect(); }}
-                                        >
-                                            {a.label}
-                                        </Button>
-                                    ))}
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </div>
-
-                {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
-                <div className={styles.tabs} role="tablist" aria-label={t('routes.manageToken.tokenManagementPanels')}>
-                    {/* Token panels stay native because Button does not implement tab semantics. */}
-                    {tabs.map((t) => (
-                        <button
-                            key={t.id}
-                            id={`${tabsId}-tab-${t.id}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={activeTab === t.id}
-                            aria-controls={`${tabsId}-panel`}
-                            tabIndex={activeTab === t.id ? 0 : -1}
-                            className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
-                            onClick={() => setActiveTab(t.id)}
-                        >
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
-
-                <div
-                    id={`${tabsId}-panel`}
-                    className={styles.tabPanel}
-                    role="tabpanel"
-                    aria-labelledby={`${tabsId}-tab-${activeTab}`}
-                >
-                    {activeTab === 'dispensers' ? (
-                        <DispensersPanel
-                            listings={listings}
-                            listingsError={listingsError}
-                            tick={tick}
-                            chainId={chainId}
-                            onOpenDispenser={onOpenDispenser}
-                            onCreateDispenser={onCreateDispenser}
-                        />
-                    ) : null}
-                    {activeTab === 'orders' ? (
-                        <OrdersPanel orders={orders} error={ordersError} tick={tick} chainId={chainId} />
-                    ) : null}
-                    {activeTab === 'swaps' ? (
-                        <SwapsPanel swaps={swaps} error={swapsError} tick={tick} />
-                    ) : null}
-                    {activeTab === 'holders' ? (
-                        <HoldersPanel
-                            holders={holders}
-                            error={holdersError}
-                            onViewAll={onViewHolders}
-                            divisibility={divisibility}
-                        />
-                    ) : null}
-                    {activeTab === 'activity' ? (
-                        <ActivityPanel
-                            activity={activity}
-                            error={activityError}
-                            onViewAll={onViewActivity}
-                            tick={tick}
-                        />
-                    ) : null}
-                </div>
-
-                {/* Genesis + subassets: small read-only metadata
-                    section. Hidden when neither piece of data is
-                    present (dev mock returns nothing). */}
-                {(genesisInfo || subassetTicks.length > 0) ? (
-                    <section className={styles.genesisPanel} aria-label={t('routes.manageToken.genesisAndSubassets')}>
-                        <SectionHeader as="h3" title={t('routes.manageToken.genesis')} />
-                        {genesisInfo ? (
-                            <dl className={styles.genesisList}>
-                                {genesisInfo.actionIndex ? (
-                                    <>
-                                        <dt>{t('routes.manageToken.issueAction')}</dt>
-                                        <dd className={styles.genesisMono}>{genesisInfo.actionIndex}</dd>
-                                    </>
-                                ) : null}
-                                {genesisInfo.blockIndex ? (
-                                    <>
-                                        <dt>{t('settings.connectedSites.block')}</dt>
-                                        <dd>{Number(genesisInfo.blockIndex).toLocaleString('en-US')}</dd>
-                                    </>
-                                ) : null}
-                                {genesisInfo.timestamp ? (
-                                    <>
-                                        <dt>{t('routes.manageToken.issued')}</dt>
-                                        <dd>{new Date(Number(genesisInfo.timestamp) * (Number(genesisInfo.timestamp) > 1e12 ? 1 : 1000)).toLocaleString()}</dd>
-                                    </>
-                                ) : null}
-                                {genesisInfo.source
-                                    && String(genesisInfo.source).toLowerCase() !== String(owner || '').toLowerCase() ? (
-                                    <>
-                                        <dt>{t('routes.manageToken.issuer')}</dt>
-                                        <dd className={styles.copyableGenesis}>
-                                            <AddressText address={genesisInfo.source} className={styles.genesisMono} />
-                                            <CopyButton value={genesisInfo.source} ariaLabel={t('routes.manageToken.copyGenesisIssuerAddress')} />
-                                        </dd>
-                                    </>
-                                ) : null}
-                            </dl>
-                        ) : (
-                            <EmptyState title={t('routes.manageToken.noGenesisRecordYet')} body={t('routes.manageToken.theIndexedGenesisRecordFor', { tick })} titleAs="p" />
-                        )}
-                        {subassetTicks.length > 0 ? (
-                            <>
-                                <SectionHeader
-                                    as="h3"
-                                    title={t('manageToken.subassetCount', { count: subassetTicks.length })}
-                                />
-                                {/* Safari needs an explicit list role because this class removes list styling. */}
-                                <ul className={styles.subassetList} role="list">
-                                    {subassetTicks.slice(0, 20).map((t) => (
-                                        <li key={t} className={styles.subassetItem}>{t}</li>
-                                    ))}
-                                </ul>
-                            </>
-                        ) : null}
-                    </section>
-                ) : null}
-                </div>
-            </ListPage>
-        </Screen>
-    );
-}
-
-/* ───── Tab panel components (kept inline since they're tightly
-   coupled to ManageToken's styles + data shapes). ───── */
-
-function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispenser, onCreateDispenser }) {
-    const { messaging } = useMessaging();
-    // A Mode B row carries no price on this lane; it comes from its oracle.
-    const oracleEntries = useMemo(() => (listings || []).map((row) => ({ chainId, row })), [listings, chainId]);
-    const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
-    if (listingsError) return <StatusMessage variant="error">{listingsError}</StatusMessage>;
-    if (listings === null) return (
-        <div className={styles.list}>
-            <Skeleton height={72} />
-            <Skeleton height={72} />
-        </div>
-    );
-    if (listings.length === 0) {
-        return (
-            <EmptyState
-                title={t('routes.manageToken.noOpenDispensers')}
-                body={t('routes.manageToken.openDispensersSellingAppearHere', { tick })}
-                titleAs="p"
-                actionLabel={typeof onCreateDispenser === 'function' ? t('routes.manageToken.createOne') : undefined}
-                onAction={onCreateDispenser}
-            />
-        );
-    }
-    return (
-        /* Safari needs an explicit list role because this class removes list styling. */
-        <ul className={styles.list} role="list">
-            {listings.map((d, i) => {
-                // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT (0 on a
-                // fiat-priced one), and the live escrow_remaining.
-                const remaining = flowsLib.dispenserLiveState(d).giveRemaining;
-                const actionIndex = d.action_index || d.actionIndex || d.tx_hash || d.id;
-                const onClick = typeof onOpenDispenser === 'function' && actionIndex
-                    ? () => onOpenDispenser(chainId, actionIndex)
-                    : undefined;
-                const summary = isDispenserPriceStale(d)
-                    ? dispenserRateLabel(d)
-                    : d.give_amount
-                        ? (dispenserRateLabel(d, oracleFeedsFor(chainId, d))
-                            + (remaining != null ? ` · ${formatDecimal(remaining)} ${tick} left` : ''))
-                        : 'Open dispenser';
-                return (
-                    <HistoryRow
-                        key={String(actionIndex || i)}
-                        as="button"
-                        chainId={chainId}
-                        action="DISPENSER"
-                        status="open"
-                        statusLabel={t('routes.manageToken.open')}
-                        summary={summary}
-                        blockIndex={d.block_index || d.blockIndex}
-                        timestamp={d.timestamp || d.block_time}
-                        onClick={onClick}
-                        disabled={!onClick}
-                    />
-                );
-            })}
-        </ul>
-    );
-}
-
-function OrdersPanel({ orders, error, tick, chainId }) {
-    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
-    if (orders === null) return (
-        <div className={styles.list}>
-            <Skeleton height={72} />
-            <Skeleton height={72} />
-        </div>
-    );
-    if (orders.length === 0) return <EmptyState title={t('routes.manageToken.noOpenOrders')} body={t('routes.manageToken.openOrdersInvolvingAppearHere', { tick })} titleAs="p" />;
-    return (
-        /* Safari needs an explicit list role because this class removes list styling. */
-        <ul className={styles.list} role="list">
-            {orders.slice(0, 50).map((o, i) => {
-                const giveTick = o.give_tick || o.give_coin || o.giveTick || o.giveCoin || '';
-                const getTick = o.get_tick || o.get_coin || o.getTick || o.getCoin || '';
-                const { give: giveQty, get: getQty } = offerAmounts(o);
-                const summary =
-                    `${giveQty != null ? formatWithThousands(giveQty) : '?'} ${giveTick}` +
-                    ' → ' +
-                    `${getQty != null ? formatWithThousands(getQty) : '?'} ${getTick}`;
-                return (
-                    <HistoryRow
-                        key={String(o.action_index || o.tx_hash || i)}
-                        chainId={chainId}
-                        tick={tick}
-                        action="ORDER"
-                        status="open"
-                        statusLabel={t('routes.manageToken.open')}
-                        summary={summary}
-                        blockIndex={o.block_index || o.blockIndex}
-                        timestamp={o.timestamp || o.block_time}
-                    />
-                );
-            })}
-        </ul>
-    );
-}
-
-function SwapsPanel({ swaps, error, tick }) {
-    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
-    if (swaps === null) return (
-        <div className={styles.list}>
-            <Skeleton height={72} />
-            <Skeleton height={72} />
-        </div>
-    );
-    if (swaps.length === 0) return <EmptyState title={t('routes.manageToken.noRecentSwaps')} body={t('routes.manageToken.recentSwapsInvolvingAppearHere', { tick })} titleAs="p" />;
-    return (
-        /* Safari needs an explicit list role because this class removes list styling. */
-        <ul className={styles.list} role="list">
-            {swaps.slice(0, 50).map((s, i) => {
-                const giveTick = s.give_tick || s.give_coin || s.giveTick || s.giveCoin || '';
-                const getTick = s.get_tick || s.get_coin || s.getTick || s.getCoin || '';
-                const giveQty = s.give_amount ?? s.giveAmount ?? null;
-                const getQty = s.get_amount ?? s.getAmount ?? null;
-                const lifecycle = offerLifecycle(s);
-                const statusLabel = lifecycle === 'complete' ? 'Filled'
-                    : lifecycle ? lifecycle[0].toUpperCase() + lifecycle.slice(1) : 'Status unavailable';
-                const summary =
-                    `${giveQty != null ? formatWithThousands(giveQty) : '?'} ${giveTick}` +
-                    ' ⇄ ' +
-                    `${getQty != null ? formatWithThousands(getQty) : '?'} ${getTick}`;
-                return (
-                    <HistoryRow
-                        key={String(s.action_index || s.tx_hash || i)}
-                        chainId={s.chainId}
-                        action="SWAP"
-                        status={lifecycle === 'complete' ? 'success' : lifecycle || 'unknown'}
-                        statusLabel={statusLabel}
-                        summary={summary}
-                        blockIndex={s.block_index || s.blockIndex}
-                        timestamp={s.timestamp || s.block_time}
-                    />
-                );
-            })}
-        </ul>
-    );
-}
-
-function HoldersPanel({ holders, error, onViewAll, divisibility }) {
-    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
-    if (holders === null) return (
-        <div className={styles.list}>
-            <Skeleton height={36} />
-            <Skeleton height={36} />
-            <Skeleton height={36} />
-        </div>
-    );
-    if (holders.length === 0) return (
-        <EmptyState title={t('history.recipients.noHoldersFound')} body={t('routes.manageToken.holdersAppearHereAfterSupply')} titleAs="p" />
-    );
-    return (
-        <>
-            <table className={tableStyles.table}>
-                <caption className={tableStyles.visuallyHiddenCaption}>{t('routes.manageToken.topHolderBalances')}</caption>
-                <thead>
-                    <tr>
-                        <th className={tableStyles.headerCell} scope="col">{t('verifySignature.address')}</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('routes.manageToken.balance')}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {holders.slice(0, 10).map((h, i) => (
-                        <tr key={`${h.address || h.holder || i}`}>
-                            <td className={tableStyles.cell} data-label="Address">
-                                <span className={styles.holderAddress}>
-                                    <AddressText
-                                        address={h.address || h.holder || '-'}
-                                        className={styles.rowMono}
-                                    />
-                                    {(h.address || h.holder) ? (
-                                        <CopyButton
-                                            value={h.address || h.holder}
-                                            ariaLabel={t('routes.manageToken.copyHolderAddress', { value: i + 1 })}
-                                        />
-                                    ) : null}
-                                </span>
-                            </td>
-                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.rowSub}`} data-label="Balance">
-                                {h.quantity != null
-                                    ? formatAmount(String(h.quantity), divisibility || 0)
-                                    : (h.amount != null ? formatWithThousands(h.amount) : '-')}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            {typeof onViewAll === 'function' && holders.length > 10 ? (
-                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
-                    {t('routes.manageToken.viewAll')} {holders.length} {t('routes.manageToken.holders2')}
-                </Button>
-            ) : null}
-        </>
-    );
-}
-
-function ActivityPanel({ activity, error, onViewAll, tick }) {
-    if (error) return <StatusMessage variant="error">{error}</StatusMessage>;
-    if (activity === null) return (
-        <div className={styles.list}>
-            <Skeleton height={36} />
-            <Skeleton height={36} />
-            <Skeleton height={36} />
-        </div>
-    );
-    if (activity.length === 0) return (
-        <EmptyState title={t('history.empty.noActivityTitle')} body={t('routes.manageToken.indexedActivityForAppearsHere', { tick })} titleAs="p" />
-    );
-    return (
-        <>
-            {/* Safari needs an explicit list role because this class removes list styling. */}
-            <ul className={styles.list} role="list">
-                {activity.slice(0, 20).map((a, i) => {
-                    // `action` is the key the explorer's /history/<tick>/token rows
-                    // actually carry (ActionDetail reads the same one). The three
-                    // aliases below never matched it, so every row fell through to
-                    // the 'EVENT' default and the whole tab read "Event · <date>"
-                    // regardless of what had happened - D-80.
-                    const type = a.action || a.type || a.action_type || a.kind || 'EVENT';
-                    const ts = Number(a.timestamp || a.block_time || 0);
-                    const when = ts > 0
-                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                        : '';
-                    const block = a.block_index != null ? Number(a.block_index) : null;
-                    const sub = [
-                        Number.isFinite(block) && block > 0
-                            ? `Block ${block.toLocaleString('en-US')}`
-                            : null,
-                        when,
-                    ].filter(Boolean).join(' · ');
-                    return (
-                        <li key={String(a.action_index || a.tx_hash || i)}>
-                            <div className={styles.row}>
-                                <span className={styles.rowMain}>{actionDisplayLabel(type)}</span>
-                                <span className={styles.rowSub}>{sub}</span>
-                            </div>
-                        </li>
-                    );
-                })}
-            </ul>
-            {typeof onViewAll === 'function' ? (
-                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
-                    {t('routes.manageToken.viewAllActivity')}
-                </Button>
-            ) : null}
-        </>
-    );
-}
-
-/* ───── History-style row used by Dispensers / Orders / Swaps panels.
-   Mirrors the §23 timeline row visually: header (chain icon + ACTION
-   label + status pill), source line (mono muted) or summary line, meta
-   line (block + relative time). When `as="button"` and `onClick` is
-   set the whole row is clickable; otherwise it renders as a div. ───── */
-
-function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, summary, blockIndex, timestamp, onClick, disabled }) {
-    const d = chainId ? chainRegistry.get(chainId) : null;
-    const statusClass = status === 'success' ? styles.histStatusSuccess
-        : status === 'pending' ? styles.histStatusPending
-        : styles.histStatusOpen;
-    const blockNum = blockIndex != null ? Number(blockIndex) : null;
-    const interactive = as === 'button' && typeof onClick === 'function';
-    // When a tick is given we lead the row with a 40px TickerIcon
-    // (letter avatar + chain pip): used by OrdersPanel so each row
-    // visually anchors on the token being traded. The small chain icon
-    // in the header is suppressed in that mode since the TickerIcon
-    // already carries the chain pip.
-    const showTickerIcon = !!(tick && chainId);
-    const contentStack = (
-        <span className={showTickerIcon ? styles.histContent : undefined}>
-            <span className={styles.histHeader}>
-                {!showTickerIcon && d ? (
-                    <img
-                        src={branding.chainIconSmallUrl(d.id)}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.histChainIcon}
-                        width={16}
-                        height={16}
-                    />
-                ) : null}
-                <span className={styles.histAction}>{actionDisplayLabel(action)}</span>
-                {statusLabel ? (
-                    <span className={`${styles.histStatus} ${statusClass}`}>{statusLabel}</span>
-                ) : null}
-            </span>
-            {summary ? (
-                <span className={styles.histSummary}>{summary}</span>
-            ) : null}
-            {source ? (
-                <span className={styles.histSource}>{source}</span>
-            ) : null}
-            <span className={styles.histMeta}>
-                {blockNum != null && Number.isFinite(blockNum) && blockNum > 0 ? (
-                    <span>{t('settings.connectedSites.block')} {blockNum.toLocaleString('en-US')}</span>
-                ) : (
-                    <span>{t('routes.manageToken.unconfirmed')}</span>
-                )}
-                {timestamp ? (
-                    <span className={styles.histTime}>{formatRelativeDateTime(timestamp)}</span>
-                ) : null}
-            </span>
-        </span>
-    );
-    const tickerIcon = showTickerIcon ? (
-        <span className={styles.histTickerIcon}>
-            <TickerIcon chainId={chainId} tick={tick} size={40} />
-        </span>
-    ) : null;
-    const rowClass = `${styles.histRow} ${showTickerIcon ? styles.histRowWithIcon : ''}`;
-    return (
-        <li>
-            {interactive ? (
-                <Button
-                    type="button"
-                    className={rowClass}
-                    icon={tickerIcon}
-                    onClick={onClick}
-                    disabled={disabled}
-                >
-                    {contentStack}
-                </Button>
-            ) : (
-                <div className={rowClass}>
-                    {tickerIcon ? <span aria-hidden="true">{tickerIcon}</span> : null}
-                    {contentStack}
-                </div>
-            )}
-        </li>
-    );
-}
-
-function nativeTickerOf(descriptor) {
-    return descriptor?.coin ? descriptor.coin.toUpperCase() : '';
-}
 
 // The /issues endpoint emits rows either as keyed objects (some
 // adapters) or as the explorer's collapsed array
@@ -1308,17 +64,360 @@ export function normalizeGenesisRow(raw) {
     };
 }
 
-// Format a native-coin amount (BTC / LTC / DOGE) for the chart's change
-// line. Uses up to 8 decimal places, trimming trailing zeros, so small
-// price moves (~0.000012 BTC) still read clearly. Mirrors the spirit of
-// PortfolioChart's `formatFiat`: chart-anchored, no localized currency
-// symbols since this side of the chart is native-tick-denominated.
-function formatNativeAmount(value) {
-    const v = Number(value);
-    if (!Number.isFinite(v)) return '-';
-    if (v === 0) return '0';
-    const abs = Math.abs(v);
-    if (abs >= 1) return v.toLocaleString('en-US', { maximumFractionDigits: 4 });
-    const fixed = v.toFixed(8);
-    return fixed.replace(/\.?0+$/, '');
+export function ManageToken({
+    walletId,
+    chainId,
+    tick,
+    divisibility: divisibilityProp = null,
+    onBack,
+    onIssueSubtoken,
+    onMint,
+    onDestroy,
+    onLock,
+    onMintSettings,
+    onCallbackSettings,
+    onExecuteCallback,
+    onAccessLists,
+    onUseSharedBlockList,
+    onBridgeSettings,
+    onPauseToken,
+    onUpdateDescription,
+    onAttachContent,
+    onGatedContent,
+    onManageRoster,
+    onTransferOwnership,
+    onSellOwnership,
+    onCreateDispenser,
+    onPayDividend,
+    onAirdrop,
+    onBroadcast,
+    onBindController,
+    onIssuerResolved,
+}) {
+    const { messaging, shell } = useMessaging();
+    const approvedTabsId = useId();
+    const variant = screenVariantFor(shell);
+    const assetInfo = useTokenInfo({ chainId, tick });
+    const tokenLocks = assetInfo?.locks || {};
+    const owner = assetInfo?.creator || null;
+    const description = assetInfo?.description || '';
+    const displayName = assetInfo?.displayName || assetInfo?.name || tick;
+    const totalSupply = assetInfo?.totalSupply ?? assetInfo?.supply ?? null;
+    const maxSupply = assetInfo?.maxSupply ?? null;
+    const divisibility = assetInfo?.divisibility != null
+        && Number.isFinite(Number(assetInfo.divisibility))
+        ? Number(assetInfo.divisibility)
+        : divisibilityProp;
+    const isOwner = useIsTokenIssuer({ messaging, walletId, chainId, issuerAddress: owner });
+    const blockIssuerActions = isOwner !== true;
+    const allLocksSet = LOCK_FLAG_KEYS.every((key) => !!tokenLocks[key]);
+    const bridgeFrozen = assetInfo?.lockBridge === true;
+    const [approvedActiveTab, setApprovedActiveTab] = useState('actions');
+    const [approvedSleepRow, setApprovedSleepRow] = useState(null);
+    const [approvedSleepHeight, setApprovedSleepHeight] = useState(null);
+    const [approvedGenesis, setApprovedGenesis] = useState(null);
+
+    useEffect(() => {
+        if (typeof onIssuerResolved === 'function') onIssuerResolved(owner || null);
+    }, [owner, onIssuerResolved]);
+
+    useEffect(() => {
+        if (!chainId || !tick || typeof messaging?.sleepState !== 'function') {
+            setApprovedSleepRow(null);
+            setApprovedSleepHeight(null);
+            return undefined;
+        }
+        let cancelled = false;
+        Promise.all([
+            messaging.sleepState({ chainId, query: tick, type: 'token' }).catch(() => null),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ]).then(([row, watermark]) => {
+            if (cancelled) return;
+            setApprovedSleepRow(row || null);
+            setApprovedSleepHeight(watermark?.watermark != null ? Number(watermark.watermark) : null);
+        });
+        return () => { cancelled = true; };
+    }, [chainId, tick, messaging]);
+
+    useEffect(() => {
+        if (typeof messaging?.getGenesisForToken !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getGenesisForToken({ chainId, tick })
+            .then((row) => { if (!cancelled) setApprovedGenesis(normalizeGenesisRow(row)); })
+            .catch(() => { if (!cancelled) setApprovedGenesis(null); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick]);
+
+    const sleepState = flowsLib.interpretSleep(
+        approvedSleepRow ? approvedSleepRow.resumeBlock : null,
+        approvedSleepHeight,
+    );
+    const ownerBlockedReason = t('routes.manageToken.ownerActionUnavailable');
+    const unavailableReason = t('routes.manageToken.actionUnavailable');
+    const ownerAction = (handler) => ({
+        onSelect: blockIssuerActions ? undefined : handler,
+        disabled: blockIssuerActions || typeof handler !== 'function',
+        disabledReason: blockIssuerActions ? ownerBlockedReason : unavailableReason,
+    });
+    const actions = approvedManageActions({
+        assetInfo,
+        tokenLocks,
+        allLocksSet,
+        bridgeFrozen,
+        blockIssuerActions,
+        ownerBlockedReason,
+        unavailableReason,
+        sleepState,
+        ownerAction,
+        onIssueSubtoken,
+        onMint,
+        onDestroy,
+        onLock,
+        onMintSettings,
+        onCallbackSettings,
+        onExecuteCallback,
+        onAccessLists,
+        onUseSharedBlockList,
+        onBridgeSettings,
+        onPauseToken,
+        onUpdateDescription,
+        onAttachContent,
+        onGatedContent,
+        onManageRoster,
+        onTransferOwnership,
+        onSellOwnership,
+        onCreateDispenser,
+        onPayDividend,
+        onAirdrop,
+        onBroadcast,
+        onBindController,
+    });
+    const panelId = `${approvedTabsId}-panel`;
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            backLabel={t('routes.manageToken.backToMyTokens')}
+            title={t('routes.manageToken.manageToken')}
+        />
+    );
+
+    return (
+        <Screen variant={variant} header={header}>
+            <ListPage className={styles.approvedBody}>
+                {assetInfo && !assetInfo.loadError && !owner ? (
+                    <StatusMessage variant="warning" role="status">
+                        {UNKNOWN_TOKEN_ISSUER_MESSAGE}
+                    </StatusMessage>
+                ) : null}
+                <section className={styles.approvedHero} aria-label={t('routes.manageToken.tokenIdentity')}>
+                    <TickerIcon chainId={chainId} tick={tick} context="list" />
+                    <div className={styles.approvedHeroText}>
+                        <h2 className={styles.approvedHeroName}>{displayName}</h2>
+                        {description ? <p className={styles.approvedHeroDescription}>{description}</p> : null}
+                    </div>
+                </section>
+                <Tabs
+                    id={approvedTabsId}
+                    items={[
+                        { id: 'actions', label: t('routes.manageToken.actions') },
+                        { id: 'details', label: t('components.reachabilityLine.details') },
+                    ]}
+                    value={approvedActiveTab}
+                    onChange={setApprovedActiveTab}
+                    panelId={panelId}
+                    aria-label={t('routes.manageToken.manageTokenView')}
+                />
+                <div
+                    id={panelId}
+                    role="tabpanel"
+                    aria-labelledby={`${approvedTabsId}-tab-${approvedActiveTab}`}
+                    className={styles.approvedTabPanel}
+                >
+                    {approvedActiveTab === 'actions' ? (
+                        <div className={styles.approvedActionGrid} aria-label={t('routes.manageToken.actions')}>
+                            {actions.map((action) => (
+                                <Button
+                                    key={action.id}
+                                    type="button"
+                                    variant={action.danger ? 'danger' : 'secondary'}
+                                    className={styles.approvedActionTile}
+                                    icon={<action.Icon />}
+                                    onClick={action.onSelect}
+                                    disabled={action.disabled}
+                                    title={action.disabled ? action.disabledReason : undefined}
+                                >
+                                    {action.label}
+                                </Button>
+                            ))}
+                        </div>
+                    ) : (
+                        <ApprovedDetailsCard
+                            tick={tick}
+                            owner={owner}
+                            issuer={approvedGenesis?.source || owner}
+                            totalSupply={totalSupply}
+                            maxSupply={maxSupply}
+                            divisibility={divisibility}
+                            tokenLocks={tokenLocks}
+                            lockBridge={bridgeFrozen}
+                            paused={sleepState.paused}
+                            createdBlock={approvedGenesis?.blockIndex ?? assetInfo?.blockIndex ?? assetInfo?.block_index ?? null}
+                        />
+                    )}
+                </div>
+            </ListPage>
+        </Screen>
+    );
+}
+
+function approvedManageActions(options) {
+    const {
+        assetInfo,
+        tokenLocks,
+        allLocksSet,
+        bridgeFrozen,
+        blockIssuerActions,
+        ownerBlockedReason,
+        unavailableReason,
+        sleepState,
+        ownerAction,
+    } = options;
+    const reason = (special) => special || (blockIssuerActions ? ownerBlockedReason : unavailableReason);
+    return [
+        { id: 'issue-subtoken', label: t('routes.manageToken.issueSubtoken'), Icon: BranchIcon, ...ownerAction(options.onIssueSubtoken) },
+        { id: 'dividend', label: t('routes.manageToken.dividend'), Icon: Icon.DollarIcon, onSelect: options.onPayDividend, disabled: typeof options.onPayDividend !== 'function', disabledReason: unavailableReason },
+        { id: 'airdrop', label: t('palette.createAirdrop.title'), Icon: Icon.UsersIcon, onSelect: options.onAirdrop, disabled: typeof options.onAirdrop !== 'function', disabledReason: unavailableReason },
+        {
+            id: 'mint', label: t('routes.manageToken.mint'), Icon: Icon.PrinterIcon,
+            ...ownerAction(options.onMint),
+            disabled: blockIssuerActions || !!tokenLocks.mint || typeof options.onMint !== 'function',
+            disabledReason: reason(tokenLocks.mint ? t('routes.manageToken.mintLocked') : null),
+        },
+        { id: 'mint-settings', label: t('routes.manageToken.mintSettings'), Icon: Icon.GearIcon, ...ownerAction(options.onMintSettings) },
+        {
+            id: 'lock-settings', label: t('routes.manageToken.lockSettings'), Icon: Icon.LockIcon,
+            ...ownerAction(options.onLock),
+            disabled: blockIssuerActions || allLocksSet || typeof options.onLock !== 'function',
+            disabledReason: reason(allLocksSet ? t('routes.manageToken.allLocksSet') : null),
+        },
+        { id: 'destroy', label: t('routes.manageToken.destroy'), Icon: Icon.TrashIcon, onSelect: options.onDestroy, disabled: typeof options.onDestroy !== 'function', disabledReason: unavailableReason, danger: true },
+        { id: 'dispenser', label: t('routes.manageToken.dispenser'), Icon: StorefrontIcon, onSelect: options.onCreateDispenser, disabled: typeof options.onCreateDispenser !== 'function', disabledReason: unavailableReason },
+        { id: 'sell-name', label: t('routes.manageToken.sellName'), Icon: TagIcon, ...ownerAction(options.onSellOwnership) },
+        {
+            id: 'description', label: t('routes.manageToken.description'), Icon: Icon.PencilIcon,
+            ...ownerAction(options.onUpdateDescription),
+            disabled: blockIssuerActions || !!tokenLocks.description || typeof options.onUpdateDescription !== 'function',
+            disabledReason: reason(tokenLocks.description ? t('routes.manageToken.descriptionLocked') : null),
+        },
+        { id: 'artwork', label: t('routes.manageToken.artwork'), Icon: PictureIcon, ...ownerAction(options.onAttachContent) },
+        { id: 'gated-content', label: t('gatedPublish.gatedContent'), Icon: Icon.KeyIcon, ...ownerAction(options.onGatedContent) },
+        { id: 'official-list', label: t('routes.manageToken.officialList'), Icon: Icon.BookIcon, ...ownerAction(options.onManageRoster) },
+        { id: 'broadcast', label: t('routes.manageToken.broadcast'), Icon: Icon.BroadcastIcon, ...ownerAction(options.onBroadcast) },
+        { id: 'transfer', label: t('routes.manageToken.transfer'), Icon: Icon.HandshakeIcon, ...ownerAction(options.onTransferOwnership) },
+        { id: 'controller', label: t('routes.manageToken.controller'), Icon: Icon.LinkIcon, ...ownerAction(options.onBindController) },
+        { id: 'callback-settings', label: t('routes.manageToken.callbackSettings'), Icon: Icon.GearIcon, ...ownerAction(options.onCallbackSettings) },
+        {
+            id: 'execute-callback', label: t('routes.manageToken.executeCallback'), Icon: LightningIcon,
+            ...ownerAction(options.onExecuteCallback),
+            disabled: blockIssuerActions || !assetInfo?.callbackTick || typeof options.onExecuteCallback !== 'function',
+            disabledReason: reason(!assetInfo?.callbackTick ? t('routes.manageToken.callbackNotConfigured') : null),
+            danger: true,
+        },
+        { id: 'access-lists', label: t('routes.manageToken.accessLists'), Icon: Icon.TokenListIcon, ...ownerAction(options.onAccessLists) },
+        { id: 'shared-block-list', label: t('routes.manageToken.sharedBlockList'), Icon: Icon.TokenListIcon, ...ownerAction(options.onUseSharedBlockList ?? options.onAccessLists) },
+        {
+            id: 'bridge', label: t('routes.manageToken.bridge'), Icon: BridgeIcon,
+            ...ownerAction(options.onBridgeSettings),
+            disabled: blockIssuerActions || bridgeFrozen || typeof options.onBridgeSettings !== 'function',
+            disabledReason: reason(bridgeFrozen ? t('routes.manageToken.bridgeLocked') : null),
+        },
+        {
+            id: 'pause-token',
+            label: sleepState.paused ? t('routes.manageToken.resumeToken') : t('routes.manageToken.pauseToken'),
+            Icon: sleepState.paused ? Icon.UnlockIcon : Icon.PauseIcon,
+            ...ownerAction(options.onPauseToken),
+        },
+    ];
+}
+
+function ApprovedDetailsCard({ tick, owner, issuer, totalSupply, maxSupply, divisibility, tokenLocks, lockBridge, paused, createdBlock }) {
+    const lockRows = [
+        ['max_supply', t('routes.manageToken.lockMaxSupply')],
+        ['max_mint', t('routes.manageToken.lockMaxPerMint')],
+        ['mint', t('routes.manageToken.lockMinting')],
+        ['mint_supply', t('palette.createMint.title')],
+        ['description', t('routes.manageToken.description')],
+        ['sleep', t('ui.animatedQrFrames.pause')],
+        ['callback', t('routes.manageToken.lockCallback')],
+        ['bridge', t('palette.createBridgeSettings.title')],
+    ];
+    return (
+        <section className={styles.approvedDetailsCard} aria-label={t('routes.manageToken.tokenDetails')}>
+            <dl className={styles.approvedDetailsList}>
+                <ApprovedDetailRow label={t('issue.ticker')} value={tick} mono />
+                <ApprovedDetailRow
+                    label={t('routes.manageToken.owner')}
+                    value={owner ? (
+                        <span className={styles.approvedAddressValue}>
+                            <AddressText address={owner} />
+                            <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} iconOnly />
+                        </span>
+                    ) : '-'}
+                />
+                <ApprovedDetailRow label={t('routes.manageToken.issuer')} value={issuer ? <AddressText address={issuer} /> : '-'} />
+                <ApprovedDetailRow label={t('issue.supply')} value={approvedFormatQuantity(maxSupply, divisibility)} mono />
+                <ApprovedDetailRow label={t('routes.manageToken.issued')} value={approvedFormatQuantity(totalSupply, divisibility)} mono />
+                <ApprovedDetailRow
+                    label={t('routes.manageToken.divisible')}
+                    value={Number(divisibility) > 0
+                        ? t('routes.manageToken.divisiblePlaces', { places: Number(divisibility) })
+                        : t('routes.manageToken.no')}
+                />
+                {lockRows.map(([key, label]) => (
+                    <ApprovedLockRow
+                        key={key}
+                        label={label}
+                        locked={key === 'bridge' ? lockBridge : !!tokenLocks[key]}
+                    />
+                ))}
+                <ApprovedDetailRow label={t('history.filters.statusHeader')} value={paused ? t('routes.manageToken.paused') : t('settings.developer.active')} />
+                <ApprovedDetailRow
+                    label={t('walletDetails.created')}
+                    value={createdBlock != null
+                        ? t('history.row.block', { block: Number(createdBlock).toLocaleString('en-US') })
+                        : '-'}
+                />
+            </dl>
+        </section>
+    );
+}
+
+function ApprovedDetailRow({ label, value, mono = false }) {
+    return (
+        <div className={styles.approvedDetailRow}>
+            <dt>{label}</dt>
+            <dd className={mono ? styles.approvedMono : undefined}>{value}</dd>
+        </div>
+    );
+}
+
+function ApprovedLockRow({ label, locked }) {
+    const state = locked ? t('routes.manageToken.locked') : t('routes.manageToken.editable');
+    return (
+        <ApprovedDetailRow
+            label={label}
+            value={(
+                <span className={locked ? styles.approvedLocked : styles.approvedEditable} aria-label={`${label}: ${state}`}>
+                    {locked ? <Icon.LockIcon /> : <Icon.UnlockIcon />}
+                    {state}
+                </span>
+            )}
+        />
+    );
+}
+
+function approvedFormatQuantity(value, divisibility) {
+    return value != null ? formatTokenQuantity(value, divisibility) : '-';
 }

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Children, cloneElement, forwardRef, Fragment, isValidElement, useContext, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ShellReachabilityNoticeContext } from '../shared/components/noticesRoute.js';
 import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
 import { ReachabilityLine } from '../shared/components/ReachabilityLine.jsx';
@@ -16,8 +17,78 @@ import { FormNotices } from './formNoticeSlot.js';
 import { EmptyStateAsLineContext } from './Screen.jsx';
 import { NoticeLines } from './FormNotice.jsx';
 import { StatusMessage, StatusMessageGroup } from './StatusMessage.jsx';
+import { PageNoticeHostContext } from './PageNotice.jsx';
 import { submitOnlyFromLastField } from './formEnter.js';
+import { Button } from './Button.jsx';
 import styles from './FormPage.module.css';
+
+/** Give the main submit action the success treatment while preserving explicit alternatives. */
+function successSubmits(node) {
+    return Children.map(node, (child) => {
+        if (!isValidElement(child)) return child;
+        if (child.type === Button) {
+            if (child.props?.type === 'submit'
+                && (child.props.variant == null || child.props.variant === 'primary')) {
+                return cloneElement(child, { variant: 'success' });
+            }
+            return child;
+        }
+        if (child.props?.children != null) {
+            return cloneElement(child, undefined, successSubmits(child.props.children));
+        }
+        return child;
+    });
+}
+
+/** True when the action row holds a submit Button anywhere inside it. */
+function hasSubmitButton(node) {
+    let found = false;
+    const visit = (current) => Children.forEach(current, (child) => {
+        if (found || !isValidElement(child)) return;
+        if (child.type === Button) {
+            if (child.props?.type === 'submit') found = true;
+            return;
+        }
+        if (child.props?.children != null) visit(child.props.children);
+    });
+    visit(node);
+    return found;
+}
+
+/**
+ * A result or step screen has no submit: its forward action (Done, Next,
+ * Continue) is an onClick button. The action row puts the primary action
+ * last, so the last primary Button gets the success treatment, the same as a
+ * submit does on a form (U63). Secondary, ghost and danger buttons stay as
+ * they are.
+ */
+function successLastPrimary(node) {
+    let last = null;
+    let hasSuccess = false;
+    const find = (current) => Children.forEach(current, (child) => {
+        if (!isValidElement(child)) return;
+        if (child.type === Button) {
+            if (child.props.variant === 'success') hasSuccess = true;
+            if (child.props.variant == null || child.props.variant === 'primary') last = child;
+            return;
+        }
+        if (child.props?.children != null) find(child.props.children);
+    });
+    find(node);
+    // A row that already names its green action (Create new wallet on the
+    // welcome screen) keeps its other buttons' own colours (U63, U69).
+    if (!last || hasSuccess) return node;
+    const visit = (current) => Children.map(current, (child) => {
+        if (!isValidElement(child)) return child;
+        if (child === last) return cloneElement(child, { variant: 'success' });
+        if (child.type === Button) return child;
+        if (child.props?.children != null) {
+            return cloneElement(child, undefined, visit(child.props.children));
+        }
+        return child;
+    });
+    return visit(node);
+}
 
 /**
  * Disable every submit button in an action row. Used by the demo guard so a
@@ -87,9 +158,11 @@ function noticeEntry(node, key) {
  * @param {'h1' | 'h2'} [props.headingAs]               title heading level; defaults to h1
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef]
  * @param {boolean} [props.stackedActions]              stack equal-width actions instead of sharing a row
+ * @param {boolean} [props.choiceActions]               keep a submit-less list of equal choices in its explicit variants instead of promoting the last primary action to success
  * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
  * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
  * @param {boolean} [props.fullWidth]                   wide screens use the whole content width with no card, for reading pages such as the license terms
+ * @param {boolean} [props.cardless]                    wide screens keep the form column but draw no card, so a form built from its own section cards (Issue token) never puts a card inside a card
  * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode }} [props.demoGuard] from useDemoGuard: in a demo wallet the note replaces `status`, submit buttons are disabled and submission is ignored
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
@@ -112,9 +185,11 @@ export const FormPage = forwardRef(function FormPage(
         headingAs: Heading = 'h1',
         titleRef,
         stackedActions = false,
+        choiceActions = false,
         sectioned = false,
         fill = false,
         fullWidth = false,
+        cardless = false,
         label,
         demoGuard,
         noValidate = true,
@@ -132,7 +207,8 @@ export const FormPage = forwardRef(function FormPage(
         sectioned ? styles.sectioned : null,
         fill ? styles.fill : null,
         fullWidth ? styles.fullWidth : null,
-        fullWidth ? styles.cardlessSections : null,
+        cardless ? styles.cardlessForm : null,
+        fullWidth || cardless ? styles.cardlessSections : null,
         className,
     ].filter(Boolean).join(' ');
     const demoBlocked = !!demoGuard?.blocked;
@@ -165,6 +241,9 @@ export const FormPage = forwardRef(function FormPage(
         styles.actions,
         stackedActions ? styles.stackedActions : null,
     ].filter(Boolean).join(' ');
+    const actionsWithSuccess = (row) => (hasSubmitButton(row)
+        ? successSubmits(row)
+        : choiceActions ? row : successLastPrimary(row));
     // A form that draws its own logo or title is the page header; any other form
     // sits under the screen's PageHeader and its notice leads the content.
     const ownsHeading = title != null || visual != null;
@@ -212,6 +291,7 @@ export const FormPage = forwardRef(function FormPage(
     // itself; its sentence is then not repeated here. The count includes
     // this form's own hide, so that one is taken off.
     const shellNotice = useContext(ShellReachabilityNoticeContext);
+    const noticeHost = useContext(PageNoticeHostContext);
     const carriedRef = useRef(false);
     const hiddenElsewhere = (shellNotice?.hiddenCount ?? 0) - (carriedRef.current ? 1 : 0) > 0;
     const carriesShellNotice = Root === 'form' && Boolean(shellNotice) && !hiddenElsewhere && entries.length > 0;
@@ -293,14 +373,20 @@ export const FormPage = forwardRef(function FormPage(
                     </EmptyStateAsLineContext.Provider>
                 </FormNotices.Provider>
             ) : null}
-            {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
+            {actions ? (
+                <div className={actionClassName}>
+                    {actionsWithSuccess(demoBlocked ? disableSubmits(actions) : actions)}
+                </div>
+            ) : null}
             {demoBlocked ? demoGuard.dialog : null}
         </Root>
     );
     if (!noticeAboveCard) return form;
     return (
         <div className={styles.page}>
-            {statusNode}
+            {/* Inside a page that hosts its notices (a Settings section card), the
+                notice goes to that host, outside the card around this form. */}
+            {noticeHost && statusNode ? createPortal(statusNode, noticeHost) : statusNode}
             {form}
         </div>
     );

@@ -262,7 +262,8 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    --xc-success-fill: #146F34;
+    /* Main action fill: the brighter green the operator picked on 2026-11-10. */
+    --xc-success-fill: #16A34A;
     --xc-badge-multisig-classic-bg: #FEF3C7;
     --xc-badge-multisig-classic-fg: #78350F;
     --xc-badge-multisig-classic-border: #D97706;

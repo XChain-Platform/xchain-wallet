@@ -100,7 +100,7 @@ function byText(container, selector, text) {
 
 async function submitUnion(container) {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create union list' }));
     const approve = await screen.findByTestId('confirm-approve');
     await waitFor(() => expect(approve.disabled).toBe(false));
     fireEvent.click(approve);
