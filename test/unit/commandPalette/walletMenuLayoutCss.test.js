@@ -31,7 +31,7 @@ describe('wallet menu CSS layout contracts', () => {
 
     it('fits the catalogue in short phone sheets without shrinking rows below 40px', () => {
         // Denser rhythm makes the catalogue fit; auto overflow means large text scrolls instead of clipping Lock wallet.
-        expect(source).toMatch(/@media \(max-height: 700px\)\s*\{\s*@container wallet-menu \(max-width: 639px\)/s);
+        expect(source).toMatch(/@media \(max-height: 700px\)\s*\{\s*@container wallet-menu not \(min-width: 640px\)/s);
         expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletSurface\s*\{[^}]*gap:\s*var\(--xc-space-1\);[^}]*padding:\s*var\(--xc-space-1\);[^}]*overflow-y:\s*auto;/);
         expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletGroupList \.walletRow,[\s\S]*?\.walletFooter \.walletFooterRow\s*\{[^}]*--xc-button-height:\s*40px;[^}]*min-block-size:\s*40px;[^}]*font-size:\s*max\(var\(--xc-text-sm\)/);
     });
