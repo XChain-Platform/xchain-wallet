@@ -466,6 +466,62 @@
     color: var(--xc-danger);
 }
 
+/* Short phone sheets trade spare rhythm for a fully visible catalogue. The
+   40px row floor keeps every destination comfortably touchable. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @media (max-height: 700px) {
+        @container wallet-menu (max-width: 639px) {
+            .menuHeader {
+                gap: var(--xc-space-1);
+                padding: var(--xc-space-1);
+                padding-block-start: calc(var(--xc-space-1) + env(safe-area-inset-top, 0));
+            }
+
+            .menuHeader .input,
+            .menuHeader .close,
+            .menuHeader .close > button {
+                --xc-button-height: 40px;
+                block-size: 40px;
+                min-block-size: 40px;
+            }
+
+            .menuHeader .close {
+                inline-size: 40px;
+            }
+
+            .walletSurface {
+                gap: var(--xc-space-1);
+                padding: var(--xc-space-1);
+                overflow-y: auto;
+            }
+
+            .walletGrid {
+                gap: var(--xc-space-1);
+            }
+
+            .walletGroupHead {
+                padding: var(--xc-space-1) var(--xc-space-2) 0;
+            }
+
+            .walletGroupList {
+                padding: 0;
+            }
+
+            .walletGroupList .walletRow,
+            .walletFooter .walletFooterRow {
+                --xc-button-height: 40px;
+                min-block-size: 40px;
+                font-size: max(var(--xc-text-sm), var(--xc-control-font-md, var(--xc-text-md)));
+            }
+
+            .walletFooter {
+                gap: var(--xc-space-1);
+                padding-block-start: var(--xc-space-1);
+            }
+        }
+    }
+}
+
 @supports (container-type: inline-size) and (width: 1cqw) {
     @container wallet-menu (min-width: 640px) {
         .panel.menuPanel {

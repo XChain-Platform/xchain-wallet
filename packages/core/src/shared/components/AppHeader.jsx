@@ -102,6 +102,7 @@ export function AppHeader({
                 ) : null}
                 {popOut ? (
                     <Button
+                        className={styles.popOut}
                         variant="secondary"
                         icon={<Icon.ExternalLinkIcon />}
                         onClick={popOut}

@@ -1,6 +1,7 @@
 /* Matches Home.module.css `.headerPopup` exactly so the global header
    visually equals the per-route header it replaces. */
 .bar {
+    container: app-header / inline-size;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -35,6 +36,16 @@
     height: var(--xc-control-h-md);
     border-radius: var(--xc-control-radius);
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
+.popOut {
+    display: none;
+}
+
+@container app-header (min-width: 640px) {
+    .popOut {
+        display: inline-flex;
+    }
 }
 
 .walletName {

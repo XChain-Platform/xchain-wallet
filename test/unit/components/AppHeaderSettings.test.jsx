@@ -8,10 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
+import styles from '../../../packages/core/src/shared/components/AppHeader.module.css';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
+
+const appHeaderCss = readFileSync(
+    'packages/core/src/shared/components/AppHeader.module.css',
+    'utf8',
+);
 
 afterEach(() => {
     cleanup();
@@ -70,6 +77,15 @@ describe('AppHeader', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open in new window' }));
         expect(onPopOut).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('reveals Open in new window only when the app bar reaches 640px', () => {
+        render(<AppHeader onPopOut={() => {}} />);
+
+        expect(screen.getByRole('button', { name: 'Open in new window' })).toHaveClass(styles.popOut);
+        expect(appHeaderCss).toMatch(/\.bar\s*\{[^}]*container:\s*app-header\s*\/\s*inline-size;/s);
+        expect(appHeaderCss).toMatch(/\.popOut\s*\{[^}]*display:\s*none;/s);
+        expect(appHeaderCss).toMatch(/@container app-header \(min-width: 640px\)\s*\{\s*\.popOut\s*\{[^}]*display:\s*inline-flex;/s);
     });
 
     it('suppresses Open in new window in native and desktop shells', () => {
