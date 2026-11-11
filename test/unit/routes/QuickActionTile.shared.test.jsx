@@ -134,7 +134,7 @@ const MODES = [
 describe('shared quick-action tile', () => {
     it.each(MODES)('draws every Home quick action with the shared tile in %s', async (_label, setup) => {
         mountHome(setup());
-        await expectSharedTiles(['Send', 'Receive', 'Exchange', 'More actions']);
+        await expectSharedTiles(['Send', 'Receive', 'Exchange', 'All actions']);
     });
 
     it.each(MODES)('draws every token detail quick action with the shared tile in %s', async (_label, setup) => {

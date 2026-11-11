@@ -25,6 +25,10 @@ import {
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('ui/icons/iconForLabel', () => {
+    it('uses the QR glyph for Receive', () => {
+        expect(ReceiveIcon().type).toBe(ScanIcon().type);
+    });
+
     const cases = [
         ['Send', SendIcon],
         ['Send message', SendIcon],

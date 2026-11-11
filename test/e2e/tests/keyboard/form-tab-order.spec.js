@@ -274,7 +274,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
         await test.step('Create token', async () => {
             await gotoSection(page, 'Home');
             // Home has no action grid at 834px and wider (ruling U45), and the
-            // Actions menu behind More actions has no wizard entry (its "Issue
+            // All actions has no wizard entry (its "Issue
             // token" row opens the plain issue form). The guided Create token
             // wizard is reached through the command palette at this width.
             await page.keyboard.press('ControlOrMeta+k');

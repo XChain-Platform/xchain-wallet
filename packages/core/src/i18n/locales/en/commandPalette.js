@@ -21,6 +21,7 @@ const messages = {
     'commandPalette.commandPalette.searchActionsTokensContacts': 'Search actions, tokens, contacts…',
     'commandPalette.commandPalette.searchCommands': 'Search commands',
     'commandPalette.commandPalette.esc': 'Esc',
+    'commandPalette.commandPalette.shortcut': 'Cmd/Ctrl+K',
     'commandPalette.commandPalette.commands': 'Commands',
     'commandPalette.commandPalette.noMatchesFor': 'No matches for “',
     'commandPalette.actionQueue.title': 'Action queue',

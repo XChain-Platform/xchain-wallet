@@ -30,7 +30,7 @@
 //   7. ActionsMenu.jsx exists and renders an entries[] prop with
 //      label + optional description; popup + web both pass an `issue`
 //      entry wired to setUnlockedView('issue').
-//   8. Home accepts onActions and wires a "More actions" button.
+//   8. Home accepts onActions and wires an "All actions" button.
 //   9. popup + web App.jsx import IssueTokenForm + ActionsMenu and
 //      track the `'issue'` + `'actions'` sub-routes.
 
@@ -230,8 +230,8 @@ assert.ok(
     'Home accepts + wires onActions for the Actions menu',
 );
 assert.ok(
-    home.includes('More actions'),
-    'Home exposes a "More actions" button',
+    home.includes("t('walletMenu.row.allActions')") && home.includes('<Icon.GridIcon />'),
+    'Home exposes an "All actions" button with the catalogue icon',
 );
 
 // --- 9. Both shells wire the new sub-routes ---------------------------
@@ -304,5 +304,5 @@ assert.ok(src.includes('<FormPage'), 'IssueTokenForm delegates its page card to 
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'IssueTokenForm has no route-level page card');
 
 console.log(
-    'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "More actions" entry + popup/web wiring)',
+    'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "All actions" entry + popup/web wiring)',
 );

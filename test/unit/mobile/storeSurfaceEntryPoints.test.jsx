@@ -28,7 +28,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
@@ -42,23 +41,6 @@ function draw(node) {
 }
 
 afterEach(cleanup);
-
-describe('the main menu', () => {
-    it('offers the DEX rows when the shell wires them', () => {
-        draw(<MenuRoute onBack={() => {}} onMarkets={() => {}} onMarketActivity={() => {}} />);
-        expect(screen.queryByText('Decentralized exchange')).toBeTruthy();
-        expect(screen.queryByText('Marketplace')).toBeTruthy();
-    });
-
-    it('renders neither row when it does not', () => {
-        // A surface-stripped build passes no handler, because the destination
-        // is not in the bundle. MenuRoute has always filtered on handler
-        // presence; this pins that, since it is load-bearing rather than tidy.
-        draw(<MenuRoute onBack={() => {}} onTokens={() => {}} />);
-        expect(screen.queryByText('Decentralized exchange')).toBeNull();
-        expect(screen.queryByText('Marketplace')).toBeNull();
-    });
-});
 
 describe('the sidebar', () => {
     it('shows a DEX tab by default', () => {
@@ -104,11 +86,11 @@ describe('the command palette', () => {
 });
 
 // The same failure one level down. Home's quick-action row hides
-// Exchange on a surface-stripped build, but kept its "More" button, whose only
+// Exchange on a surface-stripped build, but kept its "All actions" button, whose only
 // entry is the DEX-gated Swap. The button survived into a build with nothing
 // behind it, so tapping it opened a menu whose single row read
 // "No additional actions".
-describe("Home's quick-action overflow menu", () => {
+describe("Home's quick-action fallback", () => {
     const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
     const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
 

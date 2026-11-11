@@ -467,12 +467,20 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['accountPicker.manage', 'walletMenu.group.manage'],
             // The action catalogue heading and its command-palette destination.
-            ['actionsMenu.title', 'palette.navActions.title'],
+            ['actionsMenu.title', 'palette.navActions.title', 'walletMenu.row.allActions'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['alerts.title', 'walletMenu.row.alerts'],
             // The queue route title, command title, and Settings row.
             ['commandPalette.actionQueue.title', 'parallelComposer.title', 'settings.developer.actionQueue'],
             // A shared reachability retry label and the settings backup checker.
             ['common.checking', 'settings.backup.checking'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['components.contactsPickerScreen.contacts', 'walletMenu.row.contacts'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['components.headerActionMenu.openMenu', 'walletMenu.openMenu'],
             // The token list editor's field label and the Home Tokens tab.
             ['components.tickItemsEditor.tokens', 'home.tabs.tokens'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
@@ -485,7 +493,23 @@ describe('translations', () => {
             ['governance.title', 'settings.notifications.governancePolls'],
             // The History status filter header and the parallel composer's status-pill label prefix.
             ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
-            ['home.receive', 'uri.intent.receive'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['history.title', 'walletMenu.row.history'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.addresses', 'walletMenu.row.addresses'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.contracts', 'walletMenu.row.contracts'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.lockWallet', 'walletMenu.row.lock'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.messaging', 'walletMenu.row.messaging'],
+            ['home.receive', 'uri.intent.receive', 'walletMenu.row.receive'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.settings', 'walletMenu.row.settings'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.staking', 'walletMenu.row.staking'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['home.title', 'walletMenu.row.home'],
             // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
             ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
             // The Issue form's supply cap field and Manage token's supply cap lock.
@@ -496,11 +520,29 @@ describe('translations', () => {
             ['issue.summary.notSet', 'keyboard.shortcutHelp.notSet'],
             // The issue list summary and the duress settings action.
             ['issue.summary.set', 'settings.duress.set'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['nav.dex', 'walletMenu.row.dex'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['nav.lists', 'walletMenu.row.lists'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['nav.marketplace', 'walletMenu.row.marketplace'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['nav.paymentsDue', 'walletMenu.row.paymentsDue'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['palette.category.trade', 'walletMenu.group.trade'],
             // The raw action tool in the palette and Settings.
             ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['palette.navMyTokens.title', 'walletMenu.row.myTokens'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['scan.title', 'walletMenu.row.scan'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
-            ['send.title', 'uri.intent.send'],
+            ['send.title', 'uri.intent.send', 'walletMenu.row.send'],
+            // The wallet menu reuses the label the same destination carries elsewhere.
+            ['settings.thisWallet.wallet', 'walletMenu.group.wallet'],
         ]);
     });
 

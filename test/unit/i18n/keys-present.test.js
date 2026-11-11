@@ -189,11 +189,32 @@ function translationUsage(file, source) {
     const keys = new Set();
     const unresolved = [];
 
+    // A catalogue row carries its copy key as a `labelKey` string property and
+    // the renderer calls t(row.labelKey) on a callback parameter, which cannot be
+    // followed statically; the property values are the keys it reads.
+    const catalogueKeys = new Set();
+    traverse(ast, {
+        ObjectProperty(path) {
+            const { key, value } = path.node;
+            if (key.type === 'Identifier' && key.name === 'labelKey' && value.type === 'StringLiteral') {
+                catalogueKeys.add(value.value);
+            }
+        },
+    });
+
     traverse(ast, {
         CallExpression(path) {
             if (path.node.callee.type !== 'Identifier') return;
             if (!isTranslateBinding(path.scope.getBinding(path.node.callee.name))) return;
-            const result = staticStrings(path.node.arguments[0], path.scope);
+            const argument = path.node.arguments[0];
+            if (catalogueKeys.size > 0
+                && argument?.type === 'MemberExpression'
+                && !argument.computed
+                && argument.property.name === 'labelKey') {
+                addAll(keys, catalogueKeys);
+                return;
+            }
+            const result = staticStrings(argument, path.scope);
             addAll(keys, result.strings);
             if (!result.resolved || result.strings.size === 0) {
                 unresolved.push(`${file}:${path.node.loc?.start.line ?? '?'}`);

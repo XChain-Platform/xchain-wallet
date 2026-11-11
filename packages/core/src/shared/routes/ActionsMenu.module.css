@@ -42,11 +42,10 @@
     transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-/* On the main menu the entry also carries Button's btn, ghost and md classes
-   (set in MenuRoute.jsx). Those single-class rules tie the rule above, so
-   whichever sheet loads last would win; the doubled class (a composing rule
-   must stay a single class) outranks them in any sheet order and keeps the
-   row's own box, type and position. */
+/* Each entry also carries Button's btn class. Its single-class rules tie the
+   rule above, so the doubled class (a composing rule must stay a single class)
+   outranks them in any sheet order and keeps the row's own box, type and
+   position. */
 .entry.entry {
     position: static;
     min-height: var(--xc-tap-min);

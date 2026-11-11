@@ -11,7 +11,7 @@
 // Smoke for PC-10 "My Lists" (LIST v0 create / v1 fork manager):
 // MyLists, ListCreateForm, ListDetail, ListForkForm; the `listsForSource`
 // read; the shared background host + 3-shell messaging wiring; and
-// route registration (LeftNav, MenuRoute, command palette, App.jsx).
+// route registration (LeftNav, wallet menu, command palette, App.jsx).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -163,7 +163,7 @@ for (const [shell, msgPath] of [
     assert.ok(m.includes("'lists.forSource'"), `${shell} messaging.js dispatches lists.forSource`);
 }
 
-// --- Registration: LeftNav, BottomTabBar, MenuRoute, command palette ---
+// --- Registration: LeftNav, wallet menu, command palette ---
 
 const leftNav = readFileSync(join(sharedComponents, 'LeftNav.jsx'), 'utf8');
 assert.ok(/id:\s*'lists'/.test(leftNav), 'LeftNav lists a "lists" nav item');
@@ -172,12 +172,8 @@ assert.ok(['list-detail', 'list-create', 'list-fork'].every(
 ),
     'LeftNav groups list-detail/list-create/list-fork under the Lists highlight');
 
-const bottomBar = readFileSync(join(sharedComponents, 'BottomTabBar.jsx'), 'utf8');
-assert.ok(/id:\s*'lists'/.test(bottomBar), 'BottomTabBar lists a "lists" item in its More sheet');
-
-const menuRoute = readFileSync(join(sharedRoutes, 'MenuRoute.jsx'), 'utf8');
-assert.ok(/onLists/.test(menuRoute), 'MenuRoute accepts onLists');
-assert.ok(/id:\s*'lists'/.test(menuRoute), 'MenuRoute renders a My Lists entry');
+const walletMenu = readFileSync(join(core, 'src', 'shared', 'walletMenu.js'), 'utf8');
+assert.ok(/id:\s*'lists'/.test(walletMenu), 'Wallet menu renders a My Lists entry');
 
 const commandRegistry = readFileSync(join(core, 'src', 'shared', 'commandPalette', 'commandRegistry.js'), 'utf8');
 assert.ok(/nav-lists/.test(commandRegistry), 'Command palette has a nav-lists command');
@@ -210,5 +206,5 @@ console.log(
     + 'LIST v0 create reuses createList/createListHw/buildActionPsbtRequest; LIST v1 fork chains '
     + 'add-then-remove with a wait-index leg and blocks watcher mode only for that case; honest '
     + '"used by" + repoint-rail gaps; listsForSource flow + host + 3-shell messaging; '
-    + 'LeftNav/BottomTabBar/MenuRoute/command-palette/App.jsx registration)',
+    + 'LeftNav/wallet-menu/command-palette/App.jsx registration)',
 );

@@ -22,7 +22,6 @@ import {
     QrCode as LucideQrCode,
     Menu as LucideMenu,
     Send as LucideSend,
-    ArrowDownToLine as LucideArrowDownToLine,
     DollarSign as LucideDollarSign,
     MoreHorizontal as LucideMoreHorizontal,
     Filter as LucideFilter,
@@ -164,8 +163,9 @@ export function SendIcon() {
     return <LucideSend {...LUCIDE_PROPS} data-xc-directional="" />;
 }
 
+// Receive presents an address for another device to scan, so its icon is a QR code.
 export function ReceiveIcon() {
-    return <LucideArrowDownToLine {...LUCIDE_PROPS} />;
+    return <LucideQrCode {...LUCIDE_PROPS} />;
 }
 
 export function CopyIcon() {

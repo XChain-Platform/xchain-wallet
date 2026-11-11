@@ -27,12 +27,14 @@ import {
     useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Button, Icon } from '../../ui/index.js';
+import buttonStyles from '../../ui/Button.module.css';
 import { categoryLabel } from './commandRegistry.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
+import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
 import '../../i18n/locales/en/commandPalette.js';
 
 /**
@@ -45,23 +47,40 @@ import '../../i18n/locales/en/commandPalette.js';
  *        §33.3: turns the raw query into free-form intent commands (e.g.
  *        "send 100 MYTOKEN"). Their results are prepended above the fuzzy
  *        matches, so a recognized intent is the pre-selected top result.
+ * @param {{
+ *   gates: { isSignerMode?: boolean, hasDexSurface?: boolean, hasVmAddress?: boolean, hasBtcAddress?: boolean },
+ *   currentView?: string,
+ *   onSelect: (viewId: string) => void,
+ *   onOpenSettings: () => void,
+ *   onLock?: () => void,
+ * }} [props.menu]
  */
-export function CommandPalette({ open, onClose, commands, placeholder, parseQuery }) {
+export function CommandPalette({
+    open, onClose, commands, placeholder, parseQuery, menu,
+}) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
     const [recentCommandIds, setRecentCommandIds] = useState(/** @type {string[]} */ ([]));
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const listRef = useRef(/** @type {HTMLElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    // Search is the only tab stop, so Tab loops there until the palette closes.
     useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
+
+    const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
+    const walletRows = walletGroups.flatMap((group) => group.rows);
+    const trimmedQuery = (query || '').trim();
+    const showingWalletMenu = Boolean(menu) && !trimmedQuery;
+    const currentWalletIndex = menu
+        ? Math.max(0, walletRows.findIndex((row) => row.id === menu.currentView))
+        : 0;
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
         const q = (query || '').trim();
         if (!q) {
+            if (menu) return [];
             // Resolve IDs against the current catalogue so recent rows always
             // use fresh route closures and disappear when their command does.
             const commandById = new Map(base.map((command) => [command.id, command]));
@@ -76,15 +95,15 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         if (typeof parseQuery !== 'function') return base;
         const freeform = parseQuery(q) || [];
         return freeform.length ? [...freeform, ...base] : base;
-    }, [commands, query, parseQuery, recentCommandIds]);
+    }, [commands, query, parseQuery, recentCommandIds, menu]);
 
     // Reset before paint so input arriving as the palette appears cannot be
     // overwritten by a later effect. Re-opens still start from a clean slate.
     useLayoutEffect(() => {
         if (!open) return;
         setQuery('');
-        setActiveIndex(0);
-    }, [open]);
+        setActiveIndex(currentWalletIndex);
+    }, [open, currentWalletIndex]);
 
     useEffect(() => {
         if (!open) return;
@@ -104,10 +123,12 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         return () => window.removeEventListener('keydown', onKey);
     }, [open, onClose]);
 
-    // Keep the selection in range as the result set shrinks under typing.
+    const selectionCount = showingWalletMenu ? walletRows.length : results.length;
+
+    // Keep the selection in range as the visible row set changes.
     useEffect(() => {
-        setActiveIndex((i) => (results.length === 0 ? 0 : Math.min(i, results.length - 1)));
-    }, [results.length]);
+        setActiveIndex((i) => (selectionCount === 0 ? 0 : Math.min(i, selectionCount - 1)));
+    }, [selectionCount]);
 
     // Scroll the selected row into view when it moves off-screen.
     useEffect(() => {
@@ -120,7 +141,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
 
     if (!open) return null;
 
-    const runAt = (index) => {
+    const runCommandAt = (index) => {
         const command = results[index];
         if (!command) return;
         // Synthetic free-form commands are query-specific and do not exist in
@@ -137,15 +158,26 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         command.run();
     };
 
+    const selectWalletRow = (row) => {
+        if (!row || !menu) return;
+        onClose();
+        menu.onSelect(row.id);
+    };
+
+    const runAt = (index) => {
+        if (showingWalletMenu) selectWalletRow(walletRows[index]);
+        else runCommandAt(index);
+    };
+
     const onKeyDown = (e) => {
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setActiveIndex((i) => (results.length === 0 ? 0 : (i + 1) % results.length));
+                setActiveIndex((i) => (selectionCount === 0 ? 0 : (i + 1) % selectionCount));
                 break;
             case 'ArrowUp':
                 e.preventDefault();
-                setActiveIndex((i) => (results.length === 0 ? 0 : (i - 1 + results.length) % results.length));
+                setActiveIndex((i) => (selectionCount === 0 ? 0 : (i - 1 + selectionCount) % selectionCount));
                 break;
             case 'Enter':
                 e.preventDefault();
@@ -170,71 +202,188 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         flatIndex += 1;
     }
 
-    const activeId = results[activeIndex] ? `xc-cmd-${results[activeIndex].id}` : undefined;
+    const activeId = showingWalletMenu
+        ? (walletRows[activeIndex] ? `xc-wallet-menu-${walletRows[activeIndex].id}` : undefined)
+        : (results[activeIndex] ? `xc-cmd-${results[activeIndex].id}` : undefined);
+
+    const updateQuery = (value) => {
+        setQuery(value);
+        setActiveIndex(value.trim() ? 0 : currentWalletIndex);
+    };
+
+    const searchControl = (
+        <div className={styles.searchRow}>
+            <span className={styles.searchIcon} aria-hidden="true">
+                <Icon.SearchIcon />
+            </span>
+            {/* eslint-disable-next-line jsx-a11y/no-autofocus -- palette
+                is a transient modal; focusing search is the whole point */}
+            <input
+                ref={inputRef}
+                type="search"
+                enterKeyHint="search"
+                autoCapitalize="off"
+                className={styles.input}
+                value={query}
+                onChange={(e) => updateQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder || (menu
+                    ? t('walletMenu.search')
+                    : t('commandPalette.commandPalette.searchActionsTokensContacts'))}
+                aria-label={t('commandPalette.commandPalette.searchCommands')}
+                role="combobox"
+                aria-expanded="true"
+                aria-controls="xc-cmd-listbox"
+                aria-activedescendant={activeId}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+            />
+            <kbd className={styles.escHint} aria-hidden="true">
+                {menu
+                    ? t('commandPalette.commandPalette.shortcut')
+                    : t('commandPalette.commandPalette.esc')}
+            </kbd>
+        </div>
+    );
+
+    const closeButton = (
+        <span className={styles.close}>
+            <Button
+                variant="secondary"
+                size="md"
+                icon={<Icon.XIcon />}
+                onClick={onClose}
+                aria-label={menu
+                    ? t('walletMenu.closeMenu')
+                    : t('commandPalette.commandPalette.closeCommandPalette')}
+                tabIndex={menu ? 0 : -1}
+            />
+        </span>
+    );
+
+    const walletButtonClass = `${buttonStyles.btn} ${buttonStyles.rowAction} ${buttonStyles.md}`;
 
     return (
         <div
             ref={dialogRef}
-            className={styles.overlay}
+            className={`${styles.overlay} ${menu ? styles.menuOverlay : ''}`}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="xc-command-palette-title"
+            aria-labelledby="xc-wallet-menu-title"
+            data-wallet-menu={menu ? '' : undefined}
             onMouseDown={onClose}
         >
             <div
-                className={styles.panel}
+                className={`${styles.panel} ${menu ? styles.menuPanel : ''}`}
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <header className={styles.header}>
-                    <span className={styles.handle} aria-hidden="true" />
-                    <h2 id="xc-command-palette-title" className={styles.title}>{t('commandPalette.commandPalette.commandPalette')}</h2>
-                    <span className={styles.close}>
-                        <Button
-                            variant="secondary"
-                            size="md"
-                            icon={<Icon.XIcon />}
-                            onClick={onClose}
-                            aria-label={t('commandPalette.commandPalette.closeCommandPalette')}
-                            tabIndex={-1}
-                        />
-                    </span>
-                </header>
-                <div className={styles.searchRow}>
-                    <span className={styles.searchIcon} aria-hidden="true">
-                        <Icon.SearchIcon />
-                    </span>
-                    {/* eslint-disable-next-line jsx-a11y/no-autofocus -- palette
-                        is a transient modal; focusing search is the whole point */}
-                    <input
-                        ref={inputRef}
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        className={styles.input}
-                        value={query}
-                        onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
-                        onKeyDown={onKeyDown}
-                        placeholder={placeholder || t('commandPalette.commandPalette.searchActionsTokensContacts')}
-                        aria-label={t('commandPalette.commandPalette.searchCommands')}
-                        role="combobox"
-                        aria-expanded="true"
-                        aria-controls="xc-cmd-listbox"
-                        aria-activedescendant={activeId}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <kbd className={styles.escHint} aria-hidden="true">{t('commandPalette.commandPalette.esc')}</kbd>
-                </div>
-                <ul
-                    ref={listRef}
-                    id="xc-cmd-listbox"
-                    className={styles.list}
-                    role="listbox"
-                    aria-label={t('commandPalette.commandPalette.commands')}
-                >
-                    {results.length === 0 ? (
+                <h2 id="xc-wallet-menu-title" className={styles.visuallyHidden}>
+                    {t('walletMenu.menu')}
+                </h2>
+                {menu ? (
+                    <header className={styles.menuHeader}>
+                        {searchControl}
+                        {closeButton}
+                    </header>
+                ) : (
+                    <>
+                        <header className={styles.header}>
+                            <span className={styles.handle} aria-hidden="true" />
+                            <h2 className={styles.title} aria-hidden="true">
+                                {t('commandPalette.commandPalette.commandPalette')}
+                            </h2>
+                            {closeButton}
+                        </header>
+                        {searchControl}
+                    </>
+                )}
+                {showingWalletMenu ? (
+                    <div
+                        ref={listRef}
+                        id="xc-cmd-listbox"
+                        className={styles.walletSurface}
+                    >
+                        <div className={styles.walletGrid}>
+                            {walletGroups.map((group) => (
+                                <section
+                                    key={group.id}
+                                    className={styles.walletGroup}
+                                    data-wallet-menu-group={group.id}
+                                >
+                                    <h3 className={styles.walletGroupHead}>{group.label}</h3>
+                                    <ul className={styles.walletGroupList} role="list">
+                                        {group.rows.map((row) => {
+                                            const index = walletRows.findIndex((item) => item.id === row.id);
+                                            const selected = index === activeIndex;
+                                            const current = row.id === menu.currentView;
+                                            const RowIcon = Icon[row.icon];
+                                            return (
+                                                <li key={row.id}>
+                                                    <button
+                                                        id={`xc-wallet-menu-${row.id}`}
+                                                        type="button"
+                                                        tabIndex={-1}
+                                                        data-index={index}
+                                                        data-wallet-menu-row={row.id}
+                                                        data-wallet-menu-focused={selected ? '' : undefined}
+                                                        className={`${walletButtonClass} ${styles.walletRow} ${(selected || current) ? styles.walletRowActive : ''}`}
+                                                        aria-current={current ? 'page' : undefined}
+                                                        onMouseMove={() => setActiveIndex(index)}
+                                                        onClick={() => selectWalletRow(row)}
+                                                    >
+                                                        <span className={styles.walletRowIcon} aria-hidden="true">
+                                                            {RowIcon ? <RowIcon /> : null}
+                                                        </span>
+                                                        <span className={styles.walletRowLabel}>{row.label}</span>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </section>
+                            ))}
+                        </div>
+                        <div className={styles.walletFooter}>
+                            {walletMenuFooter().map((row) => {
+                                if (row.id === 'lock' && !menu.onLock) return null;
+                                const current = row.id === menu.currentView;
+                                const RowIcon = Icon[row.icon];
+                                const onClick = row.id === 'settings'
+                                    ? menu.onOpenSettings
+                                    : menu.onLock;
+                                return (
+                                    <button
+                                        key={row.id}
+                                        type="button"
+                                        data-wallet-menu-row={row.id}
+                                        data-destructive={row.id === 'lock' ? 'true' : undefined}
+                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${current ? styles.walletRowActive : ''}`}
+                                        aria-current={current ? 'page' : undefined}
+                                        onClick={() => {
+                                            onClose();
+                                            onClick?.();
+                                        }}
+                                    >
+                                        <span className={styles.walletRowIcon} aria-hidden="true">
+                                            {RowIcon ? <RowIcon /> : null}
+                                        </span>
+                                        <span className={styles.walletRowLabel}>{row.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <ul
+                        ref={listRef}
+                        id="xc-cmd-listbox"
+                        className={styles.list}
+                        role="listbox"
+                        aria-label={t('commandPalette.commandPalette.commands')}
+                    >
+                        {results.length === 0 ? (
                         <li className={styles.empty} role="presentation">
                             {t('commandPalette.commandPalette.noMatchesFor')}{query}&rdquo;
                         </li>
@@ -278,8 +427,9 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                                 </ul>
                             </li>
                         ))
-                    )}
-                </ul>
+                        )}
+                    </ul>
+                )}
             </div>
         </div>
     );

@@ -62,7 +62,7 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/actionsMenu.js';
+import '../../i18n/locales/en/walletMenu.js';
 import '../../i18n/locales/en/alerts.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -194,18 +194,16 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * array "for the small-mode drawer" and never rendered it, so the web
  * shell built 24 entries per render that no user could ever reach from
  * this component. Both variants route to the same dedicated
- * ActionsMenu screen instead: the "More actions" quick action (`onActions`)
- * at every width, the pancake menu's
- * "More actions" row (MenuRoute) or the command palette. Add entries
- * there, not here.
+ * ActionsMenu screen instead: the "All actions" quick action (`onActions`)
+ * at every width or the wallet menu. Add entries there, not here.
  */
 export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
     useNativeExitRoot();
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // The quick actions are Send, Receive, Exchange and More actions at every
-    // width; Swap lives in the More actions menu. From 834px up the
+    // The quick actions are Send, Receive, Exchange and All actions at every
+    // width; Swap lives in All actions. From 834px up the
     // supplementary row below the balances is gone when that menu is wired.
     const isWide = useWideLayout();
     const hasActionsMenu = typeof onActions === 'function';
@@ -1216,9 +1214,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 {hasActionsMenu ? (
                     <QuickActionTile
                         onClick={onActions}
-                        icon={<Icon.MoreIcon />}
+                        icon={<Icon.GridIcon />}
                     >
-                        {t('actionsMenu.more')}
+                        {t('walletMenu.row.allActions')}
                     </QuickActionTile>
                 ) : null}
                 {swapFallback ? (

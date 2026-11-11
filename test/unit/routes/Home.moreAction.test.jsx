@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Home's fourth quick action: More actions opens the actions menu, and a
+// Home's fourth quick action: All actions opens the actions menu, and a
 // shell that wires no actions menu gets Swap as its own button instead of a
 // one-item "More" menu.
 
@@ -80,6 +80,8 @@ describe('Home overflow quick action', () => {
         expect(homeSource).not.toMatch(/<button\b/);
         expect(heroSource).not.toMatch(/<button\b/);
         expect(heroMenuSource).not.toMatch(/<button\b/);
+        expect(homeSource).toContain('icon={<Icon.GridIcon />}');
+        expect(homeSource).toContain("t('walletMenu.row.allActions')");
     });
 
     it('opens Swap directly instead of a one-item More menu', async () => {
@@ -127,9 +129,9 @@ describe('Home desktop actions', () => {
         const actions = within(actionGrid).getAllByRole('button');
 
         expect(actionGrid).toHaveClass(homeModuleStyles.actionsFull);
-        // More actions is a quick action above, so the grid holds the other seven.
+        // All actions is a quick action above, so the grid holds the other seven.
         expect(actions).toHaveLength(7);
-        expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'All actions' })).toHaveLength(1);
         actions.forEach((action) => {
             expect(action).toHaveClass(buttonStyles.secondary, buttonStyles.md);
         });
@@ -160,25 +162,25 @@ describe('Home wide-layout quick actions', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     });
 
-    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and More actions at %ipx and no bottom row', async (viewportWidth) => {
+    it.each([834, 1280, 1440])('shows Send, Receive, Exchange and All actions at %ipx and no bottom row', async (viewportWidth) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
         mount(wideHandlers, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
         expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
         expect(document.querySelector(`.${homeModuleStyles.actionsFull}`)).toBeNull();
     });
 
-    it('opens the actions menu from the More actions quick action', async () => {
+    it('opens the actions menu from the All actions quick action', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
         const onActions = vi.fn();
         mount({ ...wideHandlers, onActions }, 'desktop');
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
-        fireEvent.click(within(row).getByRole('button', { name: 'More actions' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'All actions' }));
         expect(onActions).toHaveBeenCalledTimes(1);
     });
 
@@ -188,7 +190,7 @@ describe('Home wide-layout quick actions', () => {
 
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
         expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
     });

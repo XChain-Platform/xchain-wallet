@@ -282,3 +282,232 @@
         padding-top: var(--xc-space-4);
     }
 }
+
+.visuallyHidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* The wallet menu measures the available shell width, including framed
+   previews whose container can be narrower than the browser viewport. */
+.overlay.menuOverlay {
+    container: wallet-menu / inline-size;
+    align-items: stretch;
+    justify-content: stretch;
+    max-block-size: var(--xc-viewport-h, 100vh);
+    padding: 0;
+    background: transparent;
+}
+
+.panel.menuPanel {
+    inline-size: 100%;
+    max-inline-size: none;
+    block-size: var(--xc-viewport-h, 100vh);
+    max-block-size: var(--xc-viewport-h, 100vh);
+    border: 0;
+    border-radius: 0;
+    padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+.menuHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    padding: var(--xc-space-2);
+    padding-block-start: calc(var(--xc-space-2) + env(safe-area-inset-top, 0px));
+    border-block-end: 1px solid var(--xc-border);
+}
+
+.menuHeader .searchRow {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    padding: 0;
+    border: 0;
+}
+
+.menuHeader .close {
+    flex: 0 0 auto;
+}
+
+.menuPanel .escHint {
+    display: none;
+}
+
+.walletSurface {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    display: flex;
+    flex: 1 1 auto;
+    min-block-size: 0;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.walletGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+        'wallet trade'
+        'people manage';
+    align-items: start;
+    gap: var(--xc-space-2);
+}
+
+.walletGroup {
+    min-inline-size: 0;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-card-radius);
+    overflow: hidden;
+}
+
+.walletGroup[data-wallet-menu-group='wallet'] { grid-area: wallet; }
+.walletGroup[data-wallet-menu-group='trade'] { grid-area: trade; }
+.walletGroup[data-wallet-menu-group='manage'] { grid-area: manage; }
+.walletGroup[data-wallet-menu-group='people'] { grid-area: people; }
+
+.walletGroupHead {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.walletGroupList {
+    list-style: none;
+    margin: 0;
+    padding: 0 var(--xc-space-1) var(--xc-space-1);
+}
+
+.walletGroupList .walletRow,
+.walletFooter .walletFooterRow {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: transparent;
+    inline-size: 100%;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    padding-inline: var(--xc-space-2);
+    border-color: transparent;
+    background: transparent;
+    color: var(--xc-text);
+    font-weight: 400;
+    text-align: start;
+    white-space: nowrap;
+}
+
+.walletGroupList .walletRow:active:not(:disabled),
+.walletFooter .walletFooterRow:active:not(:disabled) {
+    filter: none;
+    transform: none;
+}
+
+.walletGroupList .walletRow:hover,
+.walletFooter .walletFooterRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.walletGroupList .walletRowActive,
+.walletFooter .walletRowActive {
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-text);
+    font-weight: 600;
+}
+
+.walletRowIcon {
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+.walletRowActive .walletRowIcon {
+    color: var(--xc-accent-text);
+}
+
+.walletRowLabel {
+    min-inline-size: 0;
+    overflow-wrap: normal;
+}
+
+.walletFooter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding-block-start: var(--xc-space-2);
+    border-block-start: 1px solid var(--xc-border);
+}
+
+.walletFooter .walletFooterRow {
+    inline-size: auto;
+}
+
+.walletFooterRow[data-destructive='true'] {
+    color: var(--xc-danger);
+}
+
+.walletFooterRow[data-destructive='true'] .walletRowIcon {
+    color: var(--xc-danger);
+}
+
+@container wallet-menu (min-width: 640px) {
+    .panel.menuPanel {
+        --xc-wallet-menu-bar-h: calc(var(--xc-control-h-md) + (2 * var(--xc-space-2)) + 1px);
+        inline-size: fit-content;
+        min-inline-size: min(36rem, calc(100cqi - (2 * var(--xc-space-2))));
+        max-inline-size: calc(100cqi - (2 * var(--xc-space-2)));
+        block-size: auto;
+        max-block-size: calc(var(--xc-viewport-h, 100vh) - var(--xc-wallet-menu-bar-h) - (2 * var(--xc-space-2)));
+        margin-block-start: calc(var(--xc-wallet-menu-bar-h) + var(--xc-space-2));
+        margin-inline-start: auto;
+        margin-inline-end: var(--xc-space-2);
+        border: 1px solid var(--xc-border);
+        border-radius: var(--xc-radius-lg);
+        padding-block-end: 0;
+    }
+
+    .menuHeader {
+        padding: var(--xc-space-3);
+        border-block-end: 0;
+    }
+
+    .menuHeader .close {
+        display: none;
+    }
+
+    .walletSurface {
+        padding: 0 var(--xc-space-3) var(--xc-space-3);
+    }
+
+    .walletGrid {
+        grid-template-columns: repeat(4, max-content);
+        grid-template-areas: 'wallet trade manage people';
+    }
+
+    .walletFooter {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+
+@media (hover: hover) and (pointer: fine) {
+    @container wallet-menu (min-width: 640px) {
+        .menuPanel .escHint {
+            display: inline-flex;
+        }
+    }
+}

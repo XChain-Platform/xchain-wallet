@@ -23,7 +23,6 @@ const ROUTE_NAMES = [
     'MarketActivity',
     'MarketView',
     'MarketsList',
-    'MenuRoute',
     'MessagingInbox',
     'MigrateToBip39',
     'MintForm',

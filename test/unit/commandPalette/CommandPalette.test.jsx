@@ -96,7 +96,7 @@ describe('CommandPalette', () => {
 
     it('renders a modal dialog with all commands when open', () => {
         render(<CommandPalette open onClose={() => {}} commands={makeCommands()} />);
-        expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toHaveAttribute('aria-modal', 'true');
         expect(getInput()).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('option', { name: /Home/ })).toBeTruthy();
         expect(screen.getByRole('option', { name: /Send/ })).toBeTruthy();

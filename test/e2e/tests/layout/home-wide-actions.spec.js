@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Home on layouts 834px and wider (ruling U45): no row of action buttons at
-// the bottom, and the quick actions are Send, Receive, Exchange and More
+// the bottom, and the quick actions are Send, Receive, Exchange and All
 // actions, in that order. Swap lives in the actions menu there. Below 834px
 // Home keeps its phone layout, and the quick actions are the same four at
-// every size (U45 phone scope, U66), so Swap is in More actions there too.
+// every size (U45 phone scope, U66), so Swap is in All actions there too.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
@@ -39,7 +39,7 @@ test('Home has no bottom action row and four quick actions from 834px up', async
         await page.setViewportSize({ width, height: 900 });
         const where = `${width}px`;
         await expect.poll(() => quickActionLabels(page), { message: `${where}: quick actions` })
-            .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+            .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
         expect(await bottomRowButtons(page), `${where}: bottom action row buttons`).toEqual([]);
         await expect(page.getByRole('main').getByRole('button', { name: 'Swap', exact: true }), `${where}: Swap`)
             .toHaveCount(0);
@@ -51,7 +51,7 @@ test('Home keeps its phone layout at 360px', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await createWallet(page);
 
-    // U66: the same four quick actions at every size; Swap sits in More actions.
+    // U66: the same four quick actions at every size; Swap sits in All actions.
     await expect.poll(() => quickActionLabels(page), { message: '360px: quick actions' })
-        .toEqual(['Send', 'Receive', 'Exchange', 'More actions']);
+        .toEqual(['Send', 'Receive', 'Exchange', 'All actions']);
 });

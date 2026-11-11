@@ -337,7 +337,7 @@ describe('nativeFeeErrorMessage', () => {
     // user can GET XCHAIN, and on testnet/regtest anyone can mint it. The wallet knows
     // the network from the chain id it is submitting on, so it can name the screen.
     describe('says where the XCHAIN comes from on a test network', () => {
-        const MINT_PATH = 'Menu > More actions > Mint';
+        const MINT_PATH = 'All actions > Mint';
 
         it('points a testnet user at the Mint action', () => {
             const msg = nativeFeeErrorMessage(

@@ -12,7 +12,7 @@
 // every width and for demo wallets.
 //
 //   [P2] 2026-11-10: Below 834px the row offered Swap in place of More
-//        actions, a demo wallet lost Receive and More actions, and each
+//        actions, a demo wallet lost Receive and All actions, and each
 //        tile laid its icon beside the label in a wide, short button.
 //
 // jsdom has no layout, so the tile shape is pinned on the stylesheet and the
@@ -38,7 +38,7 @@ const BALANCES = {
         },
     }],
 };
-const FOUR = ['Send', 'Receive', 'Exchange', 'More actions'];
+const FOUR = ['Send', 'Receive', 'Exchange', 'All actions'];
 
 const readCss = (path) => readFileSync(join(process.cwd(), path), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -105,7 +105,7 @@ describe('Home quick action tiles', () => {
         ['web', 360], ['web', 1280], ['web', 1440],
         ['desktop', 360], ['desktop', 1280], ['desktop', 1440],
         ['popup', 360],
-    ])('holds exactly Send, Receive, Exchange and More actions in the %s shell at %ipx', async (shell, width) => {
+    ])('holds exactly Send, Receive, Exchange and All actions in the %s shell at %ipx', async (shell, width) => {
         setWidth(width);
         mountHome(handlers(), shell);
         expect(await quickActionNames()).toEqual(FOUR);
@@ -119,14 +119,14 @@ describe('Home quick action tiles', () => {
         expect(await quickActionNames()).toEqual(FOUR);
     });
 
-    it('opens the actions menu from More actions and never from a second More button', async () => {
+    it('opens the actions menu from All actions', async () => {
         setWidth(360);
         const h = handlers();
         mountHome(h, 'desktop');
         const row = await screen.findByRole('group', { name: 'Quick actions' });
-        within(row).getByRole('button', { name: 'More actions' }).click();
+        within(row).getByRole('button', { name: 'All actions' }).click();
         expect(h.onActions).toHaveBeenCalledTimes(1);
-        expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'All actions' })).toHaveLength(1);
     });
 
     it('puts every tile icon before its label', async () => {

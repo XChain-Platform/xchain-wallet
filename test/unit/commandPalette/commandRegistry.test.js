@@ -185,7 +185,7 @@ describe('buildCommands', () => {
     });
 
     // The betting views shipped with no palette entry at all, so the only route
-    // to them was More -> More actions -> Betting: two clicks deep in a
+    // to them was the old overflow route: two clicks deep in a
     // catalogue, for a surface whose whole point is coming back to check a
     // market. Every comparable destination (Governance, Staking, Dispensers, My
     // orders) has an entry, and a returning user reaches for the palette.

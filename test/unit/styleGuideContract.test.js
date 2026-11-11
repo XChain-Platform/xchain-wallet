@@ -58,7 +58,6 @@ describe('STYLE_GUIDE component contracts', () => {
         const amountField = read('packages/core/src/shared/components/AmountField.jsx');
         const alertsOverlay = read('packages/core/src/shared/components/AlertsOverlay.jsx');
         const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
-        const menuRoute = read('packages/core/src/shared/routes/MenuRoute.jsx');
         const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
         const alertsCss = read('packages/core/src/shared/components/AlertsOverlay.module.css');
         const menuCss = read('packages/core/src/shared/components/HeaderActionMenu.module.css');
@@ -66,11 +65,9 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
         expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
         expect(alertsRoute).toMatch(/<Button[\s\S]*?variant="rowAction"[\s\S]*?openAlert\(alert\)/);
-        expect(menuRoute).toMatch(/<Button[\s\S]*?variant="danger"[\s\S]*?Lock wallet/);
         expect(amountField).not.toContain('className={styles.amountMaxInline}');
         expect(alertsOverlay).not.toContain('className={styles.alertAction}');
         expect(alertsRoute).not.toContain('className={styles.alertAction}');
-        expect(menuRoute).not.toContain('className={menuStyles.lockBtn}');
         expect(amountFieldCss).not.toMatch(/\.amountMaxInline\s*\{/);
         expect(alertsCss).not.toMatch(/\.alertAction\s*\{/);
         expect(menuCss).not.toMatch(/\.lockBtn\s*\{/);
@@ -79,7 +76,6 @@ describe('STYLE_GUIDE component contracts', () => {
     it('uses shared controls on the adopted advanced, list, signing, and staking routes', () => {
         const routeNames = [
             'AdvancedActionsForm.jsx',
-            'MenuRoute.jsx',
             'MultisigSigningSession.jsx',
             'MyLists.jsx',
             'PsbtSignForm.jsx',

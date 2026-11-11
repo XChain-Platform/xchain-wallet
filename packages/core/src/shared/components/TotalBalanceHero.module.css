@@ -1,6 +1,7 @@
 .hero {
     background: linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%);
     color: var(--xc-on-accent);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-card-radius);
     padding: var(--xc-card-pad);
     display: flex;

@@ -4,7 +4,6 @@
 import { describe, expect, it } from 'vitest';
 import betFeedsSource from '../../../packages/core/src/shared/routes/BetFeedsList.jsx?raw';
 import coSignerPolicySource from '../../../packages/core/src/shared/routes/CoSignerPolicyEditor.jsx?raw';
-import menuSource from '../../../packages/core/src/shared/routes/MenuRoute.jsx?raw';
 import multisigShareSource from '../../../packages/core/src/shared/routes/MultisigCosignerShare.jsx?raw';
 import receivePickerSource from '../../../packages/core/src/shared/routes/ReceivePicker.jsx?raw';
 import sendPickerSource from '../../../packages/core/src/shared/routes/SendPicker.jsx?raw';
@@ -12,13 +11,11 @@ import signerSelectSource from '../../../packages/core/src/shared/routes/SignerS
 import stakeNewSource from '../../../packages/core/src/shared/routes/StakeNew.jsx?raw';
 
 describe('list screen templates', () => {
-    it('builds the menu and new-stake chooser on ListPage', () => {
-        expect(menuSource).toMatch(/<ListPage\b/);
+    it('builds the new-stake chooser on ListPage', () => {
         expect(stakeNewSource).toMatch(/<ListPage\b/);
     });
 
-    it('uses the shared list row for menu, stake, and betting choices', () => {
-        expect(menuSource).toMatch(/className=\{`\$\{buttonStyles\.btn\} \$\{buttonStyles\.ghost\} \$\{buttonStyles\.md\} \$\{rowStyles\.entry\}`\}/);
+    it('uses the shared list row for stake and betting choices', () => {
         expect(stakeNewSource).toMatch(/<ListRow\b/);
         expect(betFeedsSource).toMatch(/<ListRow\b/);
         expect(betFeedsSource).not.toMatch(/className=\{rowStyles\.entry\}/);

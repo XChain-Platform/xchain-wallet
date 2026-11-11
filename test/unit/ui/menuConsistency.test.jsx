@@ -2,18 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
-import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 const tokenCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
 
@@ -45,8 +39,8 @@ describe('menu row contract', () => {
         expect(tokenCss).toMatch(/\[data-xc-menu-list="rows"\] > li \+ li[\s\S]*?border-top:\s*1px solid var\(--xc-border\)/);
     });
 
-    it('marks action pages and the header menu with the shared item semantics', () => {
-        const view = render(withMessaging(
+    it('marks action pages with the shared item semantics', () => {
+        render(withMessaging(
             <ActionsMenu
                 onBack={() => {}}
                 entries={[
@@ -60,41 +54,5 @@ describe('menu row contract', () => {
         expect(screen.getByRole('button', { name: 'Destroy' })).not.toHaveAttribute('data-destructive');
         expect(screen.getByRole('button', { name: 'Destroy' }).closest('ul'))
             .toHaveAttribute('data-xc-menu-list', 'cards');
-
-        view.rerender(withMessaging(
-            <MenuRoute onBack={() => {}} onSettings={() => {}} />,
-        ));
-        const settings = screen.getByRole('button', { name: 'Settings' });
-        expect(settings).toHaveAttribute('data-xc-menu-item');
-        expect(settings.closest('ul')).toHaveAttribute('data-xc-menu-list', 'rows');
-    });
-
-    it('moves through the More sheet with arrows and restores focus on Escape', () => {
-        render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={() => {}}
-                onLock={() => {}}
-                onOpenSettings={() => {}}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        const more = screen.getByRole('button', { name: 'More' });
-        fireEvent.click(more);
-
-        const receive = screen.getByRole('button', { name: 'Receive' });
-        receive.focus();
-        fireEvent.keyDown(receive, { key: 'ArrowDown' });
-        expect(screen.getByRole('button', { name: 'DEX' })).toHaveFocus();
-        fireEvent.keyDown(document.activeElement, { key: 'End' });
-        const lock = screen.getByRole('button', { name: 'Lock wallet' });
-        expect(lock).toHaveFocus();
-        expect(lock).toHaveAttribute('data-destructive', 'true');
-        fireEvent.keyDown(lock, { key: 'Home' });
-        expect(receive).toHaveFocus();
-
-        fireEvent.keyDown(document, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveFocus();
     });
 });

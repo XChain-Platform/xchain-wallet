@@ -95,12 +95,7 @@ describe('an unlock announcement in an unlocked extension window', () => {
         // so open the actions screen until it stays open.
         await waitFor(() => {
             if (screen.queryByRole('button', { name: 'Back to home' })) return;
-            const menu = screen.queryByRole('button', { name: 'Open menu' });
-            if (menu && menu.getAttribute('aria-expanded') !== 'true') fireEvent.click(menu);
-            const walletMenu = screen.queryByRole('dialog', { name: 'Wallet menu' });
-            const actions = walletMenu
-                ? within(walletMenu).queryByRole('button', { name: 'All actions' })
-                : null;
+            const actions = screen.queryByRole('button', { name: 'All actions' });
             if (actions) fireEvent.click(actions);
             throw new Error('actions screen not open yet');
         }, { timeout: 15_000 });

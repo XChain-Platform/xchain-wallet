@@ -128,10 +128,6 @@
             "count": 1,
             "reason": "The hidden username field a password manager reads; it has no visible control."
         },
-        "packages/core/src/shared/routes/MenuRoute.jsx": {
-            "count": 3,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/routes/OnboardingCarousel.jsx": {
             "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."

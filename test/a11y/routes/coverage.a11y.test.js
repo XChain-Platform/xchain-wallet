@@ -84,7 +84,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'MarketActivity',
     'MarketView',
     'MarketsList',
-    'MenuRoute',
     'MessagingInbox',
     'MigrateToBip39',
     'MintForm',
