@@ -21,6 +21,7 @@ import { filterCommands } from '../../../packages/core/src/shared/commandPalette
 import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
 import { SHORTCUTS } from '../../../packages/core/src/shared/keyboard/shortcuts.js';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
 import { Icon } from '../../../packages/core/src/ui/index.js';
 
 const findById = (list, id) => list.find((c) => c.id === id);
@@ -50,6 +51,10 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('send');
         findById(commands, 'nav-settings').run();
         expect(navigate).toHaveBeenCalledWith('settings');
+        expect(findById(commands, 'nav-settings')).toMatchObject({
+            title: 'Settings',
+            Icon: Icon.GearIcon,
+        });
         findById(commands, 'create-token').run();
         expect(navigate).toHaveBeenCalledWith('wizard');
         findById(commands, 'create-issue').run();
@@ -107,6 +112,29 @@ describe('buildCommands', () => {
             .toBeUndefined();
     });
 
+    it('makes every visible wallet menu row a matching Navigate command', () => {
+        const navigate = vi.fn();
+        const gates = {
+            hasDexSurface: true,
+            hasVmAddress: true,
+            hasBtcAddress: true,
+        };
+        const commands = buildCommands({ navigate, ...gates });
+        const expectedRows = visibleWalletMenu(gates).flatMap((group) => group.rows);
+
+        for (const row of expectedRows) {
+            const command = commands.find((candidate) => {
+                if (candidate.category !== 'Navigate') return false;
+                navigate.mockClear();
+                candidate.run();
+                return navigate.mock.calls[0]?.[0] === row.id;
+            });
+            expect(command, row.id).toBeDefined();
+            expect(command.title, row.id).toBe(row.label);
+            expect(command.Icon, row.id).toBe(Icon[row.icon]);
+        }
+    });
+
     it('ranks the direct destination first for common palette searches', () => {
         const commands = [
             ...buildCommands({ navigate() {} }),
@@ -114,9 +142,9 @@ describe('buildCommands', () => {
             ...helpToCommands({ openSettings() {} }),
         ];
         for (const [query, expectedId] of [
-            ['send', 'nav-send'],
-            ['receive', 'nav-receive'],
-            ['settings', 'nav-settings'],
+            ['rec', 'nav-receive'],
+            ['all', 'nav-actions'],
+            ['set', 'nav-settings'],
             ['backup', 'settings-backup'],
         ]) {
             expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
@@ -132,6 +160,7 @@ describe('buildCommands', () => {
         const gated = buildCommands({
             navigate() {},
             hasBtcAddress: true,
+            hasVmAddress: true,
             hasGovernanceAddress: true,
         });
         expect(findById(gated, 'nav-contracts')).toBeDefined();
@@ -239,10 +268,10 @@ describe('buildCommands', () => {
         }
     });
 
-    it('uses sentence case for navigation menu items', () => {
+    it('uses the catalogue labels for navigation menu items', () => {
         const commands = buildCommands({ navigate() {} });
         expect(findById(commands, 'nav-my-tokens').title).toBe('My tokens');
-        expect(findById(commands, 'nav-lists').title).toBe('My lists');
+        expect(findById(commands, 'nav-lists').title).toBe('Lists');
     });
 
     it('omits verb commands whose handler the shell did not supply', () => {
@@ -267,6 +296,10 @@ describe('buildCommands', () => {
         expect(refresh).toHaveBeenCalledOnce();
         expect(scan).toHaveBeenCalledOnce();
         expect(switchWallet).toHaveBeenCalledOnce();
+        expect(findById(commands, 'wallet-lock')).toMatchObject({
+            title: 'Lock wallet',
+            Icon: Icon.LockIcon,
+        });
     });
 
     it('hides private-key-only commands from watch-only wallets', () => {
@@ -298,7 +331,7 @@ describe('buildCommands', () => {
         expect(commands.filter((command) => ['Create', 'Trade'].includes(command.category))).toEqual([]);
         expect(ids).not.toEqual(expect.arrayContaining(['create-mint', 'trade-swap', 'trade-coinpay']));
         expect(ids).toEqual(expect.arrayContaining(['sign-message', 'sign-psbt', 'sign-verify', 'nav-home']));
-        expect(ids).not.toEqual(expect.arrayContaining(['nav-send']));
+        expect(ids).not.toEqual(expect.arrayContaining(['nav-send', 'nav-receive']));
     });
 
     it('keeps create and trade forms browsable for demo wallets but hides signing tools', () => {

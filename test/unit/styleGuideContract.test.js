@@ -60,7 +60,6 @@ describe('STYLE_GUIDE component contracts', () => {
         const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
         const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
         const alertsCss = read('packages/core/src/shared/components/AlertsOverlay.module.css');
-        const menuCss = read('packages/core/src/shared/components/HeaderActionMenu.module.css');
 
         expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
         expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
@@ -70,7 +69,6 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(alertsRoute).not.toContain('className={styles.alertAction}');
         expect(amountFieldCss).not.toMatch(/\.amountMaxInline\s*\{/);
         expect(alertsCss).not.toMatch(/\.alertAction\s*\{/);
-        expect(menuCss).not.toMatch(/\.lockBtn\s*\{/);
     });
 
     it('uses shared controls on the adopted advanced, list, signing, and staking routes', () => {

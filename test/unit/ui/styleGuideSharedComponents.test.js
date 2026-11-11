@@ -31,7 +31,7 @@ const REQUIRED = Object.freeze([
     'OwnAddressPickerScreen', 'NativeFeeToggle', 'OfflineEmptyState', 'ListPickerScreen',
     'ListToolbar', 'DraftDiscardButton', 'ContractConsentPanel', 'OwnerWithdrawWarning',
     'DemoExitConfirm', 'BalancesUncheckedState', 'HistoryEntryRow', 'ActivityRow',
-    'HomeTabs', 'BottomTabBar', 'LeftNav', 'HeaderActionMenu',
+    'HomeTabs', 'BottomTabBar', 'LeftNav',
 ]);
 
 function routeImportCounts() {

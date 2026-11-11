@@ -64,7 +64,7 @@ async function settle(page) {
 
 async function gotoPaletteRoute(page, name) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', {

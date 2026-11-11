@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Demo-mode axe sweep: the layout sweep's unlocked walk (home tabs, header
-// popovers, every command-palette destination, the menu, every Settings
-// section, the More sheet) with an axe audit of each screen, in light and
+// navigation destination, the wallet menu and every Settings section) with
+// an axe audit of each screen, in light and
 // dark at 360x800 and 1280x800. Any serious or critical violation fails the
 // run. Writes tmp/a11y-sweep/<combo>.json. Run with
 // playwright.a11y-sweep.config.js.

@@ -83,20 +83,14 @@ async function breakOracle(page, mode) {
     };
 }
 
-/** Opens the palette from the header's action menu, wherever the layout keeps it. */
+/** Opens the wallet menu from the header button. */
 async function openFromHeader(page) {
     const dialog = commandPalette(page);
     await expect(async () => {
         if (await dialog.isVisible()) return;
-        const direct = page.getByRole('button', { name: /^Search/ }).first();
-        if (await direct.isVisible().catch(() => false)) {
-            await direct.click({ timeout: 3_000 });
-        } else {
-            await page.getByRole('button', { name: 'Open menu' }).click({ timeout: 3_000 });
-            await page.getByRole('menuitem', { name: /^Search/ }).click({ timeout: 3_000 });
-        }
+        await page.getByRole('button', { name: 'Open menu' }).click({ timeout: 3_000 });
         await expect(dialog).toBeVisible({ timeout: 3_000 });
-    }, 'the header menu never opened the command palette').toPass({ timeout: 30_000 });
+    }, 'the header menu never opened the wallet menu').toPass({ timeout: 30_000 });
     return dialog;
 }
 
@@ -147,7 +141,7 @@ async function runPlainSend(page) {
 }
 
 for (const vp of VIEWPORTS) {
-    test.describe(`command palette on a failing network at ${vp.label}`, () => {
+    test.describe(`wallet menu on a failing network at ${vp.label}`, () => {
         test.use(vp.use);
 
         for (const mode of ['500', 'malformed', 'wrong-shape', 'slow']) {

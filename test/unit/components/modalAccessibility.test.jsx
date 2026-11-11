@@ -9,7 +9,6 @@ import { AlertsOverlay } from '../../../packages/core/src/shared/components/Aler
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
 
@@ -66,20 +65,6 @@ describe('open modal accessibility', () => {
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
-
-        await expectNoSeriousAxeViolations(container);
-    });
-
-    it('renders the header settings dialog without serious axe violations', async () => {
-        const { container } = render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
-                activeAccount={{ id: 'account-1', index: 0, name: 'Savings' }}
-                onOpenWalletPicker={noop}
-                onOpenAccountPicker={noop}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
         await expectNoSeriousAxeViolations(container);
     });

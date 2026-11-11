@@ -207,7 +207,7 @@ describe('Settings at a 320px viewport', () => {
         for (const section of INLINE_SECTIONS) {
             expect(screen.getByRole('heading', { name: section })).toBeVisible();
         }
-        expect(screen.getByRole('button', { name: /Accounts & addresses/ })).toBeVisible();
+        expect(screen.getByRole('button', { name: /This wallet/ })).toBeVisible();
         expect(screen.getByRole('button', { name: /Automatic donation system/ })).toBeVisible();
         expect(screen.queryByRole('button', { name: /^Keyboard/ })).toBeNull();
         expectNoFixedWidthOverflow(container);

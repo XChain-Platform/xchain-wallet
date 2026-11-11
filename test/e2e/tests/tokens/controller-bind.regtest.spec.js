@@ -663,7 +663,7 @@ async function unbindController(page, source, tick = TICK) {
 }
 
 /**
- * Opens the controller form THROUGH THE COMMAND PALETTE, with no token context
+ * Opens the controller form THROUGH THE WALLET MENU, with no token context
  * at all, and points it at the signing address.
  *
  * The palette entry is D-153's fix. Before it the form was reachable only from

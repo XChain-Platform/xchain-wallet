@@ -72,14 +72,7 @@ test('dark focus rings and hover contrast', async ({ page }, testInfo) => {
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     const fine = await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches);
     for (const name of ['Home', 'History', 'Send', 'Receive', 'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts', 'Lists', 'Settings']) {
-        if (name === 'Marketplace') {
-            await page.keyboard.press('ControlOrMeta+k');
-            const palette = page.getByRole('dialog', { name: 'Command palette' });
-            await palette.getByRole('combobox').fill('Marketplace');
-            await palette.getByRole('option').filter({ hasText: 'Marketplace' }).first().click();
-        } else {
-            await gotoSection(page, name);
-        }
+        await gotoSection(page, name);
         await page.waitForTimeout(400);
         await page.mouse.move(0, 0);
         await page.screenshot({ path: join(outDir, `screen-${name.toLowerCase()}.png`) }).catch(() => {});

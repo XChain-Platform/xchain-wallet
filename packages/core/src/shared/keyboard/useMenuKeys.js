@@ -23,8 +23,8 @@
 //     to the button that opened the popup instead.
 //
 // Each popover keeps its own open/close state and its own Escape handler;
-// this only moves focus. The command palette is not touched: its options are
-// not focusable, its search box drives them with aria-activedescendant.
+// this only moves focus. The wallet menu handles its own keys through its
+// search input and aria-activedescendant model.
 
 import { useEffect } from 'react';
 import { restoreFocusAfterClose } from '../utils/focusTrap.js';

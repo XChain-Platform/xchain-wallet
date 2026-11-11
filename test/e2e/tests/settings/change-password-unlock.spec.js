@@ -12,7 +12,6 @@ import {
     createWallet,
     expect,
     gotoSection,
-    nav,
     openSettings,
     test,
     unlockedShell,
@@ -36,10 +35,9 @@ async function openSettingsSubpage(page, name, ready) {
 async function lockFromPhoneNavigation(page) {
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible();
-    const bottomNavigation = nav(page);
-    await bottomNavigation.getByRole('button', { name: 'More', exact: true }).click();
-    const more = page.getByRole('dialog', { name: 'More', exact: true });
-    await more.getByRole('button', { name: 'Lock wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+    await menu.locator('[data-wallet-menu-row="lock"]').click();
     await expect(unlockButton(page)).toBeVisible();
 }
 

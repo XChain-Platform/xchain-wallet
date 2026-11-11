@@ -117,12 +117,10 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('render, search and mark read the alerts inbox', async () => {
-            // The condensed header opens its action menu; the full wallet Menu
-            // page is its "More wallet actions" row.
+            // Alerts is a catalogue row in the wallet menu.
             await page.getByRole('button', { name: 'Open menu' }).click();
-            await page.getByRole('menuitem', { name: 'More wallet actions' }).click();
-            await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
-            await page.getByRole('main').getByRole('button', { name: 'Alerts', exact: true }).click();
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+            await menu.locator('[data-wallet-menu-row="alerts"]').click();
 
             await expectScreen(page, `${viewport.name} alerts list`, 'Alerts');
             await expectScreenStartsAtTop(page, `${viewport.name} alerts list`);

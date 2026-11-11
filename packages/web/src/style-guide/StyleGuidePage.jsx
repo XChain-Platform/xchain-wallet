@@ -166,7 +166,7 @@ export const SECTIONS = [
     { id: 'list-toolbar',          label: 'List toolbar',           Component: ListToolbarSection, components: ['ListToolbar'] },
     { id: 'unavailable-states',    label: 'Offline, unchecked states', Component: UnavailableStatesSection, components: ['OfflineEmptyState', 'BalancesUncheckedState'] },
     { id: 'activity-rows',         label: 'Activity rows',          Component: ActivityRowsSection, components: ['ActivityRow', 'HistoryEntryRow', 'RelativeTime'] },
-    { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar', 'HeaderActionMenu'] },
+    { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar'] },
     { id: 'home-tabs',             label: 'Home tabs',              Component: HomeTabsSection, components: ['HomeTabs'] },
 ];
 

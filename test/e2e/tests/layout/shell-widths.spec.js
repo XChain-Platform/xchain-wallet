@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Shell rulings at the widths between the device venues: every route the
-// sidebar, bottom bar and More sheet reach, at phone, tablet and desktop
+// sidebar, bottom bar and wallet menu reach, at phone, tablet and desktop
 // sizes and just either side of the 640px and 900px tier edges. Per route:
 //   1. the app header is one row, nothing clipped;
 //   2. the app header holds only logo, wallet and buttons, the page header
@@ -44,23 +44,23 @@ const VIEWPORTS = [
     { width: 1920, height: 1080 },
 ];
 
-// Nav labels as the sidebar and More sheet show them, with the route id the
+// Navigation labels as the sidebar and wallet menu show them, with the route id the
 // registry lists them under, so the Back ruling can be derived per surface.
 const ROUTES = [
     { name: 'Home', id: 'home', tab: true },
     { name: 'History', id: 'history', tab: true },
     { name: 'Send', id: 'send', tab: true },
-    { name: 'Scan', id: 'scan', tab: true },
-    { name: 'Receive', id: 'receive' },
+    { name: 'Scan', id: 'scan' },
+    { name: 'Receive', id: 'receive', tab: true },
     { name: 'DEX', id: 'markets' },
-    { name: 'Marketplace', id: 'market-activity', sidebarOnly: true, noSheetRow: true },
+    { name: 'Marketplace', id: 'market-activity' },
     { name: 'Dispensers', id: 'dispensers-list' },
     { name: 'Contracts', id: 'contracts-list', optional: true },
     { name: 'Messaging', id: 'messaging' },
     { name: 'Contacts', id: 'contacts' },
     { name: 'Lists', id: 'lists' },
     { name: 'Payments due', id: 'obligations' },
-    { name: 'Settings', id: 'settings', sidebarOnly: true },
+    { name: 'Settings', id: 'settings', tab: true },
 ];
 
 // The tiered --xc-page-gutter: 12px below 640px, 16px from 640px, 24px from 900px.
@@ -189,7 +189,7 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
     test.slow();
     test.setTimeout(30 * 60_000);
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-    // The More sheet slides in; a row measured mid-slide reads as off screen.
+    // Freeze the menu sheet transition before measuring compact routes.
     await freezeMotion(page);
 
     for (const viewport of VIEWPORTS) {
@@ -200,12 +200,10 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
         for (const route of ROUTES) {
             const label = `${viewport.width}x${viewport.height} ${route.name}`;
             await test.step(label, async () => {
-                // Marketplace is a sidebar row only; the More sheet has no row for it.
-                if (route.noSheetRow && !wide) return;
                 try {
                     await openRoute(page, route, wide);
                 } catch (error) {
-                    if (route.optional || route.sidebarOnly) {
+                    if (route.optional) {
                         test.info().annotations.push({ type: 'skip', description: `${label}: ${route.name} not reachable` });
                         return;
                     }
@@ -233,9 +231,7 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
 
                 // 3. Back.
                 const backExpected = wide ? false : !route.tab;
-                if (!route.sidebarOnly || wide) {
-                    expect.soft(m.backCount > 0, at('Back shown')).toBe(backExpected);
-                }
+                expect.soft(m.backCount > 0, at('Back shown')).toBe(backExpected);
 
                 // 5. no sideways page scroll.
                 expect.soft(m.docScrollWidth, at('document scrolls sideways')).toBeLessThanOrEqual(m.docClientWidth);

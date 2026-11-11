@@ -134,7 +134,7 @@ function expectedP2wpkh(wif, hrp) {
  *
  * The Addresses route has three screens - list, address detail, import form -
  * and the two inner ones are STATES of the same route, not routes of their own.
- * So the command palette cannot leave them: navigating to Addresses while
+ * So the wallet menu cannot leave them: navigating to Addresses while
  * already on Addresses changes nothing, the list never renders, and the wait
  * that follows burns its whole budget on a screen that was never coming. Both
  * inner screens carry a header Back, which is the only control that pops them.

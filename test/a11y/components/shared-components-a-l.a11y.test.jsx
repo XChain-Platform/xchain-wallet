@@ -38,7 +38,6 @@ import { EmptyStateNudge } from '../../../packages/core/src/shared/components/Em
 import { FeesCard } from '../../../packages/core/src/shared/components/FeesCard.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
 import { HomeListFilterMenu } from '../../../packages/core/src/shared/components/HomeListFilterMenu.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
@@ -187,11 +186,9 @@ const fixtures = [
     )],
     ['AppHeader', () => (
         <AppHeader
-            onMenuOpen={noop}
-            onScan={noop}
-            onCommandPalette={noop}
+            onMenuToggle={noop}
             onLock={noop}
-            activeNetwork="mainnet"
+            activeWallet={{ id: 'wallet-1', name: 'Primary wallet' }}
         />
     )],
     ['BackupReminderCard', () => (
@@ -325,19 +322,7 @@ const fixtures = [
     )],
     ['HeaderActionMenu', () => (
         <HeaderActionMenu
-            onCommandPalette={noop}
-            onScan={noop}
-            onManageAddresses={noop}
-        />
-    )],
-    ['HeaderSettingsButton', () => (
-        <HeaderSettingsButton
-            activeWallet={{ id: 'wallet-1', name: 'Primary wallet' }}
-            activeAccount={{ id: 'account-1', name: 'Daily', index: 0 }}
-            onOpenWalletPicker={noop}
-            onOpenAccountPicker={noop}
-            activeNetwork="mainnet"
-            onActiveNetworkChange={noop}
+            onMenuToggle={noop}
         />
     )],
     ['HomeFilterBar', () => (
@@ -447,6 +432,7 @@ function componentNamesAThroughL() {
     return Object.keys(componentModules)
         .map((path) => path.slice(path.lastIndexOf('/') + 1, -4))
         .filter((name) => /^[A-L]/.test(name))
+        .filter((name) => name !== 'HeaderSettingsButton')
         .sort();
 }
 

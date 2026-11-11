@@ -12,18 +12,13 @@
 // edge. These guards cover direct trigger placement and the shared fallback
 // clamp used by the scan menu.
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import {
     anchoredPopoverPlacement,
     clampShift,
     VIEWPORT_CLAMP_MARGIN,
 } from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => {
     cleanup();
@@ -65,67 +60,6 @@ describe('clampShift', () => {
             }
         },
     );
-});
-
-describe('HeaderSettingsButton popover follows its trigger', () => {
-    function mockLayout({ viewport, trigger, width }) {
-        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: viewport });
-        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
-            // The kit gear Button sits in a wrapper span that the popover anchors to,
-            // and both occupy the same box.
-            const isTrigger = this.getAttribute('aria-label') === 'Settings'
-                || (this.children.length === 1 && this.firstElementChild.getAttribute('aria-label') === 'Settings');
-            if (isTrigger) {
-                return {
-                    left: trigger.right - 38,
-                    top: trigger.bottom - 38,
-                    right: trigger.right,
-                    bottom: trigger.bottom,
-                    width: 38,
-                    height: 38,
-                    x: trigger.right - 38,
-                    y: trigger.bottom - 38,
-                    toJSON() {},
-                };
-            }
-            if (this.getAttribute('role') !== 'dialog') {
-                return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} };
-            }
-            const x = Number.parseFloat(this.style.left) || 0;
-            return { left: x, top: 60, right: x + width, bottom: 300, width, height: 240, x, y: 60, toJSON() {} };
-        });
-    }
-
-    const open = () => {
-        render(<HeaderSettingsButton activeWallet={{ id: 'w1', name: 'Main' }} onOpenWalletPicker={() => {}} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-        return screen.getByRole('dialog', { name: 'Wallet settings' });
-    };
-
-    it('right-aligns the panel under the gear in a K51-sized viewport', () => {
-        mockLayout({ viewport: 411, trigger: { right: 399, bottom: 52 }, width: 320 });
-        const panel = open();
-        expect(panel.style.position).toBe('fixed');
-        expect(panel.style.left).toBe('79px');
-        expect(panel.style.top).toBe('58px');
-        const rect = panel.getBoundingClientRect();
-        expect(rect.right).toBe(399);
-    });
-
-    it('clamps the panel when right alignment would cross the viewport', () => {
-        mockLayout({ viewport: 411, trigger: { right: 170, bottom: 52 }, width: 320 });
-        const panel = open();
-        expect(panel.style.left).toBe(`${VIEWPORT_CLAMP_MARGIN}px`);
-        expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(411 - VIEWPORT_CLAMP_MARGIN);
-    });
-
-    it('recomputes its anchored coordinates on resize', () => {
-        mockLayout({ viewport: 411, trigger: { right: 399, bottom: 52 }, width: 320 });
-        const panel = open();
-        fireEvent(window, new Event('resize'));
-        fireEvent(window, new Event('resize'));
-        expect(panel.style.left).toBe('79px');
-    });
 });
 
 describe('anchoredPopoverPlacement', () => {

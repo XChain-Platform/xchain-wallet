@@ -39,7 +39,7 @@ async function settle(page) {
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('combobox').first().fill(title);
     const option = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();

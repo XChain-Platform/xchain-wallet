@@ -240,18 +240,20 @@ test.describe('responsive: one interface at every width', () => {
             }
         });
 
-        await test.step('More sheet', async () => {
-            await page.getByRole('navigation', { name: 'Bottom navigation' })
-                .getByRole('button', { name: 'More', exact: true }).click();
-            await expect(page.getByRole('dialog', { name: 'More', exact: true })).toBeVisible();
-            await expectTappable(page, 'More sheet at 360px');
-            await page.keyboard.press('Escape');
+        await test.step('five-tab bottom navigation', async () => {
+            const bottom = page.getByRole('navigation', { name: 'Bottom navigation' });
+            const labels = ['Home', 'Send', 'Receive', 'History', 'Settings'];
+            await expect(bottom.locator('[data-bottom-tab]')).toHaveCount(labels.length);
+            for (const label of labels) {
+                await expect(bottom.getByRole('button', { name: label, exact: true })).toBeVisible();
+            }
+            await expectTappable(page, 'bottom navigation at 360px');
         });
 
-        await test.step('command palette', async () => {
+        await test.step('wallet menu', async () => {
             await page.keyboard.press('ControlOrMeta+k');
-            await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
-            await expectTappable(page, 'command palette at 360px');
+            await expect(page.getByRole('dialog', { name: 'Wallet menu' })).toBeVisible();
+            await expectTappable(page, 'wallet menu at 360px');
             await page.keyboard.press('Escape');
         });
 

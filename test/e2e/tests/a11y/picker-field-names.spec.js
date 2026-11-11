@@ -35,15 +35,15 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
 const PASSWORD = 'a11y-picker-names';
 
-/** Opens a route through the command palette, by clicking its row. */
+/** Opens a route through the wallet menu, by clicking its row. */
 async function gotoPalette(page, title, heading = title, form = heading) {
     // The palette is modal, and a route rendered by the PREVIOUS call may still
     // be settling. Address the palette's own combobox by its dialog rather than
     // taking the first combobox on the page, or a form's own select is matched
     // and `fill` waits forever on something that is not the palette.
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(dialog, 'the wallet menu did not open').toBeVisible({ timeout: 15_000 });
     const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeEditable({ timeout: 15_000 });
     await combobox.fill(title);

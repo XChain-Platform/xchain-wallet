@@ -417,8 +417,8 @@ export function createCrawl(page, {
         await enterDemo();
     }
 
-    const paletteButton = () => page.getByRole('button', { name: 'Open command palette' }).first();
-    const palette = () => page.getByRole('dialog', { name: 'Command palette' });
+    const paletteButton = () => page.getByRole('button', { name: 'Open menu' }).first();
+    const palette = () => page.getByRole('dialog', { name: 'Wallet menu' });
     async function openPalette(timeout = 10_000) {
         if (await paletteButton().isVisible().catch(() => false)) {
             await paletteButton().click({ timeout });
@@ -432,54 +432,25 @@ export function createCrawl(page, {
         screens.push({ label: 'chrome: header and nav', open: async () => {}, chrome: true });
 
         await openPalette();
-        let destinations = await palette().getByRole('option').evaluateAll((els) => els
-            .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
-        destinations = [...new Set(destinations.filter((x) => x && !/^\d/.test(x)))];
+        const destinations = await palette().locator('[data-wallet-menu-row]').evaluateAll((els) => els
+            .map((e) => ({
+                id: e.getAttribute('data-wallet-menu-row'),
+                label: (e.textContent || '').trim(),
+            }))
+            .filter((row) => row.id && row.id !== 'lock' && row.label));
         await page.keyboard.press('Escape');
-        // Every coin and token has a palette entry, and they all open the
-        // same detail screen; two per chain cover it.
-        const perChain = new Map();
         for (const dest of destinations) {
-            if (DESTRUCTIVE.test(dest)) continue;
-            const chain = dest.match(/ on (\w+)$/)?.[1];
-            if (chain) {
-                perChain.set(chain, (perChain.get(chain) || 0) + 1);
-                if (perChain.get(chain) > 2) continue;
-            }
+            if (DESTRUCTIVE.test(dest.label)) continue;
             const openDestination = async (timeout = 10_000) => {
                 await openPalette(timeout);
-                await palette().getByRole('combobox').fill(dest, { timeout });
-                await palette().getByRole('option').filter({ hasText: dest }).first()
+                await palette().locator(`[data-wallet-menu-row="${dest.id}"]`)
                     .click({ timeout: Math.min(timeout, 5_000) });
             };
             screens.push({
-                label: `palette: ${dest}`,
+                label: `menu: ${dest.label}`,
                 open: openDestination,
                 reopen: () => openDestination(2_000),
             });
-        }
-
-        const menu = paletteButton().page().getByRole('button', { name: 'Open menu' }).first();
-        if (await menu.isVisible().catch(() => false)) {
-            await menu.click();
-            await page.waitForTimeout(300);
-            // The header menu is a role=menu popover in the header, not part
-            // of <main>; its rows are the buttons (links leave the app).
-            const rows = await page.getByRole('menu').getByRole('menuitem').evaluateAll((els) => els
-                .filter((e) => e.tagName === 'BUTTON' && !e.disabled)
-                .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
-            await home();
-            for (const row of [...new Set(rows)]) {
-                if (!row || /^Back/.test(row) || DESTRUCTIVE.test(row) || /new window/i.test(row)) continue;
-                screens.push({
-                    label: `menu: ${row}`,
-                    open: async () => {
-                        await page.getByRole('button', { name: 'Open menu' }).first().click();
-                        await page.waitForTimeout(300);
-                        await page.getByRole('menu').getByRole('menuitem').filter({ hasText: row }).first().click({ timeout: 5_000 });
-                    },
-                });
-            }
         }
 
         await openSettings(page);

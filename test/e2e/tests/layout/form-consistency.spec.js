@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Every form and button looks the same: walk each form route reachable from
-// the command palette and Settings at a phone and a desktop size and measure
+// the wallet menu and Settings at a phone and a desktop size and measure
 //   - every text, number, select and textarea field draws a solid 1px border
 //     in the shared control-border colour (on itself or on its wrapper),
 //   - inputs, selects and buttons that share a row share one height,
@@ -68,7 +68,7 @@ const SETTINGS_SECTIONS = [
 
 async function palette(page, destination) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').fill(destination);
     const option = dialog.getByRole('option').filter({ hasText: destination }).first();

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, gotoSection, mainButton, test, unlockedShell } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
 
 const PASSWORD = 'async-boundaries-123';
 const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -133,17 +133,8 @@ async function releaseHold(page) {
     });
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(palette).toBeVisible();
-    await palette.getByRole('combobox').fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(palette).toBeHidden();
-}
-
 async function addSecondWallet(page) {
-    await gotoPalette(page, 'Switch wallet');
+    await openWalletPicker(page);
     await page.getByRole('button', { name: 'Add wallet' }).click();
     await createWallet(page, {
         password: PASSWORD,

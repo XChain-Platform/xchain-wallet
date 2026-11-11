@@ -245,7 +245,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await fundAddress(oracle, FUNDING);
 
-            // LEAVE THIS FORM FIRST. `mintXchain` opens the command palette
+            // LEAVE THIS FORM FIRST. `mintXchain` opens the wallet menu
             // with `getByRole('combobox').first()`, and the create-market form
             // carries its own <select> ("Time to publish the result"), which is
             // the first combobox on the page - so the fixture tries to type

@@ -8,8 +8,6 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
     useReachability: () => ({ overall: 'normal', perChain: [] }),
 }));
 
-import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkStatusIndicator } from '../../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
 import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
@@ -116,69 +114,6 @@ describe('overlay focus return', () => {
         expect(screen.queryByRole('listbox')).toBeNull();
         expect(trigger).toHaveFocus();
         expect(onParentBack).not.toHaveBeenCalled();
-    });
-
-    it('closes a nested network list before the settings dialog', async () => {
-        render(
-            <HeaderSettingsButton
-                chainRegistry={chainRegistry}
-                coinFamilies={['bitcoin', 'litecoin']}
-                networkFilter="all"
-                onNetworkFilterChange={() => {}}
-            />,
-        );
-        const settingsTrigger = screen.getByRole('button', { name: 'Settings' });
-        fireEvent.click(settingsTrigger);
-        // The chain filter is a lazy chunk inside the popover.
-        const filterTrigger = await screen.findByRole('button', { name: /All networks/ });
-        fireEvent.click(filterTrigger);
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-
-        expect(screen.queryByRole('listbox')).toBeNull();
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-        expect(settingsTrigger).toHaveAttribute('aria-expanded', 'true');
-        expect(filterTrigger).toHaveFocus();
-    });
-
-    it('returns header action menu focus after an outside press and an action', () => {
-        const onScan = vi.fn();
-        render(<AppHeader onScan={onScan} />);
-        // Scan lives in the header action menu, which replaced the scan menu.
-        const trigger = screen.getByRole('button', { name: 'Open menu' });
-
-        fireEvent.click(trigger);
-        screen.getByRole('menuitem', { name: 'Scan' }).focus();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(trigger).toHaveFocus();
-
-        fireEvent.click(trigger);
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Scan' }));
-        expect(onScan).toHaveBeenCalledOnce();
-        expect(trigger).toHaveFocus();
-    });
-
-    it('returns settings-popover focus after an outside press and an action', () => {
-        const onOpenWalletPicker = vi.fn();
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
-                onOpenWalletPicker={onOpenWalletPicker}
-            />,
-        );
-        const trigger = screen.getByRole('button', { name: 'Settings' });
-
-        fireEvent.click(trigger);
-        screen.getByRole('button', { name: 'Main wallet' }).focus();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(trigger).toHaveFocus();
-
-        fireEvent.click(trigger);
-        fireEvent.click(screen.getByRole('button', { name: 'Main wallet' }));
-        expect(onOpenWalletPicker).toHaveBeenCalledOnce();
-        expect(trigger).toHaveFocus();
     });
 
     it('returns network-status focus after an outside press and an action', () => {

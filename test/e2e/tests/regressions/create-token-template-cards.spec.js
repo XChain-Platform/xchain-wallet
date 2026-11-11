@@ -38,7 +38,7 @@ async function settle(page) {
 
 async function openCreateToken(page) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('Create a token');
     await palette.getByRole('option', { name: /^Create a token\b/ }).click();

@@ -121,7 +121,7 @@ async function expectScreen(page, heading, label) {
 
 async function openAgentAccounts(page) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('All actions');
     await palette.getByRole('option', { name: /^All actions\b/ }).first().click();

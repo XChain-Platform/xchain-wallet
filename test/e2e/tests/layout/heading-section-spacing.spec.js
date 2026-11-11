@@ -33,8 +33,6 @@ const SIZES = [
 
 // Routes reached from the navigation, with the sections each one stacks.
 const NAV_ROUTES = ['History', 'Marketplace', 'Contracts', 'Dispensers', 'Contacts', 'Lists', 'Payments due'];
-// Marketplace has no bottom bar or More sheet entry at phone width.
-const PHONE_SKIPS = new Set(['Marketplace']);
 
 // Settings screens whose section headings or card titles are checked.
 const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Automatic donation system', 'Keyboard'];
@@ -143,11 +141,11 @@ for (const [width, height] of SIZES) {
         const tokens = await page.evaluate(readTokens);
         expect(tokens.sectionHeaderGap, 'header gap is below the section gap').toBeLessThan(tokens.sectionGap);
 
-        for (const route of NAV_ROUTES.filter((r) => width > 599 || !PHONE_SKIPS.has(r))) {
+        for (const route of NAV_ROUTES) {
             try {
                 await gotoSection(page, route);
             } catch {
-                // Not every route is in the bottom bar's More sheet at phone width.
+                // A route can be gated out of the catalogue for this wallet.
                 continue;
             }
             await page.waitForTimeout(400);

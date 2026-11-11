@@ -212,47 +212,44 @@ test('rtl sweep', async ({ page }, testInfo) => {
     await enablePseudoRtl(page);
     await sweep.measure('rtl: settings root');
 
-    const names = ['Home', 'History', 'Send', 'Receive', 'Scan', 'DEX', 'Dispensers', 'Contracts',
-        'Messaging', 'Contacts', 'Lists', 'Payments due', 'Settings'];
-    const goto = async (name) => {
+    const routes = [
+        ['Home', 'home'], ['History', 'history'], ['Send', 'send'], ['Receive', 'receive'],
+        ['Scan', 'scan'], ['My tokens', 'my-tokens'], ['Addresses', 'addresses'], ['DEX', 'markets'],
+        ['Marketplace', 'market-activity'], ['Dispensers', 'dispensers-list'],
+        ['Cross-chain', 'cross-chain-templates'], ['Payments due', 'obligations'],
+        ['Contracts', 'contracts-list'], ['Staking', 'staking-dashboard'],
+        ['Multisig', 'multisig-create'], ['Lists', 'lists'], ['All actions', 'actions'],
+        ['Messaging', 'messaging'], ['Contacts', 'contacts'], ['Alerts', 'alerts'],
+        ['Settings', 'settings'],
+    ];
+    const goto = async (name, id) => {
         const item = nav(page).getByRole('button', { name: pseudo(name) }).first();
         if (await item.isVisible().catch(() => false)) { await item.click(); return; }
-        await nav(page).getByRole('button', { name: pseudo('More') }).first().click();
-        const sheet = page.getByRole('dialog', { name: pseudo('More') });
-        await sheet.getByRole('button', { name: pseudo(name) }).first().click();
+        await page.getByRole('button', { name: pseudo('Open menu') }).first().click();
+        const menu = page.getByRole('dialog', { name: pseudo('Wallet menu') });
+        await menu.locator(`[data-wallet-menu-row="${id}"]`).click();
     };
-    for (const name of names) {
+    for (const [name, id] of routes) {
         try {
-            await goto(name);
+            await goto(name, id);
             await sweep.measure(`rtl route: ${name}`);
         } catch (err) { skip(`rtl route: ${name}`, err); }
     }
-    // Marketplace and the rest of the palette.
+    // The catalogue itself is a layout surface.
     try {
         await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: pseudo('Command palette') });
-        await palette.waitFor({ state: 'visible', timeout: 10_000 });
-        await sweep.measure('rtl palette: open');
-        const titles = await palette.getByRole('option').evaluateAll((els) => els
-            .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
+        const menu = page.getByRole('dialog', { name: pseudo('Wallet menu') });
+        await menu.waitFor({ state: 'visible', timeout: 10_000 });
+        await sweep.measure('rtl menu: open');
         await page.keyboard.press('Escape');
-        for (const title of [...new Set(titles.filter((t) => t && !/^\d/.test(t)))].slice(0, 140)) {
-            try {
-                await page.keyboard.press('ControlOrMeta+k');
-                await palette.waitFor({ state: 'visible', timeout: 5_000 });
-                await palette.getByRole('combobox').fill(title);
-                await palette.getByRole('option').filter({ hasText: title }).first().click({ timeout: 5_000 });
-                await sweep.measure(`rtl palette: ${title}`);
-            } catch (err) { skip(`rtl palette: ${title}`, err); await page.keyboard.press('Escape').catch(() => {}); }
-        }
-    } catch (err) { skip('rtl palette', err); }
+    } catch (err) { skip('rtl menu', err); }
     // Settings sections by row index.
     try {
-        await goto('Settings');
+        await goto('Settings', 'settings');
         const count = await page.getByRole('main').locator('button:visible').count();
         for (let i = 0; i < Math.min(count, 30); i += 1) {
             try {
-                await goto('Settings');
+                await goto('Settings', 'settings');
                 const back = page.locator('button:has(svg[data-xc-directional]):visible').first();
                 if (await back.isVisible().catch(() => false) && await page.getByRole('searchbox').count() === 0) await back.click();
                 const row = page.getByRole('main').locator('button:visible').nth(i);
@@ -263,8 +260,8 @@ test('rtl sweep', async ({ page }, testInfo) => {
             } catch (err) { skip(`rtl settings row ${i}`, err); }
         }
     } catch (err) { skip('rtl settings', err); }
-    // Header popovers.
-    for (const re of [/Settings/, /Scan and addresses/, /XChain platform sites/, /Open menu/]) {
+    // Header wallet menu.
+    for (const re of [/Open menu/]) {
         try {
             const b = page.getByRole('button', { name: re }).first();
             if (!(await b.isVisible().catch(() => false))) continue;

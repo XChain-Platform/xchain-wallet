@@ -52,7 +52,7 @@ async function openRoute(page, route) {
         await gotoSection(page, route.name);
     } else {
         await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         await expect(palette).toBeVisible();
         await palette.getByRole('combobox').fill(route.paletteName);
         await palette.getByRole('option', {

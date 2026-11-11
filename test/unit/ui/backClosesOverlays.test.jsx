@@ -20,8 +20,6 @@ import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
-import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { useFormLeaveGuard } from '../../../packages/core/src/shared/hooks/useFormLeaveGuard.js';
 import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
 
@@ -121,45 +119,6 @@ describe('Back closes overlays first', () => {
         expect(onCancel).not.toHaveBeenCalled();
         expect(onBack).not.toHaveBeenCalled();
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
-    });
-
-    it('closes a dropdown on native Back before reaching the route', () => {
-        const onBack = vi.fn();
-        render(
-            <>
-                <AppHeader onScan={() => {}} />
-                <PageHeader title="Receive" onBack={onBack} />
-            </>,
-        );
-        const trigger = screen.getByRole('button', { name: 'Open menu' });
-        fireEvent.click(trigger);
-        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-
-        act(() => nativeBack({ canGoBack: true }));
-
-        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
-        expect(onBack).not.toHaveBeenCalled();
-    });
-
-    it('closes the header settings menu on native Back before reaching the route', () => {
-        const onBack = vi.fn();
-        render(
-            <>
-                <HeaderSettingsButton
-                    activeWallet={{ id: 'wallet-a', name: 'Main Wallet' }}
-                    onOpenWalletPicker={() => {}}
-                />
-                <PageHeader title="Receive" onBack={onBack} />
-            </>,
-        );
-        const trigger = screen.getByRole('button', { name: 'Settings' });
-        fireEvent.click(trigger);
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-
-        act(() => nativeBack({ canGoBack: true }));
-
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(onBack).not.toHaveBeenCalled();
     });
 
     it('closes the More sheet on native Back, then lets the next press reach the screen', async () => {

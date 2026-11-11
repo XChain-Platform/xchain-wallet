@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Agent accounts opens from the command palette at phone and desktop widths.
+// Agent accounts opens from the wallet menu at phone and desktop widths.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
@@ -16,12 +16,12 @@ for (const { name, width, height } of [
     { name: 'phone 360', width: 360, height: 640 },
     { name: 'desktop 1440', width: 1440, height: 900 },
 ]) {
-    test(`the command palette opens Agent accounts at ${name}`, async ({ page }) => {
+    test(`the wallet menu opens Agent accounts at ${name}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width, height });
         await createWallet(page);
         await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         await expect(palette).toBeVisible();
         await palette.getByRole('combobox').fill('Agent accounts');
         await palette.getByRole('option', { name: /^Agent accounts\b/ }).first().click();

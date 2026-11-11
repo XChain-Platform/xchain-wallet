@@ -187,13 +187,10 @@ async function clickAndLetItClose(locator) {
     }
 }
 
-// The popup header keeps Search in its action menu; the hero's own search
-// button folds into "Balance actions" at popup width, so the header menu is
-// the one visible route to the palette at every popup size.
+// The popup header opens the searchable wallet menu at every popup size.
 async function openAllActions(page) {
     await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('menu', { name: 'Header actions' }).getByRole('menuitem', { name: /^Search/ }).click();
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('All actions');
     await palette.getByRole('option', { name: /All actions/ }).first().click();

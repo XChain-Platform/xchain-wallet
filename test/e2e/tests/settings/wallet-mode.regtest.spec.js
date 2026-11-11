@@ -42,7 +42,7 @@
 //   - step 3 FAILED: `LeftNav` had no wallet-mode gating at all, so **Send and
 //     Receive were still one click away** while the Wallet Mode screen told the
 //     user "Send / receive screens are hidden; this wallet does not broadcast."
-// The fix gates both nav surfaces, the command palette and the Send / Receive
+// The fix gates both nav surfaces, the wallet menu and the Send / Receive
 // routes themselves on `useWalletMode().isSignerMode`, so the `.fixme` is gone
 // and step 3 is now the regression guard on the promise. The assertions have
 // not been touched: they were the specification, and they were correct as

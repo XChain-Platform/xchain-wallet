@@ -101,7 +101,7 @@ async function settle(page) {
 
 async function openPaletteDestination(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
     await palette.getByRole('option', { name: new RegExp(`^${escapeRegExp(title)}\\b(?! the )`) })
@@ -110,7 +110,7 @@ async function openPaletteDestination(page, title) {
 
 async function openTopLevelRoute(page, route) {
     // Marketplace is a rail destination at larger tiers and a palette
-    // destination on compact screens, where the More sheet has no row for it.
+    // destination on compact screens through the searchable wallet menu.
     if (route === 'Marketplace') {
         await openPaletteDestination(page, route);
     } else {

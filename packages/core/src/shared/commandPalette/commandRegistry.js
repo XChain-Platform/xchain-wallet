@@ -36,6 +36,7 @@ import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
 import { Icon } from '../../ui/index.js';
+import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
@@ -119,6 +120,37 @@ const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
     'sign-message',
     'sign-psbt',
 ]);
+
+const CATALOGUE_COMMAND_META = {
+    home: { subtitleKey: 'palette.navHome.subtitle', keywords: ['balances', 'portfolio', 'tokens', 'overview'] },
+    send: { subtitleKey: 'palette.navSend.subtitle', keywords: ['pay', 'transfer', 'spend'] },
+    receive: { subtitleKey: 'palette.navReceive.subtitle', keywords: ['address', 'deposit', 'qr'] },
+    history: { subtitleKey: 'palette.navHistory.subtitle', keywords: ['transactions', 'activity', 'timeline'] },
+    scan: { subtitleKey: 'palette.walletScan.subtitle', keywords: ['qr', 'camera'] },
+    'my-tokens': { subtitleKey: 'palette.navMyTokens.subtitle', keywords: ['issued', 'owned', 'assets', 'manage'] },
+    addresses: { subtitleKey: 'palette.navAddresses.subtitle', keywords: ['accounts', 'keys'] },
+    markets: { subtitleKey: 'palette.navMarkets.subtitle', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'] },
+    'market-activity': { subtitleKey: 'palette.navMarketplace.subtitle', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'] },
+    'dispensers-list': { subtitleKey: 'palette.navDispensers.subtitle', keywords: ['vending', 'sell'] },
+    'cross-chain-templates': { keywords: ['cross chain', 'templates', 'parallel'] },
+    obligations: { subtitleKey: 'palette.navObligations.subtitle', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'] },
+    'contracts-list': { subtitleKey: 'palette.navContracts.subtitle', keywords: ['vm', 'deploy', 'execute'] },
+    'staking-dashboard': { subtitleKey: 'palette.navStaking.subtitle', keywords: ['stake', 'validator', 'rewards'] },
+    'multisig-create': { subtitleKey: 'palette.navMultisigCreate.subtitle', keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'] },
+    lists: { subtitleKey: 'palette.navLists.subtitle', keywords: ['list', 'roster', 'allowlist', 'blocklist'] },
+    actions: { subtitleKey: 'palette.navActions.subtitle', keywords: ['more', 'menu', 'catalogue'] },
+    messaging: { subtitleKey: 'palette.navMessaging.subtitle', keywords: ['inbox', 'messages', 'chat'] },
+    contacts: { subtitleKey: 'palette.navContacts.subtitle', keywords: ['address book', 'people'] },
+    alerts: { keywords: ['notifications', 'notify'] },
+};
+
+const CATALOGUE_COMMAND_IDS = {
+    'market-activity': 'nav-marketplace',
+    'dispensers-list': 'nav-dispensers',
+    'contracts-list': 'nav-contracts',
+    'staking-dashboard': 'nav-staking',
+    actions: 'nav-actions',
+};
 
 /**
  * Parse a free-form palette query into synthetic action commands (§33.3).
@@ -209,57 +241,42 @@ export function buildCommands(ctx) {
     const hasDex = ctx.hasDexSurface !== false;
     const list = [];
 
-    // ---- Navigate: primary surfaces (mirror LeftNav) --------------------
+    // ---- Navigate: wallet menu catalogue and additional surfaces --------
+    for (const group of visibleWalletMenu(ctx)) {
+        for (const row of group.rows) {
+            const meta = CATALOGUE_COMMAND_META[row.id] || {};
+            list.push({
+                id: CATALOGUE_COMMAND_IDS[row.id] || `nav-${row.id}`,
+                category: 'Navigate',
+                title: row.label,
+                ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
+                keywords: meta.keywords || [],
+                Icon: Icon[row.icon],
+                run: go(row.id),
+            });
+        }
+    }
+
+    const settingsRow = walletMenuFooter().find((row) => row.id === 'settings');
+    list.push({
+        id: 'nav-settings',
+        category: 'Navigate',
+        title: settingsRow.label,
+        subtitle: t('components.totalBalanceHero.openSettings'),
+        keywords: ['preferences', 'options', 'config'],
+        Icon: Icon[settingsRow.icon],
+        run: go('settings'),
+    });
+
     list.push(
-        { id: 'nav-home', category: 'Navigate', title: t('home.title'), subtitle: t('palette.navHome.subtitle'), keywords: ['balances', 'portfolio', 'tokens', 'overview'], Icon: Icon.HomeIcon, run: go('home') },
-        { id: 'nav-history', category: 'Navigate', title: t('history.title'), subtitle: t('palette.navHistory.subtitle'), keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
-        // The palette reaches every route by name, so gating the nav
-        // rails alone would leave Send one Cmd-K away from a wallet whose
-        // Wallet Mode screen says the screen is hidden. Signer mode drops both.
-        ...(ctx.isSignerMode ? [] : [
-            { id: 'nav-send', category: 'Navigate', title: t('send.title'), subtitle: t('palette.navSend.subtitle'), keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
-            { id: 'nav-receive', category: 'Navigate', title: t('home.receive'), subtitle: t('palette.navReceive.subtitle'), keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
-        ]),
-        // The DEX rows are gated on the surface EXISTING in this build,
-        // not on anything about the wallet: a build that hides the DEX compiles
-        // those routes out, so the command would land the user on Home with no
-        // explanation.
-        // Spread in place rather than pushed later, so the display order every
-        // other build has stays exactly as it was.
         ...(hasDex ? [
-            { id: 'nav-markets', category: 'Navigate', title: t('palette.navMarkets.title'), subtitle: t('palette.navMarkets.subtitle'), keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
-            { id: 'nav-marketplace', category: 'Navigate', title: t('nav.marketplace'), subtitle: t('palette.navMarketplace.subtitle'), keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.LineChartIcon, run: go('market-activity') },
             { id: 'nav-my-orders', category: 'Navigate', title: t('palette.navMyOrders.title'), subtitle: t('palette.navMyOrders.subtitle'), keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
             { id: 'nav-my-swaps', category: 'Navigate', title: t('palette.navMySwaps.title'), subtitle: t('palette.navMySwaps.subtitle'), keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
-        { id: 'nav-dispensers', category: 'Navigate', title: t('routes.addressList.dispensers'), subtitle: t('palette.navDispensers.subtitle'), keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
-        // The buyer's side. 'Dispensers' above lists the ones this wallet
-        // opened; a buyer with no link in hand needs the search, which was
-        // reachable only through the Token Actions catalogue.
         { id: 'nav-browse-dispensers', category: 'Navigate', title: t('palette.navBrowseDispensers.title'), subtitle: t('palette.navBrowseDispensers.subtitle'), keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
-        { id: 'nav-my-tokens', category: 'Navigate', title: t('palette.navMyTokens.title'), subtitle: t('palette.navMyTokens.subtitle'), keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
-        { id: 'nav-messaging', category: 'Navigate', title: t('home.messaging'), subtitle: t('palette.navMessaging.subtitle'), keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
-        { id: 'nav-addresses', category: 'Navigate', title: t('home.addresses'), subtitle: t('palette.navAddresses.subtitle'), keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
-        { id: 'nav-lists', category: 'Navigate', title: t('palette.navLists.title'), subtitle: t('palette.navLists.subtitle'), keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
-        // Plain-language subtitle, opcode in `keywords` only: 'coinpay' still
-        // matches in search, and no palette row renders a raw protocol verb.
-        { id: 'nav-obligations', category: 'Navigate', title: t('nav.paymentsDue'), subtitle: t('palette.navObligations.subtitle'), keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
-        { id: 'nav-actions', category: 'Navigate', title: t('palette.navActions.title'), subtitle: t('palette.navActions.subtitle'), keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
     );
-    // Contracts follow the VM gate (every chain whose descriptor advertises
-    // DEPLOY: BTC, LTC and DOGE today), the same gate Home's Contracts entry
-    // uses, so an LTC/DOGE-only wallet reaches Contracts from the palette too.
-    // A shell that has not wired hasVmAddress yet falls back to the older
-    // BTC gate rather than hiding the surface. Staking stays BTC-only.
-    if (ctx.hasVmAddress ?? ctx.hasBtcAddress) {
-        list.push({ id: 'nav-contracts', category: 'Navigate', title: t('home.contracts'), subtitle: t('palette.navContracts.subtitle'), keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
-    }
     if (ctx.hasBtcAddress) {
-        list.push({ id: 'nav-staking', category: 'Navigate', title: t('home.staking'), subtitle: t('palette.navStaking.subtitle'), keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
-        // Multisig is Bitcoin-only, so it shares the staking gate. Multisig
-        // signing lists the sessions a multisig send starts.
         list.push(
-            { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
             { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
             { id: 'nav-cosigner-accounts', category: 'Navigate', title: t('palette.navCoSignerAccounts.title'), subtitle: t('palette.navCoSignerAccounts.subtitle'), keywords: ['agent', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'], Icon: Icon.UsersIcon, run: go('cosigner-accounts') },
         );
@@ -339,11 +356,6 @@ export function buildCommands(ctx) {
         { id: 'sign-psbt', category: 'Sign', title: t('home.signer.signTransaction'), subtitle: t('palette.signPsbt.subtitle'), keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
     );
 
-    // ---- Contacts -------------------------------------------------------
-    list.push(
-        { id: 'nav-contacts', category: 'Contacts', title: t('components.contactsPickerScreen.contacts'), subtitle: t('palette.navContacts.subtitle'), keywords: ['address book', 'people'], Icon: Icon.UsersIcon, run: go('contacts') },
-    );
-
     // ---- Wallet verbs (only when the shell wires the handler) -----------
     if (typeof ctx.scan === 'function') {
         list.push({ id: 'wallet-scan', category: 'Wallet', title: t('scan.scannerAlt'), subtitle: t('palette.walletScan.subtitle'), keywords: ['qr', 'camera', 'scan'], Icon: Icon.ScanIcon, run: () => ctx.scan() });
@@ -355,17 +367,15 @@ export function buildCommands(ctx) {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
     }
     if (typeof ctx.lock === 'function') {
-        list.push({ id: 'wallet-lock', category: 'Wallet', title: t('home.lockWallet'), subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon.LockIcon, run: () => ctx.lock() });
+        const lockRow = walletMenuFooter().find((row) => row.id === 'lock');
+        list.push({ id: 'wallet-lock', category: 'Wallet', title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {
         list.push({ id: 'help-shortcuts', category: 'Wallet', title: t('keyboard.shortcutHelp.keyboardShortcuts'), subtitle: t('palette.helpShortcuts.subtitle'), keywords: ['keys', 'hotkeys', 'help', 'cheatsheet', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
     }
 
     // ---- Settings -------------------------------------------------------
-    list.push(
-        { id: 'nav-settings', category: 'Settings', title: t('home.settings'), subtitle: t('components.totalBalanceHero.openSettings'), keywords: ['preferences', 'options', 'config'], Icon: Icon.GearIcon, run: go('settings') },
-        { id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
-    );
+    list.push({ id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') });
 
     if (ctx.isSignerMode) {
         return list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category));

@@ -197,7 +197,7 @@ async function freshContext(browser) {
     return context;
 }
 
-/** Opens Settings via the command palette. */
+/** Opens Settings via the wallet menu. */
 async function openSettingsViaPalette(page) {
     await openPaletteCommand(page, 'Settings');
 }

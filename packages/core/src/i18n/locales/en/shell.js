@@ -51,9 +51,6 @@ const messages = {
     'shell.platformLinks.sync': 'Bootstraps & sync',
     'shell.platformLinks.hub': 'Validator hub',
     'shell.platformLinks.mcp': 'MCP for agents',
-    'shell.headerMenu.manageAddresses': 'Manage addresses',
-    'shell.headerMenu.moreWalletActions': 'More wallet actions',
-    'shell.header.walletPrefix': 'Wallet: ',
 };
 
 addEnglish(messages);

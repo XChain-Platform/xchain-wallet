@@ -72,7 +72,7 @@ async function tokenPx(page, name) {
 
 async function openPaletteRoute(page, query, option) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(query);
     await palette.getByRole('option', { name: option }).first().click();
@@ -99,7 +99,7 @@ async function openSettingsSearch(page, query) {
 
 async function openStaking(page) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill('staking');
     await palette.getByRole('option', { name: /^Staking\b/ }).first().click();

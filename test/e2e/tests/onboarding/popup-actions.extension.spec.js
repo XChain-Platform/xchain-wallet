@@ -87,7 +87,7 @@ test('popup keeps onboarding actions and bottom navigation labels visible', asyn
         const bottomNavigation = page.getByRole('navigation', { name: 'Bottom navigation' });
         await expect(bottomNavigation).toBeVisible({ timeout: 120_000 });
 
-        const expectedLabels = ['Home', 'History', 'Send', 'Scan', 'More'];
+        const expectedLabels = ['Home', 'Send', 'Receive', 'History', 'Settings'];
         const items = bottomNavigation.locator('[data-bottom-tab]');
         await expect(items).toHaveCount(expectedLabels.length);
         await expect(items).toHaveText(expectedLabels);

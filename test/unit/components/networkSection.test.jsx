@@ -39,6 +39,25 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('NetworkSection', () => {
+    it('switches through the shell active-network handler after confirmation', async () => {
+        const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
+        const reload = vi.fn();
+        render(
+            <NetworkSection
+                activeWallet={{ id: 'wallet-1' }}
+                onActiveNetworkChange={onActiveNetworkChange}
+                reload={reload}
+            />,
+        );
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('testnet'));
+        expect(setActiveNetworkSpy).not.toHaveBeenCalled();
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+    });
+
     it('does not switch networks until the user confirms', async () => {
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
         fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });

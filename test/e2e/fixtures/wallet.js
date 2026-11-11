@@ -28,6 +28,7 @@
 
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { visibleWalletMenu, walletMenuFooter } from '../../../packages/core/src/shared/walletMenu.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
 import { stubHubRegistry } from './hubStub.js';
@@ -127,8 +128,8 @@ export function nav(page) {
  * (`packages/extension/src/popup/App.jsx:600-603` says so explicitly), so no
  * nav landmark exists there to wait on.
  *
- * The nav rail's Lock button is not usable for this either: below 640px it
- * lives inside the More sheet, which is closed by default.
+ * The nav rail's Lock button is not usable for this either: below 640px the
+ * rail is absent and Lock lives inside the closed wallet menu.
  */
 export function unlockedShell(page) {
     return page.getByRole('region', { name: 'Active address balance' }).first();
@@ -156,7 +157,7 @@ export function unlockedAnyScreen(page) {
  * Opens Settings, by whichever route this shell offers.
  *
  * The MV3 popup has no navigation surface. Its entry point is the gear
- * in Home's balance hero, which is what a real user has; the command palette
+ * in Home's balance hero, which is what a real user has; the wallet menu
  * also lists every Settings section and is kept here as the fallback so this
  * still works if the gear ever moves. Web and desktop use the nav. Same screen
  * either way, so the walk after this is shared.
@@ -181,13 +182,13 @@ function escapeRegExp(text) {
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** The command palette dialog, open or not. */
+/** The wallet menu dialog, open or not. */
 export function commandPalette(page) {
-    return page.getByRole('dialog', { name: 'Command palette' });
+    return page.getByRole('dialog', { name: 'Wallet menu' });
 }
 
 /**
- * Opens the command palette and types `query` into its own search field.
+ * Opens the wallet menu and types `query` into its own search field.
  *
  * The search field is found INSIDE the dialog by its name. A page-wide
  * `getByRole('combobox').first()` resolves to whatever select sits earlier in
@@ -218,16 +219,16 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
             });
             await page.keyboard.press('ControlOrMeta+k');
         }
-        await expect(search, 'the command palette did not open').toBeEditable({ timeout: 3_000 });
+        await expect(search, 'the wallet menu did not open').toBeEditable({ timeout: 3_000 });
         await search.fill(query, { timeout: 3_000 });
         await expect(search).toHaveValue(query, { timeout: 2_000 });
-    }, `the command palette never opened with "${query}" typed into its search field`)
+    }, `the wallet menu never opened with "${query}" typed into its search field`)
         .toPass({ timeout: timeoutMs });
     return dialog;
 }
 
 /**
- * Runs one command palette entry by its title, and waits for the palette to
+ * Runs one wallet menu entry by its title, and waits for the palette to
  * close behind it.
  *
  * The option is matched as an anchored word prefix of its accessible name,
@@ -242,7 +243,7 @@ export async function openPaletteCommand(page, title, { option, timeoutMs = 30_0
     const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
     await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
     await row.click();
-    await expect(dialog, `the command palette stayed open after choosing "${title}"`)
+    await expect(dialog, `the wallet menu stayed open after choosing "${title}"`)
         .toBeHidden({ timeout: 15_000 });
 }
 
@@ -264,15 +265,26 @@ export async function expectActiveWallet(page, name, message, { timeoutMs = 30_0
         .toBeVisible({ timeout: timeoutMs });
 }
 
+/** Opens the wallet picker through the Settings page. */
+export async function openWalletPicker(page) {
+    await openSettings(page);
+    const main = page.getByRole('main');
+    const back = page.getByRole('button', { name: 'Back to settings' });
+    if (await back.isVisible().catch(() => false)) await back.click();
+    await main.getByRole('button', { name: /^This wallet\b/ }).click();
+    await main.getByRole('button', { name: /^Open wallets/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
+}
+
 /**
- * Switches to the wallet called `name` through the palette's Switch wallet
- * screen, and confirms it in the App header.
+ * Switches to the wallet called `name` through Settings, and confirms it in
+ * the App header.
  *
  * The row is told apart from its own "Wallet details for <name>" button,
  * which carries the same name.
  */
 export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
-    await openPaletteCommand(page, 'Switch wallet');
+    await openWalletPicker(page);
     const row = page.getByRole('main')
         .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${escapeRegExp(name)}`) })
         .first();
@@ -292,7 +304,7 @@ export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
  */
 export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
     if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
-    await openPaletteCommand(page, 'Switch wallet');
+    await openWalletPicker(page);
     await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
     // navigate:false: the add flow starts at the onboarding welcome inside the
     // unlocked shell, and a goto('/') would drop the session.
@@ -302,19 +314,9 @@ export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads =
 }
 
 /**
- * A nav destination by name, tolerating the badge that rides in its
- * accessible name.
- *
- * A nav item with unread items reads "Messaging 5 unread", not
- * "Messaging": the count pill carries `aria-label="5 unread"` and the
- * accessible name is the concatenation. An exact match therefore finds
- * the item right up until the wallet has something to tell the user
- * about, which is precisely when a test is most likely to be looking at
- * it. (This bit the width walk: the same click passed on an empty
- * wallet and hung on a populated one.)
- *
- * Exact first so a name that IS another's prefix cannot be hijacked, then
- * an anchored prefix so the badge suffix is tolerated. Anchored, not
+ * A nav destination by name. Exact first so a name that IS another's prefix
+ * cannot be hijacked, then an anchored prefix for descriptive suffixes.
+ * Anchored, not
  * substring: `getByRole(..., { name })` without `exact` matches anywhere
  * in the name, which would let "Send" also select "Resend".
  */
@@ -326,10 +328,8 @@ function navDestination(scope, name) {
     };
 }
 
-// A destination can sit in the DOM of a collapsed nav without being shown
-// (the phone bar keeps its More sheet rows mounted off screen); only one that
-// is visible inside the viewport is a click target, otherwise the caller
-// falls through to More.
+// A destination can sit in the DOM during a responsive transition without
+// being shown. Only a row inside the viewport is a click target.
 async function onScreen(locator) {
     if (!(await locator.isVisible())) return false;
     const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
@@ -340,10 +340,9 @@ async function onScreen(locator) {
         && box.x < viewport.width && box.y < viewport.height;
 }
 
-// The landscape icon rail and the open More sheet both scroll inside a short
-// viewport (or under enlarged text spacing), so a row can be scrolled out of
-// view; bring it back before the on-screen check. The closed phone bar's
-// off-screen sheet rows are neither, so they still fall through to More.
+// The landscape icon rail can scroll inside a short viewport or under
+// enlarged text spacing, so a row can be outside the viewport. Bring it back
+// before the on-screen check.
 // A resize can unmount the row between the count and these calls, so each
 // is bounded and a vanished row simply counts as not on screen.
 async function revealInScroller(locator) {
@@ -352,9 +351,7 @@ async function revealInScroller(locator) {
         const scrolls = await locator.first().evaluate((el) => {
             const navEl = el.closest('nav');
             if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
-            const sheet = el.closest('[role="dialog"]');
-            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
-                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+            return false;
         }, undefined, { timeout: 2_000 });
         if (scrolls && await locator.first().isVisible()) {
             await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
@@ -379,55 +376,67 @@ async function clickDestination(scope, name) {
     return false;
 }
 
+function walletMenuRowId(name) {
+    const groups = visibleWalletMenu({
+        hasDexSurface: true,
+        hasVmAddress: true,
+        hasBtcAddress: true,
+    });
+    const rows = [...groups.flatMap((group) => group.rows), ...walletMenuFooter()];
+    return rows.find((row) => row.label === name)?.id;
+}
+
+async function openWalletMenuDestination(page, name) {
+    const id = walletMenuRowId(name);
+    if (!id) {
+        await openPaletteCommand(page, name);
+        return;
+    }
+    const dialog = commandPalette(page);
+    if (!(await dialog.isVisible())) {
+        await page.evaluate(() => {
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.keyboard.press('ControlOrMeta+k');
+    }
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    const row = dialog.locator(`[data-wallet-menu-row="${id}"]`);
+    await expect(row, `the wallet menu has no ${name} row`).toBeVisible({ timeout: 15_000 });
+    await row.click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
+
 /**
  * Clicks a section (Send / History / DEX / ...) in whichever nav is showing.
  *
- * The bottom bar surfaces only four primary tabs (Home, History, Send,
- * Scan); everything else lives behind "More". Try the visible nav first and
- * fall back to the sheet, so one call works at every width.
+ * The bottom bar surfaces Home, Send, Receive, History and Settings. Other
+ * destinations open through the searchable wallet menu, so one call works at
+ * every width.
  */
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        // Landscape phones can show the rail and the bottom bar together, so
-        // try every nav on screen before opening the More sheet. Right after
-        // a resize the shell can still be swapping the bottom bar for the
-        // rail, so a More button that vanishes means "look again", not
-        // "wait for it forever".
+        // Landscape phones can briefly show the rail and the bottom bar
+        // together, so try every navigation surface on screen.
         const navs = [
             page.getByRole('navigation', { name: 'Primary navigation' }),
             page.getByRole('navigation', { name: 'Bottom navigation' }),
         ];
-        const more = page.getByRole('button', { name: 'More', exact: true });
         for (let attempt = 0; attempt < 3; attempt += 1) {
             for (const candidate of navs) {
                 if (await candidate.count() === 0) continue;
                 if (await clickDestination(candidate.first(), name)) return;
             }
-            if (await more.count() === 0) {
-                await page.waitForTimeout(500);
-                continue;
-            }
-            try {
-                await more.first().click({ timeout: 10_000 });
-            } catch {
-                await page.waitForTimeout(500);
-                continue;
-            }
-            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-            if (await clickDestination(sheet, name)) return;
-            break;
+            await page.waitForTimeout(500);
         }
-        throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
+        await openWalletMenuDestination(page, name);
+        return;
     }
 
-    // No nav landmark at all: the MV3 popup. It navigates from Home's quick
-    // actions (Send / Receive / Exchange / More) instead of a nav surface.
-    // Destinations that are NOT quick actions are not reachable this way; see
-    // before writing an extension spec that needs one.
+    // A shell without navigation still exposes quick actions and the wallet
+    // menu.
     if (await clickDestination(page.getByRole('main'), name)) return;
-    throw new Error(`no quick action named "${name}" on this screen`);
+    await openWalletMenuDestination(page, name);
 }
 
 /** A button inside the main content region, e.g. a form's submit. */

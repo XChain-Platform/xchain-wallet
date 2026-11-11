@@ -33,7 +33,6 @@ import { NetworkEndpointsSection } from '../components/settings/NetworkEndpoints
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
 import { readBalanceCache } from '../utils/balanceCache.js';
-import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/desktopUpdate.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/routes.js';
@@ -70,9 +69,9 @@ const row = (title, terms = '', target = title) => ({ title, terms, target });
 let settingsVisits = 0;
 
 export const SETTINGS_SEARCH_ROWS = Object.freeze({
-    'accounts-addresses': [row('Accounts & addresses', 'account address signer change pairing')],
     'this-wallet': [
         row('Wallet', 'switch rename name vault'),
+        row('Account', 'switch choose active'),
         row('Upgrade recovery phrase', 'migrate legacy seed mnemonic'),
         row('Extended public keys', 'xpub export watch only'),
         row('Change wallet password', 'password security'),
@@ -221,7 +220,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
  *
  * Top-level layout uses three section kinds:
  *   - `external-drill`   single row showing a key fact; click navigates
- *                        outside Settings (Wallet / Account pickers).
+ *                        outside Settings.
  *   - `internal-drill`   single row with summary state on the right;
  *                        click renders the section's Component inside a
  *                        Settings sub-page (back returns to the list).
@@ -240,6 +239,7 @@ export const SETTINGS_SEARCH_ROWS = Object.freeze({
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onOpenAccountPicker]
+ * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
  * @param {() => void} [props.onNavigateToAdvanced]
@@ -253,6 +253,7 @@ export function Settings({
     activeAccount,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    onActiveNetworkChange,
     initialSubpageId = null,
     onNavigateToMint,
     onNavigateToAdvanced,
@@ -345,8 +346,6 @@ export function Settings({
     }, [messaging, reload]);
 
     const walletLabel = activeWallet?.name || t('shell.settingsButton.noWallet');
-    const accountLabel = activeAccount?.name
-        || (Number.isInteger(activeAccount?.index) ? t('accountPicker.defaultName', { number: activeAccount.index + 1 }) : t('accountPicker.defaultName', { number: 1 }));
 
     // Same rule as activeNetworkOptions, so the Network row describes the
     // choices its select actually offers.
@@ -362,21 +361,11 @@ export function Settings({
             kind: 'internal-drill',
             Component: ThisWalletSection,
             props: {
-                activeWallet, onOpenWalletPicker, activeAccount,
+                activeWallet, onOpenWalletPicker, activeAccount, onOpenAccountPicker,
                 onWalletRemoved: handleWalletRemoved,
                 onBusyChange: setWalletManagementBusy,
             },
             summary: walletLabel,
-        },
-        {
-            id: 'accounts-addresses',
-            title: t('settings.page.accountsAddresses'),
-            description: t('settings.page.chooseTheActiveAccountAnd'),
-            keywords: 'account address signer change addresses',
-            kind: 'external-drill',
-            visible: Boolean(onOpenAccountPicker && activeWallet),
-            onOpen: onOpenAccountPicker,
-            summary: accountLabel,
         },
         {
             id: 'appearance',
@@ -477,6 +466,7 @@ export function Settings({
             // that wallet's first address on each chain of the new network.
             props: {
                 activeWallet,
+                onActiveNetworkChange,
                 reload: () => {
                     // Resume on Home because the saved route belongs to the
                     // previous network's data.
@@ -569,7 +559,7 @@ export function Settings({
             props: { balancesFetchedAt },
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
+    ]), [walletLabel, onOpenWalletPicker, onOpenAccountPicker, onActiveNetworkChange, activeWallet, activeAccount, settings, balancesFetchedAt, siteCount, siteSearchTerms, onNavigateToMint, onNavigateToAdvanced, onNavigateToActionQueue, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping

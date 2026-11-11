@@ -58,7 +58,7 @@ async function expectControlRowAligned(controls, label) {
 
 async function openPaletteCommand(page, title, subtitle) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible({ timeout: 15_000 });
     await palette.getByRole('combobox').fill(title);
 

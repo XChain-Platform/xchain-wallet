@@ -84,7 +84,6 @@ describe('320x568 modal inventory', () => {
         for (const name of [
             'BottomTabBar.jsx',
             'ConfirmModal.jsx',
-            'HeaderSettingsButton.jsx',
             'NetworkStatusIndicator.jsx',
             'NoticeModal.jsx',
         ]) {

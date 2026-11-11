@@ -35,7 +35,7 @@ function renderLayout(width, onLock) {
             <FullLayoutWithNav
                 nav={<LeftNav currentView="home" onSelect={() => {}} onLock={onLock} />}
                 bottomBar={<BottomTabBar currentView="home" onSelect={() => {}} onLock={onLock} />}
-                header={<AppHeader onLock={onLock} onMenuOpen={() => {}} />}
+                header={<AppHeader onLock={onLock} onMenuToggle={() => {}} />}
             >
                 <main />
             </FullLayoutWithNav>
@@ -72,7 +72,7 @@ describe('Lock control appears once per layout', () => {
     });
 
     it('a header outside any layout keeps Lock', () => {
-        render(<AppHeader onLock={() => {}} onMenuOpen={() => {}} />);
+        render(<AppHeader onLock={() => {}} onMenuToggle={() => {}} />);
         expect(screen.getByRole('button', { name: 'Lock wallet' })).toBeTruthy();
     });
 });

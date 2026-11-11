@@ -38,7 +38,7 @@ import { ConfirmModal } from '../ConfirmModal.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
-export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
+export function NetworkSection({ activeWallet, onActiveNetworkChange, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
@@ -73,10 +73,13 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
         setSwitchError(null);
         setSwitching(true);
         try {
-            // Prepare destination addresses before reloading so every
-            // balance, history, and chain picker mounts against usable data.
-            await persistActiveNetwork({ messaging, update, walletId, network: next });
-            reload();
+            if (typeof onActiveNetworkChange === 'function') {
+                await onActiveNetworkChange(next);
+            } else {
+                // Embedded Settings callers retain the shared persistence fallback.
+                await persistActiveNetwork({ messaging, update, walletId, network: next });
+                reload();
+            }
         } catch (err) {
             setSwitchError(userFacingMessage(err, t('settings.network.switchError')));
         } finally {

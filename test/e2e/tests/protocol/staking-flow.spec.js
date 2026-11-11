@@ -38,7 +38,7 @@ async function settle(page) {
 
 async function openPaletteItem(page, title, subtitle) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
     const option = palette.getByRole('option').filter({ hasText: subtitle }).first();

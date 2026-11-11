@@ -36,6 +36,7 @@ import { SettingsActionRow, SettingsInlineForm } from './_settingsPrimitives.jsx
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/accountPicker.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
@@ -82,6 +83,7 @@ function publicKeyEntries(result) {
  * @param {{ id: string, name: string, format?: string } | null} [props.activeWallet]
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]
+ * @param {() => void} [props.onOpenAccountPicker]
  * @param {(walletId: string) => void | Promise<void>} [props.onWalletRemoved]
  * @param {(busy: boolean) => void} [props.onBusyChange]
  */
@@ -89,6 +91,7 @@ export function ThisWalletSection({
     activeWallet,
     activeAccount,
     onOpenWalletPicker,
+    onOpenAccountPicker,
     onWalletRemoved,
     onBusyChange,
 }) {
@@ -208,6 +211,16 @@ export function ThisWalletSection({
                 actionLabel={onOpenWalletPicker ? t('settings.thisWallet.switchRename') : null}
                 actionIcon={<Icon.SwapIcon />}
                 onClick={onOpenWalletPicker}
+                disabled={removing}
+            />
+            <Row
+                label={t('settings.thisWallet.account')}
+                hint={activeAccount?.name || t('accountPicker.defaultName', {
+                    number: Number.isInteger(activeAccount?.index) ? activeAccount.index + 1 : 1,
+                })}
+                actionLabel={onOpenAccountPicker ? t('settings.thisWallet.switchAccount') : null}
+                actionIcon={<Icon.SwapIcon />}
+                onClick={onOpenAccountPicker}
                 disabled={removing}
             />
             {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}

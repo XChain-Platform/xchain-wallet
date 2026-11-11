@@ -116,7 +116,7 @@ async function approveConfirm(page) {
     await page.getByTestId('confirm-approve').click();
 }
 
-/** Navigates through the command palette, the way a returning user reaches
+/** Navigates through the wallet menu, the way a returning user reaches
  * anything that is not one of the four primary tabs. Staking is not a nav
  * destination at any width; it hangs off Home's secondary actions
  * and off the palette, so the palette is what works identically in every

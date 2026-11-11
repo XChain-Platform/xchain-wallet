@@ -23,7 +23,7 @@
 // No chain, no funds, no signing: this is a shell-state question, so it runs on
 // the dev-server venue.
 
-import { createWallet, expect, test, unlockedShell } from '../../fixtures/wallet.js';
+import { createWallet, expect, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 // Every wait below sits on the far side of an Argon2id derivation (a create or
@@ -39,25 +39,12 @@ function activeWallet(page, name) {
     return page.getByRole('region', { name: 'App header' }).getByText(`Wallet: ${name}`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 test.describe('adding a second wallet', () => {
     test('creates the wallet and makes it the active one', async ({ page }) => {
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
         await expect(unlockedShell(page)).toBeVisible();
 
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
@@ -70,7 +57,7 @@ test.describe('adding a second wallet', () => {
             .toBeVisible({ timeout: 30_000 });
 
         // ...and the first wallet is still there to switch back to.
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
             'the original wallet is missing from the picker')
             .toBeVisible({ timeout: 30_000 });
@@ -93,14 +80,14 @@ test.describe('adding a second wallet', () => {
         // to, not the one whose name was last on screen.
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
 
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
-        await gotoPalette(page, 'Switch wallet');
+        await openWalletPicker(page);
         await page.getByRole('button', { name: /Second Wallet/ }).first().click();
         await expect(activeWallet(page, 'Second Wallet'))
             .toBeVisible({ timeout: 30_000 });

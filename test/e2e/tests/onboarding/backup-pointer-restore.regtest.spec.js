@@ -67,6 +67,7 @@ import {
     createWallet,
     expect,
     openPaletteCommand,
+    openWalletPicker,
     test,
     dismissIntroCarousel,
     gotoSection,
@@ -115,7 +116,7 @@ const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183
 const FUNDING = 1;
 const SEND_AMOUNT = '0.01';
 
-/** Opens Settings via the command palette, then the Backup sub-page. */
+/** Opens Settings via the wallet menu, then the Backup sub-page. */
 async function openBackupSection(page) {
     await openPaletteCommand(page, 'Settings');
     await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
@@ -346,7 +347,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
             });
 
             await test.step('scan the pointer and restore', async () => {
-                await openPaletteCommand(two, 'Switch wallet');
+                await openWalletPicker(two);
 
                 await two.getByRole('button', { name: 'Add wallet' }).click();
                 await two.getByRole('button', { name: 'Import wallet' }).click();
@@ -400,7 +401,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 expect(fetched.every((u) => u.startsWith('https://')),
                     'the pointer was fetched over something other than https').toBe(true);
 
-                await openPaletteCommand(two, 'Switch wallet');
+                await openWalletPicker(two);
 
                 const main = two.getByRole('main');
                 await expect(main.getByText(ORIGIN_WALLET, { exact: false }).first(),

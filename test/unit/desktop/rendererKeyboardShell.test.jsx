@@ -96,7 +96,7 @@ describe('desktop renderer keyboard shell', () => {
         pressEnter(skip);
         expect(document.getElementById('xc-main')).toHaveFocus();
 
-        const paletteTrigger = screen.getByRole('button', { name: 'Open command palette' });
+        const paletteTrigger = screen.getByRole('button', { name: 'Open the wallet menu' });
         const home = screen.getByRole('button', { name: 'Home' });
         const history = screen.getByRole('button', { name: 'History' });
         paletteTrigger.focus();

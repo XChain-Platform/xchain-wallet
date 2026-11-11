@@ -24,25 +24,23 @@ import {
 
 const VIEWPORT = { width: 360, height: 800 };
 
-// Root destinations mirror ROUTE_NAV_GROUPS. Marketplace uses the command
-// palette because compact navigation intentionally keeps it out of More.
-// `tab` marks the bottom-bar tabs: the tab bar already links to them, so
-// their header shows no Back control at this width.
+// Root destinations mirror the wallet-menu catalogue. `tab` marks the five
+// bottom-bar tabs, whose headers show no Back control at this width.
 const ROUTES = [
-    { name: 'Home' },
-    { name: 'History', tab: true },
-    { name: 'Send', tab: true },
-    { name: 'Receive', back: true },
-    { name: 'Scan', tab: true },
-    { name: 'DEX', back: true },
-    { name: 'Marketplace', back: true, palette: true },
-    { name: 'Dispensers', back: true },
-    { name: 'Contracts', back: true },
-    { name: 'Messaging', back: true },
-    { name: 'Contacts', back: true },
-    { name: 'Lists', back: true },
-    { name: 'Payments due', back: true },
-    { name: 'Settings', back: true },
+    { name: 'Home', id: 'home', tab: true },
+    { name: 'History', id: 'history', tab: true },
+    { name: 'Send', id: 'send', tab: true },
+    { name: 'Receive', id: 'receive', tab: true },
+    { name: 'Scan', id: 'scan', back: true },
+    { name: 'DEX', id: 'markets', back: true },
+    { name: 'Marketplace', id: 'market-activity', back: true },
+    { name: 'Dispensers', id: 'dispensers-list', back: true },
+    { name: 'Contracts', id: 'contracts-list', back: true },
+    { name: 'Messaging', id: 'messaging', back: true },
+    { name: 'Contacts', id: 'contacts', back: true },
+    { name: 'Lists', id: 'lists', back: true },
+    { name: 'Payments due', id: 'obligations', back: true },
+    { name: 'Settings', id: 'settings', tab: true },
 ];
 
 async function settle(page) {
@@ -70,39 +68,27 @@ async function enablePseudoRtl(page) {
 }
 
 // The pseudo locale wraps every translated string, the navigation and the
-// palette chrome and command titles included, as RLM + "⟦" + English + "⟧".
+// menu chrome and row titles included, as RLM + "⟦" + English + "⟧".
 // Match that form, so the walk still proves each label went through translation.
 function pseudoName(name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`^\\u200F?⟦${escaped}⟧`);
 }
 
-async function gotoPseudoSection(page, name) {
+async function gotoPseudoSection(page, name, id) {
     const navItem = page.getByRole('navigation').getByRole('button', { name: pseudoName(name) }).first();
     if (await navItem.isVisible().catch(() => false)) {
         await navItem.click();
         return;
     }
-    await page.getByRole('navigation').getByRole('button', { name: pseudoName('More') }).first().click();
-    const sheet = page.getByRole('dialog', { name: pseudoName('More') });
-    await expect(sheet, `no More sheet to find "${name}" in`).toBeVisible();
-    await sheet.getByRole('button', { name: pseudoName(name) }).first().click();
+    await page.getByRole('button', { name: pseudoName('Open menu') }).first().click();
+    const menu = page.getByRole('dialog', { name: pseudoName('Wallet menu') });
+    await expect(menu, `no wallet menu to find "${name}" in`).toBeVisible();
+    await menu.locator(`[data-wallet-menu-row="${id}"]`).click();
 }
 
 async function gotoRoute(page, route) {
-    if (!route.palette) {
-        await gotoPseudoSection(page, route.name);
-        return;
-    }
-
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: pseudoName('Command palette') });
-    await expect(palette).toBeVisible();
-    await palette.getByRole('combobox').fill(route.name);
-    // Command titles go through translation now, so in the pseudo locale they
-    // carry the same RLM and bracket wrapper as the navigation labels.
-    await palette.getByRole('option', { name: new RegExp(`^\\u200F?⟦?${route.name}\\b`) }).first().click();
-    await expect(palette).toBeHidden();
+    await gotoPseudoSection(page, route.name, route.id);
 }
 
 async function expectNoHorizontalOverflow(page, label) {

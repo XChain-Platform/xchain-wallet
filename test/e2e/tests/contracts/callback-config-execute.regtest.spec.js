@@ -115,7 +115,7 @@ async function readDoneTxid(page, timeoutMs = 180_000) {
     return txid;
 }
 
-/** Opens My Tokens (via the command palette) filtered to one ticker, and opens it. */
+/** Opens My Tokens (via the wallet menu) filtered to one ticker, and opens it. */
 async function openManageToken(page, tick) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');

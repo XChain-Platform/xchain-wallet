@@ -16,7 +16,7 @@
 //
 // Focus rules are the global dispatcher's (canHandleGlobalShortcut): every
 // shortcut is suppressed while an editable element has focus or a modal dialog
-// is open, so a key pressed in the palette or the shortcut help never acts on
+// is open, so a key pressed in the wallet menu or shortcut help never acts on
 // the screen behind it (Send's mod+enter composing a send under the help
 // modal), and `mod` is the platform's primary modifier only. Handlers may
 // return false to decline the key (e.g. no row focused), letting the event

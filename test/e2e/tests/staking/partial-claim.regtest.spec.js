@@ -135,7 +135,7 @@ async function approveConfirm(page) {
     await page.getByTestId('confirm-approve').click();
 }
 
-/** Navigates through the command palette, the way Staking is reached (it
+/** Navigates through the wallet menu, the way Staking is reached (it
  * hangs off Home's secondary actions and the palette, never a nav tab). */
 
 /** Reads the full txid from either action or SEND completion markup: the

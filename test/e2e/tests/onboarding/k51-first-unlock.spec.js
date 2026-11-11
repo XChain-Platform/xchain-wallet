@@ -119,11 +119,10 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
         await acknowledgeDonationNotice(page, 'on');
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
-        const bottomNav = page.getByRole('navigation', { name: 'Bottom navigation' });
-        await bottomNav.getByRole('button', { name: 'More', exact: true }).click();
-        const lock = page.getByRole('dialog', { name: 'More' })
-            .getByRole('button', { name: 'Lock wallet' });
-        await expectActionReachable(page, 'mobile navigation', lock);
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        const lock = page.getByRole('dialog', { name: 'Wallet menu' })
+            .locator('[data-wallet-menu-row="lock"]');
+        await expectActionReachable(page, 'wallet menu', lock);
         await lock.click();
 
         await expect(page.getByRole('heading', { name: WALLET_NAME })).toBeVisible();

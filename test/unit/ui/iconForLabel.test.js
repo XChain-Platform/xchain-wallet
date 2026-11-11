@@ -8,9 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for the shared label → icon resolver. Drives the auto-icon
-// behaviour on Button + the icon column on HeaderActionMenu's extra-
-// actions list.
+// Unit tests for the shared label → icon resolver used by Button and menu rows.
 
 import { describe, it, expect } from 'vitest';
 import {

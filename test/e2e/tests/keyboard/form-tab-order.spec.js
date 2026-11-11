@@ -198,10 +198,10 @@ async function expectHeaderMenuEscapeKeepsForm(page, form, label) {
     const trigger = page.getByRole('button', { name: 'Open menu' });
     await expect(trigger).toBeVisible();
     await trigger.click();
-    const menu = page.getByRole('menu', { name: 'Header actions' });
+    const menu = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(menu).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(menu).toHaveCount(0);
+    await expect(menu).toBeHidden();
     await expect(form, `${label}: Escape must leave the current form mounted`).toBeVisible();
 }
 
@@ -276,9 +276,9 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             // Home has no action grid at 834px and wider (ruling U45), and the
             // All actions has no wizard entry (its "Issue
             // token" row opens the plain issue form). The guided Create token
-            // wizard is reached through the command palette at this width.
+            // wizard is reached through the wallet menu at this width.
             await page.keyboard.press('ControlOrMeta+k');
-            const palette = page.getByRole('dialog', { name: 'Command palette' });
+            const palette = page.getByRole('dialog', { name: 'Wallet menu' });
             await expect(palette).toBeVisible();
             const paletteInput = palette.getByRole('combobox').first();
             await expect(paletteInput).toBeEditable();

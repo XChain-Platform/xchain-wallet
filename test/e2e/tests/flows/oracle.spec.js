@@ -90,8 +90,8 @@ async function settle(page) {
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(dialog, 'the wallet menu did not open').toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('combobox').fill(title);
     const option = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
     await expect(option, `no palette command matching "${title}"`).toBeVisible();

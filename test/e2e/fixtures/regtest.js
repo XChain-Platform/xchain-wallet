@@ -1756,7 +1756,7 @@ export async function assertGasHeadroom(needed, opts) {
  * XChain actions (pre-flight, the §4.7 reservation) are exactly the parts a
  * native-coin send skips.
  *
- * Driven through the command palette's Advanced action -> MINT rather than
+ * Driven through the wallet menu's Advanced action -> MINT rather than
  * the friendly Mint form, which is balance-scoped and will not offer a tick
  * the wallet holds none of.
  */
@@ -2000,7 +2000,7 @@ export async function enableDeveloperMode(page) {
  */
 export async function switchToRegtest(page, password) {
     // One UI walk for every shell. `openSettings` absorbs the only difference:
-    // web/desktop navigate, the MV3 popup goes through the command palette
+    // web/desktop navigate, the MV3 popup goes through the wallet menu
     // because it has no nav surface.
     await openSettings(page);
 
@@ -2054,8 +2054,8 @@ export async function unlockAfterReload(page, password) {
     await unlock.click();
     // Any unlocked screen, not Home's hero alone: unlock resumes the last
     // view, so a reload on Addresses reopens Addresses. Not the Lock button
-    // either: the popup renders no nav at all, and below 600px Lock sits
-    // inside the closed More sheet.
+    // either: the popup renders no nav at all, and compact layouts keep Lock
+    // inside the closed wallet menu.
     // Shared budget, not a hand-picked number: this is the far side of an
     // Argon2id unlock  .
     await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: kdfStepTimeout() });

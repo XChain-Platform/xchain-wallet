@@ -30,7 +30,7 @@
 //     form's "Receive at" auto-fills from it (`getNewestAddress`).
 //   - The form is two ordinary `ChainPicker`s plus two `TokenField`s, all four
 //     of which the campaign's widget map already knows how to drive.
-//   - The route is reachable from the command palette.
+//   - The route is reachable from the wallet menu.
 //
 // What was genuinely missing is TWO helpers, not the one the row predicted, and
 // they live in `fixtures/crossChain.js` with the reasoning: the venue-pinned

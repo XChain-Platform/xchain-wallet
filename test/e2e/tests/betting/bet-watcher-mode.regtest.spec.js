@@ -143,7 +143,7 @@ async function useAddress(page, address) {
     await page.getByRole('group', { name: 'Address actions' })
         .getByRole('button', { name: 'Use' }).click();
     // Use awaits the active-address write and only then returns to Home, and
-    // any route change closes the command palette. A palette opened before
+    // any route change closes the wallet menu. A palette opened before
     // that late navigation is unmounted under the next step, so leaving the
     // detail screen is what marks the switch as done.
     await expect(page.getByRole('group', { name: 'Address actions' }),

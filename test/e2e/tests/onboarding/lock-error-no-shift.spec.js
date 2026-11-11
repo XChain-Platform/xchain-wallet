@@ -16,15 +16,15 @@
 
 const FORM_GAP_PX = 16;
 
-import { createWallet, expect, test, lockButton, nav, unlockButton } from '../../fixtures/wallet.js';
+import { createWallet, expect, test, lockButton, unlockButton } from '../../fixtures/wallet.js';
 
 async function lockWallet(page) {
     if (await lockButton(page).count()) {
         await lockButton(page).click();
     } else {
-        await nav(page).getByRole('button', { name: 'More', exact: true }).click();
-        await page.getByRole('dialog', { name: 'More', exact: true })
-            .getByRole('button', { name: 'Lock wallet', exact: true }).click();
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        await page.getByRole('dialog', { name: 'Wallet menu' })
+            .locator('[data-wallet-menu-row="lock"]').click();
     }
     await expect(unlockButton(page)).toBeVisible();
 }

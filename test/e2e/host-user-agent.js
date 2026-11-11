@@ -11,7 +11,7 @@
 // The Desktop Chrome device reports a Windows user agent, and Chromium derives
 // navigator.platform from it, so the wallet's shortcut gate expects Ctrl. Playwright
 // resolves ControlOrMeta on the host instead (Meta on a Mac), so on a Mac host every
-// Cmd/Ctrl+K was dropped and the command palette never opened. Matching the user
+// Cmd/Ctrl+K was dropped and the wallet menu never opened. Matching the user
 // agent to the host keeps both sides on the same modifier. It lives in its own
 // module so fixtures can use it without loading a config and its side effects.
 

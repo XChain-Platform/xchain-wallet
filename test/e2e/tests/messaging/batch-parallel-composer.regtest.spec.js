@@ -102,7 +102,7 @@ const paramsBox = (scope) => scope.getByRole('textbox', { name: 'Params (JSON ob
 const batchStep = (scope, number) => scope.getByRole('region', { name: `Step ${number}`, exact: true });
 const parallelRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
-/** Opens the catch-all Actions page through the command palette ("All actions"). */
+/** Opens the catch-all Actions page through the wallet menu ("All actions"). */
 async function gotoMoreActions(page) {
     await openPaletteCommand(page, 'All actions');
 }

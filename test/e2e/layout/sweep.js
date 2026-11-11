@@ -1053,7 +1053,7 @@ export function createSweep(page, {
                 (e.getAttribute('title') || e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()
             )));
             const navLabels = (await labelsNow())
-                .filter((label) => label && !/^(search|more|open command palette)$/i.test(label) && !DESTRUCTIVE.test(label));
+                .filter((label) => label && !/^(search|open menu)$/i.test(label) && !DESTRUCTIVE.test(label));
             for (const label of [...new Set(navLabels)]) {
                 try {
                     await home();
@@ -1068,20 +1068,9 @@ export function createSweep(page, {
             await home();
         }
 
-        // Header popovers.
-        for (const name of ['Settings', 'Scan and addresses', 'XChain platform sites']) {
-            const b = page.getByRole('button', { name, exact: true }).first();
-            if (await b.count() === 0 || !(await b.isVisible())) continue;
-            await b.click();
-            await measure(`header: ${name} popover`);
-            await page.keyboard.press('Escape');
-            if (await b.getAttribute('aria-expanded') === 'true') await b.click().catch(() => {});
-        }
-
-        // Every destination the command palette offers. The desktop app has
-        // no header button for it; there the keyboard shortcut opens it.
-        const paletteButton = page.getByRole('button', { name: 'Open command palette' }).first();
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        // Every catalogue destination the wallet menu offers.
+        const paletteButton = page.getByRole('button', { name: 'Open menu' }).first();
+        const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         const openPalette = async () => {
             if (await paletteButton.count() > 0 && await paletteButton.isVisible().catch(() => false)) {
                 await paletteButton.click();
@@ -1092,42 +1081,25 @@ export function createSweep(page, {
         };
         let destinations = [];
         if (await openPalette().then(() => true, () => false)) {
-            await measure('palette: open');
-            destinations = await palette.getByRole('option').evaluateAll((els) => els
-                .map((e) => (e.querySelector('[class*="title"], [class*="label"]')?.textContent || e.textContent || '').trim()));
-            destinations = [...new Set(destinations.filter((x) => x && !/^\d/.test(x)))];
+            await measure('menu: open');
+            destinations = await palette.locator('[data-wallet-menu-row]').evaluateAll((els) => els
+                .map((e) => ({
+                    id: e.getAttribute('data-wallet-menu-row'),
+                    label: (e.textContent || '').trim(),
+                }))
+                .filter((row) => row.id && row.id !== 'lock' && row.label));
             await page.keyboard.press('Escape');
         }
         for (const dest of destinations) {
-            if (DESTRUCTIVE.test(dest)) continue;
+            if (DESTRUCTIVE.test(dest.label)) continue;
             try {
                 await openPalette();
-                await palette.getByRole('combobox').fill(dest);
-                const option = palette.getByRole('option').filter({ hasText: dest }).first();
-                await option.click({ timeout: 5_000 });
-                await measure(`palette: ${dest}`);
+                await palette.locator(`[data-wallet-menu-row="${dest.id}"]`).click({ timeout: 5_000 });
+                await measure(`menu: ${dest.label}`);
             } catch (err) {
-                appendFileSync(linesPath, `${JSON.stringify({ venue, label: `palette: ${dest}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
+                appendFileSync(linesPath, `${JSON.stringify({ venue, label: `menu: ${dest.label}`, skipped: String(err?.message || err).slice(0, 120) })}\n`);
             }
             await home();
-        }
-
-        // The header menu and each of its rows. Its links open the platform
-        // sites in a new window and Open in new window opens another wallet
-        // window; neither is a wallet screen, so neither is walked.
-        const menu = page.getByRole('button', { name: 'Open menu' }).first();
-        if (await menu.count() > 0 && await menu.isVisible()) {
-            const menuPanel = page.getByRole('menu', { name: 'Header actions' });
-            await home();
-            await menu.click();
-            await measure('menu: list');
-            // Reopened fresh for every row: the Settings row opens a flyout
-            // over the menu that would take the next row's click.
-            await crawlRows('menu', async () => {
-                await home();
-                await menu.click();
-                await menuPanel.waitFor({ state: 'visible', timeout: 5_000 });
-            }, () => menuPanel.locator('button[role="menuitem"]:visible:not([disabled])'), /new window/i);
         }
 
         // Settings and every section in it.
@@ -1146,13 +1118,6 @@ export function createSweep(page, {
             await openSettings(page);
         });
 
-        // The bottom navigation's More sheet, where it exists.
-        const more = nav(page).getByRole('button', { name: 'More', exact: true });
-        if (await more.count() > 0) {
-            await more.click();
-            await measure('nav: More sheet');
-            await page.keyboard.press('Escape');
-        }
     }
 
     return { measure, home, onboarding, unlocked };
@@ -1230,7 +1195,7 @@ export function measureRulings() {
         return null;
     };
     for (const field of fields) {
-        if (field.closest('[role="dialog"][aria-label="Command palette"]')) continue;
+        if (field.closest('[role="dialog"][data-wallet-menu]')) continue;
         if (!frameOf(field)) cap(out.borderlessFields, desc(field));
     }
 
@@ -1316,7 +1281,7 @@ export function measureRulings() {
     const seen = new Map();
     const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(visible).pop();
     for (const el of (modal || document).querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
-        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][aria-label="Command palette"]')) continue;
+        if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][data-wallet-menu]')) continue;
         if (el.querySelector('h1, h2, h3, h4, p')) continue;
         const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
         if (t.length < 4) continue;

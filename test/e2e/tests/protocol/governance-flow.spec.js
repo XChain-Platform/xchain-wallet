@@ -40,11 +40,11 @@ const DELEGATE_ADDRESS = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const DEPOSIT = '125.5';
 const NORMAL_FEE = '0.000015 BTC (6 sat/vB)';
 
-// Governance is not a nav destination; it opens from the command palette.
+// Governance is not a nav destination; it opens from the wallet menu.
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(dialog, 'the wallet menu did not open').toBeVisible({ timeout: 15_000 });
     const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeEditable({ timeout: 15_000 });
     await combobox.fill(title);

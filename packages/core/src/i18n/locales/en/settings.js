@@ -290,6 +290,8 @@ const messages = {
     'settings.thisWallet.walletRemoved': 'Wallet removed.',
     'settings.thisWallet.noActiveWallet': 'No active wallet.',
     'settings.thisWallet.switchRename': 'Switch / rename…',
+    'settings.thisWallet.account': 'Account',
+    'settings.thisWallet.switchAccount': 'Switch account…',
     'settings.thisWallet.thisWalletUsesAnOlder':
         "This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Upgrade recovery phrase.",
     'settings.thisWallet.openWallets': 'Open wallets…',
@@ -650,10 +652,7 @@ const messages = {
     'settings.notifications.priceAlerts': 'Price alerts',
     'settings.page.thisWallet': 'This wallet',
     'settings.page.manageItsNameExtendedPublic':
-        'Manage its name, extended public keys, switching, and removal.',
-    'settings.page.accountsAddresses': 'Accounts & addresses',
-    'settings.page.chooseTheActiveAccountAnd':
-        'Choose the active account and manage change addresses and signer pairing.',
+        'Switch wallets or accounts, and manage wallet keys, security, and removal.',
     'settings.page.appearance': 'Appearance',
     'settings.page.display': 'Display',
     'settings.page.controlBalanceThresholdsNumberFormatting':

@@ -19,7 +19,7 @@ const VIEWPORTS = [
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible({ timeout: 15_000 });
     await palette.getByRole('combobox').first().fill(title);
     await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();

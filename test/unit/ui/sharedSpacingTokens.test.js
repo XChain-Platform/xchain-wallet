@@ -48,7 +48,6 @@ const auditedGeometryModules = [
 const controlDimensionModules = [
     'EmptyStateNudge.module.css',
     'GatedFileViewer.module.css',
-    'HeaderActionMenu.module.css',
     'HwFirmwareBanner.module.css',
     'HwSignBlock.module.css',
     'LayoutModeToggle.module.css',
@@ -306,18 +305,6 @@ it('uses shared dimension tokens across the empty, gated, menu, hardware, and la
         readFileSync(join(componentsRoot, file), 'utf8'),
     ]));
 
-    // The slide-in offset is a spacing token that RTL negates.
-    expect(modules['HeaderActionMenu.module.css']).toContain('--xc-slide-in-offset: var(--xc-space-5)');
-    expect(modules['HeaderActionMenu.module.css']).toContain('transform: translateX(var(--xc-slide-in-offset))');
-    expect(modules['HeaderActionMenu.module.css']).toMatch(
-        /\.close\s*\{[^}]*width:\s*var\(--xc-control-h-sm\);[^}]*height:\s*var\(--xc-control-h-sm\)/s,
-    );
-    expect(modules['HeaderActionMenu.module.css']).toMatch(
-        /\.rowIcon\s*\{[^}]*width:\s*var\(--xc-icon-xl\);[^}]*height:\s*var\(--xc-icon-xl\)/s,
-    );
-    expect(modules['HeaderActionMenu.module.css']).toMatch(
-        /\.rowChevron\s*\{[^}]*width:\s*var\(--xc-icon-sm\);[^}]*height:\s*var\(--xc-icon-sm\)/s,
-    );
     expect(modules['HwSignBlock.module.css']).toContain('gap: var(--xc-space-2);');
     expect(modules['LayoutModeToggle.module.css']).toContain('gap: var(--xc-space-2);');
 

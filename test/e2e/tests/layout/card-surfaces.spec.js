@@ -68,7 +68,7 @@ async function homeTab(page, name) {
 
 async function palette(page, destination) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').fill(destination);
     // A renamed entry fails here by name instead of a click that waits out the test.

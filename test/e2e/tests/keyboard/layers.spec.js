@@ -51,30 +51,28 @@ for (const size of SIZES) {
             await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         });
 
-        test('header menu opens by keyboard, closes on Escape and returns focus', async ({ page }) => {
+        test('header wallet menu opens by keyboard, closes on Escape and returns focus', async ({ page }) => {
             const trigger = page.getByRole('button', { name: 'Open menu' });
             await trigger.focus();
             await page.keyboard.press('Enter');
-            const menu = page.getByRole('menu', { name: 'Header actions' });
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
             await expect(menu).toBeVisible();
-            await expect(menu.getByRole('menuitem').first()).toBeFocused();
-            await page.keyboard.press('ArrowDown');
-            expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('menuitem');
+            await expect(menu.getByRole('combobox')).toBeFocused();
             await page.keyboard.press('Escape');
             await expect(menu).toBeHidden();
             await expect(trigger).toBeFocused();
         });
 
-        test('command palette keeps focus inside, closes on Escape and returns focus', async ({ page }) => {
+        test('wallet menu keeps focus inside, closes on Escape and returns focus', async ({ page }) => {
             const opener = page.getByRole('button', { name: 'Open menu' });
             await opener.focus();
             await page.keyboard.press('ControlOrMeta+k');
-            const palette = page.getByRole('dialog', { name: 'Command palette' });
+            const palette = page.getByRole('dialog', { name: 'Wallet menu' });
             await expect(palette).toBeVisible();
             for (let i = 0; i < 8; i += 1) {
                 await page.keyboard.press('Tab');
                 const state = await page.evaluate(focusState);
-                expect(state?.inDialog, `Tab ${i + 1} stays in the palette (${state?.name})`).toBe(true);
+                expect(state?.inDialog, `Tab ${i + 1} stays in the wallet menu (${state?.name})`).toBe(true);
             }
             await page.keyboard.press('Escape');
             await expect(palette).toBeHidden();
@@ -103,25 +101,16 @@ for (const size of SIZES) {
             await expect(menu, 'Tab past the last item closes the menu instead of leaving it open behind focus').toBeHidden();
         });
 
-        test('wallet settings popover closes at its last control and returns focus to the opener', async ({ page }) => {
-            await page.getByRole('button', { name: 'Open menu' }).focus();
-            await page.keyboard.press('Enter');
-            const opener = page.getByRole('menuitem', { name: 'Settings' });
+        test('the Settings footer row opens Settings and closes the wallet menu', async ({ page }) => {
+            const opener = page.getByRole('button', { name: 'Open menu' });
             await opener.focus();
             await page.keyboard.press('Enter');
-            const popover = page.getByRole('dialog', { name: 'Wallet settings' });
-            await expect(popover).toBeVisible();
-            // The popover is visible a frame before it moves focus to its first
-            // control; a Tab in between lands on the menu row and closes the menu.
-            await expect(popover.locator(':focus'), 'focus has moved into the popover').toHaveCount(1);
-            const stops = [];
-            for (let i = 0; i < 12 && await popover.isVisible(); i += 1) {
-                await page.keyboard.press('Tab');
-                if (await popover.isVisible()) stops.push(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))));
-            }
-            await expect(popover, 'Tab off the last control closes the popover').toBeHidden();
-            expect(stops.every(Boolean), 'focus stays inside the popover until it closes').toBe(true);
-            await expect(opener, 'focus returns to the control that opened it').toBeFocused();
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+            const settings = menu.locator('[data-wallet-menu-row="settings"]');
+            await settings.focus();
+            await page.keyboard.press('Enter');
+            await expect(menu).toBeHidden();
+            await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
         });
 
         test('opening a detail screen by keyboard puts focus on its heading', async ({ page }) => {
@@ -148,19 +137,18 @@ for (const size of SIZES) {
             await expect(add, 'Back returns focus to the control that opened the form').toBeFocused();
         });
 
-        test('a destination chosen in the More sheet by keyboard takes focus on its heading', async ({ page }) => {
-            const more = page.getByRole('button', { name: 'More', exact: true });
-            test.skip(await more.count() === 0, 'This width shows every destination in the rail');
-            await more.focus();
+        test('a catalogue destination chosen by keyboard takes focus on its heading', async ({ page }) => {
+            const opener = page.getByRole('button', { name: 'Open menu' });
+            await opener.focus();
             await page.keyboard.press('Enter');
-            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-            await expect(sheet).toBeVisible();
-            const row = sheet.getByRole('button', { name: 'Receive', exact: true });
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+            await expect(menu).toBeVisible();
+            const row = menu.locator('[data-wallet-menu-row="receive"]');
             await row.focus();
             await page.keyboard.press('Enter');
             const heading = page.getByRole('heading', { level: 1, name: 'Receive', exact: true });
             await expect(heading).toBeVisible();
-            await expect(heading, 'focus does not return to the More button behind the new screen').toBeFocused();
+            await expect(heading, 'focus does not return to the menu button behind the new screen').toBeFocused();
         });
 
         for (const route of ['Send', 'Receive', 'Settings']) {
@@ -219,9 +207,9 @@ test.describe('keyboard focus on wide layouts at 1440x900', () => {
         await expect(heading, 'focus does not fall to the page body').toBeFocused();
     });
 
-    test('the command palette finds Receive by name and opens it', async ({ page }) => {
+    test('the wallet menu finds Receive by name and opens it', async ({ page }) => {
         await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         await expect(palette).toBeVisible();
         await page.keyboard.type('Receive');
         await expect(palette.getByText('No matches')).toHaveCount(0);

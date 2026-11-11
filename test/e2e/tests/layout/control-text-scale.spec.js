@@ -22,7 +22,7 @@ const BASE_CONTROL_PX = 14;
 
 async function openByPalette(page, query) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(query);
     await palette.getByRole('option').first().click();

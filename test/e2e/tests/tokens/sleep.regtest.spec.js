@@ -12,7 +12,7 @@
 // the chain's own SLEEP rows on the explorer, not the wallet's success copy.
 //
 // v1 pauses and resumes a token from Manage Token (shared confirm screen).
-// v0 locks the signing address from Token Actions (legacy review stage with
+// v0 locks the signing address from All actions (legacy review stage with
 // a typed LOCK confirm); it runs last because a slept address cannot sign.
 
 import {
@@ -71,11 +71,11 @@ async function openPauseAction(page, tick, label) {
     await clickManageTokenAction(main, label);
 }
 
-/** Opens the address self-lock form (SLEEP v0) off the Token Actions page. */
+/** Opens the address self-lock form (SLEEP v0) off the All actions page. */
 async function openLockAddress(page) {
     await openPaletteCommand(page, 'All actions');
     const entry = page.getByRole('main').getByRole('button', { name: /^Lock this address/ });
-    await expect(entry, 'Token Actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
+    await expect(entry, 'All actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
     await entry.click();
     await expect(page.getByLabel('Address to lock')).toBeVisible({ timeout: 30_000 });
 }

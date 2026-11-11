@@ -65,8 +65,8 @@ test('demo wallet routes meet color contrast requirements in light and dark them
 });
 
 // Tinted fills sit under accent and danger text only on these surfaces: the
-// DeFi confirmation pill, the More sheet's hovered destructive row and the
-// palette's hovered link row. The route loop above never opens them.
+// DeFi confirmation pill and the wallet menu's hovered destructive row. The
+// route loop above never opens the menu itself.
 test('tinted pills, hovered rows and sheets meet color contrast in light and dark themes', async ({ page }) => {
     test.slow();
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
@@ -81,13 +81,12 @@ test('tinted pills, hovered rows and sheets meet color contrast in light and dar
             await expectContrast(page, `${theme} theme / DeFi tab`);
         });
 
-        await test.step(`${theme} / More sheet`, async () => {
-            const more = page.getByRole('button', { name: 'More', exact: true });
-            if (await more.count() === 0) return; // the rail has no sheet
-            await more.first().click();
-            const lock = page.getByRole('button', { name: 'Lock wallet' }).last();
+        await test.step(`${theme} / wallet menu`, async () => {
+            await page.getByRole('button', { name: 'Open menu' }).click();
+            const menu = page.getByRole('dialog', { name: 'Wallet menu' });
+            const lock = menu.locator('[data-wallet-menu-row="lock"]');
             await lock.hover();
-            await expectContrast(page, `${theme} theme / More sheet`);
+            await expectContrast(page, `${theme} theme / wallet menu`);
             await page.keyboard.press('Escape');
         });
     }

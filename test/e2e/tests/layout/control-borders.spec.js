@@ -53,7 +53,7 @@ async function expectVisibleEdge(label, control, { pressed = false, surface = fa
 
 async function openPaletteRoute(page, query, option) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(query);
     await palette.getByRole('option', { name: option }).first().click();

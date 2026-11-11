@@ -8,841 +8,107 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The persistent AppHeader exposes account, wallet, network, and global
-// actions without sending the user through an advanced settings route.
-// These guards pin the optional settings sections and the compact header's
-// labels, tooltips, source order, and width budget.
-
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { act, render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
-import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
-import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
-import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
-import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
-import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { registry as registryLib } from '../../../packages/core/src/index.js';
-import { persistActiveNetwork } from '../../../packages/core/src/shared/utils/activeNetworkSwitch.js';
-import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
-import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
-import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
-
-// The app loads these on idle after first paint; load them up front here.
-beforeAll(() => preloadOnDemandOverlays());
-
-let nativeBack;
-let capacitorApp;
-
-beforeEach(() => {
-    resetBackStackForTests();
-    capacitorApp = {
-        addListener: vi.fn((_event, listener) => {
-            nativeBack = listener;
-            return { remove: vi.fn() };
-        }),
-        minimizeApp: vi.fn(),
-    };
-    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
-});
-
-vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
-    useReachability: () => ({ overall: 'normal', perChain: [] }),
-}));
+import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 
 afterEach(() => {
     cleanup();
-    resetBackStackForTests();
-    delete globalThis.Capacitor;
-    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
-const chainRegistry = registryLib.defaultRegistry();
-const COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
-const appHeaderCss = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/components/AppHeader.module.css'),
-    'utf8',
-);
-const headerSettingsCss = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.module.css'),
-    'utf8',
-);
-
-const gear = () => screen.queryByRole('button', { name: 'Settings' })
-    || screen.queryByRole('menuitem', { name: 'Settings' });
-const openHeaderMenu = () => fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-const openAppSettings = () => {
-    openHeaderMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }));
-};
-
-describe('AppHeader settings gear', () => {
-    it('renders no gear when no picker and no network filter are wired', () => {
-        render(<AppHeader onMenuOpen={() => {}} onLock={() => {}} />);
-        openHeaderMenu();
-        expect(gear()).toBeNull();
-    });
-
-    it('renders settings as a menu row when only the wallet picker is wired', () => {
-        render(<AppHeader onOpenWalletPicker={() => {}} />);
-        openHeaderMenu();
-        expect(gear()).not.toBeNull();
-    });
-
-    it('opens full settings from the bottom row of the popover', () => {
-        const onOpenSettings = vi.fn();
-        render(
-            <AppHeader
-                activeWallet={{ id: 'w1', name: 'Savings' }}
-                onOpenWalletPicker={() => {}}
-                onOpenSettings={onOpenSettings}
-            />,
-        );
-        openAppSettings();
-
-        const dialog = screen.getByRole('dialog', { name: 'Wallet settings' });
-        const buttons = within(dialog).getAllByRole('button');
-        expect(buttons.at(-1)).toHaveTextContent('All settings');
-
-        fireEvent.click(buttons.at(-1));
-        expect(onOpenSettings).toHaveBeenCalledOnce();
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-    });
-
-    it('renders the settings panel outside the scrolling action menu', () => {
-        render(
-            <AppHeader
-                activeWallet={{ id: 'w1', name: 'Savings' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        openAppSettings();
-
-        const menu = screen.getByRole('menu', { name: 'Header actions' });
-        const dialog = screen.getByRole('dialog', { name: 'Wallet settings' });
-        const settingsTrigger = screen.getByRole('menuitem', { name: 'Settings' });
-        expect(menu).not.toContainElement(dialog);
-        expect(dialog.parentElement).toBe(document.body);
-
-        fireEvent.mouseDown(screen.getByRole('button', { name: 'Savings' }));
-        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-        expect(dialog).toBeInTheDocument();
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-        expect(settingsTrigger).toHaveFocus();
-    });
-
-    it('hides the action menu panel while the settings popover is open', () => {
-        render(<AppHeader activeWallet={{ id: 'w1', name: 'Savings' }} onOpenWalletPicker={() => {}} />);
-        openAppSettings();
-        const menu = screen.getByRole('menu', { name: 'Header actions' });
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-        expect(menu).toHaveAttribute('data-overlay-open', 'true');
-        expect(appHeaderCss).toMatch(/\.actionMenu\[data-overlay-open='true'\]\s*\{[^}]*opacity: 0;[^}]*pointer-events: none;/);
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-        expect(menu).not.toHaveAttribute('data-overlay-open');
-    });
-
-    it('keeps the watch-only badge in the persistent header', () => {
-        render(<AppHeader isWatcherMode />);
-        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
-        expect(screen.getByText('Watch-only')).toBeTruthy();
-    });
-
-    it('renders the gear when only the network filter is wired', () => {
-        render(
-            <AppHeader
-                chainRegistry={chainRegistry}
-                coinFamilies={COIN_FAMILIES}
-                networkFilter="all"
-                onNetworkFilterChange={() => {}}
-            />,
-        );
-        openHeaderMenu();
-        expect(gear()).not.toBeNull();
-    });
-
-    it('suppresses the network section when showNetworkFilter is false', () => {
-        render(
-            <AppHeader
-                onOpenWalletPicker={() => {}}
-                chainRegistry={chainRegistry}
-                coinFamilies={COIN_FAMILIES}
-                networkFilter="all"
-                onNetworkFilterChange={() => {}}
-                showNetworkFilter={false}
-            />,
-        );
-        openAppSettings();
-        expect(screen.queryByText('Network')).toBeNull();
-        expect(screen.getByText('Wallet')).toBeTruthy();
-    });
-
-    it('surfaces the active wallet and account, and routes to their pickers', () => {
-        const onOpenWalletPicker = vi.fn();
-        const onOpenAccountPicker = vi.fn();
-        render(
-            <AppHeader
-                activeWallet={{ id: 'w1', name: 'Savings' }}
-                activeAccount={{ id: 'a2', index: 1 }}
-                onOpenWalletPicker={onOpenWalletPicker}
-                onOpenAccountPicker={onOpenAccountPicker}
-            />,
-        );
-        openAppSettings();
-
-        // Account label falls back to the 1-based hardened index when the
-        // account carries no user label.
-        expect(screen.getByText('Savings')).toBeTruthy();
-        expect(screen.getByText('Account 2')).toBeTruthy();
-
-        fireEvent.click(screen.getByText('Savings'));
-        expect(onOpenWalletPicker).toHaveBeenCalledOnce();
-        expect(onOpenAccountPicker).not.toHaveBeenCalled();
-        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
-
-        // Navigation closes both settings layers; reopen them for the account row.
-        openAppSettings();
-        fireEvent.click(screen.getByText('Account 2'));
-        expect(onOpenAccountPicker).toHaveBeenCalledOnce();
-        expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull();
-    });
-
-    it('omits the account section until a wallet is active', () => {
-        render(
-            <AppHeader
-                activeWallet={null}
-                activeAccount={{ id: 'a1', index: 0 }}
-                onOpenWalletPicker={() => {}}
-                onOpenAccountPicker={() => {}}
-            />,
-        );
-        openAppSettings();
-        expect(screen.getByText('Wallet')).toBeTruthy();
-        expect(screen.queryByText('Account')).toBeNull();
-    });
-});
-
-describe('AppHeader action row', () => {
-    const allActions = {
-        onOpenWalletPicker: () => {},
-        onCommandPalette: () => {},
-        onScan: () => {},
-        onManageAddresses: () => {},
-        onViewAddress: () => {},
-        onLock: () => {},
-        onOpenNetworkSettings: () => {},
-        activeNetwork: 'mainnet',
-        onPopOut: () => {},
-        platformCurrent: 'wallet',
-        onMenuOpen: () => {},
-    };
-
-    it('keeps only lock and menu visible while secondary actions are menu rows', () => {
-        render(<AppHeader {...allActions} />);
-        const header = screen.getByRole('region', { name: 'App header' });
-        const controls = [...header.querySelectorAll('[data-header-control]')];
-        const buttons = controls.map((control) => (
-            control.matches('button') ? control : control.querySelector('button')
-        ));
-        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
-            'Lock wallet',
-            'Open menu',
-        ]);
-        expect(buttons.every((button) => Boolean(button.getAttribute('title')))).toBe(true);
-        expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
-
-        openHeaderMenu();
-        expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(expect.arrayContaining([
-            expect.stringContaining('Settings'),
-            expect.stringContaining('Search'),
-            expect.stringContaining('Scan'),
-            expect.stringContaining('Manage addresses'),
-            expect.stringContaining('View address'),
-            expect.stringContaining('Open in new window'),
-            expect.stringContaining('More wallet actions'),
-        ]));
-        expect(screen.getByRole('menuitem', { name: 'Search' }))
-            .toHaveAttribute('aria-keyshortcuts', 'Meta+K Control+K');
-    });
-
-    it('uses the shared icon-only Button styling for chrome actions', () => {
-        render(
-            <>
-                <AppHeader {...allActions} platformCurrent={undefined} />
-                <BottomTabBar currentView="home" onSelect={() => {}} />
-            </>,
-        );
-
-        const actionNames = ['Lock wallet', 'Open menu'];
-        const actionClasses = actionNames.map((name) => screen.getByRole('button', { name }).className);
-        expect(new Set(actionClasses).size).toBe(1);
-        expect(actionClasses[0]).toMatch(/iconOnly/);
-
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        expect(screen.getByRole('button', { name: 'Close more navigation' }).className)
-            .toBe(actionClasses[0]);
-    });
-
-    it('uses shared Buttons for non-destination left-nav actions', () => {
-        render(
-            <LeftNav
-                currentView="home"
-                onSelect={() => {}}
-                onCommandPalette={() => {}}
-                onLock={() => {}}
-            />,
-        );
-
-        const search = screen.getByRole('button', { name: 'Open command palette' });
-        const lock = screen.getByRole('button', { name: 'Lock' });
-        expect(search.className).toBe(lock.className);
-        expect(search.className).toMatch(/secondary/);
-    });
-
-    it('uses the shared icon-only Button for the shortcut help close', () => {
-        render(<ShortcutHelp open onClose={() => {}} />);
-        const close = screen.getByRole('button', { name: 'Close' });
-        expect(close.className).toMatch(/secondary/);
-        expect(close.className).toMatch(/iconOnly/);
-        // The same md close as every other dialog, sheet and the palette.
-        expect(close.className).toMatch(/(^|\s|_)md(_|\s|$)/);
-        expect(close.className).not.toMatch(/(^|\s|_)sm(_|\s|$)/);
-    });
-
-
-    it.each([320, 360, 400])('keeps the logo and buttons in one header row at %dpx', (width) => {
-        const originalWidth = window.innerWidth;
-        window.innerWidth = width;
+describe('AppHeader', () => {
+    it('renders the logo, plain wallet name, and controlled wallet menu trigger', () => {
+        const onMenuToggle = vi.fn();
         const { container } = render(
-            <MessagingProvider
-                shell="web"
-                messaging={{ getSettings: async () => ({ schemaVersion: 1, activeNetwork: 'mainnet' }) }}
-            >
-                <FullLayoutWithNav
-                    header={(
-                        <AppHeader
-                            {...allActions}
-                            activeWallet={{ id: 'w1', name: 'Main' }}
-                            onOpenNetworkSettings={() => {}}
-                        />
-                    )}
-                >
-                    <main />
-                </FullLayoutWithNav>
-            </MessagingProvider>,
+            <AppHeader
+                activeWallet={{ id: 'wallet-1', name: 'Everyday wallet' }}
+                onMenuToggle={onMenuToggle}
+                menuOpen
+            />,
         );
 
-        const barRule = /\.bar\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
-        const leftRule = /\.left\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
-        const rightRule = /\.right\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
-        expect(barRule).toMatch(/display:\s*flex/);
-        expect(barRule).toMatch(/align-items:\s*center/);
-        expect(barRule).toMatch(/justify-content:\s*space-between/);
-        expect(barRule).toMatch(/flex-wrap:\s*nowrap/);
-        expect(barRule).toMatch(/padding:\s*var\(--xc-space-2\) var\(--xc-space-3\)/);
-        expect(barRule).not.toMatch(/(?:min-|max-)?height\s*:/);
-        expect(leftRule).toMatch(/flex:\s*1 1 auto/);
-        expect(leftRule).toMatch(/min-width:\s*0/);
-        expect(rightRule).toMatch(/gap:\s*var\(--xc-space-1\)/);
-        expect(rightRule).toMatch(/flex:\s*0 0 auto/);
-        expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
-        expect(container.querySelector('[data-xc-tier]')).toHaveAttribute('data-xc-tier', 'compact');
         const header = screen.getByRole('region', { name: 'App header' });
-        expect(header.style.flexWrap).toBe('');
-        expect(header.children).toHaveLength(2);
-        expect(header.firstElementChild).toContainElement(screen.getByAltText('XChain Wallet'));
-        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
-        expect(header.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Open menu' }));
-        expect(container.querySelectorAll('[data-header-control]')).toHaveLength(2);
-        expect(screen.queryByRole('button', { name: /Network/ })).toBeNull();
-        expect(screen.getByText('Wallet: Main')).toBeTruthy();
-        window.innerWidth = originalWidth;
+        expect(within(header).getByAltText('XChain Wallet')).toBeTruthy();
+        expect(within(header).getByText('Everyday wallet')).toHaveAttribute('title', 'Everyday wallet');
+        expect(container.querySelector('[data-testid="wallet-identity"]')).toBeNull();
+
+        const menu = within(header).getByRole('button', { name: 'Open menu' });
+        expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(menu).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(menu);
+        expect(onMenuToggle).toHaveBeenCalledOnce();
     });
 
-    it.each([
-        ['web', { ...allActions }],
-        ['extension popup', { onCommandPalette: () => {}, onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'regtest', onPopOut: () => {} }],
-        ['iOS', { onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'mainnet' }],
-        ['Android', { onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'testnet' }],
-        ['desktop', { onCommandPalette: () => {}, onLock: () => {}, onOpenNetworkSettings: () => {}, activeNetwork: 'mainnet' }],
-    ])('%s shell has at most two visible controls on the right', (_shell, props) => {
-        const { container } = render(<AppHeader {...props} />);
-        expect(container.querySelectorAll('[data-header-control]').length).toBeLessThanOrEqual(2);
+    it('keeps the menu trigger when no toggle handler is supplied', () => {
+        render(<AppHeader />);
+        expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('offers pop-out on web-capable surfaces and suppresses it in native and desktop apps', () => {
-        render(<AppHeader onPopOut={() => {}} />);
-        openHeaderMenu();
-        expect(screen.getByRole('menuitem', { name: 'Open in new window' })).toBeTruthy();
+    it('renders a disabled Lock control while locking', () => {
+        const onLock = vi.fn();
+        render(<AppHeader onLock={onLock} locking />);
 
-        cleanup();
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
+        expect(lock).toBeDisabled();
+        fireEvent.click(lock);
+        expect(onLock).not.toHaveBeenCalled();
+    });
+
+    it('shows the watch-only status independently of the wallet label', () => {
+        render(<AppHeader isWatcherMode activeWallet={{ id: 'watch-1', name: 'Cold watch' }} />);
+        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
+        expect(screen.getByText('Cold watch')).toBeTruthy();
+    });
+
+    it('renders Open in new window as a header button on browser surfaces', () => {
+        const onPopOut = vi.fn();
+        render(<AppHeader onPopOut={onPopOut} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open in new window' }));
+        expect(onPopOut).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('suppresses Open in new window in native and desktop shells', () => {
         vi.stubGlobal('Capacitor', { isNativePlatform: () => true });
-        render(<AppHeader onPopOut={() => {}} />);
-        openHeaderMenu();
-        expect(screen.queryByRole('menuitem', { name: 'Open in new window' })).toBeNull();
+        const native = render(<AppHeader onPopOut={() => {}} />);
+        expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
+        native.unmount();
 
-        cleanup();
         vi.unstubAllGlobals();
         vi.stubGlobal('xchainWalletWindow', {});
         render(<AppHeader onPopOut={() => {}} />);
-        openHeaderMenu();
-        expect(screen.queryByRole('menuitem', { name: 'Open in new window' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Open in new window' })).toBeNull();
     });
 
-    it('keeps phone-hidden actions reachable from bottom navigation', () => {
-        const onCommandPalette = vi.fn();
-        render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={() => {}}
-                onOpenSettings={() => {}}
-                onCommandPalette={onCommandPalette}
-            />,
+    it('has no unread indicator on any header control', () => {
+        const { container } = render(
+            <AppHeader onLock={() => {}} onMenuToggle={() => {}} activeWallet={{ id: 'w', name: 'Wallet' }} />,
+        );
+        expect(container.querySelector('[data-unread], [data-unread-count], [data-badge-count]')).toBeNull();
+    });
+});
+
+describe('HeaderActionMenu', () => {
+    it('is one secondary Button that delegates state to its owner', () => {
+        const onMenuToggle = vi.fn();
+        const { container, rerender } = render(
+            <HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen={false} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-        expect(onCommandPalette).toHaveBeenCalledOnce();
-
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
-        // The More sheet lists wallet places only; sibling sites live in the header switcher.
-        expect(screen.queryAllByRole('link')).toHaveLength(0);
-    });
-
-    it('pops the complete phone action menu out as one scrolling column', () => {
-        render(<AppHeader {...allActions} platformCurrent="wallet" />);
-        openHeaderMenu();
-
-        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-        expect(screen.getAllByRole('menuitem').length).toBe(7);
-        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*display:\s*grid/);
-        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*grid-template-columns/);
-        expect(appHeaderCss).not.toMatch(/\.actionMenu\s*\{[^}]*overflow-y:\s*hidden/);
-        expect(appHeaderCss).toMatch(/\.actionMenu\s*\{[^}]*width:\s*min\(280px,[^}]*overflow-y:\s*auto;/);
-    });
-
-    it('returns focus to the header trigger when Escape closes its menu', () => {
-        render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
+        expect(container.querySelectorAll('button')).toHaveLength(1);
         const trigger = screen.getByRole('button', { name: 'Open menu' });
-        fireEvent.click(trigger);
-        const item = screen.getByRole('menuitem', { name: 'Scan' });
-        item.focus();
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(document.activeElement).toBe(trigger);
-    });
-
-    it('closes the scan menu on Android Back instead of minimizing the app', () => {
-        render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Open menu' });
-        fireEvent.click(trigger);
-        expect(screen.getByRole('menu')).toBeInTheDocument();
-
-        act(() => nativeBack({ canGoBack: false }));
-
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(trigger).toHaveFocus();
-        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
-    });
-
-    it('closes the action menu when route-change focus enters the page', async () => {
-        const renderLayout = (routeKey) => (
-            <FullLayoutWithNav
-                routeKey={routeKey}
-                header={<AppHeader onScan={() => {}} />}
-            >
-                <main id="xc-main"><h1>{routeKey}</h1></main>
-            </FullLayoutWithNav>
-        );
-        const view = render(renderLayout('home'));
-        openHeaderMenu();
-        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
-
-        view.rerender(renderLayout('wallets'));
-
-        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Header actions' })).toBeNull());
-        expect(screen.getByRole('heading', { name: 'wallets' })).toHaveFocus();
-    });
-
-    it('supports arrow, Enter, and Tab keys in the header action menu', () => {
-        const onManageAddresses = vi.fn();
-        render(<AppHeader onScan={() => {}} onManageAddresses={onManageAddresses} onViewAddress={() => {}} />);
-        const trigger = screen.getByRole('button', { name: 'Open menu' });
-
-        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
-        expect(trigger).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('menuitem', { name: 'Scan' })).toHaveFocus();
-
-        fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
-        const manage = screen.getByRole('menuitem', { name: 'Manage addresses' });
-        expect(manage).toHaveFocus();
-        fireEvent.keyDown(manage, { key: 'Enter' });
-        expect(onManageAddresses).toHaveBeenCalledOnce();
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveAttribute('data-header-control');
+        fireEvent.click(trigger);
+        expect(onMenuToggle).toHaveBeenCalledOnce();
 
-        fireEvent.keyDown(trigger, { key: 'ArrowUp' });
-        const last = screen.getAllByRole('menuitem').at(-1);
-        expect(last).toHaveFocus();
-        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-        fireEvent(last, event);
+        rerender(<HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen />);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
         expect(screen.queryByRole('menu')).toBeNull();
-        expect(event.defaultPrevented).toBe(false);
-    });
-});
-
-describe('HeaderSettingsButton section gating', () => {
-    it('uses the remaining phone viewport and compact sections for the complete popover', async () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                activeAccount={{ id: 'a1', name: 'Everyday', index: 0 }}
-                onOpenWalletPicker={() => {}}
-                onOpenAccountPicker={() => {}}
-                onOpenSettings={() => {}}
-                chainRegistry={chainRegistry}
-                coinFamilies={COIN_FAMILIES}
-                networkFilter="all"
-                onNetworkFilterChange={() => {}}
-                activeNetwork="mainnet"
-                onActiveNetworkChange={() => Promise.resolve()}
-            />,
-        );
-        fireEvent.click(gear());
-
-        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
-        expect(await within(popover).findByText('Network filter')).toBeTruthy();
-        expect(within(popover).getByRole('button', { name: 'Main' })).toBeTruthy();
-        expect(within(popover).getByRole('button', { name: 'Everyday' })).toBeTruthy();
-        expect(within(popover).getByRole('button', { name: 'All settings' })).toBeTruthy();
-        expect(headerSettingsCss).toMatch(
-            /\.popover\.popover\s*\{[^}]*max-height:\s*calc\(var\(--xc-viewport-h, 100vh\) - var\(--xc-control-h-md\) - var\(--xc-space-6\)\);/,
-        );
-        expect(headerSettingsCss).toMatch(
-            /\.section\s*\{[^}]*gap:\s*var\(--xc-space-1\);[^}]*padding:\s*var\(--xc-space-1\) var\(--xc-space-2\);/,
-        );
-    });
-
-    it('closes the settings popover on Android Back instead of minimizing the app', () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        const trigger = gear();
-        fireEvent.click(trigger);
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-
-        act(() => nativeBack({ canGoBack: false }));
-
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(trigger).toHaveFocus();
-        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
-    });
-
-    it('renders without a network section when the filter props are absent', () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        fireEvent.click(gear());
-        expect(screen.queryByText('Network')).toBeNull();
-        expect(screen.getByText('Main')).toBeTruthy();
-    });
-
-    it('renders the network section and reports changes when fully wired', async () => {
-        const onNetworkFilterChange = vi.fn();
-        render(
-            <HeaderSettingsButton
-                chainRegistry={chainRegistry}
-                coinFamilies={COIN_FAMILIES}
-                networkFilter="all"
-                onNetworkFilterChange={onNetworkFilterChange}
-            />,
-        );
-        fireEvent.click(gear());
-        // The chain filter is a lazy chunk inside the popover.
-        expect(await screen.findByText('Network filter')).toBeTruthy();
-        const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
-        expect(networkTrigger).toHaveAttribute('title', 'All networks');
-        fireEvent.click(networkTrigger);
-        const litecoin = screen.getByRole('option', { name: /Litecoin/ });
-        expect(litecoin).toHaveAttribute('title', 'Litecoin');
-        fireEvent.click(litecoin);
-        expect(onNetworkFilterChange).toHaveBeenCalledWith('litecoin');
-    });
-
-    it('confirms an active network switch from settings', async () => {
-        const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
-        const nativeConfirm = vi.spyOn(window, 'confirm');
-        render(
-            <HeaderSettingsButton
-                activeNetwork="testnet"
-                developerMode
-                onActiveNetworkChange={onActiveNetworkChange}
-            />,
-        );
-
-        fireEvent.click(gear());
-        fireEvent.change(screen.getByLabelText('Active network in header'), {
-            target: { value: 'regtest' },
-        });
-
-        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
-        expect(dialog).toHaveTextContent('Unlock the wallet again after it reloads.');
-        expect(nativeConfirm).not.toHaveBeenCalled();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
-
-        await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
-    });
-
-    it('shows a progress status while the network switch is under way', async () => {
-        const onActiveNetworkChange = vi.fn(() => new Promise(() => {}));
-        render(
-            <HeaderSettingsButton
-                activeNetwork="testnet"
-                developerMode
-                onActiveNetworkChange={onActiveNetworkChange}
-            />,
-        );
-
-        fireEvent.click(gear());
-        expect(screen.queryByRole('status')).toBeNull();
-        fireEvent.change(screen.getByLabelText('Active network in header'), {
-            target: { value: 'regtest' },
-        });
-        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
-
-        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Switching networks'));
-        expect(screen.getByLabelText('Active network in header')).toBeDisabled();
-    });
-
-    it('moves focus into the body-level popover on open and back to the trigger on Escape', async () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main wallet' }}
-                onOpenWalletPicker={() => {}}
-                activeNetwork="testnet"
-                onActiveNetworkChange={() => Promise.resolve()}
-            />,
-        );
-        gear().focus();
-        fireEvent.click(gear());
-        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
-        expect(popover.contains(document.activeElement)).toBe(true);
-        expect(document.activeElement).toHaveTextContent('Main wallet');
-
-        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        expect(document.activeElement).toBe(gear());
-    });
-
-    it('stacks the network confirm beside the body-level popover and keeps both open on its presses', () => {
-        render(
-            <HeaderSettingsButton
-                activeNetwork="testnet"
-                developerMode
-                onActiveNetworkChange={() => Promise.resolve()}
-            />,
-        );
-
-        fireEvent.click(gear());
-        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
-        fireEvent.change(screen.getByLabelText('Active network in header'), {
-            target: { value: 'regtest' },
-        });
-        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
-        // Both are body-level layers, and the confirm comes after the popover
-        // in paint order, so the popover can never cover it.
-        const confirmLayer = dialog.closest('[data-header-settings-confirm]');
-        expect(confirmLayer?.parentElement).toBe(document.body);
-        expect(popover.compareDocumentPosition(confirmLayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-        fireEvent.mouseDown(within(dialog).getByRole('button', { name: 'Cancel' }));
-        expect(screen.getByRole('dialog', { name: 'Switch to Regtest?' })).toBeInTheDocument();
-        expect(screen.getByRole('dialog', { name: 'Wallet settings' })).toBeInTheDocument();
-    });
-
-    it('does not guess a network badge before settings load', () => {
-        render(
-            <HeaderSettingsButton
-                activeNetwork={undefined}
-                onActiveNetworkChange={() => Promise.resolve()}
-            />,
-        );
-
-        expect(screen.queryByLabelText(/Active network:/)).toBeNull();
-    });
-
-    it('keeps the current network when the header confirmation is cancelled', async () => {
-        const onActiveNetworkChange = vi.fn();
-        render(
-            <HeaderSettingsButton
-                activeNetwork="mainnet"
-                onActiveNetworkChange={onActiveNetworkChange}
-            />,
-        );
-
-        fireEvent.click(gear());
-        const select = screen.getByLabelText('Active network in header');
-        // Testnet is offered without Developer Mode; Regtest is not.
-        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
-        fireEvent.change(select, { target: { value: 'testnet' } });
-
-        const dialog = await screen.findByRole('dialog', { name: 'Switch to Testnet?' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Switch to Testnet?' })).toBeNull());
-        expect(onActiveNetworkChange).not.toHaveBeenCalled();
-        expect(select.value).toBe('mainnet');
-    });
-
-    it('clears a stale destination after persisting a network switch', async () => {
-        const walletId = 'network-switch-wallet';
-        writeLastView(walletId, 'contacts');
-        const setActiveNetwork = vi.fn().mockResolvedValue({ activeNetwork: 'testnet' });
-
-        await persistActiveNetwork({
-            messaging: { setActiveNetwork },
-            walletId,
-            network: 'testnet',
-        });
-
-        expect(setActiveNetwork).toHaveBeenCalledWith({ walletId, network: 'testnet' });
-        expect(readLastView(walletId)).toBeNull();
-    });
-
-    it('keeps the saved destination when network persistence fails', async () => {
-        const walletId = 'failed-network-switch-wallet';
-        writeLastView(walletId, 'contacts');
-
-        await expect(persistActiveNetwork({
-            messaging: { setActiveNetwork: vi.fn().mockRejectedValue(new Error('offline')) },
-            walletId,
-            network: 'testnet',
-        })).rejects.toThrow('offline');
-
-        expect(readLastView(walletId)).toBe('contacts');
-        writeLastView(walletId, 'home');
-    });
-
-    it('marks the trigger active when a non-default wallet or account is selected', () => {
-        const { rerender } = render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        expect(gear()).not.toHaveAttribute('data-active');
-
-        rerender(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w2', name: 'Second' }}
-                onOpenWalletPicker={() => {}}
-                walletNonDefault
-            />,
-        );
-        expect(gear()).toHaveAttribute('data-active', 'true');
-    });
-
-    it('returns focus to the settings trigger when Escape closes its popover', () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-            />,
-        );
-        const trigger = gear();
-        fireEvent.click(trigger);
-        const wallet = screen.getByRole('button', { name: 'Main' });
-        expect(wallet).toHaveAttribute('title', 'Main');
-        wallet.focus();
-
-        fireEvent.keyDown(window, { key: 'Escape' });
-
-        expect(screen.queryByRole('dialog')).toBeNull();
-        expect(document.activeElement).toBe(trigger);
-    });
-
-    it('closes the settings popover when route-change focus enters the page', async () => {
-        render(
-            <>
-                <HeaderSettingsButton
-                    activeWallet={{ id: 'w1', name: 'Main' }}
-                    onOpenWalletPicker={() => {}}
-                />
-                <main id="xc-main"><h1 tabIndex={-1}>Wallets</h1></main>
-            </>,
-        );
-        fireEvent.click(gear());
-
-        screen.getByRole('heading', { name: 'Wallets' }).focus();
-
-        await waitFor(() => {
-            expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
-        });
-    });
-
-    it('does not treat a stale network filter as active when the section is unwired', () => {
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-                networkFilter="litecoin"
-            />,
-        );
-        expect(gear()).not.toHaveAttribute('data-active');
-        cleanup();
-        render(
-            <HeaderSettingsButton
-                activeWallet={{ id: 'w1', name: 'Main' }}
-                onOpenWalletPicker={() => {}}
-                networkFilter="all"
-            />,
-        );
-        expect(gear()).not.toHaveAttribute('data-active');
-    });
-});
-
-describe('network status', () => {
-    it('does not render a network control in the toolbar', () => {
-        render(
-            <AppHeader
-                activeNetwork="regtest"
-                onOpenNetworkSettings={() => {}}
-            />,
-        );
-        expect(screen.queryByRole('button', { name: /Network/ })).toBeNull();
-    });
-});
-
-describe('AppHeader search-only menu', () => {
-    it('marks a menu holding only Search so a rail with Search can hide it', () => {
-        // The desktop window has no pop-out row; this flag stands for that shell.
-        globalThis.xchainWalletWindow = {};
-        try {
-            const { container } = render(<AppHeader onCommandPalette={() => {}} />);
-            expect(container.querySelector('[data-header-menu="search-only"]')).not.toBeNull();
-        } finally {
-            delete globalThis.xchainWalletWindow;
-        }
-    });
-
-    it('keeps the menu unmarked when it holds more than Search', () => {
-        const { container } = render(<AppHeader onCommandPalette={() => {}} onScan={() => {}} />);
-        expect(container.querySelector('[data-header-menu]')).toBeNull();
     });
 });

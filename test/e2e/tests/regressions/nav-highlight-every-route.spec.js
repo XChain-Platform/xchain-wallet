@@ -17,7 +17,7 @@ const VIEWPORTS = [
 
 async function openPaletteRoute(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
     await palette.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
@@ -52,8 +52,15 @@ const ROUTES = [
 async function expectCurrentSection(page, section) {
     const bottomNav = page.getByRole('navigation', { name: 'Bottom navigation' });
     if (await bottomNav.count() > 0) {
-        await bottomNav.getByRole('button', { name: 'More', exact: true }).click();
-        await expect(page.getByRole('dialog', { name: 'More', exact: true })).toBeVisible();
+        const current = bottomNav.locator('[aria-current="page"]');
+        const bottomSections = new Set(['Home', 'Send', 'Receive', 'History', 'Settings']);
+        if (bottomSections.has(section)) {
+            await expect(current).toHaveCount(1);
+            await expect(current).toHaveAccessibleName(section);
+        } else {
+            await expect(current).toHaveCount(0);
+        }
+        return;
     }
 
     const current = page.locator('[aria-current="page"]');
@@ -64,10 +71,6 @@ async function expectCurrentSection(page, section) {
         await expect(current).toHaveAccessibleName(section);
     }
 
-    if (await bottomNav.count() > 0) {
-        await page.keyboard.press('Escape');
-        await expect(page.getByRole('dialog', { name: 'More', exact: true })).toBeHidden();
-    }
 }
 
 test('every route highlights exactly its mapped navigation section', async ({ page }) => {

@@ -61,7 +61,7 @@ export function PageHeaderSection() {
 
             <LiveExample label="Stacked under the App header (edges should align)">
                 <div style={frame}>
-                    <AppHeader onScan={noop} onLock={noop} onMenuOpen={noop} />
+                    <AppHeader onLock={noop} onMenuToggle={noop} />
                     <div style={headerSlot}>
                         <PageHeader
                             onBack={noop}

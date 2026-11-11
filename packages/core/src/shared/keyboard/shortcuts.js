@@ -105,7 +105,7 @@ export function bindingFamily(s) {
 
 /**
  * True for entries the Settings → Keyboard UI may rebind: the globally
- * dispatched set plus the palette combo (whose listener lives in
+ * dispatched set plus the wallet menu combo (whose listener lives in
  * useCommandPalette). Context shortcuts stay fixed for now.
  * @param {{ dispatch?: boolean, rebindable?: boolean, id: string }} s
  */

@@ -17,17 +17,16 @@
 
 import { test, expect, createWallet, nav } from '../../fixtures/wallet.js';
 
-const dialog = (page) => page.getByRole('dialog', { name: 'Command palette' });
+const dialog = (page) => page.getByRole('dialog', { name: 'Wallet menu' });
 const navItem = (page, name) => nav(page).getByRole('button', { name, exact: true });
 
-test.describe('command palette', () => {
+test.describe('wallet menu', () => {
     test('opens from the header menu and the shortcut, and navigates', async ({ page }) => {
         await createWallet(page);
 
-        // The condensed header keeps Search in its action menu; Enter runs
-        // the top match.
+        // The header button opens the same searchable menu as the shortcut;
+        // Enter runs the top match.
         await page.getByRole('button', { name: 'Open menu' }).click();
-        await page.getByRole('menuitem', { name: /^Search/ }).click();
         await expect(dialog(page)).toBeVisible();
         await dialog(page).getByRole('combobox').fill('history');
         await page.keyboard.press('Enter');

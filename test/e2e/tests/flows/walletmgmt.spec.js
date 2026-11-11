@@ -107,7 +107,7 @@ async function expectGroupedControlHeights(group, label) {
 
 async function openPaletteRoute(page, route) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route);
     await palette.getByRole('option', { name: new RegExp(`^${route}\\b`) }).first().click();

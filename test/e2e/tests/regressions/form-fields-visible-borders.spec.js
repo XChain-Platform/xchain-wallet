@@ -37,7 +37,7 @@ const VISIBLE_FIELD_SELECTOR = [
 
 async function gotoPaletteRoute(page, name) {
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', { name: new RegExp(`^${name}\\b`) }).first().click();

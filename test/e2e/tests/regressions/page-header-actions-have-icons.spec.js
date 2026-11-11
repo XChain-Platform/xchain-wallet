@@ -6,6 +6,7 @@
 import {
     dismissIntroCarousel,
     expect,
+    openWalletPicker,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -45,7 +46,7 @@ async function openPaletteRoute(page, route) {
     // focuses its name field), so start from the page.
     await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(route.paletteName);
     await palette.getByRole('option', {
@@ -56,7 +57,7 @@ async function openPaletteRoute(page, route) {
 
 async function openRoute(page, route) {
     if (route.open === 'wallet-rename') {
-        await openPaletteRoute(page, { paletteName: 'Switch wallet' });
+        await openWalletPicker(page);
         await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
         await page.getByRole('button', { name: 'Manage wallet', exact: true }).click();
         await expect(page.getByRole('heading', { level: 1, name: 'Wallet details' })).toBeVisible();

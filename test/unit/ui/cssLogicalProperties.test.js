@@ -310,12 +310,6 @@ describe('wallet CSS logical properties', () => {
         expect(component('AlertsOverlay.module.css')).toMatch(
             /:global\(html\[dir='rtl'\]\) \.panel\s*\{[^}]*--xc-slide-in-offset:\s*calc\(-1 \* var\(--xc-space-5\)\)/s,
         );
-        expect(component('HeaderActionMenu.module.css')).toMatch(
-            /:global\(html\[dir='rtl'\]\) \.rowChevron\s*\{[^}]*transform:\s*scaleX\(-1\)/s,
-        );
-        expect(component('HeaderSettingsButton.module.css')).toMatch(
-            /:global\(html\[dir='rtl'\]\) \.summaryChevron\s*\{[^}]*transform:\s*scaleX\(-1\)/s,
-        );
         expect(component('LearnNote.module.css')).toMatch(
             /:global\(\[dir='rtl'\]\)[^{]+\{[^}]*transform:\s*scaleX\(-1\)/s,
         );

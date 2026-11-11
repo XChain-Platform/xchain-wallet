@@ -30,134 +30,21 @@
     flex-wrap: nowrap;
 }
 
-.right > button,
-.actionTrigger > button {
+.right > button {
     width: var(--xc-control-h-md);
     height: var(--xc-control-h-md);
     border-radius: var(--xc-control-radius);
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
 }
 
-.bar [data-network-status-trigger] {
-    width: auto;
-    min-width: var(--xc-control-h-md);
-    gap: var(--xc-space-1);
-    padding: 0 var(--xc-space-2);
-}
-
-.bar [data-network-name] {
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
-}
-
-.actionWrap {
-    position: relative;
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
-.actionTrigger {
-    display: inline-flex;
-}
-
-.actionMenu {
-    position: absolute;
-    box-sizing: border-box;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    z-index: 20;
-    width: min(280px, calc(100vw - (2 * var(--xc-space-2))));
-    /* Sized by the viewport alone: a fixed pixel cap cut the last visible row
-       through its label on tall phones that had room for every row. */
-    max-height: 70vh;
-    overflow-y: auto;
-    padding: var(--xc-space-1);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
-    box-shadow: var(--xc-shadow-header-menu);
-}
-
-/* A phone keeps the same single 280px column a wide layout shows. It may use
-   the height below the header, and the base overflow-y: auto scrolls any rows
-   past that instead of cutting them. */
-@media (max-width: 480px) {
-    .actionMenu {
-        max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-control-h-md) - var(--xc-space-5));
-    }
-}
-
-.actionRow {
-    appearance: none;
-    box-sizing: border-box;
-    width: 100%;
-    min-height: var(--xc-tap-min);
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 0;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.actionMenu[data-overlay-open='true'] {
-    /* Not visibility or display: the Settings row inside stays the popover
-       anchor and keeps focus for its return. */
-    opacity: 0;
-    pointer-events: none;
-}
-
-.settingsWrap,
-.settingsWrap > span {
-    width: 100%;
-}
-
-.actionRow:hover {
-    background: var(--xc-bg-muted);
-}
-
-.actionRow:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.rowIcon {
-    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
-    position: relative;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-accent-text);
-}
-
-.rowLabel {
+.walletName {
     min-width: 0;
-    flex: 1 1 auto;
-}
-
-.shortcut {
-    flex: 0 0 auto;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-}
-
-@media (pointer: coarse), (hover: none) {
-    .shortcut {
-        display: none;
-    }
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect

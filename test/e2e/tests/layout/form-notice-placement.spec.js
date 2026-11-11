@@ -359,7 +359,7 @@ const FORMS = ONLY ? ALL_FORMS.filter((form) => ONLY.test(form.label)) : ALL_FOR
 
 async function palette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').first().fill(title);
     await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();

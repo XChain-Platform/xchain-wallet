@@ -84,7 +84,7 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
 
     const palette = async (title) => {
         await page.keyboard.press('ControlOrMeta+k');
-        const dialog = page.getByRole('dialog', { name: 'Command palette' });
+        const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
         await dialog.waitFor({ state: 'visible', timeout: 15_000 });
         await dialog.getByRole('combobox').first().fill(title);
         await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();

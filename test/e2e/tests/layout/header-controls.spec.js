@@ -12,7 +12,6 @@ import {
     createWallet,
     expect,
     gotoSection,
-    nav,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -107,59 +106,18 @@ async function expectKeyboardReachable(page, controls, viewportName) {
     ).toEqual(markers);
 }
 
-// Header menu destinations are menu items; navigation destinations are buttons.
-async function hasVisibleButton(scope, name) {
-    const matches = [
-        ...await scope.getByRole('button', { name }).all(),
-        ...await scope.getByRole('menuitem', { name }).all(),
-    ];
-    const visibility = await Promise.all(matches.map((match) => match.isVisible()));
-    return visibility.some(Boolean);
-}
-
 async function expectHeaderOrNavDestinations(page, header, viewportName) {
-    const destinations = [
-        { label: 'Settings', name: /^Settings\b/ },
-        { label: 'Search', name: /^(Search|Open command palette)\b/ },
-        { label: 'Scan', name: /^(Scan|Scan and addresses)\b/ },
-    ];
-    const reachable = new Set();
-    const record = async (surfaces) => {
-        for (const destination of destinations) {
-            const available = await Promise.all(
-                surfaces.map((surface) => hasVisibleButton(surface, destination.name)),
-            );
-            if (available.some(Boolean)) reachable.add(destination.label);
-        }
-    };
-
-    // The condensed header keeps its secondary actions in one action menu.
+    // The header opens the searchable catalogue at every width.
     const openMenu = header.getByRole('button', { name: 'Open menu' });
     await openMenu.focus();
     await page.keyboard.press('Enter');
-    const headerMenu = page.getByRole('menu', { name: 'Header actions' });
-    await expect(headerMenu).toBeVisible();
-    const navigation = nav(page);
-    await record([header, headerMenu, navigation, page.getByRole('main')]);
+    const walletMenu = page.getByRole('dialog', { name: 'Wallet menu' });
+    await expect(walletMenu).toBeVisible();
+    await expect(walletMenu.getByRole('combobox')).toBeVisible();
+    await expect(walletMenu.locator('[data-wallet-menu-row="scan"]')).toBeVisible();
+    await expect(walletMenu.locator('[data-wallet-menu-row="settings"]')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(headerMenu).toBeHidden();
-
-    const more = navigation.getByRole('button', { name: 'More', exact: true });
-    if (await more.isVisible().catch(() => false)) {
-        await more.focus();
-        await page.keyboard.press('Enter');
-        const moreDialog = page.getByRole('dialog', { name: 'More', exact: true });
-        await expect(moreDialog).toBeVisible();
-        await record([moreDialog]);
-        await page.keyboard.press('Escape');
-    }
-
-    for (const destination of destinations) {
-        expect(
-            reachable.has(destination.label),
-            `${viewportName}: ${destination.label} must remain reachable through the header menu or navigation`,
-        ).toBe(true);
-    }
+    await expect(walletMenu, `${viewportName}: Escape closes the wallet menu`).toBeHidden();
 
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible();

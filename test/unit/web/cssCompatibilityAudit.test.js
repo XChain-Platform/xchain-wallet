@@ -82,17 +82,6 @@ describe('Chrome 102 CSS compatibility audit', () => {
         ]);
     });
 
-    it('keeps Header settings backgrounds free of color-mix without build transforms', () => {
-        const header = readFileSync(join(
-            process.cwd(), 'packages', 'core', 'src', 'shared', 'components',
-            'HeaderSettingsButton.module.css',
-        ), 'utf8');
-        expect(header).not.toContain('color-mix(');
-        expect(header).toMatch(/--header-accent-bg-subtle:\s*rgba\(26, 123, 172, 0\.10\)/);
-        expect(header.match(/var\(--header-accent-bg-subtle\)/g)).toHaveLength(1);
-        expect(audit(header)).toEqual([]);
-    });
-
     it('keeps the Settings narrow fallback independent of :has()', () => {
         const settingsCss = readFileSync(join(
             process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', 'Settings.module.css',

@@ -52,7 +52,7 @@ test.describe('keyboard shortcut residuals', () => {
         // Palette deep-link into Settings -> Keyboard (also proves that
         // settings-section commands end-to-end).
         await page.keyboard.press('ControlOrMeta+k');
-        await page.getByRole('dialog', { name: 'Command palette' })
+        await page.getByRole('dialog', { name: 'Wallet menu' })
             .getByRole('combobox').fill('settings keyboard');
         await page.keyboard.press('Enter');
         await expect(page.getByText('Select Rebind, then press the new key combination.', { exact: false })).toBeVisible();

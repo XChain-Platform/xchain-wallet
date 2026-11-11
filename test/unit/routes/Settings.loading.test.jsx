@@ -53,7 +53,8 @@ describe('Settings while settings are loading', () => {
         expect(screen.getByRole('searchbox').closest('[data-settings-layout="responsive"]')).toBeTruthy();
     });
 
-    it('shows the active account and opens its account picker', () => {
+    it('opens the wallet and account pickers from This wallet', () => {
+        const onOpenWalletPicker = vi.fn();
         const onOpenAccountPicker = vi.fn();
         const messaging = {
             getSettings: () => new Promise(() => {}),
@@ -65,13 +66,16 @@ describe('Settings while settings are loading', () => {
                     onBack={() => {}}
                     activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
                     activeAccount={{ id: 'account-2', index: 1, name: 'Savings' }}
+                    onOpenWalletPicker={onOpenWalletPicker}
                     onOpenAccountPicker={onOpenAccountPicker}
                 />
             </MessagingProvider>,
         );
-
+        fireEvent.click(screen.getByRole('button', { name: /This wallet/ }));
         expect(screen.getByText('Savings')).toBeTruthy();
-        fireEvent.click(screen.getByText('Accounts & addresses').closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: 'Switch / rename…' }));
+        expect(onOpenWalletPicker).toHaveBeenCalledOnce();
+        fireEvent.click(screen.getByRole('button', { name: 'Switch account…' }));
         expect(onOpenAccountPicker).toHaveBeenCalledOnce();
     });
 

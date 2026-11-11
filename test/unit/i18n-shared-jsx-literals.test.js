@@ -80,7 +80,6 @@ const localizedComponents = [
     'settings/WalletModeSection.jsx',
     'AppHeader.jsx',
     'BalanceList.jsx',
-    'HeaderSettingsButton.jsx',
     'HomeFilterBar.jsx',
     'HomeTabs.jsx',
     'TxStatusTimeline.jsx',
