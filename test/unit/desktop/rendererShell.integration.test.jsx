@@ -17,6 +17,9 @@ const boot = vi.hoisted(() => ({
     commandPaletteProps: null,
     headerProps: null,
     bottomTabBarProps: null,
+    alertsRouteProps: null,
+    marketsProps: null,
+    messagingUnread: 0,
 }));
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
@@ -61,7 +64,7 @@ vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
     }),
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useMessagingUnread.js', () => ({
-    useMessagingUnread: () => 0,
+    useMessagingUnread: () => boot.messagingUnread,
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useAccountList.js', () => ({ useAccountList: () => [] }));
 vi.mock('@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js', () => ({
@@ -113,18 +116,62 @@ vi.mock('@xchain-wallet/core/shared/routes/Settings.jsx', () => ({
     Settings: () => <h1>Settings screen</h1>,
 }));
 vi.mock('@xchain-wallet/core/shared/routes/AlertsRoute.jsx', () => ({
-    AlertsRoute: ({ onBack }) => (
-        <section>
-            <h1>Alerts screen</h1>
-            <button type="button" onClick={onBack}>Back from alerts</button>
-        </section>
-    ),
+    AlertsRoute: (props) => {
+        boot.alertsRouteProps = props;
+        return (
+            <section>
+                <h1>Alerts screen</h1>
+                <button type="button" onClick={props.onBack}>Back from alerts</button>
+            </section>
+        );
+    },
 }));
 vi.mock('@xchain-wallet/core/shared/routes/ContactsList.jsx', () => ({
     ContactsList: ({ onBack }) => (
         <section>
             <h1>Contacts screen</h1>
             <button type="button" onClick={onBack}>Back from contacts</button>
+        </section>
+    ),
+}));
+vi.mock('@xchain-wallet/core/shared/routes/DispensersList.jsx', () => ({
+    DispensersList: ({ onOpenDispenser, onBack }) => (
+        <section>
+            <h1>Dispensers screen</h1>
+            <button type="button" onClick={() => onOpenDispenser('bitcoin-mainnet', '7')}>Open dispenser</button>
+            <button type="button" onClick={onBack}>Back from dispensers</button>
+        </section>
+    ),
+}));
+vi.mock('@xchain-wallet/core/shared/routes/DispenserDetail.jsx', () => ({
+    DispenserDetail: () => <h1>Dispenser detail screen</h1>,
+}));
+vi.mock('@xchain-wallet/core/shared/routes/MarketsList.jsx', () => ({
+    MarketsList: (props) => {
+        boot.marketsProps = props;
+        return (
+            <section>
+                <h1>Markets screen</h1>
+                <button type="button" onClick={props.onChangeAsset}>Change market asset</button>
+            </section>
+        );
+    },
+}));
+vi.mock('@xchain-wallet/core/shared/routes/ReceivePicker.jsx', () => ({
+    ReceivePicker: ({ onSelect }) => (
+        <section>
+            <h1>Asset picker screen</h1>
+            <button
+                type="button"
+                onClick={() => onSelect({
+                    chainId: 'bitcoin-mainnet',
+                    tick: 'CUSTOM',
+                    displayName: 'Custom asset',
+                    kind: 'token',
+                })}
+            >
+                Choose custom asset
+            </button>
         </section>
     ),
 }));
@@ -194,6 +241,9 @@ beforeEach(() => {
     boot.commandPaletteProps = null;
     boot.headerProps = null;
     boot.bottomTabBarProps = null;
+    boot.alertsRouteProps = null;
+    boot.marketsProps = null;
+    boot.messagingUnread = 0;
     localStorage.clear();
     document.body.innerHTML = '<div id="xchain-desktop-root"></div>';
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 });
@@ -285,9 +335,86 @@ describe('desktop renderer shell', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
         expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
         expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
+    });
+
+    it('passes derived unread-message alerts to the Alerts route', async () => {
+        boot.messagingUnread = 3;
+        window.xchainWalletBridge = createPreloadBridge();
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        act(() => { boot.commandPaletteProps.menu.onSelect('alerts'); });
+        await screen.findByRole('heading', { name: 'Alerts screen' });
+
+        expect(boot.alertsRouteProps.alerts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'unread-messages' }),
+        ]));
+    });
+
+    it('keeps a chosen DEX asset when the Markets row is selected again later', async () => {
+        window.xchainWalletBridge = createPreloadBridge();
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        act(() => { boot.commandPaletteProps.menu.onSelect('markets'); });
+        await screen.findByRole('heading', { name: 'Markets screen' });
+        fireEvent.click(screen.getByRole('button', { name: 'Change market asset' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose custom asset' }));
+        await screen.findByRole('heading', { name: 'Markets screen' });
+        expect(boot.marketsProps.selectedAsset).toMatchObject({ tick: 'CUSTOM' });
+
+        act(() => { boot.commandPaletteProps.menu.onSelect('home'); });
+        await screen.findByRole('heading', { name: 'Home screen' });
+        act(() => { boot.commandPaletteProps.menu.onSelect('markets'); });
+        await screen.findByRole('heading', { name: 'Markets screen' });
+
+        expect(boot.marketsProps.selectedAsset).toMatchObject({ tick: 'CUSTOM' });
+    });
+
+    it('returns Home after choosing Dispensers from a dispenser drilldown', async () => {
+        window.xchainWalletBridge = createPreloadBridge();
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
+        await screen.findByRole('heading', { name: 'Dispensers screen' });
+        fireEvent.click(screen.getByRole('button', { name: 'Open dispenser' }));
+        await screen.findByRole('heading', { name: 'Dispenser detail screen' });
+        act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
+        await screen.findByRole('heading', { name: 'Dispensers screen' });
+        fireEvent.click(screen.getByRole('button', { name: 'Back from dispensers' }));
+
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
+    });
+
+    it('preserves the Contacts origin when the active row is selected again', async () => {
+        window.xchainWalletBridge = createPreloadBridge();
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        act(() => { boot.commandPaletteProps.menu.onSelect('settings'); });
+        await screen.findByRole('heading', { name: 'Settings screen' });
+        act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
+        await screen.findByRole('heading', { name: 'Contacts screen' });
+        act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
+        fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
+
+        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
     });
 
     it('leaves the unlocked screen at once when auto-lock fires, before main answers', async () => {

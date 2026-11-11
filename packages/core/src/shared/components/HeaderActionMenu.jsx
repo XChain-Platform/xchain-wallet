@@ -22,7 +22,7 @@ import '../../i18n/locales/en/walletMenu.js';
 export function HeaderActionMenu({ onMenuToggle, menuOpen = false }) {
     return (
         <Button
-            variant="secondary"
+            variant={menuOpen ? 'primary' : 'secondary'}
             icon={<Icon.MenuIcon />}
             onClick={onMenuToggle}
             aria-label={t('walletMenu.openMenu')}

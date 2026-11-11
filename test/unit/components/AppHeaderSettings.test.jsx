@@ -93,7 +93,7 @@ describe('AppHeader', () => {
 });
 
 describe('HeaderActionMenu', () => {
-    it('is one secondary Button that delegates state to its owner', () => {
+    it('is one Button that delegates state to its owner', () => {
         const onMenuToggle = vi.fn();
         const { container, rerender } = render(
             <HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen={false} />,
@@ -110,5 +110,19 @@ describe('HeaderActionMenu', () => {
         rerender(<HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen />);
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
         expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('uses the filled primary Button style while the wallet menu is open', () => {
+        const { rerender } = render(<HeaderActionMenu menuOpen={false} />);
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+
+        expect(trigger.className).toMatch(/secondary/);
+        expect(trigger.className).not.toMatch(/primary/);
+
+        rerender(<HeaderActionMenu menuOpen />);
+
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(trigger.className).toMatch(/primary/);
+        expect(trigger.className).not.toMatch(/secondary/);
     });
 });

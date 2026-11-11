@@ -20,6 +20,7 @@
 // lets each control select a named icon size without overriding SVGs.
 import {
     QrCode as LucideQrCode,
+    ScanLine as LucideScanLine,
     Menu as LucideMenu,
     Send as LucideSend,
     DollarSign as LucideDollarSign,
@@ -178,7 +179,7 @@ export function CopyIcon() {
 }
 
 export function ScanIcon() {
-    return <LucideQrCode {...LUCIDE_PROPS} />;
+    return <LucideScanLine {...LUCIDE_PROPS} />;
 }
 
 export function CameraIcon() {

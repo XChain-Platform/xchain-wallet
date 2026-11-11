@@ -80,6 +80,7 @@ import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backS
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 import { t } from '../../core/src/i18n/index.js';
+import { ROUTE_NAV_SECTIONS } from '@xchain-wallet/core/shared/routeRegistry.js';
 
 const APP_CHAIN_REGISTRY = defaultRegistry();
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -385,6 +386,8 @@ function AppInner() {
     // ManageToken sets this to 'manage-token' before opening a per-
     // token form so back lands the user back on the management page.
     const [formReturnView, setFormReturnView] = useState(/** @type {string | null} */ (null));
+    const [directoryReturnView, setDirectoryReturnView] = useState('actions');
+    const [alertsReturnView, setAlertsReturnView] = useState('home');
     const [tokenAdminInitialPicker, setTokenAdminInitialPicker] = useState(
         /** @type {'shared-block' | null} */ (null),
     );
@@ -539,26 +542,11 @@ function AppInner() {
     // participates in the Home filter. Send and Receive keep separate query
     // text so typing there cannot narrow Home's Tokens tab.
     const {
-        networkFilter: storedGlobalNetworkFilter,
+        networkFilter: globalNetworkFilter,
         tokenQuery: globalTokenQuery,
         setNetworkFilter: setGlobalNetworkFilter,
         setTokenQuery: setGlobalTokenQuery,
     } = useWalletFilters(activeWalletId);
-    const resetNetworkFilterWallets = useRef(new Set());
-    const shouldResetNetworkFilter = Boolean(
-        activeWalletId && !resetNetworkFilterWallets.current.has(activeWalletId),
-    );
-    const globalNetworkFilter = shouldResetNetworkFilter ? 'all' : storedGlobalNetworkFilter;
-    // The header was the only network-filter control available on every
-    // route. Clear a persisted selection and render the default immediately
-    // so routes are never invisibly scoped while the storage update is
-    // pending. Each wallet is reset once per app load; later changes from an
-    // in-page filter persist.
-    useEffect(() => {
-        if (!activeWalletId || resetNetworkFilterWallets.current.has(activeWalletId)) return;
-        resetNetworkFilterWallets.current.add(activeWalletId);
-        if (storedGlobalNetworkFilter !== 'all') setGlobalNetworkFilter('all');
-    }, [activeWalletId, storedGlobalNetworkFilter, setGlobalNetworkFilter]);
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -1269,7 +1257,10 @@ function AppInner() {
                 return (
                     <AlertsRoute
                         key={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => {
+                            setUnlockedView(alertsReturnView);
+                            setAlertsReturnView('home');
+                        }}
                         walletId={activeWalletId}
                         alerts={menuAlerts}
                     />
@@ -1633,7 +1624,10 @@ function AppInner() {
                         onCreateList={() => setUnlockedView('list-create')}
                         onCreateUnionList={() => setUnlockedView('list-union')}
                         onOpenSharedLists={() => setUnlockedView('shared-lists')}
-                        onBack={formBack}
+                        onBack={() => {
+                            setUnlockedView(directoryReturnView);
+                            setDirectoryReturnView('actions');
+                        }}
                     />
                 );
             }
@@ -2271,7 +2265,10 @@ function AppInner() {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');
                         }}
-                        onBack={formBack}
+                        onBack={() => {
+                            setUnlockedView(directoryReturnView);
+                            setDirectoryReturnView('actions');
+                        }}
                         scanPrefill={contactScanPrefill}
                         onScanPrefillConsumed={() => setContactScanPrefill(null)}
                         onOpenBackup={() => { setSettingsInitialSection('backup'); setUnlockedView('settings'); }}
@@ -2767,7 +2764,10 @@ function AppInner() {
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
-                            onContacts: () => setUnlockedView('contacts'),
+                            onContacts: () => {
+                                setDirectoryReturnView('actions');
+                                setUnlockedView('contacts');
+                            },
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
@@ -3100,9 +3100,31 @@ function AppInner() {
             };
             const handleMenuSelect = (view) => {
                 setGlobalScannerOpen(false);
-                if (view === 'dispensers-list') setDispensersBackTo(unlockedView);
-                if (view === 'messaging') setMessagingThread(null);
-                if (view === 'contacts') setFormReturnView(unlockedView);
+                if (view === unlockedView) {
+                    const main = typeof document === 'undefined' ? null : document.getElementById('xc-main');
+                    if (main) main.scrollTop = 0;
+                    return;
+                }
+                const returnView = ROUTE_NAV_SECTIONS[unlockedView] === view ? 'home' : unlockedView;
+                if (view === 'send') {
+                    setSendPrefill(null);
+                    setSendBackTo('home');
+                } else if (view === 'receive') {
+                    setReceivePrefill(null);
+                } else if (view === 'history') {
+                    setHistoryInitialQuery('');
+                    setHistoryInitialChainCoin('');
+                    setHistoryInitialFocus(null);
+                    setHistoryReturnTo('home');
+                } else if (view === 'dispensers-list') {
+                    setDispensersBackTo(returnView);
+                } else if (view === 'messaging') {
+                    setMessagingThread(null);
+                } else if (view === 'contacts' || view === 'lists') {
+                    setDirectoryReturnView(returnView);
+                } else if (view === 'alerts') {
+                    setAlertsReturnView(returnView);
+                }
                 palette.navigate(view);
             };
             // Assigned rather than returned directly so the whole unlocked
@@ -3121,7 +3143,7 @@ function AppInner() {
                     nav={
                         <LeftNav
                             currentView={unlockedView}
-                            onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
+                            onSelect={handleMenuSelect}
                             onLock={handleNavLock}
                             onOpenSettings={handleOpenSettings}
                             hasVmAddress={hasVmAddress}
@@ -3132,7 +3154,7 @@ function AppInner() {
                     bottomBar={
                         <BottomTabBar
                             currentView={unlockedView}
-                            onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
+                            onSelect={handleMenuSelect}
                             onOpenSettings={handleOpenSettings}
                             isSignerMode={isSignerMode}
                         />

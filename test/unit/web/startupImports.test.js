@@ -201,6 +201,28 @@ describe('web startup imports', () => {
         expect(appSource).toContain('onLock: handleNavLock');
     });
 
+    it('keeps web navigation state consistent across menu, sidebar and tab selections', () => {
+        expect(appSource).toContain('networkFilter: globalNetworkFilter');
+        expect(appSource).not.toContain('shouldResetNetworkFilter');
+        expect(appSource).not.toContain('resetNetworkFilterWallets');
+
+        expect(appSource.match(/onSelect=\{handleMenuSelect\}/g)).toHaveLength(2);
+        expect(appSource).toContain("if (view === unlockedView) {");
+        expect(appSource).toContain('if (main) main.scrollTop = 0;');
+        expect(appSource).toContain("const returnView = ROUTE_NAV_SECTIONS[unlockedView] === view ? 'home' : unlockedView;");
+
+        expect(appSource).toContain('setSendPrefill(null);');
+        expect(appSource).toContain('setReceivePrefill(null);');
+        expect(appSource).toContain("setHistoryInitialQuery('');");
+        expect(appSource).toContain('setHistoryInitialFocus(null);');
+        expect(appSource).toContain('setDispensersBackTo(returnView);');
+        expect(appSource).toContain("if (view === 'contacts' || view === 'lists') {");
+        expect(appSource).toContain('setDirectoryReturnView(returnView);');
+        expect(appSource).not.toContain("if (view === 'contacts') setFormReturnView");
+        expect(appSource).toContain('setAlertsReturnView(returnView);');
+        expect(appSource).toContain('setUnlockedView(alertsReturnView);');
+    });
+
     it('loads the action catalogue together with the Actions menu', () => {
         // Every action's label and description is copy only that menu shows.
         expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/actionEntries\.js'/);

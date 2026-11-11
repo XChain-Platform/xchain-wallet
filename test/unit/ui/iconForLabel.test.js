@@ -23,8 +23,8 @@ import {
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('ui/icons/iconForLabel', () => {
-    it('uses the QR glyph for Receive', () => {
-        expect(ReceiveIcon().type).toBe(ScanIcon().type);
+    it('uses different glyphs for Receive and Scan', () => {
+        expect(ReceiveIcon().type).not.toBe(ScanIcon().type);
     });
 
     const cases = [

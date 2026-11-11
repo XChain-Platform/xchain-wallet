@@ -146,6 +146,9 @@ import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcA
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
+import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
+import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
+import { ROUTE_NAV_SECTIONS } from '@xchain-wallet/core/shared/routeRegistry.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
@@ -394,6 +397,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     const headerAccounts = useAccountList(activeWalletId, `${accountRenameTarget?.id ?? ''}:${recordRevision}`);
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
@@ -1098,6 +1102,11 @@ function AppInner() {
             // <FullLayoutWithNav> so the left nav is always visible at
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
+            const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
+            const menuAlerts = buildWalletAlerts({ activeWallet, messagingUnread }, {
+                onMessaging: () => { setMessagingThread(null); setUnlockedView('messaging'); },
+                onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
+            });
             const routeNode = (() => {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
@@ -2191,6 +2200,7 @@ function AppInner() {
                     <AlertsRoute
                         walletId={activeWalletId}
                         onBack={() => setUnlockedView(menuReturnView)}
+                        alerts={menuAlerts}
                     />
                 );
             }
@@ -2721,7 +2731,6 @@ function AppInner() {
                 // §24 Cluster Y FOLLOWUP 2: same top-level Settings
                 // route the web shell ships; 'connected-sites' deep-links
                 // into the Connected Sites drilldown.
-                const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
                 // Palette deep-links land on a specific section via
                 // settingsInitialSection; the key forces a remount when the
                 // target changes while Settings is already the active view.
@@ -2944,7 +2953,8 @@ function AppInner() {
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenSettings = () => setUnlockedView('settings');
             const handleShellSelect = (view) => {
-                const returnView = unlockedView === view ? 'home' : unlockedView;
+                if (unlockedView === view) return;
+                const returnView = ROUTE_NAV_SECTIONS[unlockedView] === view ? 'home' : unlockedView;
                 if (view === 'send') {
                     setSendPrefill(null);
                     setSendBackTo('home');
@@ -2955,8 +2965,6 @@ function AppInner() {
                     setHistoryInitialChainCoin('');
                     setHistoryInitialFocus(null);
                     setHistoryReturnTo('home');
-                } else if (view === 'markets') {
-                    setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                 } else if (view === 'dispensers-list') {
                     setDispensersBackTo(returnView);
                 } else if (view === 'messaging') {
