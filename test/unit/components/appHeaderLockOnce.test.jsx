@@ -54,7 +54,7 @@ describe('Lock control appears once per layout', () => {
         expect(within(header).getByRole('button', { name: 'Open menu' })).toBeTruthy();
 
         const lock = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
-            .getByRole('button', { name: 'Lock' });
+            .getByRole('button', { name: 'Lock wallet' });
         fireEvent.click(lock);
         expect(onLock).toHaveBeenCalledTimes(1);
         expect(screen.getAllByRole('button', { name: /^Lock/ })).toHaveLength(1);

@@ -59,6 +59,8 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('wizard');
         findById(commands, 'create-issue').run();
         expect(navigate).toHaveBeenLastCalledWith('wizard');
+        findById(commands, 'create-mint-settings').run();
+        expect(navigate).toHaveBeenLastCalledWith('mint-settings');
     });
 
     it('executes every command through a test router or its action handler', () => {
@@ -149,6 +151,26 @@ describe('buildCommands', () => {
         ]) {
             expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
         }
+    });
+
+    it('marks integrated menu search sources without changing base categories', () => {
+        const commands = buildCommands({ navigate() {}, lock() {} });
+        expect(findById(commands, 'nav-settings')).toMatchObject({
+            category: 'Navigate',
+            searchGroup: 'Menu',
+            searchOnlyTitle: true,
+        });
+        expect(findById(commands, 'create-bridge-settings')).toMatchObject({
+            category: 'Create',
+            searchGroup: 'In All actions',
+            searchOnlyTitle: true,
+        });
+        expect(findById(commands, 'create-mint-settings').title).toBe('Mint settings');
+        expect(findById(commands, 'wallet-lock')).toMatchObject({
+            category: 'Wallet',
+            searchGroup: 'Menu',
+            searchOnlyTitle: true,
+        });
     });
 
     it('gates BTC-only and governance surfaces behind the context flags', () => {

@@ -26,6 +26,9 @@
  * @property {string} id
  * @property {string} category
  * @property {string} title
+ * @property {string} [searchTitle]
+ * @property {boolean} [searchOnlyTitle]
+ * @property {string} [searchGroup]
  * @property {string} [subtitle]
  * @property {string[]} [keywords]
  * @property {import('react').ComponentType<any>} [Icon]
@@ -78,14 +81,20 @@ export function scoreText(query, textRaw) {
  *
  * @param {string} query   lowercased, trimmed search string
  * @param {Command} command
+ * @param {{ respectSearchOnlyTitle?: boolean }} [options]
  * @returns {number} 0 when the command does not match at all
  */
-export function scoreCommand(query, command) {
+export function scoreCommand(query, command, { respectSearchOnlyTitle = false } = {}) {
     if (!query) return 1;
-    const titleScore = scoreText(query, command.title);
+    const titleScore = scoreText(query, command.searchTitle || command.title);
     // Keep title matches in a separate tier so even a loose title match
     // outranks an exact keyword or subtitle match.
     let best = titleScore > 0 ? 1000 + titleScore : 0;
+    if (respectSearchOnlyTitle && command.searchOnlyTitle) {
+        // Catalogue filtering accepts a label substring or acronym, but not a
+        // loose subsequence that turns "set" into a match for "Issue token".
+        return titleScore >= 400 ? best : 0;
+    }
     for (const kw of command.keywords || []) {
         best = Math.max(best, scoreText(query, kw) * 0.6);
     }
@@ -104,9 +113,10 @@ export function scoreCommand(query, command) {
  *
  * @param {Command[]} commands
  * @param {string} rawQuery
+ * @param {{ respectSearchOnlyTitle?: boolean }} [options]
  * @returns {Command[]}
  */
-export function filterCommands(commands, rawQuery) {
+export function filterCommands(commands, rawQuery, options) {
     const query = (rawQuery || '').trim().toLowerCase();
     if (!query) return commands.filter((c) => !c.disabled);
 
@@ -114,7 +124,7 @@ export function filterCommands(commands, rawQuery) {
     for (let i = 0; i < commands.length; i += 1) {
         const command = commands[i];
         if (command.disabled) continue;
-        const score = scoreCommand(query, command);
+        const score = scoreCommand(query, command, options);
         if (score > 0) scored.push({ command, score, order: i });
     }
     scored.sort((a, b) => (b.score - a.score) || (a.order - b.order));

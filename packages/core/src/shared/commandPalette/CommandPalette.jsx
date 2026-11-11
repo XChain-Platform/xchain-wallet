@@ -28,7 +28,7 @@ import {
 } from 'react';
 import { Button, Icon } from '../../ui/index.js';
 import buttonStyles from '../../ui/Button.module.css';
-import { categoryLabel } from './commandRegistry.js';
+import { categoryLabel, COMMAND_CATEGORIES } from './commandRegistry.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -37,6 +37,47 @@ import { t } from '../../i18n/index.js';
 import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/walletMenu.js';
+
+const MENU_SEARCH_GROUPS = [
+    'Suggested',
+    'Menu',
+    'In Settings',
+    'In All actions',
+    ...COMMAND_CATEGORIES.filter((category) => ![
+        'Suggested', 'Recent', 'Create', 'Trade', 'Sign',
+    ].includes(category)),
+];
+
+const CATALOGUE_SEARCH_GROUPS = new Set(['Menu', 'In Settings', 'In All actions']);
+
+const commandSearchGroup = (command) => command.searchGroup || command.category;
+
+function orderMenuSearchResults(results, commands) {
+    const sourceOrder = new Map(commands.map((command, index) => [command.id, index]));
+    const groupOrder = new Map(MENU_SEARCH_GROUPS.map((group, index) => [group, index]));
+    let nextGroup = groupOrder.size;
+    for (const command of results) {
+        const group = commandSearchGroup(command);
+        if (!groupOrder.has(group)) {
+            groupOrder.set(group, nextGroup);
+            nextGroup += 1;
+        }
+    }
+    return results
+        .map((command, rank) => ({ command, rank }))
+        .sort((a, b) => {
+            const aGroup = commandSearchGroup(a.command);
+            const bGroup = commandSearchGroup(b.command);
+            const groupDifference = groupOrder.get(aGroup) - groupOrder.get(bGroup);
+            if (groupDifference) return groupDifference;
+            if (aGroup === bGroup && CATALOGUE_SEARCH_GROUPS.has(aGroup)) {
+                return (sourceOrder.get(a.command.id) ?? a.rank)
+                    - (sourceOrder.get(b.command.id) ?? b.rank);
+            }
+            return a.rank - b.rank;
+        })
+        .map(({ command }) => command);
+}
 
 /**
  * @param {object} props
@@ -71,14 +112,20 @@ export function CommandPalette({
 
     const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
     const walletRows = walletGroups.flatMap((group) => group.rows);
+    const walletFooterRows = menu
+        ? walletMenuFooter().filter((row) => row.id !== 'lock' || menu.onLock)
+        : [];
+    const walletSelectableRows = [...walletRows, ...walletFooterRows];
     const trimmedQuery = (query || '').trim();
     const showingWalletMenu = Boolean(menu) && !trimmedQuery;
     const currentWalletIndex = menu
-        ? Math.max(0, walletRows.findIndex((row) => row.id === menu.currentView))
+        ? Math.max(0, walletSelectableRows.findIndex((row) => row.id === menu.currentView))
         : 0;
 
     const results = useMemo(() => {
-        const base = filterCommands(commands || [], query);
+        const base = filterCommands(commands || [], query, {
+            respectSearchOnlyTitle: Boolean(menu),
+        });
         const q = (query || '').trim();
         if (!q) {
             if (menu) return [];
@@ -93,9 +140,9 @@ export function CommandPalette({
             const recentIds = new Set(recent.map((command) => command.id));
             return [...recent, ...base.filter((command) => !recentIds.has(command.id))];
         }
-        if (typeof parseQuery !== 'function') return base;
-        const freeform = parseQuery(q) || [];
-        return freeform.length ? [...freeform, ...base] : base;
+        const freeform = typeof parseQuery === 'function' ? (parseQuery(q) || []) : [];
+        const combined = freeform.length ? [...freeform, ...base] : base;
+        return menu ? orderMenuSearchResults(combined, commands || []) : combined;
     }, [commands, query, parseQuery, recentCommandIds, menu]);
 
     // Reset before paint so input arriving as the palette appears cannot be
@@ -124,7 +171,7 @@ export function CommandPalette({
         return () => window.removeEventListener('keydown', onKey);
     }, [open, onClose]);
 
-    const selectionCount = showingWalletMenu ? walletRows.length : results.length;
+    const selectionCount = showingWalletMenu ? walletSelectableRows.length : results.length;
 
     // Keep the selection in range as the visible row set changes.
     useEffect(() => {
@@ -162,11 +209,13 @@ export function CommandPalette({
     const selectWalletRow = (row) => {
         if (!row || !menu) return;
         onClose();
-        menu.onSelect(row.id);
+        if (row.id === 'settings') menu.onOpenSettings();
+        else if (row.id === 'lock') menu.onLock?.();
+        else menu.onSelect(row.id);
     };
 
     const runAt = (index) => {
-        if (showingWalletMenu) selectWalletRow(walletRows[index]);
+        if (showingWalletMenu) selectWalletRow(walletSelectableRows[index]);
         else runCommandAt(index);
     };
 
@@ -194,9 +243,10 @@ export function CommandPalette({
     const groups = [];
     let flatIndex = 0;
     for (const command of results) {
+        const category = menu ? commandSearchGroup(command) : command.category;
         let group = groups[groups.length - 1];
-        if (!group || group.category !== command.category) {
-            group = { category: command.category, rows: [] };
+        if (!group || group.category !== category) {
+            group = { category, rows: [] };
             groups.push(group);
         }
         group.rows.push({ command, index: flatIndex });
@@ -204,7 +254,9 @@ export function CommandPalette({
     }
 
     const activeId = showingWalletMenu
-        ? (walletRows[activeIndex] ? `xc-wallet-menu-${walletRows[activeIndex].id}` : undefined)
+        ? (walletSelectableRows[activeIndex]
+            ? `xc-wallet-menu-${walletSelectableRows[activeIndex].id}`
+            : undefined)
         : (results[activeIndex] ? `xc-cmd-${results[activeIndex].id}` : undefined);
 
     const updateQuery = (value) => {
@@ -348,25 +400,24 @@ export function CommandPalette({
                             ))}
                         </div>
                         <div className={styles.walletFooter}>
-                            {walletMenuFooter().map((row) => {
-                                if (row.id === 'lock' && !menu.onLock) return null;
+                            {walletFooterRows.map((row) => {
+                                const index = walletSelectableRows.findIndex((item) => item.id === row.id);
+                                const selected = index === activeIndex;
                                 const current = row.id === menu.currentView;
                                 const RowIcon = Icon[row.icon];
-                                const onClick = row.id === 'settings'
-                                    ? menu.onOpenSettings
-                                    : menu.onLock;
                                 return (
                                     <button
                                         key={row.id}
+                                        id={`xc-wallet-menu-${row.id}`}
                                         type="button"
+                                        data-index={index}
                                         data-wallet-menu-row={row.id}
+                                        data-wallet-menu-focused={selected ? '' : undefined}
                                         data-destructive={row.id === 'lock' ? 'true' : undefined}
-                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${current ? styles.walletRowActive : ''}`}
+                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${(selected || current) ? styles.walletRowActive : ''}`}
                                         aria-current={current ? 'page' : undefined}
-                                        onClick={() => {
-                                            onClose();
-                                            onClick?.();
-                                        }}
+                                        onMouseMove={() => setActiveIndex(index)}
+                                        onClick={() => selectWalletRow(row)}
                                     >
                                         <span className={styles.walletRowIcon} aria-hidden="true">
                                             {RowIcon ? <RowIcon /> : null}

@@ -50,8 +50,10 @@ describe('list screens share one toolbar', () => {
 
 describe('Dispensers icon', () => {
     it('keeps the menu icon in the left navigation', () => {
+        expect(read('packages/core/src/shared/walletMenu.js'))
+            .toMatch(/id: 'dispensers-list'[^\n]*icon: 'DollarIcon'/);
         expect(read('packages/core/src/shared/components/LeftNav.jsx'))
-            .toMatch(/dispensers-list[^\n]*Icon\.DollarIcon/);
+            .toMatch(/walletMenuRow\(id\)[\s\S]*Icon\[row\.icon\]/);
     });
 });
 

@@ -11,6 +11,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
+import {
+    buildCommands,
+    parseFreeformCommands,
+    settingsSectionsToCommands,
+} from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 
 afterEach(() => {
     cleanup();
@@ -49,6 +54,13 @@ function renderMenu(overrides = {}) {
     return {
         ...view, onClose, menu, commands,
     };
+}
+
+function integratedCommands() {
+    return [
+        ...buildCommands({ navigate() {}, lock() {}, ...fullGates }),
+        ...settingsSectionsToCommands({ openSettings() {} }),
+    ];
 }
 
 describe('CommandPalette wallet menu surface', () => {
@@ -145,6 +157,54 @@ describe('CommandPalette wallet menu surface', () => {
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(order).toEqual(['close', 'run']);
         expect(topRun).toHaveBeenCalledOnce();
+    });
+
+    it('groups set matches as Menu, In Settings, then In All actions', () => {
+        renderMenu({ commands: integratedCommands() });
+
+        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'set' } });
+
+        expect(screen.getAllByRole('option').map((row) => row.id)).toEqual([
+            'xc-cmd-nav-settings',
+            'xc-cmd-settings-this-wallet',
+            'xc-cmd-settings-safety',
+            'xc-cmd-settings-network',
+            'xc-cmd-create-bridge-settings',
+            'xc-cmd-create-mint-settings',
+        ]);
+        const headings = ['Menu', 'In Settings', 'In All actions']
+            .map((label) => screen.getByText(label));
+        expect(headings[0].compareDocumentPosition(headings[1]))
+            .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(headings[1].compareDocumentPosition(headings[2]))
+            .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('puts Receive first for rec', () => {
+        renderMenu({ commands: integratedCommands() });
+        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'rec' } });
+        expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', 'xc-cmd-nav-receive');
+    });
+
+    it('keeps a matching footer row in the Menu group', () => {
+        renderMenu({ commands: integratedCommands() });
+        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'lock' } });
+        expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', 'xc-cmd-wallet-lock');
+        expect(screen.getByText('Menu')).toBeTruthy();
+    });
+
+    it('keeps a parsed send intent above every grouped result', () => {
+        const composeSend = vi.fn();
+        renderMenu({
+            commands: integratedCommands(),
+            parseQuery: (query) => parseFreeformCommands(query, { composeSend }),
+        });
+        const input = screen.getByRole('combobox');
+
+        fireEvent.change(input, { target: { value: 'send 1 BTC' } });
+        expect(screen.getAllByRole('option')[0]).toHaveTextContent('Send 1 BTC');
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(composeSend).toHaveBeenCalledWith({ amount: '1', tick: 'BTC' });
     });
 
     it('shows neither a Recent group nor unread badge UI for an empty query', () => {

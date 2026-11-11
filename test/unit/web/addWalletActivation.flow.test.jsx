@@ -74,13 +74,18 @@ function answerRecoveryQuiz() {
 }
 
 async function openWalletPicker() {
-    // The condensed header keeps Settings inside its action menu.
-    if (!screen.queryByRole('menuitem', { name: 'Settings' })) {
-        fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    }
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Settings' }));
-    const settings = await screen.findByRole('dialog', { name: 'Wallet settings' });
-    fireEvent.click(within(settings).getByRole('button', { name: /First Wallet|Second Wallet|Wallet 2/ }));
+    // Wallet switching lives on the Settings page.
+    const settingsTabs = await screen.findAllByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsTabs[0]);
+    // The This wallet section may already be open when Settings is revisited.
+    const entry = await waitFor(() => {
+        const found = screen.queryByRole('button', { name: /Switch \/ rename/ })
+            || screen.queryByRole('button', { name: /^This wallet/ });
+        if (!found) throw new Error('no wallet entry on Settings');
+        return found;
+    });
+    if (!/Switch/.test(entry.textContent)) fireEvent.click(entry);
+    fireEvent.click(await screen.findByRole('button', { name: /Switch \/ rename/ }));
     return screen.findByRole('heading', { name: 'Wallets' });
 }
 
@@ -153,19 +158,19 @@ describe('web add-wallet activation flow', () => {
         }));
         expect(await screen.findByText('Wallet 2 is now active.')).toBeTruthy();
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
-        expect(await screen.findByText('Wallet: Wallet 2')).toBeInTheDocument();
+        expect(await within(screen.getByRole('region', { name: 'App header' })).findByText('Wallet 2')).toBeInTheDocument();
 
         await openWalletPicker();
         expect(walletRow('First Wallet')).not.toHaveAttribute('aria-current');
         expect(walletRow('Wallet 2')).toHaveAttribute('aria-current', 'true');
         fireEvent.click(walletRow('First Wallet'));
         await waitFor(() => expect(screen.queryByRole('heading', { name: 'Wallets' })).toBeNull());
-        expect(await screen.findByText('Wallet: First Wallet')).toBeInTheDocument();
+        expect(await within(screen.getByRole('region', { name: 'App header' })).findByText('First Wallet')).toBeInTheDocument();
 
         await openWalletPicker();
         fireEvent.click(walletRow('Wallet 2'));
         await waitFor(() => expect(screen.queryByRole('heading', { name: 'Wallets' })).toBeNull());
-        expect(await screen.findByText('Wallet: Wallet 2')).toBeInTheDocument();
+        expect(await within(screen.getByRole('region', { name: 'App header' })).findByText('Wallet 2')).toBeInTheDocument();
 
         firstMount.unmount();
         render(<App />);

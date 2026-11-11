@@ -360,17 +360,13 @@ describe('200 wallets and 500 tokens (SC)', () => {
                 || Number.parseFloat(node.style.minWidth) > POPUP_WIDTH);
         expect(tooWide).toEqual([]);
 
-        await act(async () => {
-            const more = screen.queryByRole('button', { name: /^more$/i })
-                || screen.queryByRole('button', { name: /more/i, hidden: false });
-            if (more) fireEvent.click(more);
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        });
-        const switchButton = await waitFor(() => {
-            const found = screen.queryByRole('button', { name: /switch wallet|choose wallet/i });
-            if (!found) throw new Error('no wallet switcher entry');
-            return found;
-        }, { timeout: 10_000 });
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        fireEvent.click(await screen.findByRole('button', { name: /This wallet/i }));
+        const switchButton = await screen.findByRole(
+            'button',
+            { name: /Switch \/ rename|Open wallets/i },
+            { timeout: 10_000 },
+        );
         fireEvent.click(switchButton);
         await screen.findByRole('heading', { name: 'Wallets' }, { timeout: 15_000 });
         const last = await screen.findByText(new RegExp(`^200 N{116}$`), {}, { timeout: 15_000 });
@@ -383,8 +379,8 @@ describe('200 wallets and 500 tokens (SC)', () => {
             fireEvent.click(row);
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
-        await waitFor(() => expect(localStorage.getItem('xc:activeWallet') || '').toContain('"id":"w200"'), { timeout: 15_000 });
-        await waitFor(() => expect(screen.getAllByTestId('wallet-identity')[0].getAttribute('title')).toMatch(/^200 N{116}$/), { timeout: 15_000 });
+        await waitFor(() => expect(localStorage.getItem('xc:activeWallet')).toBe('w200'), { timeout: 15_000 });
+        await waitFor(() => expect(screen.getByTitle(/^200 N{116}$/)).toBeInTheDocument(), { timeout: 15_000 });
         await waitFor(() => expect(bg.sent.some((m) => m.type === 'account.list' && m.request?.walletId === 'w200'))
             .toBe(true), { timeout: 15_000 });
     });

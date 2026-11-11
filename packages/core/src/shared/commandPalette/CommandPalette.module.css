@@ -124,11 +124,11 @@
 .input:focus {
     outline: none;
     border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+    /* The global focus-visible rule supplies the standard focus token. */
+    box-shadow: none;
 }
 
-/* Box-shadow focus rings are not painted in forced-colors mode, so give this
-   control a real outline there. */
+/* Use the system focus color when forced-colors mode replaces theme tokens. */
 @media (forced-colors: active) {
     .input:focus {
         outline: 2px solid Highlight;
@@ -358,6 +358,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
         'wallet trade'
+        'wallet manage'
         'people manage';
     align-items: start;
     gap: var(--xc-space-2);
@@ -468,6 +469,7 @@
 @container wallet-menu (min-width: 640px) {
     .panel.menuPanel {
         --xc-wallet-menu-bar-h: calc(var(--xc-control-h-md) + (2 * var(--xc-space-2)) + 1px);
+        align-self: flex-start;
         inline-size: fit-content;
         min-inline-size: min(36rem, calc(100cqi - (2 * var(--xc-space-2))));
         max-inline-size: calc(100cqi - (2 * var(--xc-space-2)));

@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // The Back button policy over the whole route registry (UI ruling U17).
-// On phones the bottom tab bar is the way out of Home, History, Send and
-// Scan, so those four hide Back and every other screen shows it; with the
+// On phones the bottom tab bar is the way out of Home, Send, Receive, History and
+// Settings, so those five hide Back and every other screen shows it; with the
 // sidebar on screen every route the sidebar links to hides it. A sub-screen
 // that shares its parent's route id always shows Back, and outside the
 // unlocked layout Back always shows. The rule is written out here from the
@@ -28,8 +28,8 @@ import {
 } from '../../../packages/core/src/shared/components/navSurface.js';
 import { ROUTE_REGISTRY, TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
-/** The four bottom-bar tabs the ruling names. */
-const PHONE_TABS = ['home', 'history', 'send', 'scan'];
+/** The five bottom-bar tabs the wallet menu catalogue names. */
+const PHONE_TABS = ['home', 'send', 'receive', 'history', 'settings'];
 
 /** Every route the sidebar and icon rail link to directly. */
 const SIDEBAR_ROUTES = [
@@ -62,7 +62,7 @@ function showsBack(surface, routeId, nested) {
 afterEach(() => cleanup());
 
 describe('Back button policy over the route registry', () => {
-    it('names the four phone tabs the ruling names, in the bottom bar', () => {
+    it('names the five phone tabs the catalogue names, in the bottom bar', () => {
         expect([...TAB_BAR_DESTINATIONS].sort()).toEqual([...PHONE_TABS].sort());
     });
 
@@ -89,6 +89,6 @@ describe('Back button policy over the route registry', () => {
     it('documents the phone tabs in STYLE_GUIDE.md', () => {
         const guide = readFileSync('STYLE_GUIDE.md', 'utf8');
         const rule = guide.split('\n').find((line) => line.startsWith('**When Back shows**')) || '';
-        expect(rule).toMatch(/with the bottom tab bar it is Home, History, Send and Scan\./);
+        expect(rule).toMatch(/with the bottom tab bar it is Home, Send, Receive, History and Settings\./);
     });
 });

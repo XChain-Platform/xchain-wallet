@@ -63,6 +63,27 @@ describe('scoreCommand', () => {
     it('finds a command by a keyword the title does not contain', () => {
         expect(scoreCommand('dex', cmd('Open markets', { keywords: ['dex', 'exchange'] }))).toBeGreaterThan(0);
     });
+
+    it('can search a display title by its own label without its breadcrumb', () => {
+        const section = cmd('Settings › Backup', {
+            searchTitle: 'Backup',
+            keywords: ['seed', 'restore'],
+        });
+        expect(scoreCommand('settings', section)).toBe(0);
+        expect(scoreCommand('backup', section)).toBeGreaterThan(0);
+        expect(scoreCommand('seed', section)).toBeGreaterThan(0);
+    });
+
+    it('can limit catalogue matching to its label', () => {
+        const receive = cmd('Receive', {
+            subtitle: 'Show a receive address',
+            keywords: ['deposit'],
+            searchOnlyTitle: true,
+        });
+        expect(scoreCommand('receive', receive, { respectSearchOnlyTitle: true })).toBeGreaterThan(0);
+        expect(scoreCommand('deposit', receive, { respectSearchOnlyTitle: true })).toBe(0);
+        expect(scoreCommand('deposit', receive)).toBeGreaterThan(0);
+    });
 });
 
 describe('filterCommands', () => {

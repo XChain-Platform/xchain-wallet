@@ -62,6 +62,9 @@ export const COMMAND_CATEGORIES = /** @type {const} */ ([
 // they stay English in data and are only localized for display.
 const CATEGORY_LABEL_KEYS = {
     Suggested: 'palette.category.suggested',
+    Menu: 'palette.category.menu',
+    'In Settings': 'palette.category.inSettings',
+    'In All actions': 'palette.category.inAllActions',
     Recent: 'ui.addressCombobox.recent',
     Navigate: 'palette.category.navigate',
     Tokens: 'home.tabs.tokens',
@@ -120,6 +123,14 @@ const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
     'sign-message',
     'sign-psbt',
 ]);
+
+const ALL_ACTION_CATEGORIES = new Set(['Navigate', 'Create', 'Trade', 'Sign']);
+
+const markAllActionCommands = (commands) => commands.map((command) => (
+    ALL_ACTION_CATEGORIES.has(command.category) && !command.searchGroup
+        ? { ...command, searchGroup: 'In All actions', searchOnlyTitle: true }
+        : command
+));
 
 const CATALOGUE_COMMAND_META = {
     home: { subtitleKey: 'palette.navHome.subtitle', keywords: ['balances', 'portfolio', 'tokens', 'overview'] },
@@ -248,6 +259,8 @@ export function buildCommands(ctx) {
             list.push({
                 id: CATALOGUE_COMMAND_IDS[row.id] || `nav-${row.id}`,
                 category: 'Navigate',
+                searchGroup: 'Menu',
+                searchOnlyTitle: true,
                 title: row.label,
                 ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
                 keywords: meta.keywords || [],
@@ -261,6 +274,8 @@ export function buildCommands(ctx) {
     list.push({
         id: 'nav-settings',
         category: 'Navigate',
+        searchGroup: 'Menu',
+        searchOnlyTitle: true,
         title: settingsRow.label,
         subtitle: t('components.totalBalanceHero.openSettings'),
         keywords: ['preferences', 'options', 'config'],
@@ -327,6 +342,7 @@ export function buildCommands(ctx) {
         // is not a trade; nobody is on the other side of it.
         { id: 'create-bridge-move', category: 'Create', title: t('palette.createBridgeMove.title'), subtitle: t('palette.createBridgeMove.subtitle'), keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
         { id: 'create-bridge-settings', category: 'Create', title: t('palette.createBridgeSettings.title'), subtitle: t('palette.createBridgeSettings.subtitle'), keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
+        { id: 'create-mint-settings', category: 'Create', title: t('routes.manageToken.mintSettings'), subtitle: t('palette.createMintSettings.subtitle'), keywords: ['mint', 'supply', 'issuer', 'limit'], Icon: Icon.GearIcon, run: go('mint-settings') },
         { id: 'create-advanced', category: 'Create', title: t('palette.createAdvanced.title'), subtitle: t('palette.createAdvanced.subtitle'), keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
         { id: 'create-action-queue', category: 'Create', title: t('commandPalette.actionQueue.title'), subtitle: t('commandPalette.actionQueue.subtitle'), keywords: ['action', 'queue', 'parallel', 'cross chain'], Icon: Icon.MenuIcon, run: go('parallel-compose') },
     );
@@ -368,7 +384,7 @@ export function buildCommands(ctx) {
     }
     if (typeof ctx.lock === 'function') {
         const lockRow = walletMenuFooter().find((row) => row.id === 'lock');
-        list.push({ id: 'wallet-lock', category: 'Wallet', title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
+        list.push({ id: 'wallet-lock', category: 'Wallet', searchGroup: 'Menu', searchOnlyTitle: true, title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {
         list.push({ id: 'help-shortcuts', category: 'Wallet', title: t('keyboard.shortcutHelp.keyboardShortcuts'), subtitle: t('palette.helpShortcuts.subtitle'), keywords: ['keys', 'hotkeys', 'help', 'cheatsheet', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
@@ -378,15 +394,15 @@ export function buildCommands(ctx) {
     list.push({ id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') });
 
     if (ctx.isSignerMode) {
-        return list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category));
+        return markAllActionCommands(list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category)));
     }
     if (ctx.isDemoWallet) {
-        return list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id));
+        return markAllActionCommands(list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id)));
     }
     if (ctx.isWatcherMode) {
-        return list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id));
+        return markAllActionCommands(list.filter((command) => !WATCHER_UNAVAILABLE_COMMAND_IDS.has(command.id)));
     }
-    return list;
+    return markAllActionCommands(list);
 }
 
 /**
@@ -540,8 +556,10 @@ export function settingsSectionsToCommands(ctx) {
     return SETTINGS_SECTIONS.filter((s) => !hidden.has(s.id)).map((s) => ({
         id: `settings-${s.id}`,
         category: 'Settings',
+        searchGroup: 'In Settings',
         title: t('palette.settingsSectionTitle', { section: s.title }),
-        keywords: ['settings', ...s.keywords],
+        searchTitle: s.title,
+        keywords: s.keywords,
         Icon: Icon.GearIcon,
         run: () => ctx.openSettings(s.id),
     }));

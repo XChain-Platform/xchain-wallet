@@ -50,14 +50,16 @@ describe('command palette titles follow the active locale', () => {
         expect(commands.map((c) => c.id)).toEqual(english.map((c) => c.id));
         for (const [index, c] of commands.entries()) {
             expect(c.title, c.id).toBe(wrap(english[index].title));
-            expect(c.subtitle, c.id).toBe(wrap(english[index].subtitle));
+            expect(c.subtitle, c.id).toBe(english[index].subtitle === undefined
+                ? undefined
+                : wrap(english[index].subtitle));
         }
     });
 
     it('translates settings, help and free-form rows', async () => {
         await useNonEnglish();
         const settings = settingsSectionsToCommands({ openSettings() {} });
-        expect(byId(settings, 'settings-backup').title).toBe(wrap('Settings → ' + wrap('Backup')));
+        expect(byId(settings, 'settings-backup').title).toBe(wrap('Settings › ' + wrap('Backup')));
         const help = helpToCommands({ openSettings() {}, openHelp() {} });
         expect(byId(help, 'help-panic').title).toBe(wrap('What is panic mode?'));
         const [send] = parseFreeformCommands('send 5 abc', { composeSend() {} });

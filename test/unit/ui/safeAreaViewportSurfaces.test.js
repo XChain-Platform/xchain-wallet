@@ -11,9 +11,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import bottomBarStyles from '../../../packages/core/src/shared/components/BottomTabBar.module.css';
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
+import menuStyles from '../../../packages/core/src/shared/commandPalette/CommandPalette.module.css';
 import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 import toastStyles from '../../../packages/core/src/shared/components/ToastHost.module.css';
 import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
@@ -32,6 +34,7 @@ const h = React.createElement;
 
 const bottomBarCss = read('packages/core/src/shared/components/BottomTabBar.module.css');
 const layoutCss = read('packages/core/src/shared/components/LeftNav.module.css');
+const menuCss = read('packages/core/src/shared/commandPalette/CommandPalette.module.css');
 const overlayCss = read('packages/core/src/shared/components/OverlaySurface.module.css');
 const toastCss = read('packages/core/src/shared/components/ToastHost.module.css');
 const initialWidth = window.innerWidth;
@@ -116,21 +119,28 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         expect(toastRules).toMatch(new RegExp(inset('right')));
         expect(toastRules).toMatch(new RegExp(inset('bottom')));
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        const sheet = screen.getByRole('dialog', { name: 'More' });
-        const sheetRules = computedClassRules(sheet, overlayStyles, overlayCss);
-        const sheetSurfaceRules = computedClassRules(sheet.firstElementChild, overlayStyles, overlayCss);
-        expect(sheetRules).toMatch(new RegExp(inset('right')));
-        // The inset pads the scrolling list, never the surface around it: a
-        // surface band under the scroller cut the last row above the home
-        // indicator, while padding inside the scroller lets the list reach the
-        // sheet edge and its end rest above the inset.
-        expect(sheetSurfaceRules).toMatch(/padding-bottom:\s*0\s*;/);
-        expect(sheetSurfaceRules).not.toMatch(/safe-area-inset-bottom/);
-        const sheetBody = sheet.querySelector(`.${overlayStyles.body}`);
-        const sheetBodyRules = computedClassRules(sheetBody, overlayStyles, overlayCss);
-        expect(sheetBodyRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
-        expect(sheetRules).toMatch(new RegExp(inset('left')));
+        // The wallet menu is a full-height sheet on a phone: its top bar pads
+        // by the top inset beside the search box, and the panel ends above the
+        // home indicator.
+        cleanup();
+        render(h(CommandPalette, {
+            open: true,
+            onClose: () => {},
+            commands: [],
+            menu: {
+                gates: {},
+                currentView: 'home',
+                onSelect: () => {},
+                onOpenSettings: () => {},
+                onLock: () => {},
+            },
+        }));
+        const sheet = screen.getByRole('dialog', { name: 'Wallet menu' });
+        const panelRules = computedClassRules(sheet.firstElementChild, menuStyles, menuCss);
+        expect(panelRules).toMatch(new RegExp(`padding-block-end:\\s*${inset('bottom')}`));
+        const menuTopBar = sheet.querySelector(`.${menuStyles.menuHeader}`);
+        const topBarRules = computedClassRules(menuTopBar, menuStyles, menuCss);
+        expect(topBarRules).toMatch(new RegExp(`padding-block-start:[\\s\\S]*${inset('top')}`));
     });
 
     it('leaves the desktop header on the body inset instead of padding it twice', () => {
@@ -159,7 +169,7 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it('keeps the bottom sheet above the home indicator and landscape cutouts', () => {
-        // The More sheet is an OverlaySurface sheet: its overlay clears the side
+        // Bottom sheets are OverlaySurface sheets: its overlay clears the side
         // cutouts and its scrolling body ends above the home indicator.
         const css = read('packages/core/src/shared/components/OverlaySurface.module.css');
         const overlay = css.match(/\.sheetOverlay\s*\{[^}]*\}/)[0];

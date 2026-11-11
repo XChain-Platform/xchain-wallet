@@ -54,6 +54,7 @@ import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { isConfirmActive, isConfirmApproving } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { useHeldWalletSwitch } from '@xchain-wallet/core/shared/hooks/useHeldWalletSwitch.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
+import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
@@ -89,6 +90,7 @@ import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNe
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
@@ -105,6 +107,8 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { LockedSendOutcomeNotice } from '@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { ROUTE_NAV_SECTIONS } from '@xchain-wallet/core/shared/routeRegistry.js';
+import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -257,6 +261,12 @@ const pairLedgerSigner = (...args) => hardwareFactories.load('ledger')
     .then((module) => module.pairLedgerSigner(...args));
 const resetHardwareSessions = () => hardwareFactories.reset();
 
+export function walletMenuReturnView(currentView, destinationView) {
+    return currentView === destinationView || ROUTE_NAV_SECTIONS[currentView] === destinationView
+        ? 'home'
+        : currentView;
+}
+
 export function App() {
     const shell = shellForExtensionView();
     const canOpenInTab = isToolbarPopupView();
@@ -332,7 +342,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 : 'welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ (
+        /** @type {'home' | 'alerts' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ (
             extensionHandoff?.flow === 'backup'
                 ? 'settings'
                 : extensionHandoff?.flow === 'hardware'
@@ -355,6 +365,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // the existing actions-menu return behaviour; ManageToken sets it
     // to 'manage-token' before opening a form so Back returns there.
     const [formReturnView, setFormReturnView] = useState(/** @type {string | null} */ (null));
+    const [listsReturnView, setListsReturnView] = useState('actions');
+    const [contactsReturnView, setContactsReturnView] = useState('actions');
+    const [alertsReturnView, setAlertsReturnView] = useState('home');
     const [tokenAdminInitialPicker, setTokenAdminInitialPicker] = useState(
         /** @type {'shared-block' | null} */ (null),
     );
@@ -936,6 +949,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         () => wallets.find((w) => w.id === activeWalletId) || null,
         [wallets, activeWalletId],
     );
+    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const walletAlerts = buildWalletAlerts({ activeWallet, messagingUnread }, {
+        onMessaging: () => {
+            setMessagingThread(null);
+            setUnlockedView('messaging');
+        },
+        onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
+    });
 
     // D-34(c): switch the active wallet AND remember it, so the next popup
     // open returns to it instead of snapping back to the first wallet. Twin of
@@ -1087,6 +1108,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     };
 
     const handleWalletMenuSelect = (viewId) => {
+        if (viewId === unlockedView) return;
         switch (viewId) {
             case 'send':
                 setSendPrefill(null);
@@ -1102,19 +1124,20 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 setHistoryReturnTo('home');
                 break;
             case 'dispensers-list':
-                setDispensersBackTo(unlockedView === viewId ? 'home' : unlockedView);
+                setDispensersBackTo(walletMenuReturnView(unlockedView, viewId));
                 break;
             case 'lists':
+                setListsReturnView(walletMenuReturnView(unlockedView, viewId));
+                break;
             case 'contacts':
-                setFormReturnView(unlockedView === viewId ? 'home' : unlockedView);
+                setContactsReturnView(walletMenuReturnView(unlockedView, viewId));
                 break;
             case 'messaging':
                 setMessagingThread(null);
                 break;
             case 'alerts':
-                // Home is the extension shell's existing wallet alerts surface.
-                setUnlockedView('home');
-                return;
+                setAlertsReturnView(unlockedView);
+                break;
             default:
                 break;
         }
@@ -1300,6 +1323,16 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // a single <CommandPalette> mount (this shell has no shared layout
             // wrapper like the web/desktop FullLayoutWithNav to hang it on).
             const routeNode = (() => {
+            if (unlockedView === 'alerts' && activeWalletId) {
+                return (
+                    <AlertsRoute
+                        key={activeWalletId}
+                        walletId={activeWalletId}
+                        alerts={walletAlerts}
+                        onBack={() => setUnlockedView(alertsReturnView)}
+                    />
+                );
+            }
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
@@ -1608,7 +1641,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         onCreateList={() => setUnlockedView('list-create')}
                         onCreateUnionList={() => setUnlockedView('list-union')}
                         onOpenSharedLists={() => setUnlockedView('shared-lists')}
-                        onBack={formBack}
+                        onBack={() => {
+                            setUnlockedView(listsReturnView);
+                            setListsReturnView('actions');
+                        }}
                     />
                 );
             }
@@ -2356,7 +2392,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');
                         }}
-                        onBack={formBack}
+                        onBack={() => {
+                            setUnlockedView(contactsReturnView);
+                            setContactsReturnView('actions');
+                        }}
                         onOpenBackup={() => openSettingsSection('backup')}
                     />
                 );
@@ -2856,7 +2895,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
-                            onContacts: () => { setFormReturnView('actions'); setUnlockedView('contacts'); },
+                            onContacts: () => { setContactsReturnView('actions'); setUnlockedView('contacts'); },
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),

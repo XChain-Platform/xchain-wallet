@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
-import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
@@ -52,19 +51,21 @@ describe('open modal accessibility', () => {
         await expectNoSeriousAxeViolations(container);
     });
 
-    it('renders the More bottom sheet without serious axe violations', async () => {
+    it('renders the wallet menu without serious axe violations', async () => {
         const { container } = render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={noop}
-                onLock={noop}
-                onOpenWalletPicker={noop}
-                onOpenSettings={noop}
-                hasVmAddress
-                hasDexSurface
+            <CommandPalette
+                open
+                onClose={noop}
+                commands={[{ id: 'home', category: 'Navigate', title: 'Home', run: noop }]}
+                menu={{
+                    gates: { hasDexSurface: true, hasVmAddress: true, hasBtcAddress: true },
+                    currentView: 'home',
+                    onSelect: noop,
+                    onOpenSettings: noop,
+                    onLock: noop,
+                }}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
         await expectNoSeriousAxeViolations(container);
     });

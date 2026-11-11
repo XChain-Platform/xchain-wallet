@@ -82,7 +82,6 @@ describe('320x568 modal inventory', () => {
 
     it('routes overlays through the shared surface and page-sized flows through page templates', () => {
         for (const name of [
-            'BottomTabBar.jsx',
             'ConfirmModal.jsx',
             'NetworkStatusIndicator.jsx',
             'NoticeModal.jsx',
@@ -167,32 +166,6 @@ describe('320x568 modal renders', () => {
         expect(close.parentElement.previousElementSibling).toHaveTextContent('long preview');
     });
 
-    it('keeps the More sheet close control above its scrolling navigation', () => {
-        render(
-            <BottomTabBar
-                currentView="home"
-                onSelect={() => {}}
-                onLock={() => {}}
-                onOpenSettings={() => {}}
-                onOpenWalletPicker={() => {}}
-                hasVmAddress
-                hasDexSurface
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-
-        const sheet = screen.getByRole('dialog', { name: 'More' });
-        const close = screen.getByRole('button', { name: 'Close more navigation' });
-        expect(sheet.firstElementChild).toHaveAttribute('data-overlay-surface', 'sheet');
-        expect(sheet.firstElementChild.querySelector(`.${overlayStyles.handle}`))
-            .toHaveAttribute('aria-hidden', 'true');
-        expect(sheet.firstElementChild).toContainElement(close);
-        expect(close).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
-        expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
-        fireEvent.click(close);
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-    });
-
     it('gives the phone command sheet a handle, header row, and close action', () => {
         const onClose = vi.fn();
         render(
@@ -203,11 +176,36 @@ describe('320x568 modal renders', () => {
             />,
         );
 
-        const dialog = screen.getByRole('dialog', { name: 'Command palette' });
-        const header = screen.getByRole('heading', { name: 'Command palette' }).closest('header');
-        expect(dialog.firstElementChild.firstElementChild).toBe(header);
+        const dialog = screen.getByRole('dialog', { name: 'Wallet menu' });
+        const header = screen.getByRole('button', { name: 'Close command palette' }).closest('header');
+        expect(header.parentElement).toBe(dialog.firstElementChild);
         expect(header.querySelector('[aria-hidden="true"]')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Close command palette' }));
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('puts the wallet menu search box beside the close action with no title row', () => {
+        const onClose = vi.fn();
+        render(
+            <CommandPalette
+                open
+                onClose={onClose}
+                commands={[{ id: 'home', category: 'Navigate', title: 'Home', run: () => {} }]}
+                menu={{
+                    gates: { hasDexSurface: true, hasVmAddress: true, hasBtcAddress: true },
+                    currentView: 'home',
+                    onSelect: () => {},
+                    onOpenSettings: () => {},
+                    onLock: () => {},
+                }}
+            />,
+        );
+
+        const dialog = screen.getByRole('dialog', { name: 'Wallet menu' });
+        const header = screen.getByRole('combobox').closest('header');
+        expect(header.parentElement).toBe(dialog.firstElementChild);
+        expect(header).toContainElement(screen.getByRole('button', { name: 'Close menu' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
         expect(onClose).toHaveBeenCalledOnce();
     });
 });

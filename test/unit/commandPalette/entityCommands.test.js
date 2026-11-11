@@ -84,7 +84,9 @@ describe('settingsSectionsToCommands', () => {
         const cmds = settingsSectionsToCommands({ openSettings });
         expect(cmds.length).toBeGreaterThanOrEqual(10);
         const backup = cmds.find((c) => c.id === 'settings-backup');
-        expect(backup.title).toBe('Settings → Backup');
+        expect(backup.title).toBe('Settings › Backup');
+        expect(backup.searchTitle).toBe('Backup');
+        expect(backup.keywords).not.toContain('settings');
         backup.run();
         expect(openSettings).toHaveBeenCalledWith('backup');
         // The keyboard section is reachable too.
