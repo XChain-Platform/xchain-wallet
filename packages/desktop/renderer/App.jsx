@@ -2198,6 +2198,7 @@ function AppInner() {
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
                     <AlertsRoute
+                        key={activeWalletId}
                         walletId={activeWalletId}
                         onBack={() => setUnlockedView(menuReturnView)}
                         alerts={menuAlerts}

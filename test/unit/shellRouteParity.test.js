@@ -36,12 +36,7 @@ const SHELLS = {
 };
 
 const SHELL_ONLY = {
-    routes: {
-        alerts: {
-            shells: ['desktop', 'web'],
-            reason: 'The wallet menu lists Alerts in every shell; the extension popup opens Home, its existing alerts surface.',
-        },
-    },
+    routes: {},
     messaging: {
         reportAutoLock: {
             shells: ['desktop', 'extension'],

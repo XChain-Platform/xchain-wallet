@@ -40,7 +40,7 @@ describe('device finding fixes', () => {
 
         expect(rule(css, '.menuPanel .escHint')).toMatch(/display:\s*none/);
         expect(css).toMatch(
-            /@media \(hover: hover\) and \(pointer: fine\)\s*\{\s*@container wallet-menu \(min-width: 640px\)\s*\{\s*\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/,
+            /@media \(hover: hover\) and \(pointer: fine\)\s*\{\s*(?:@supports [^{]+\{\s*)?@container wallet-menu \(min-width: 640px\)\s*\{\s*\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/,
         );
     });
 });

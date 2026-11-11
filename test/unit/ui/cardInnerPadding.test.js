@@ -13,6 +13,7 @@ const packagesRoot = join(repoRoot, 'packages');
 // Every reviewed flush surface delegates its inset to each direct content row.
 // Reasons stay beside the exception so a new flush composition requires review.
 const REVIEWED_PADDED_ROW_CONTAINERS = {
+    'packages/core/src/shared/commandPalette/CommandPalette.module.css | .walletGroup': 'Each wallet menu group heading and row button carries its own padding.',
     'packages/core/src/shared/components/BalanceList.module.css | .list': 'Balance rows and the hidden-balances toggle carry their own padding.',
     'packages/core/src/shared/components/CollectiblesView.module.css | .card': 'The sole cardContent child uses the shared card padding token.',
     'packages/core/src/shared/components/ContactsPickerScreen.module.css | .abList': 'Every contact is rendered through a padded ListRow.',

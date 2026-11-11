@@ -30,17 +30,17 @@ function renderImport(variant) {
 
 describe('Recovery phrase Scan QR field action', () => {
     it.each([['phrase', undefined], ['FreeWallet', 'freewallet']])(
-        'draws Scan QR as a QR icon button inside the %s box',
+        'draws Scan QR as a scan icon button inside the %s box',
         (_name, variant) => {
             renderImport(variant);
             const textarea = screen.getByLabelText('Recovery phrase');
             const label = document.querySelector(`label[for="${textarea.id}"]`);
             const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
 
-            // Icon only: the QR glyph and no visible text.
+            // Icon only: the scan viewfinder glyph and no visible text.
             const glyph = scan.querySelector('svg');
             expect(glyph).not.toBeNull();
-            expect(glyph.getAttribute('class') || '').toMatch(/qr-code/);
+            expect(glyph.getAttribute('class') || '').toMatch(/scan-line/);
             expect(scan.textContent.trim()).toBe('');
             expect(scan).toHaveAttribute('aria-label', 'Scan QR');
             expect(scan).toHaveAttribute('aria-pressed', 'false');
