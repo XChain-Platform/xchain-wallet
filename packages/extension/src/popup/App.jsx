@@ -1086,6 +1086,41 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         palette.navigate('settings');
     };
 
+    const handleWalletMenuSelect = (viewId) => {
+        switch (viewId) {
+            case 'send':
+                setSendPrefill(null);
+                setSendBackTo('home');
+                break;
+            case 'receive':
+                setReceivePrefill(null);
+                break;
+            case 'history':
+                setHistoryInitialQuery('');
+                setHistoryInitialChainCoin('');
+                setHistoryInitialFocus(null);
+                setHistoryReturnTo('home');
+                break;
+            case 'dispensers-list':
+                setDispensersBackTo(unlockedView === viewId ? 'home' : unlockedView);
+                break;
+            case 'lists':
+            case 'contacts':
+                setFormReturnView(unlockedView === viewId ? 'home' : unlockedView);
+                break;
+            case 'messaging':
+                setMessagingThread(null);
+                break;
+            case 'alerts':
+                // Home is the extension shell's existing wallet alerts surface.
+                setUnlockedView('home');
+                return;
+            default:
+                break;
+        }
+        setUnlockedView(viewId);
+    };
+
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
     // popup locks via messaging.lockWallet, the same call as Home's lock button.
@@ -3094,14 +3129,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
                     header={(
                         <AppHeader
-                            onCommandPalette={palette.openPalette}
+                            onMenuToggle={palette.togglePalette}
+                            menuOpen={palette.open}
                             onLock={handleLock}
                             isWatcherMode={isWatcherMode}
                             activeWallet={activeWalletId ? {
                                 id: activeWalletId,
                                 name: activeWallet?.name,
                             } : null}
-                            activeNetwork={settings?.activeNetwork}
                         />
                     )}
                     // Demo data is fixture data and never stale, so no reachability notice.
@@ -3114,12 +3149,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
-                            onSelect={setUnlockedView}
-                            onLock={handleLock}
-                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onSelect={handleWalletMenuSelect}
                             onOpenSettings={() => openSettingsSection(null)}
-                            hasVmAddress={hasVmAddress}
-                            hasDexSurface
                             isSignerMode={isSignerMode}
                         />
                     )}
@@ -3150,6 +3181,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         onClose={palette.closePalette}
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
+                        menu={{
+                            gates: {
+                                isSignerMode,
+                                hasDexSurface: true,
+                                hasVmAddress,
+                                hasBtcAddress,
+                            },
+                            currentView: unlockedView,
+                            onSelect: handleWalletMenuSelect,
+                            onOpenSettings: () => openSettingsSection(null),
+                            onLock: handleLock,
+                        }}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>

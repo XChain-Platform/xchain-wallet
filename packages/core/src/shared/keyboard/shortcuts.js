@@ -29,7 +29,7 @@
 
 export const SHORTCUTS = /** @type {const} */ ([
     // General
-    { id: 'command-palette', binding: 'mod+k', label: 'Open command palette', action: 'palette', group: 'General', dispatch: false },
+    { id: 'command-palette', binding: 'mod+k', label: 'Open the wallet menu', action: 'palette', group: 'General', dispatch: false },
     { id: 'shortcut-help', binding: '?', altBinding: 'mod+/', label: 'Keyboard shortcuts', action: 'help', group: 'General', dispatch: true },
     // The browser keeps Cmd/Ctrl+L, +N and +comma in a web tab, so these three
     // defaults are keys the page receives. `family: 'combo'` keeps Settings →

@@ -97,8 +97,8 @@ describe('KeyboardSection', () => {
         const messaging = await setup();
         const lockRow = screen.getByText('Lock wallet').closest('div');
         fireEvent.click(lockRow.querySelector('button'));
-        press({ key: 'k', ctrlKey: true }); // taken by the command palette
-        await waitFor(() => expect(screen.getByText(/already used by "Open command palette"/)).toBeTruthy());
+        press({ key: 'k', ctrlKey: true }); // taken by the wallet menu
+        await waitFor(() => expect(screen.getByText(/already used by "Open the wallet menu"/)).toBeTruthy());
         expect(messaging.updateSettings).not.toHaveBeenCalled();
     });
 
@@ -135,7 +135,7 @@ describe('KeyboardSection', () => {
 
     it('removes an override when capture returns to the built-in binding', async () => {
         const messaging = await setup({ 'command-palette': 'mod+j' });
-        const row = screen.getByText('Open command palette').closest('div');
+        const row = screen.getByText('Open the wallet menu').closest('div');
         fireEvent.click(within(row).getByRole('button', { name: 'Rebind' }));
         press({ key: 'k', ctrlKey: true });
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({

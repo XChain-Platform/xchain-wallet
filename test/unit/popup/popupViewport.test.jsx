@@ -123,9 +123,15 @@ describe('extension popup main screens at 360x600', () => {
     });
 
     it('keeps all five bottom navigation labels in the popup bar', () => {
-        renderPopup(<BottomTabBar currentView="home" onSelect={() => {}} />);
+        renderPopup(
+            <BottomTabBar
+                currentView="home"
+                onSelect={() => {}}
+                onOpenSettings={() => {}}
+            />,
+        );
 
-        for (const label of ['Home', 'History', 'Send', 'Scan', 'More']) {
+        for (const label of ['Home', 'Send', 'Receive', 'History', 'Settings']) {
             expect(screen.getByRole('button', { name: label })).toBeVisible();
         }
         expect(css.bottomBar).toMatch(

@@ -36,7 +36,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 - **Cross-chain flows:** cross-chain swap form (single fill, all-or-nothing), cross-chain order form (federation-matched limit order, partial fills), cross-chain templates (parallel composer for atomic multi-chain submission), per-chain SDK registry, link/swap coordinators
 - **Multisig coordinator:** create n-of-m configs, paste-inbox for partial PSBTs, AnimatedQrFrames PSBT-QR transport, multisig session state machine, MuSig2 session round labels, schema-v2 multi-config-per-address support, camera scanner, co-signer account provisioning with a policy editor and account list/detail views
 - **Chain-registry sync:** the web, extension, and desktop shells fetch the hub's signed chain list at startup, verify it against a pinned key, and add new or updated chains automatically without touching any chain you added yourself
-- **Command palette and keyboard shortcuts:** Cmd/Ctrl+K opens a fuzzy search over pages, actions, and contacts; a starter set of global shortcuts (lock, send, settings, help) plus single-key navigation, with a shortcut-help screen, in the web, extension, and desktop shells
+- **Wallet menu and keyboard shortcuts:** the header menu button and Cmd/Ctrl+K open one menu that lists every wallet destination in outlined groups and filters it with a fuzzy search over pages, actions, and contacts; a starter set of global shortcuts (lock, send, settings, help) plus single-key navigation, with a shortcut-help screen, in the web, extension, and desktop shells
 - **Governance-poll notifications:** the wallet flags a new VOTE poll for a token you hold, calling out binding polls explicitly (toggle in Settings, all three desktop-class shells)
 - **dApp bridge (`window.xchain`):** typed bridge spec at `@xchain-wallet/bridge-spec`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
 - **Air-gapped PSBT signing:** BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
@@ -59,7 +59,7 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 | [Architecture](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/architecture.md) | Repo layout, package boundaries, state flow, three-shell model, core/web/extension/desktop seams |
 | [Keys & Signing](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/keys-signing.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
 | [Security & Threat Model](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/security.md) | Protected assets, in-scope and out-of-scope threats, sign-screen safety rails, audit posture |
-| [UX Surfaces](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/ux.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, command palette, settings |
+| [UX Surfaces](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/ux.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, wallet menu, settings |
 | [Features](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/features.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain; surface-by-surface |
 | [Bridge](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/bridge.md) | `window.xchain` dApp bridge: connect, signMessage, signPsbt, signAction, signIn, events, error codes |
 | [URI Schemes](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/uri-schemes.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
@@ -232,7 +232,7 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 | Smoke - governance | 3 | Binding-poll detection, deadline watcher, VOTE flow |
 | Smoke - desktop / docs / wallet | 3 | Pending-tx detach on window close, glossary appendix check, add-wallet backup mode |
 | **Smoke total** | **471** | All run on every commit; CI fails on any regression |
-| Playwright E2E - web (default) | 12 specs | Onboarding, add-wallet activation, license gate, send-form review, command palette, a11y scans, responsive viewports, keyboard shortcuts |
+| Playwright E2E - web (default) | 12 specs | Onboarding, add-wallet activation, license gate, send-form review, wallet menu, a11y scans, responsive viewports, keyboard shortcuts |
 | Playwright E2E - regtest | 69 specs | Betting, fees, contracts, dispensers, oracle, DEX, tokens, addresses, send, a11y against a live regtest chain |
 | Playwright E2E - extension | 4 specs | Cosigner approval, confirm-resume, reservation-race, service-worker kill/rehydration |
 | Repro-build verification | Manual | Run `packages/desktop/scripts/reproduce.sh <tag>` twice on a clean dev machine; diff `RELEASE_HASHES.txt` |

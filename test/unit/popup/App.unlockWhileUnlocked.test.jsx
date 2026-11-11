@@ -14,7 +14,7 @@
 // that announcement, so the Safety row stays on screen and confirms the save
 // as it does on the other shells. A lock announcement still reloads.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../../packages/extension/src/popup/App.jsx';
 import { SURFACE_STATE_STORAGE_KEY } from '../../../packages/extension/src/shared/surfaceStateSync.js';
@@ -95,8 +95,13 @@ describe('an unlock announcement in an unlocked extension window', () => {
         // so open the actions screen until it stays open.
         await waitFor(() => {
             if (screen.queryByRole('button', { name: 'Back to home' })) return;
-            const more = screen.queryByRole('button', { name: 'More actions' });
-            if (more) fireEvent.click(more);
+            const menu = screen.queryByRole('button', { name: 'Open menu' });
+            if (menu && menu.getAttribute('aria-expanded') !== 'true') fireEvent.click(menu);
+            const walletMenu = screen.queryByRole('dialog', { name: 'Wallet menu' });
+            const actions = walletMenu
+                ? within(walletMenu).queryByRole('button', { name: 'All actions' })
+                : null;
+            if (actions) fireEvent.click(actions);
             throw new Error('actions screen not open yet');
         }, { timeout: 15_000 });
         const before = count(sent, 'session.status');

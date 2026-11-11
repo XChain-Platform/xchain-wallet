@@ -41,7 +41,7 @@
     overflow: hidden;
 }
 
-/* The same header as the command palette and the shared overlay surface:
+/* The same header as the wallet menu and the shared overlay surface:
    centred title, one md close control in a fixed end cell. */
 .header {
     display: grid;

@@ -145,9 +145,21 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as icon controls at the Back control size (small), with a touch-floor hit area, so the header keeps one height |
 | `nested` | marks a sub-screen that shares its parent route id (a Settings section, a Contacts detail, a review step), so Back always shows |
 
-**When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, History, Send and Scan. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
+**When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, Send, Receive, History and Settings. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`, with `TAB_BAR_DESTINATIONS` taken from the wallet menu catalogue), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
 
 **Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
+
+## Wallet menu
+
+`packages/core/src/shared/walletMenu.js` is the one catalogue of wallet destinations. The header menu button, Cmd/Ctrl+K, the left nav and the bottom tab bar all read their rows from it, so a destination has one label, one icon and one view id on every shell and at every width. Add or rename a destination there and nowhere else; a component never hard-codes a menu label or icon.
+
+- **One menu.** The header menu button and Cmd/Ctrl+K open the same surface, the command palette grown into the menu. With an empty query it shows the catalogue; typing filters with the palette search, and Enter runs the highlighted row.
+- **Outlined group boxes.** Each group (Wallet, Trade, Manage, People) sits in its own box with a `1px solid var(--xc-border-strong)` border, the card radius and the group heading inside the box. Settings and Lock wallet form a footer row under the boxes. The current view's row is highlighted.
+- **Label-width columns.** Columns are as wide as their labels, with as many as fit: four at tablet and desktop widths, two on a phone (Wallet and People stacked on the left, Trade and Manage on the right). Nothing scrolls on a 390x844 phone.
+- **Presentation.** Below 640px of container width the menu is a full-height sheet with the search box in its top bar beside the close button. At 640px and wider it is a dropdown panel under the app bar at the right edge, sized to its content. The menu has no visible title; its accessible name is "Wallet menu". The Cmd/Ctrl+K hint shows only on wide pointer layouts.
+- **Five-tab bar.** The bottom tab bar holds Home, Send, Receive, History and Settings, with no overflow tab and no sheet. In signer mode Send and Receive hide.
+- **Left nav.** The sidebar keeps its shortcut list with every label and icon read from the catalogue, and Settings and Lock wallet at its foot.
+- **No unread dots.** The menu button, menu rows, sidebar and tab bar never show an unread dot or count.
 
 ## Buttons
 
