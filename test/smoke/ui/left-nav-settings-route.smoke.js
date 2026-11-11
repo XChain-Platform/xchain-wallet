@@ -87,11 +87,11 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
     assert.ok(/onOpenSettings=\{handleOpenSettings\}/.test(src),
         `${label} App passes onOpenSettings into both LeftNav and BottomTabBar`);
     assert.ok(
-        /const activeWalletName\s*=\s*\n?\s*walletList\.find\(\(w\)\s*=>\s*w\.id === activeWalletId\)\?\.name \|\| undefined/.test(src),
-        `${label} App derives activeWalletName from walletList`,
+        /walletList\.find\(\(w\) => w\.id === activeWalletId\)/.test(src),
+        `${label} App derives the active wallet from walletList`,
     );
-    assert.ok(/walletName=\{activeWalletName\}/.test(src),
-        `${label} App passes walletName into LeftNav`);
+    assert.ok(/<AppHeader[\s\S]*?activeWallet=\{[^}]+\}[\s\S]*?\/>/.test(src),
+        `${label} App passes the active wallet into AppHeader as its plain name label`);
 }
 
 console.log(

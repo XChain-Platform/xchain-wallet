@@ -18,7 +18,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, SIDEBAR_SECONDARY_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -60,20 +60,19 @@ assert.match(status, /secondsLeft <= 0\) return \{ state: 'expired'/, 'T=0 is ex
 const leftNav = read('packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx');
 assert.deepEqual(ROUTE_NAV_GROUPS.obligations, ['obligations', 'coinpay'],
     'LeftNav view group covers the queue and payment drilldown');
-assert.match(leftNav, /id: 'obligations', label: 'Payments due', Icon: Icon\.ClockIcon/, 'LeftNav item');
-// Secondary rows must render badge pills (the obligations item lives there).
-const secondaryBlock = leftNav.slice(leftNav.indexOf('{secondary.map'));
-assert.match(secondaryBlock, /badges\[item\.id\] > 0/, 'secondary nav rows render badges');
-
-const tabBar = read('packages', 'core', 'src', 'shared', 'components', 'BottomTabBar.jsx');
-assert.match(tabBar, /id: 'obligations', label: 'Payments due', Icon: Icon\.ClockIcon, group: \['obligations'\]/,
-    'BottomTabBar sheet row (badge + More-dot ride the existing sheet logic)');
+assert.ok(SIDEBAR_SECONDARY_DESTINATIONS.includes('obligations'), 'LeftNav item');
+const walletMenuSrc = read('packages', 'core', 'src', 'shared', 'walletMenu.js');
+assert.match(walletMenuSrc, /id: 'obligations', labelKey: 'walletMenu\.row\.paymentsDue', icon: 'ClockIcon'/,
+    'wallet menu catalogue row carries the Payments due label and ClockIcon');
+// The menu, sidebar and tab bar carry no unread counts, so no badge reaches the nav.
+assert.doesNotMatch(leftNav, /badges/, 'LeftNav takes no badges');
 
 const icons = read('packages', 'core', 'src', 'ui', 'icons', 'index.jsx');
 assert.match(icons, /export function ClockIcon/, 'ClockIcon exists');
 
 const paletteSrc = read('packages', 'core', 'src', 'shared', 'commandPalette', 'commandRegistry.js');
-assert.match(paletteSrc, /id: 'nav-obligations'[\s\S]*?run: go\('obligations'\)/, 'command palette entry');
+assert.match(paletteSrc, /id: CATALOGUE_COMMAND_IDS\[row\.id\] \|\| `nav-\$\{row\.id\}`[\s\S]*?run: go\(row\.id\)/, 'command palette entry');
+assert.match(paletteSrc, /obligations: \{ subtitleKey: 'palette\.navObligations\.subtitle'/, 'command palette obligations meta');
 
 // ---- Shell wiring (web + desktop) --------------------------------------
 for (const [label, ...p] of [
@@ -85,8 +84,7 @@ for (const [label, ...p] of [
     // unlocked tree and the nav reads the count from the shared hook, so a
     // second bare hook call here would be the duplicate scan coming back.
     assert.match(app, /<CoinpayObligationsProvider walletId=\{activeWalletId\} accountId=\{activeAccountId\}>/, `${label}: obligations provider wraps the unlocked tree`);
-    assert.match(app, /useSharedCoinpayObligations\(\)/, `${label}: nav badge reads the shared scan`);
-    assert.match(app, /badges=\{\{ \.\.\.badges, obligations: payableCount \}\}/, `${label}: badge fed to nav`);
+    assert.doesNotMatch(app, /badges=/, `${label}: no badge is fed to nav`);
     assert.doesNotMatch(app, /useCoinpayObligations\(activeWalletId/, `${label}: no second scan beside the provider`);
     assert.match(app, /unlockedView === 'obligations' && activeWalletId/, `${label}: obligations view routed`);
     assert.match(app, /setResumeCoinpay\(\{ \.\.\.ref, from: 'obligations' \}\)/, `${label}: Pay now prefills CoinpayForm`);

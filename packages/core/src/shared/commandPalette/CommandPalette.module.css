@@ -466,51 +466,55 @@
     color: var(--xc-danger);
 }
 
-@container wallet-menu (min-width: 640px) {
-    .panel.menuPanel {
-        --xc-wallet-menu-bar-h: calc(var(--xc-control-h-md) + (2 * var(--xc-space-2)) + 1px);
-        align-self: flex-start;
-        inline-size: fit-content;
-        min-inline-size: min(36rem, calc(100cqi - (2 * var(--xc-space-2))));
-        max-inline-size: calc(100cqi - (2 * var(--xc-space-2)));
-        block-size: auto;
-        max-block-size: calc(var(--xc-viewport-h, 100vh) - var(--xc-wallet-menu-bar-h) - (2 * var(--xc-space-2)));
-        margin-block-start: calc(var(--xc-wallet-menu-bar-h) + var(--xc-space-2));
-        margin-inline-start: auto;
-        margin-inline-end: var(--xc-space-2);
-        border: 1px solid var(--xc-border);
-        border-radius: var(--xc-radius-lg);
-        padding-block-end: 0;
-    }
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container wallet-menu (min-width: 640px) {
+        .panel.menuPanel {
+            --xc-wallet-menu-bar-h: calc(var(--xc-control-h-md) + (2 * var(--xc-space-2)) + 1px);
+            align-self: flex-start;
+            inline-size: fit-content;
+            min-inline-size: min(36rem, calc(100cqi - (2 * var(--xc-space-2))));
+            max-inline-size: calc(100cqi - (2 * var(--xc-space-2)));
+            block-size: auto;
+            max-block-size: calc(var(--xc-viewport-h, 100vh) - var(--xc-wallet-menu-bar-h) - (2 * var(--xc-space-2)));
+            margin-block-start: calc(var(--xc-wallet-menu-bar-h) + var(--xc-space-2));
+            margin-inline-start: auto;
+            margin-inline-end: var(--xc-space-2);
+            border: 1px solid var(--xc-border);
+            border-radius: var(--xc-radius-lg);
+            padding-block-end: 0;
+        }
 
-    .menuHeader {
-        padding: var(--xc-space-3);
-        border-block-end: 0;
-    }
+        .menuHeader {
+            padding: var(--xc-space-3);
+            border-block-end: 0;
+        }
 
-    .menuHeader .close {
-        display: none;
-    }
+        .menuHeader .close {
+            display: none;
+        }
 
-    .walletSurface {
-        padding: 0 var(--xc-space-3) var(--xc-space-3);
-    }
+        .walletSurface {
+            padding: 0 var(--xc-space-3) var(--xc-space-3);
+        }
 
-    .walletGrid {
-        grid-template-columns: repeat(4, max-content);
-        grid-template-areas: 'wallet trade manage people';
-    }
+        .walletGrid {
+            grid-template-columns: repeat(4, max-content);
+            grid-template-areas: 'wallet trade manage people';
+        }
 
-    .walletFooter {
-        flex-direction: row;
-        align-items: center;
+        .walletFooter {
+            flex-direction: row;
+            align-items: center;
+        }
     }
 }
 
 @media (hover: hover) and (pointer: fine) {
-    @container wallet-menu (min-width: 640px) {
-        .menuPanel .escHint {
-            display: inline-flex;
+    @supports (container-type: inline-size) and (width: 1cqw) {
+        @container wallet-menu (min-width: 640px) {
+            .menuPanel .escHint {
+                display: inline-flex;
+            }
         }
     }
 }

@@ -13,7 +13,6 @@ const root = join(here, '..', '..', '..');
 const sourceRoot = join(root, 'packages', 'core', 'src');
 
 const expectedLocalDeclarations = new Map(Object.entries({
-    'shared/components/AppHeader.module.css': ['20'],
     'shared/components/LeftNav.module.css': ['1000'],
     'shared/components/PlatformSwitcher.module.css': ['20'],
     // The selected chart range fill sits behind its label inside the label's

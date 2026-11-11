@@ -49,11 +49,12 @@ for (const id of expectedDrills) {
     assert.match(block, /summary:/, `${id} carries a summary string`);
 }
 
-// Accounts & Addresses stays as external-drill since it routes to the
-// existing AccountPicker route, not into the Settings sub-page tree.
-const accIdx = src.indexOf("id: 'accounts-addresses'");
-const accBlock = src.slice(accIdx, accIdx + 600);
-assert.match(accBlock, /kind:\s*'external-drill'/, 'accounts-addresses uses external-drill');
+// Account switching lives inside the This wallet sub-page; the top level has
+// no separate Accounts & Addresses row.
+assert.equal(src.indexOf("id: 'accounts-addresses'"), -1, 'no accounts-addresses row at the top level');
+const walletIdx = src.indexOf("id: 'this-wallet'");
+assert.match(src.slice(walletIdx, walletIdx + 800), /onOpenAccountPicker/,
+    'this-wallet hands the account picker to its sub-page');
 
 const expectedPanels = ['appearance', 'language-region', 'notifications', 'contacts'];
 for (const id of expectedPanels) {

@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
-import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, SIDEBAR_SECONDARY_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -165,8 +165,7 @@ for (const [shell, msgPath] of [
 
 // --- Registration: LeftNav, wallet menu, command palette ---
 
-const leftNav = readFileSync(join(sharedComponents, 'LeftNav.jsx'), 'utf8');
-assert.ok(/id:\s*'lists'/.test(leftNav), 'LeftNav lists a "lists" nav item');
+assert.ok(SIDEBAR_SECONDARY_DESTINATIONS.includes('lists'), 'LeftNav lists a "lists" nav item');
 assert.ok(['list-detail', 'list-create', 'list-fork'].every(
     (route) => ROUTE_NAV_GROUPS.lists.includes(route),
 ),
@@ -176,7 +175,8 @@ const walletMenu = readFileSync(join(core, 'src', 'shared', 'walletMenu.js'), 'u
 assert.ok(/id:\s*'lists'/.test(walletMenu), 'Wallet menu renders a My Lists entry');
 
 const commandRegistry = readFileSync(join(core, 'src', 'shared', 'commandPalette', 'commandRegistry.js'), 'utf8');
-assert.ok(/nav-lists/.test(commandRegistry), 'Command palette has a nav-lists command');
+assert.ok(/\|\| `nav-\$\{row\.id\}`/.test(commandRegistry) && /visibleWalletMenu\(/.test(commandRegistry),
+    'Command palette builds a nav-lists command from the wallet menu catalogue');
 assert.ok(/create-list/.test(commandRegistry), 'Command palette has a create-list command');
 
 // --- App.jsx wiring (all three shells) ---

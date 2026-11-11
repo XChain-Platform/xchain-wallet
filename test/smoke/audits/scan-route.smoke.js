@@ -29,7 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROUTE_NAV_GROUPS, TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
+import { ROUTE_NAV_GROUPS, SIDEBAR_PRIMARY_DESTINATIONS, TAB_BAR_DESTINATIONS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -127,18 +127,15 @@ function arrayBody(name) {
     const end = tabBarSrc.indexOf('];', start);
     return tabBarSrc.slice(start, end + 2);
 }
-// The thumb-row tabs are TAB_BAR_DESTINATIONS in order, drawn with the
-// sidebar's own label and icon rows (navItem in LeftNav.jsx).
-const sheetBody = arrayBody('SHEET_PRIMARY');
-assert.ok(/const PRIMARY_TABS = TAB_BAR_DESTINATIONS\.map\(navItem\)/.test(tabBarSrc),
-    'PRIMARY_TABS is built from the tab bar destination list');
-assert.ok(TAB_BAR_DESTINATIONS.includes('scan'), 'PRIMARY_TABS now contains Scan');
-assert.ok(!TAB_BAR_DESTINATIONS.includes('receive'),
-    'PRIMARY_TABS no longer carries Receive (moved to More sheet)');
-assert.ok(/id: 'receive',[\s\S]*?Icon\.ReceiveIcon/.test(sheetBody),
-    'SHEET_PRIMARY (More drawer) now lists Receive so the surface stays reachable');
-assert.ok(/Cluster Y FOLLOWUP 1/.test(tabBarSrc),
-    'BottomTabBar header documents the swap as Cluster Y FOLLOWUP 1');
+// The tab bar is TAB_BAR_DESTINATIONS in order, drawn from the wallet menu
+// catalogue. Scan is not a tab; it stays reachable from the wallet menu and the sidebar.
+assert.ok(/const TABS = TAB_BAR_DESTINATIONS\.map\(tabRow\)/.test(tabBarSrc),
+    'the tab bar is built from the tab bar destination list');
+assert.deepEqual(TAB_BAR_DESTINATIONS, ['home', 'send', 'receive', 'history', 'settings'],
+    'the tab bar carries Home, Send, Receive, History and Settings');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('scan'), 'Scan is not a tab bar destination');
+assert.ok(!/SHEET_PRIMARY|More/.test(tabBarSrc.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'the tab bar has no More sheet');
 
 // --- 3. LeftNav adds Scan ---------------------------------------------
 
@@ -148,10 +145,12 @@ const leftNavSrc = readFileSync(
 );
 assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
-assert.ok(
-    /\{ id: 'scan', (?:label: 'Scan'|get label\(\) \{ return t\('[\w.]+'\); \}), Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
-    'LeftNav primary list renders a Scan row with ScanIcon',
-);
+assert.ok(SIDEBAR_PRIMARY_DESTINATIONS.includes('scan'),
+    'LeftNav primary list renders a Scan row');
+assert.ok(/id: 'scan', labelKey: 'walletMenu\.row\.scan', icon: 'ScanIcon'/.test(
+    readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'walletMenu.js'), 'utf8')),
+    'the Scan row carries ScanIcon in the wallet menu catalogue');
+assert.ok(/\.map\(navItem\)/.test(leftNavSrc), 'LeftNav reads each row from the catalogue');
 
 // --- 4. Three shells wire ScanRoute -----------------------------------
 
