@@ -36,9 +36,10 @@ import {
  * @param {(view: string) => void} props.navigate
  * @param {object} props.parseCtx context for free-form queries such as "send 100 MYTOKEN"
  * @param {{ developerMode?: boolean } | null} [props.settings] decides which Settings sections the palette lists
+ * @param {object} [props.menu] wallet menu catalogue and shell handlers
  */
 export function CommandPaletteHost({
-    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx, settings,
+    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx, settings, menu,
 }) {
     const commands = [
         ...buildCommands(ctx),
@@ -58,6 +59,7 @@ export function CommandPaletteHost({
             onClose={onClose}
             commands={commands}
             parseQuery={parseQuery}
+            menu={menu}
         />
     );
 }

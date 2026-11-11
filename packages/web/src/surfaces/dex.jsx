@@ -50,7 +50,7 @@ const ReceivePicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/
  * Whether this build carries the DEX surface. `false` in the twin.
  *
  * The shell reads it to decide whether to WIRE a handler at all, which is what
- * makes the entry points disappear: MenuRoute, the actions menu and the
+ * makes the entry points disappear: the wallet menu, the actions menu and the
  * command palette all render an entry only when its handler exists.
  */
 export const DEX_SURFACE_ENABLED = true;

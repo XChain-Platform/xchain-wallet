@@ -30,7 +30,6 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';
-import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
@@ -53,9 +52,8 @@ import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
-import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
-import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { CoinpayObligationsProvider } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { isDemoWallet } from '../../core/src/flows/demoMode.js';
@@ -80,7 +78,6 @@ import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/use
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { defaultRegistry } from '../../core/src/registry/index.js';
-import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 import { t } from '../../core/src/i18n/index.js';
 
@@ -141,7 +138,6 @@ const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/
 const WalletDetails = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletDetails.jsx'), 'WalletDetails');
 const RenameWalletForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RenameWalletForm.jsx'), 'RenameWalletForm');
 const RenameAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RenameAccountForm.jsx'), 'RenameAccountForm');
-const MenuRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MenuRoute.jsx'), 'MenuRoute');
 const AlertsRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AlertsRoute.jsx'), 'AlertsRoute');
 const KeyQR = lazyRoute(() => import('@xchain-wallet/core/shared/components/KeyQR.jsx'), 'KeyQR');
 const CreateWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateWallet.jsx'), 'CreateWallet');
@@ -323,21 +319,6 @@ export function App() {
     );
 }
 
-// PC-15: the "Payments due" nav badge. Its count comes from the tree's ONE
-// pending-COINPAY scan (CoinpayObligationsProvider, mounted around the
-// unlocked route below and shared with Home's resume cards), and reading a
-// context means being rendered UNDER the provider. So each nav surface gets a
-// thin wrapper here rather than the App body reading a second scan of its own.
-function LeftNavWithObligations({ badges, ...rest }) {
-    const { payableCount } = useSharedCoinpayObligations();
-    return <LeftNav {...rest} badges={{ ...badges, obligations: payableCount }} />;
-}
-
-function BottomTabBarWithObligations({ badges, ...rest }) {
-    const { payableCount } = useSharedCoinpayObligations();
-    return <BottomTabBar {...rest} badges={{ ...badges, obligations: payableCount }} />;
-}
-
 // The dev variant switcher is a developer-only preview tool. Gate it
 // behind Developer Mode plus its own "Show variant popover" toggle
 // (`settings.showVariantBadge`); both default off, so it never shows in
@@ -481,28 +462,16 @@ function AppInner() {
     const [sweepCtx, setSweepCtx] = useState(
         /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
     );
-    // Header filter coins come from the live registry, so custom and
-    // hub-synced chains appear without a restart (regtest stays dev-only).
-    const supportedChains = useSupportedChains(APP_CHAIN_REGISTRY);
-    const developerMode = Boolean(settings?.developerMode);
-    // Do not flash a Mainnet badge while the encrypted record is still
-    // loading because a Testnet or Regtest wallet would be mislabeled.
+    // Last-view persistence and DEX defaults stay scoped to the wallet's
+    // active network once the encrypted settings record is available.
     const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
-    const headerCoinFamilies = useMemo(
-        () => coinFamiliesForUser(supportedChains, { developerMode }),
-        [supportedChains, developerMode],
-    );
     // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
     // all / coins / tokens. Lifted here so the popover and SendPicker
     // share one source of truth.
     const [globalKindFilter, setGlobalKindFilter] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
-    // Tracks which unlockedView the user was on when they tapped the
-    // pancake. The back-button on MenuRoute returns to it; tapping the
-    // pancake again from inside Menu does the same.
-    const [menuBackTo, setMenuBackTo] = useState('home');
-    // QR scanner overlay: available from any unlocked view via the
-    // AppHeader scan button. On a `send` outcome we populate the
+    // QR scanner overlay: available from any unlocked view through the
+    // palette's Scan command. On a `send` outcome we populate the
     // sendPrefill and navigate into Send; receive jumps to the Receive
     // route; psbt opens the PSBT-sign route. Mirrors the existing
     // dedicated 'scan' route handler.
@@ -570,23 +539,31 @@ function AppInner() {
     // participates in the Home filter. Send and Receive keep separate query
     // text so typing there cannot narrow Home's Tokens tab.
     const {
-        networkFilter: globalNetworkFilter,
+        networkFilter: storedGlobalNetworkFilter,
         tokenQuery: globalTokenQuery,
         setNetworkFilter: setGlobalNetworkFilter,
         setTokenQuery: setGlobalTokenQuery,
     } = useWalletFilters(activeWalletId);
+    const resetNetworkFilterWallets = useRef(new Set());
+    const shouldResetNetworkFilter = Boolean(
+        activeWalletId && !resetNetworkFilterWallets.current.has(activeWalletId),
+    );
+    const globalNetworkFilter = shouldResetNetworkFilter ? 'all' : storedGlobalNetworkFilter;
+    // The header was the only network-filter control available on every
+    // route. Clear a persisted selection and render the default immediately
+    // so routes are never invisibly scoped while the storage update is
+    // pending. Each wallet is reset once per app load; later changes from an
+    // in-page filter persist.
+    useEffect(() => {
+        if (!activeWalletId || resetNetworkFilterWallets.current.has(activeWalletId)) return;
+        resetNetworkFilterWallets.current.add(activeWalletId);
+        if (storedGlobalNetworkFilter !== 'all') setGlobalNetworkFilter('all');
+    }, [activeWalletId, storedGlobalNetworkFilter, setGlobalNetworkFilter]);
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    // Persist through the host route before reloading so the next render sees
-    // only destination-network addresses, balances, and history.
-    const handleActiveNetworkChange = useCallback(async (network) => {
-        if (!activeWalletId) throw new Error('An active wallet is required to switch networks.');
-        await persistActiveNetwork({ messaging, walletId: activeWalletId, network });
-        window.location.reload();
-    }, [activeWalletId]);
-    // Unread-message count for the active wallet + account, surfaced as a badge
-    // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
+    // Unread-message state still feeds the Alerts route, but navigation
+    // surfaces deliberately expose no unread badges or counts.
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. The global shortcut is inert unless the wallet is unlocked
@@ -1130,14 +1107,11 @@ function AppInner() {
     // so the nav rails and the command palette drop both entries.
     const { isSignerMode, isWatcherMode } = useWalletMode();
 
-    // Accounts of the active wallet, purely so the AppHeader gear
-    // can name the active one. The per-wallet effect above owns SELECTION;
-    // this owns the label, and keeping them separate stops the header from
-    // reaching into that effect's control flow.
+    // Settings names the selected account while the per-wallet effect above
+    // continues to own account selection.
     const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
 
-    // Build the pancake menu's Alerts panel from the shared list in core
-    // (walletAlerts.js); the menu lives at the App level here, not in Home.
+    // Build the Alerts destination from the shared list in core.
     const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
     const menuAlerts = buildWalletAlerts({ activeWallet, messagingUnread }, {
         onMessaging: () => { setMessagingThread(null); setUnlockedView('messaging'); },
@@ -1291,35 +1265,11 @@ function AppInner() {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
-            if (unlockedView === 'menu' && activeWalletId) {
-                return (
-                    <MenuRoute
-                        onBack={() => setUnlockedView(menuBackTo)}
-                        onAlerts={() => setUnlockedView('alerts')}
-                        onMarkets={DEX_SURFACE_ENABLED ? () => setUnlockedView('markets') : undefined}
-                        onMarketActivity={DEX_SURFACE_ENABLED ? () => setUnlockedView('market-activity') : undefined}
-                        onDispensers={() => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); }}
-                        onTokens={() => setUnlockedView('my-tokens')}
-                        onMoreActions={() => setUnlockedView('actions')}
-                        onMessaging={() => { setMessagingThread(null); setUnlockedView('messaging'); }}
-                        onCrossChain={() => setUnlockedView('cross-chain-templates')}
-                        onContacts={() => { setFormReturnView(menuBackTo); setUnlockedView('contacts'); }}
-                        onLists={() => setUnlockedView('lists')}
-                        onAddresses={() => setUnlockedView('addresses')}
-                        onContracts={hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
-                        onStaking={hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
-                        onMultisig={hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
-                        onSwitchWallet={() => openWalletPicker()}
-                        onLock={handleLock}
-                        onSettings={() => setUnlockedView('settings')}
-                    />
-                );
-            }
             if (unlockedView === 'alerts' && activeWalletId) {
                 return (
                     <AlertsRoute
                         key={activeWalletId}
-                        onBack={() => setUnlockedView('menu')}
+                        onBack={() => setUnlockedView('home')}
                         walletId={activeWalletId}
                         alerts={menuAlerts}
                     />
@@ -3077,27 +3027,9 @@ function AppInner() {
             })();
             const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
-            const handleOpenAccountPicker = () => {
-                setAccountPickerBackTo('home');
-                setUnlockedView('account-picker');
-            };
             const handleOpenSettings = () => setUnlockedView('settings');
-            const activeWalletName =
-                walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             const activeWalletRow =
                 walletList.find((w) => w.id === activeWalletId) || null;
-            // gear status dot: "non-default" means the user has moved
-            // off the first entry in the list, which is the only thing the
-            // dot is trying to say. Lists are ordered (wallets as stored,
-            // accounts by hardened index), so index 0 is the default.
-            const headerAccountRow =
-                headerAccounts.find((a) => a.id === activeAccountId) || null;
-            const headerWalletNonDefault = Boolean(
-                activeWalletId && walletList.length > 1 && walletList[0]?.id !== activeWalletId,
-            );
-            const headerAccountNonDefault = Boolean(
-                activeAccountId && headerAccounts.length > 1 && headerAccounts[0]?.id !== activeAccountId,
-            );
             // §33: assemble the palette command list from the shared catalogue
             // (navigation + authoring + signing + wallet verbs, gated exactly
             // like the ActionsMenu) plus the lazily-loaded contacts. Every
@@ -3166,6 +3098,13 @@ function AppInner() {
                     palette.navigate('history');
                 },
             };
+            const handleMenuSelect = (view) => {
+                setGlobalScannerOpen(false);
+                if (view === 'dispensers-list') setDispensersBackTo(unlockedView);
+                if (view === 'messaging') setMessagingThread(null);
+                if (view === 'contacts') setFormReturnView(unlockedView);
+                palette.navigate(view);
+            };
             // Assigned rather than returned directly so the whole unlocked
             // tree (both nav surfaces AND the route, Home included) sits under
             // one CoinpayObligationsProvider, which is the tree's only
@@ -3180,31 +3119,22 @@ function AppInner() {
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
-                        <LeftNavWithObligations
+                        <LeftNav
                             currentView={unlockedView}
                             onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
                             onLock={handleNavLock}
-                            onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            walletName={activeWalletName}
                             hasVmAddress={hasVmAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     bottomBar={
-                        <BottomTabBarWithObligations
+                        <BottomTabBar
                             currentView={unlockedView}
                             onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
-                            onLock={handleNavLock}
-                            onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            onCommandPalette={palette.openPalette}
-                            hasVmAddress={hasVmAddress}
-                            hasDexSurface={DEX_SURFACE_ENABLED}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     header={
@@ -3217,38 +3147,16 @@ function AppInner() {
                                     level controls visible without each route
                                     re-rendering its own copy. */}
                                 <AppHeader
-                                    onMenuOpen={() => {
-                                        if (unlockedView === 'menu') {
-                                            setUnlockedView(menuBackTo);
-                                        } else {
-                                            setMenuBackTo(unlockedView);
-                                            setUnlockedView('menu');
-                                        }
-                                    }}
-                                    onScan={() => setGlobalScannerOpen(true)}
-                                    onCommandPalette={palette.openPalette}
-                                    onManageAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
-                                    onViewAddress={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
+                                    onMenuToggle={palette.togglePalette}
+                                    menuOpen={palette.open}
                                     onLock={handleNavLock}
                                     isWatcherMode={isWatcherMode}
                                     activeWallet={activeWalletRow}
-                                    activeAccount={headerAccountRow}
-                                    onOpenWalletPicker={handleOpenWalletPicker}
-                                    onOpenAccountPicker={handleOpenAccountPicker}
-                                    onOpenSettings={handleOpenSettings}
-                                    walletNonDefault={headerWalletNonDefault}
-                                    accountNonDefault={headerAccountNonDefault}
-                                    chainRegistry={APP_CHAIN_REGISTRY}
-                                    coinFamilies={headerCoinFamilies}
-                                    networkFilter={globalNetworkFilter}
-                                    onNetworkFilterChange={setGlobalNetworkFilter}
-                                    activeNetwork={activeNetwork}
-                                    developerMode={developerMode}
-                                    onActiveNetworkChange={handleActiveNetworkChange}
-                                    // Cross-site navigation for the *.xchain.io family.
-                                    // Web only: the extension popup and desktop app do
-                                    // not pass this, so they render no switcher.
-                                    platformCurrent="wallet"
+                                    onPopOut={() => window.open(
+                                        window.location.href,
+                                        '_blank',
+                                        'noopener,noreferrer',
+                                    )}
                                 />
                             </>
                         ) : null
@@ -3365,6 +3273,18 @@ function AppInner() {
                                 navigate={palette.navigate}
                                 parseCtx={paletteParseCtx}
                                 settings={settings}
+                                menu={{
+                                    gates: {
+                                        isSignerMode,
+                                        hasDexSurface: DEX_SURFACE_ENABLED,
+                                        hasVmAddress,
+                                        hasBtcAddress,
+                                    },
+                                    currentView: unlockedView,
+                                    onSelect: handleMenuSelect,
+                                    onOpenSettings: handleOpenSettings,
+                                    onLock: handleNavLock,
+                                }}
                             />
                         </Suspense>
                     ) : null}

@@ -13,6 +13,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.jsx'), 'utf8');
+const paletteHostSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/CommandPaletteHost.jsx'),
+    'utf8',
+);
 const nativeVaultSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/storage/nativeVault.js'),
     'utf8',
@@ -54,7 +58,6 @@ const deferredRoutes = [
     'WalletDetails',
     'RenameWalletForm',
     'RenameAccountForm',
-    'MenuRoute',
     'AlertsRoute',
     'ScanRoute',
     'ContractsList',
@@ -73,6 +76,10 @@ describe('web startup imports', () => {
         expect(appSource).not.toContain(
             `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
         );
+    });
+
+    it('does not load the retired menu route', () => {
+        expect(appSource).not.toContain('MenuRoute');
     });
 
     it.each(['CreateWallet', 'ImportWallet', 'PairPartnerWallet'])(
@@ -181,6 +188,17 @@ describe('web startup imports', () => {
         expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/commandPalette\/(CommandPalette\.jsx|commandRegistry\.js)'/);
         expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/keyboard\/ShortcutHelp\.jsx'/);
         expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
+    });
+
+    it('wires the wallet menu through the deferred command palette host', () => {
+        expect(paletteHostSource).toContain('menu={menu}');
+        expect(appSource).toContain('onMenuToggle={palette.togglePalette}');
+        expect(appSource).toContain('menuOpen={palette.open}');
+        expect(appSource).toContain('hasDexSurface: DEX_SURFACE_ENABLED');
+        expect(appSource).toContain('currentView: unlockedView');
+        expect(appSource).toContain('onSelect: handleMenuSelect');
+        expect(appSource).toContain('onOpenSettings: handleOpenSettings');
+        expect(appSource).toContain('onLock: handleNavLock');
     });
 
     it('loads the action catalogue together with the Actions menu', () => {

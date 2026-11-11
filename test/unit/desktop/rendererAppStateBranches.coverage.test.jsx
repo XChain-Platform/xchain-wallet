@@ -52,6 +52,7 @@ vi.mock('@xchain-wallet/core/shared/commandPalette/useCommandPalette.js', () => 
         navigate,
         openPalette: vi.fn(),
         closePalette: vi.fn(),
+        togglePalette: vi.fn(),
     }),
 }));
 vi.mock('@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx', () => ({

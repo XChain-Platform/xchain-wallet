@@ -71,8 +71,7 @@ import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEn
 import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
-import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
-import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { CoinpayObligationsProvider } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
@@ -207,6 +206,7 @@ const CoSignerAccountList = lazyRoute(() => import('@xchain-wallet/core/shared/r
 const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerProvision.jsx'), 'CoSignerProvision');
 const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
+const AlertsRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AlertsRoute.jsx'), 'AlertsRoute');
 
 // Loaded on first pairing; a lock or wallet switch resets the loaded ones.
 const hardwareFactories = trackHardwareFactories({
@@ -256,21 +256,6 @@ export function App() {
     );
 }
 
-// PC-15: the "Payments due" nav badge. Its count comes from the tree's ONE
-// pending-COINPAY scan (CoinpayObligationsProvider, mounted around the
-// unlocked route below and shared with Home's resume cards), and reading a
-// context means being rendered UNDER the provider. So each nav surface gets a
-// thin wrapper here rather than the App body reading a second scan of its own.
-function LeftNavWithObligations({ badges, ...rest }) {
-    const { payableCount } = useSharedCoinpayObligations();
-    return <LeftNav {...rest} badges={{ ...badges, obligations: payableCount }} />;
-}
-
-function BottomTabBarWithObligations({ badges, ...rest }) {
-    const { payableCount } = useSharedCoinpayObligations();
-    return <BottomTabBar {...rest} badges={{ ...badges, obligations: payableCount }} />;
-}
-
 function AppInner() {
     const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
@@ -290,7 +275,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'alerts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     useDocumentTitle({
         statusState: status.state,
@@ -343,6 +328,8 @@ function AppInner() {
     const [messagingThread, setMessagingThread] = useState(
         /** @type {string | null} */ (null),
     );
+    const [contactsReturnView, setContactsReturnView] = useState('actions');
+    const [menuReturnView, setMenuReturnView] = useState('home');
     // View to return to when backing out of My Dispensers (recorded at
     // each navigation into the list; back otherwise loses the origin).
     const [dispensersBackTo, setDispensersBackTo] = useState('home');
@@ -408,9 +395,6 @@ function AppInner() {
         /** @type {string | null} */ (null),
     );
     const headerAccounts = useAccountList(activeWalletId, `${accountRenameTarget?.id ?? ''}:${recordRevision}`);
-    // Unread-message count for the active wallet + account, surfaced as a badge
-    // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
-    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. It stays disabled while locked or while shortcut help owns
@@ -656,6 +640,8 @@ function AppInner() {
         setMultisigInitialLink(null);
         setParallelPrefill(null);
         setSendBackTo('home');
+        setContactsReturnView('actions');
+        setMenuReturnView('home');
     }
 
     function handleLock() {
@@ -2189,11 +2175,22 @@ function AppInner() {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');
                         }}
-                        onBack={() => setUnlockedView('actions')}
+                        onBack={() => {
+                            setUnlockedView(contactsReturnView);
+                            setContactsReturnView('actions');
+                        }}
                         onOpenBackup={() => {
                             setSettingsInitialSection('backup');
                             setUnlockedView('settings');
                         }}
+                    />
+                );
+            }
+            if (unlockedView === 'alerts' && activeWalletId) {
+                return (
+                    <AlertsRoute
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView(menuReturnView)}
                     />
                 );
             }
@@ -2691,7 +2688,10 @@ function AppInner() {
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
-                            onContacts: () => setUnlockedView('contacts'),
+                            onContacts: () => {
+                                setContactsReturnView('actions');
+                                setUnlockedView('contacts');
+                            },
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
@@ -2926,17 +2926,6 @@ function AppInner() {
                         setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                    // No onMyTokens / onMarketActivity / onCrossChain /
-                    // onContacts / onMultisig here. Home takes an explicit
-                    // parameter list with no rest-spread and reads none of
-                    // those five, so they rendered nothing: four are
-                    // MenuRoute props (only the web shell mounts MenuRoute)
-                    // and the fifth misspells MenuRoute's `onTokens`. This
-                    // shell reaches those surfaces from its Actions menu
-                    // (cross-chain templates, contacts, multisig-create) and
-                    // its Cmd/Ctrl+K palette (`nav-my-tokens`). The one route
-                    // with no desktop caller either way is 'market-activity';
-                    // giving it one is a product decision, not a rename.
                     onOpenWalletPicker={() => openWalletPicker()}
                     onOpenAccountPicker={activeWalletId ? () => {
                         setAccountPickerBackTo('home');
@@ -2954,6 +2943,31 @@ function AppInner() {
             const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenSettings = () => setUnlockedView('settings');
+            const handleShellSelect = (view) => {
+                const returnView = unlockedView === view ? 'home' : unlockedView;
+                if (view === 'send') {
+                    setSendPrefill(null);
+                    setSendBackTo('home');
+                } else if (view === 'receive') {
+                    setReceivePrefill(null);
+                } else if (view === 'history') {
+                    setHistoryInitialQuery('');
+                    setHistoryInitialChainCoin('');
+                    setHistoryInitialFocus(null);
+                    setHistoryReturnTo('home');
+                } else if (view === 'markets') {
+                    setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
+                } else if (view === 'dispensers-list') {
+                    setDispensersBackTo(returnView);
+                } else if (view === 'messaging') {
+                    setMessagingThread(null);
+                } else if (view === 'contacts') {
+                    setContactsReturnView(returnView);
+                } else if (view === 'alerts') {
+                    setMenuReturnView(returnView);
+                }
+                setUnlockedView(view);
+            };
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             // §33 command list: shared catalogue + lazily-loaded contacts,
@@ -2969,6 +2983,7 @@ function AppInner() {
                 hasBtcAddress,
                 hasVmAddress,
                 hasGovernanceAddress,
+                hasDexSurface: true,
                 isSignerMode,
                 isWatcherMode,
                 isDemoWallet: isDemoWallet(activeWalletId),
@@ -3024,38 +3039,34 @@ function AppInner() {
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
-                        <LeftNavWithObligations
+                        <LeftNav
                             currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
+                            onSelect={handleShellSelect}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
                             hasVmAddress={hasVmAddress}
+                            hasDexSurface
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     bottomBar={
-                        <BottomTabBarWithObligations
+                        <BottomTabBar
                             currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
-                            onLock={handleNavLock}
-                            onOpenWalletPicker={handleOpenWalletPicker}
+                            onSelect={handleShellSelect}
                             onOpenSettings={handleOpenSettings}
-                            hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     header={
                         <AppHeader
-                            onCommandPalette={palette.openPalette}
+                            onMenuToggle={palette.togglePalette}
+                            menuOpen={palette.open}
                             onLock={handleNavLock}
                             isWatcherMode={isWatcherMode}
                             activeWallet={activeWalletId ? { id: activeWalletId, name: activeWalletName } : null}
-                            activeNetwork={settings?.activeNetwork}
                         />
                     }
                     notices={
@@ -3096,6 +3107,18 @@ function AppInner() {
                         onClose={palette.closePalette}
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
+                        menu={{
+                            gates: {
+                                isSignerMode,
+                                hasDexSurface: true,
+                                hasVmAddress,
+                                hasBtcAddress,
+                            },
+                            currentView: unlockedView,
+                            onSelect: handleShellSelect,
+                            onOpenSettings: handleOpenSettings,
+                            onLock: handleNavLock,
+                        }}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>

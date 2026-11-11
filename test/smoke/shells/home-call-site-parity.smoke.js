@@ -15,14 +15,13 @@
 // direction, and both halves of a shell/component contract can rot.
 //
 // WHAT IT COST, measured 2026-08-25 on this tree. The desktop renderer
-// handed <Home> five handlers Home does not destructure -
+// handed <Home> five handlers Home does not destructure:
 // onMyTokens / onMarketActivity / onCrossChain / onContacts / onMultisig.
-// Four are MenuRoute props, and only the web shell mounts MenuRoute; the
-// fifth spells MenuRoute's `onTokens` wrong and matches no component at
-// all. Home takes an explicit parameter list with no rest-spread, so all
-// five reached no render path. The block reads as if a desktop home
-// surface offers Marketplace, My Tokens, Cross-chain, Contacts and
-// Multisig; nothing there did.
+// Those destinations belong to the shared wallet menu and navigation
+// surfaces, not Home. Home takes an explicit parameter list with no
+// rest-spread, so all five reached no render path. The block reads as if a
+// desktop home surface offers Marketplace, My Tokens, Cross-chain, Contacts
+// and Multisig; nothing there did.
 //
 // The same call site was missing a prop Home DOES read: `onSelectEntry`,
 // which Home forwards to HomeTabs, which hands it to every demo Activity

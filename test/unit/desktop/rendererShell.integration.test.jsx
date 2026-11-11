@@ -13,6 +13,10 @@ const boot = vi.hoisted(() => ({
     setShellCapabilities: vi.fn(),
     homeMounts: 0,
     autoLockOpts: null,
+    togglePalette: vi.fn(),
+    commandPaletteProps: null,
+    headerProps: null,
+    bottomTabBarProps: null,
 }));
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
@@ -79,10 +83,14 @@ vi.mock('@xchain-wallet/core/shared/commandPalette/useCommandPalette.js', () => 
         navigate,
         openPalette: vi.fn(),
         closePalette: vi.fn(),
+        togglePalette: boot.togglePalette,
     }),
 }));
 vi.mock('@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx', () => ({
-    CommandPalette: () => null,
+    CommandPalette: (props) => {
+        boot.commandPaletteProps = props;
+        return null;
+    },
 }));
 vi.mock('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx', () => ({ ShortcutHelp: () => null }));
 vi.mock('@xchain-wallet/core/shared/hooks/useCoinpayObligations.js', () => ({
@@ -104,8 +112,34 @@ vi.mock('@xchain-wallet/core/shared/routes/Home.jsx', async () => {
 vi.mock('@xchain-wallet/core/shared/routes/Settings.jsx', () => ({
     Settings: () => <h1>Settings screen</h1>,
 }));
-vi.mock('@xchain-wallet/core/shared/components/AppHeader.jsx', () => ({ AppHeader: () => null }));
-vi.mock('@xchain-wallet/core/shared/components/BottomTabBar.jsx', () => ({ BottomTabBar: () => null }));
+vi.mock('@xchain-wallet/core/shared/routes/AlertsRoute.jsx', () => ({
+    AlertsRoute: ({ onBack }) => (
+        <section>
+            <h1>Alerts screen</h1>
+            <button type="button" onClick={onBack}>Back from alerts</button>
+        </section>
+    ),
+}));
+vi.mock('@xchain-wallet/core/shared/routes/ContactsList.jsx', () => ({
+    ContactsList: ({ onBack }) => (
+        <section>
+            <h1>Contacts screen</h1>
+            <button type="button" onClick={onBack}>Back from contacts</button>
+        </section>
+    ),
+}));
+vi.mock('@xchain-wallet/core/shared/components/AppHeader.jsx', () => ({
+    AppHeader: (props) => {
+        boot.headerProps = props;
+        return null;
+    },
+}));
+vi.mock('@xchain-wallet/core/shared/components/BottomTabBar.jsx', () => ({
+    BottomTabBar: (props) => {
+        boot.bottomTabBarProps = props;
+        return null;
+    },
+}));
 vi.mock('@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx', () => ({
     QueuedBroadcastBanner: () => null,
 }));
@@ -157,6 +191,9 @@ async function importRenderer() {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    boot.commandPaletteProps = null;
+    boot.headerProps = null;
+    boot.bottomTabBarProps = null;
     localStorage.clear();
     document.body.innerHTML = '<div id="xchain-desktop-root"></div>';
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 });
@@ -203,7 +240,49 @@ describe('desktop renderer shell', () => {
             });
         });
 
+        await waitFor(() => {
+            expect(boot.headerProps?.activeWallet).toEqual({ id: 'wallet-1', name: 'Primary wallet' });
+        });
+        expect(boot.headerProps).toMatchObject({
+            onMenuToggle: boot.togglePalette,
+            menuOpen: false,
+            isWatcherMode: false,
+        });
+        expect(boot.headerProps).not.toHaveProperty('onCommandPalette');
+        expect(boot.headerProps).not.toHaveProperty('activeNetwork');
+        expect(boot.bottomTabBarProps).toMatchObject({
+            currentView: 'home',
+            isSignerMode: false,
+        });
+        expect(boot.bottomTabBarProps).not.toHaveProperty('badges');
+        expect(boot.bottomTabBarProps).not.toHaveProperty('onLock');
+        expect(boot.commandPaletteProps.menu).toMatchObject({
+            currentView: 'home',
+            gates: {
+                isSignerMode: false,
+                hasDexSurface: true,
+                hasVmAddress: false,
+                hasBtcAddress: false,
+            },
+        });
+        expect(boot.commandPaletteProps.menu.onLock).toBeTypeOf('function');
+
+        act(() => { boot.headerProps.onMenuToggle(); });
+        expect(boot.togglePalette).toHaveBeenCalledOnce();
+
+        const homeMenu = boot.commandPaletteProps.menu;
+        act(() => { homeMenu.onSelect('alerts'); });
+        expect(await screen.findByRole('heading', { name: 'Alerts screen' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back from alerts' }));
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
+
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
+
+        const settingsMenu = boot.commandPaletteProps.menu;
+        act(() => { settingsMenu.onSelect('contacts'); });
+        expect(await screen.findByRole('heading', { name: 'Contacts screen' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
         expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
