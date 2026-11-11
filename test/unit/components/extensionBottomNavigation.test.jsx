@@ -44,7 +44,7 @@ describe('extension bottom navigation', () => {
             /<FullLayoutWithNav[\s\S]*?bottomBar=\{\([\s\S]*?<BottomTabBar/,
         );
         expect(popupAppSource).toMatch(/currentView=\{unlockedView\}/);
-        expect(popupAppSource).toMatch(/onSelect=\{setUnlockedView\}/);
+        expect(popupAppSource).toMatch(/onSelect=\{handleWalletMenuSelect\}/);
     });
 
     it.each([

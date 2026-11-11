@@ -288,7 +288,7 @@
     inline-size: 1px;
     block-size: 1px;
     padding: 0;
-    margin: -1px;
+    margin: -0.0625rem;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
@@ -313,7 +313,7 @@
     max-block-size: var(--xc-viewport-h, 100vh);
     border: 0;
     border-radius: 0;
-    padding-block-end: env(safe-area-inset-bottom, 0px);
+    padding-block-end: env(safe-area-inset-bottom, 0rem);
 }
 
 .menuHeader {
@@ -322,7 +322,7 @@
     gap: var(--xc-space-2);
     flex: 0 0 auto;
     padding: var(--xc-space-2);
-    padding-block-start: calc(var(--xc-space-2) + env(safe-area-inset-top, 0px));
+    padding-block-start: calc(var(--xc-space-2) + env(safe-area-inset-top, 0rem));
     border-block-end: 1px solid var(--xc-border);
 }
 
@@ -363,10 +363,11 @@
     gap: var(--xc-space-2);
 }
 
+/* Each catalogue group is the shared flush card: the wallet card outline,
+   with the rows carrying their own padding. */
 .walletGroup {
+    composes: flush from '../../ui/Card.module.css';
     min-inline-size: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-card-radius);
     overflow: hidden;
 }
 

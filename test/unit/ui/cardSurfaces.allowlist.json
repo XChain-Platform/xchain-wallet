@@ -2,8 +2,8 @@
     "rules": {
         "packages/core/src/shared/commandPalette/CommandPalette.module.css | .escHint": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/commandPalette/CommandPalette.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
+        "packages/core/src/shared/commandPalette/CommandPalette.module.css | .panel.menuPanel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/AlertsOverlay.module.css | .alert": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/components/AppHeader.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/ConfirmActionModal.module.css | .messageText": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/DerivationPathCrossCheck.module.css | .path": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/GatedFileViewer.module.css | .body": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",

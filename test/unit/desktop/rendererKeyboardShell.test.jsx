@@ -118,12 +118,12 @@ describe('desktop renderer keyboard shell', () => {
         fireEvent.keyDown(home, { key: 'k', ctrlKey: true });
         await flushFocus();
         const search = screen.getByRole('combobox', { name: 'Search commands' });
-        expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toBeTruthy();
         expect(search).toHaveFocus();
 
         fireEvent.keyDown(search, { key: 'Escape' });
         await flushFocus();
-        expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         expect(home).toHaveFocus();
     });
 
@@ -139,7 +139,7 @@ describe('desktop renderer keyboard shell', () => {
         expect(close).toHaveFocus();
 
         fireEvent.keyDown(close, { key: 'k', ctrlKey: true });
-        expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         fireEvent.keyDown(close, { key: 'Escape' });
         await flushFocus();
         expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();

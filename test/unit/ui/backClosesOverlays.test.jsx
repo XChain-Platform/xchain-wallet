@@ -9,17 +9,18 @@
 // contact legal@dankest.llc.
 
 // The system Back gesture closes the topmost overlay (a dialog, a popover,
-// the More sheet) before it navigates or leaves the app. With only screens
+// the wallet menu) before it navigates or leaves the app. With only screens
 // registered, Back on Home with the header settings popover open closed the
 // whole app on an LG K51.
 
+import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, cleanup, fireEvent, screen } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
-import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
 import { useFormLeaveGuard } from '../../../packages/core/src/shared/hooks/useFormLeaveGuard.js';
 import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
 
@@ -37,6 +38,26 @@ async function pressBack() {
 
 function swipeBackFromIOS() {
     act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
+}
+
+function MenuHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button type="button" onClick={() => setOpen(true)}>Open menu</button>
+            <CommandPalette
+                open={open}
+                onClose={() => setOpen(false)}
+                commands={[]}
+                menu={{
+                    gates: {},
+                    currentView: 'receive',
+                    onSelect: () => {},
+                    onOpenSettings: () => {},
+                }}
+            />
+        </>
+    );
 }
 
 function DirtyForm({ onLeave }) {
@@ -121,42 +142,40 @@ describe('Back closes overlays first', () => {
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
-    it('closes the More sheet on native Back, then lets the next press reach the screen', async () => {
+    it('closes the wallet menu on native Back, then lets the next press reach the screen', async () => {
         const onBack = vi.fn();
         render(
             <>
                 <PageHeader title="Receive" onBack={onBack} />
-                <BottomTabBar currentView="receive" onSelect={() => {}} onLock={() => {}} />
+                <MenuHarness />
             </>,
         );
         await settle();
-        const more = screen.getByRole('button', { name: /More/ });
-        fireEvent.click(more);
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
         await settle();
-        expect(more.getAttribute('aria-expanded')).toBe('true');
+        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toBeInTheDocument();
         act(() => nativeBack({ canGoBack: true }));
-        expect(more.getAttribute('aria-expanded')).toBe('false');
-        expect(more).toHaveFocus();
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         expect(onBack).not.toHaveBeenCalled();
         act(() => nativeBack({ canGoBack: true }));
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('closes the More sheet completely on an iOS edge swipe before navigating', () => {
+    it('closes the wallet menu completely on an iOS edge swipe before navigating', async () => {
         const onBack = vi.fn();
         render(
             <>
                 <PageHeader title="Receive" onBack={onBack} />
-                <BottomTabBar currentView="receive" onSelect={() => {}} />
+                <MenuHarness />
             </>,
         );
-        const more = screen.getByRole('button', { name: /More/ });
-        fireEvent.click(more);
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        await settle();
+        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toBeInTheDocument();
 
         swipeBackFromIOS();
 
-        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
-        expect(more).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         expect(onBack).not.toHaveBeenCalled();
     });
 

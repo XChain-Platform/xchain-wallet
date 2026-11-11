@@ -9,7 +9,7 @@
 //        added wallet before Home renders, so later actions use its identity.
 
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -82,11 +82,11 @@ function answerRecoveryQuiz() {
 }
 
 async function openAddWallet() {
-    // The condensed header keeps Settings inside its action menu.
-    fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Settings' }));
-    const settings = await screen.findByRole('dialog', { name: 'Wallet settings' });
-    fireEvent.click(within(settings).getByRole('button', { name: /First Wallet/ }));
+    // Switching wallets lives on the Settings page now, not in the header.
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0]);
+    // Settings is a lazy route, so its first import in jsdom can outlast the default wait.
+    fireEvent.click(await screen.findByRole('button', { name: /^This wallet/ }, { timeout: 20_000 }));
+    fireEvent.click(await screen.findByRole('button', { name: /Switch \/ rename/ }));
     await screen.findByRole('heading', { name: 'Wallets' });
     fireEvent.click(screen.getByRole('button', { name: 'Add wallet' }));
 }
@@ -147,6 +147,6 @@ describe('regression/add-wallet-becomes-active', () => {
         expect(await screen.findByRole('button', { name: 'Home', current: 'page' }))
             .toBeInTheDocument();
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
-        expect(await screen.findByText('Wallet: Second Wallet')).toBeInTheDocument();
+        expect(await screen.findByTitle('Second Wallet')).toBeInTheDocument();
     });
 });

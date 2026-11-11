@@ -26,15 +26,7 @@ const messages = {
 
     // Copy moved out of JSX literals by the i18n sweep.
     'shell.header.appHeader': 'App header',
-    'shell.settingsButton.walletSettings': 'Wallet settings',
-    'shell.settingsButton.chooseWallet': 'Choose wallet',
     'shell.settingsButton.noWallet': 'No wallet',
-    'shell.settingsButton.account': 'Account',
-    'shell.settingsButton.chooseAccount': 'Choose account',
-    'shell.settingsButton.account1': 'Account 1',
-    'shell.settingsButton.activeNetworkInHeader': 'Active network in header',
-    'shell.settingsButton.chainFilter': 'Network filter',
-    'shell.settingsButton.allSettings': 'All settings',
     'shell.devVariantBadge.devVariant': 'Dev variant: {variant}',
     'shell.devVariantBadge.dragToMove': 'Drag to move',
     'shell.devVariantBadge.variant': 'variant',

@@ -293,7 +293,7 @@ describe('an open review survives record changes made in another surface', () =>
         localStorage.setItem('xchain.activeWallet', 'w1');
         const { container } = render(<App />);
         await screen.findByRole('heading', { name: 'Home', level: 1 });
-        await screen.findByText('Wallet: Alpha');
+        await screen.findByText('Alpha');
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         return { ...env, heading: container.querySelector('h1') };
     }
@@ -305,7 +305,7 @@ describe('an open review survives record changes made in another surface', () =>
         await emit('wallet', { walletId: 'w2' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
     });
 
     it('takes the wallet another surface chose during a review at the next navigation', async () => {
@@ -316,7 +316,7 @@ describe('an open review survives record changes made in another surface', () =>
         reviewOpen = false;
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
-        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+        expect(await screen.findByText('Bravo')).toBeInTheDocument();
     });
 
     it('takes the wallet another surface chose as soon as the review is cancelled', async () => {
@@ -324,11 +324,11 @@ describe('an open review survives record changes made in another surface', () =>
         reviewOpen = true;
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
-        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
 
         await endReview({ approved: false, left: false });
 
-        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+        expect(await screen.findByText('Bravo')).toBeInTheDocument();
     });
 
     it('keeps a signing or broadcast result on its wallet until the user leaves it', async () => {
@@ -339,12 +339,12 @@ describe('an open review survives record changes made in another surface', () =>
         await emit('wallet', { walletId: 'w2' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
 
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
 
-        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+        expect(await screen.findByText('Bravo')).toBeInTheDocument();
     });
 
     it('drops a held switch to a wallet another surface removed before the review ended', async () => {
@@ -358,15 +358,15 @@ describe('an open review survives record changes made in another surface', () =>
         await endReview({ approved: false, left: false });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
 
-        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
-        expect(screen.queryByText('Wallet: Bravo')).toBeNull();
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(screen.queryByText('Bravo')).toBeNull();
     });
 
     it('switches at once when another surface switches wallet with no review open', async () => {
         const { emit } = await twoWallets();
         localStorage.setItem('xchain.activeWallet', 'w2');
         await emit('wallet', { walletId: 'w2' });
-        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+        expect(await screen.findByText('Bravo')).toBeInTheDocument();
     });
 
     it('reloads the open screen for a network change while a review is open', async () => {
@@ -386,7 +386,7 @@ describe('an open review survives record changes made in another surface', () =>
         await emit('wallets', { change: 'removed', walletId: 'w1' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
         expect(heading.isConnected).toBe(true);
-        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
 
         // The send settles and the person moves on: the session reloads then.
@@ -395,7 +395,7 @@ describe('an open review survives record changes made in another surface', () =>
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
         await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
-        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+        expect(await screen.findByText('Bravo')).toBeInTheDocument();
     });
 
     it('closes a review not yet approved when another surface removes its wallet', async () => {

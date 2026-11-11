@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite: header overflow menu height.
+// Regression suite: wallet menu height.
 //
 //   2026-10-14: the header overflow menu was capped at 520px, so on tall
-//   phones it cut its last visible row ("Validator hub") through the label
-//   while hundreds of pixels sat empty below it. The menu is now bounded by
-//   the viewport alone.
+//   phones it cut its last visible row through the label while hundreds of
+//   pixels sat empty below it. The wallet menu that replaced it is bounded by
+//   the viewport alone: a full-height sheet on a phone, and a dropdown whose
+//   height is the viewport minus the app bar at wider widths.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -22,20 +23,24 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const core = join(here, '..', '..', 'packages', 'core', 'src');
-const headerCss = readFileSync(join(core, 'shared', 'components', 'AppHeader.module.css'), 'utf8');
+const paletteCss = readFileSync(join(core, 'shared', 'commandPalette', 'CommandPalette.module.css'), 'utf8');
 
 function ruleBody(css, selector) {
     const match = css.match(new RegExp(`${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`));
     return match ? match[1] : '';
 }
 
-describe('header overflow menu height', () => {
+describe('wallet menu height', () => {
     it('is bounded by the viewport, not a fixed pixel cap', () => {
-        const body = ruleBody(headerCss, '.actionMenu');
-        const maxHeight = body.match(/max-height:\s*([^;]+);/);
-        expect(maxHeight).not.toBeNull();
-        expect(maxHeight[1]).toMatch(/vh/);
-        expect(maxHeight[1]).not.toMatch(/\d+px/);
-        expect(body).toMatch(/overflow-y:\s*auto/);
+        const panel = ruleBody(paletteCss, '.panel.menuPanel');
+        expect(panel).toMatch(/max-block-size:\s*var\(--xc-viewport-h/);
+        expect(panel).not.toMatch(/(?:max-)?block-size:\s*\d+px/);
+
+        const dropdown = paletteCss.match(/@container wallet-menu \(min-width: 640px\) \{[\s\S]*?\.panel\.menuPanel \{([^}]*)\}/);
+        expect(dropdown).not.toBeNull();
+        expect(dropdown[1]).toMatch(/max-block-size:\s*calc\(var\(--xc-viewport-h/);
+        expect(dropdown[1]).not.toMatch(/max-block-size:[^;]*\d+px/);
+
+        expect(ruleBody(paletteCss, '.walletSurface')).toMatch(/overflow-y:\s*auto/);
     });
 });

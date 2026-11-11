@@ -28,19 +28,19 @@ describe('device finding fixes', () => {
         const commandRegistry = read('packages/core/src/shared/commandPalette/commandRegistry.js');
 
         for (const source of [leftNav, commandRegistry]) {
-            expect(source).toMatch(/(?:label|title): 'Marketplace'[^\n]*Icon: Icon\.LineChartIcon/);
+            expect(source).toMatch(/Icon: Icon\[(?:row|item)\.icon\]/);
+            expect(source).toMatch(/walletMenu/);
         }
-        expect(leftNav).toMatch(/label: 'Dispensers'[^\n]*Icon: Icon\.DollarIcon/);
-        expect(commandRegistry).toMatch(/title: 'Dispensers'[^\n]*Icon: Icon\.DollarIcon/);
         expect(walletMenu).toMatch(/id: 'market-activity'[^\n]*icon: 'LineChartIcon'/);
         expect(walletMenu).toMatch(/id: 'dispensers-list'[^\n]*icon: 'DollarIcon'/);
     });
 
-    it('hides the Search shortcut hint for touch input', () => {
-        const css = read('packages/core/src/shared/components/AppHeader.module.css');
+    it('hides the menu shortcut hint for touch input', () => {
+        const css = read('packages/core/src/shared/commandPalette/CommandPalette.module.css');
 
+        expect(rule(css, '.menuPanel .escHint')).toMatch(/display:\s*none/);
         expect(css).toMatch(
-            /@media \(pointer: coarse\), \(hover: none\)\s*\{\s*\.shortcut\s*\{[^}]*display:\s*none/,
+            /@media \(hover: hover\) and \(pointer: fine\)\s*\{\s*@container wallet-menu \(min-width: 640px\)\s*\{\s*\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/,
         );
     });
 });

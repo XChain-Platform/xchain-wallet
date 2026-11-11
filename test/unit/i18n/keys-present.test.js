@@ -24,6 +24,12 @@ const sources = import.meta.glob([
     '!../../../packages/desktop/node_modules/**',
 ], { query: '?raw', import: 'default', eager: true });
 
+// Consumers of the shared catalogue (left nav, tab bar, command registry) call
+// t(row.labelKey) on rows built elsewhere; the keys are the catalogue's own.
+const WALLET_MENU_KEYS = [...Object.values(sources)
+    .find((_, index) => Object.keys(sources)[index].endsWith('/shared/walletMenu.js'))
+    .matchAll(/labelKey: '([^']+)'/g)].map((match) => match[1]);
+
 const PARSER_PLUGINS = ['jsx', 'importAssertions', 'topLevelAwait'];
 
 function addAll(target, source) {
@@ -192,11 +198,11 @@ function translationUsage(file, source) {
     // A catalogue row carries its copy key as a `labelKey` string property and
     // the renderer calls t(row.labelKey) on a callback parameter, which cannot be
     // followed statically; the property values are the keys it reads.
-    const catalogueKeys = new Set();
+    const catalogueKeys = new Set(WALLET_MENU_KEYS);
     traverse(ast, {
         ObjectProperty(path) {
             const { key, value } = path.node;
-            if (key.type === 'Identifier' && key.name === 'labelKey' && value.type === 'StringLiteral') {
+            if (key.type === 'Identifier' && (key.name === 'labelKey' || key.name === 'subtitleKey') && value.type === 'StringLiteral') {
                 catalogueKeys.add(value.value);
             }
         },
@@ -210,7 +216,7 @@ function translationUsage(file, source) {
             if (catalogueKeys.size > 0
                 && argument?.type === 'MemberExpression'
                 && !argument.computed
-                && argument.property.name === 'labelKey') {
+                && (argument.property.name === 'labelKey' || argument.property.name === 'subtitleKey')) {
                 addAll(keys, catalogueKeys);
                 return;
             }

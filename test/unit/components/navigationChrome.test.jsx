@@ -311,7 +311,7 @@ describe('navigation Tab order', () => {
         screen.getByRole('button', { name: 'Before navigation' }).focus();
 
         const order = [
-            'Open command palette', 'Home', 'History', 'Send', 'Receive',
+            'Open the wallet menu', 'Home', 'History', 'Send', 'Receive',
             'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
             'Lists', 'Payments due', 'Settings', 'Lock wallet',
             'After navigation',

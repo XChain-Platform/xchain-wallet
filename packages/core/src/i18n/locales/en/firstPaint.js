@@ -112,8 +112,6 @@ const messages = {
     'components.routeErrorBoundary.thisScreenCouldNotBe': "This screen couldn't be shown",
     'components.routeErrorBoundary.somethingWentWrongWhileShowing':
         'Something went wrong while showing this screen. Try again or go to Home.',
-    'components.headerActionMenu.openMenu': 'Open menu',
-    'components.headerActionMenu.headerActions': 'Header actions',
     'components.toastHost.more': '+{hiddenCount} more',
     'components.toastHost.dismissNotification': 'Dismiss notification',
     'components.demoExitConfirm.exitDemoAndDeleteIts': 'Exit demo and delete its data?',
@@ -121,10 +119,6 @@ const messages = {
     'components.watchOnlyBadge.watchOnly': 'Watch-only',
     'ui.input.capsLockIsOn': 'Caps Lock is on',
     'ui.pageHeader.backToPreviousScreen': 'Back to previous screen',
-    'nav.dex': 'DEX',
-    'nav.lists': 'Lists',
-    'nav.paymentsDue': 'Payments due',
-    'nav.marketplace': 'Marketplace',
 };
 
 addEnglish(messages);

@@ -470,7 +470,7 @@ describe('translations', () => {
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['accountPicker.manage', 'walletMenu.group.manage'],
             // The action catalogue heading and its command-palette destination.
-            ['actionsMenu.title', 'palette.navActions.title', 'walletMenu.row.allActions'],
+            ['actionsMenu.title', 'walletMenu.row.allActions'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['alerts.title', 'walletMenu.row.alerts'],
             // The queue route title, command title, and Settings row.
@@ -479,8 +479,6 @@ describe('translations', () => {
             ['common.checking', 'settings.backup.checking'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['components.contactsPickerScreen.contacts', 'walletMenu.row.contacts'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['components.headerActionMenu.openMenu', 'walletMenu.openMenu'],
             // The token list editor's field label and the Home Tokens tab.
             ['components.tickItemsEditor.tokens', 'home.tabs.tokens'],
             // The noun the queued-result panel names for a held message and the noun the signing warning names.
@@ -521,19 +519,9 @@ describe('translations', () => {
             // The issue list summary and the duress settings action.
             ['issue.summary.set', 'settings.duress.set'],
             // The wallet menu reuses the label the same destination carries elsewhere.
-            ['nav.dex', 'walletMenu.row.dex'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['nav.lists', 'walletMenu.row.lists'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['nav.marketplace', 'walletMenu.row.marketplace'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['nav.paymentsDue', 'walletMenu.row.paymentsDue'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
             ['palette.category.trade', 'walletMenu.group.trade'],
             // The raw action tool in the palette and Settings.
             ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['palette.navMyTokens.title', 'walletMenu.row.myTokens'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
             // The wallet menu reuses the label the same destination carries elsewhere.

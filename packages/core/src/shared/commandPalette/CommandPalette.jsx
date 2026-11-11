@@ -36,6 +36,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
 import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
 import '../../i18n/locales/en/commandPalette.js';
+import '../../i18n/locales/en/walletMenu.js';
 
 /**
  * @param {object} props
@@ -313,6 +314,7 @@ export function CommandPalette({
                                     data-wallet-menu-group={group.id}
                                 >
                                     <h3 className={styles.walletGroupHead}>{group.label}</h3>
+                                    {/* Safari needs an explicit list role because this class removes list styling. */}
                                     <ul className={styles.walletGroupList} role="list">
                                         {group.rows.map((row) => {
                                             const index = walletRows.findIndex((item) => item.id === row.id);

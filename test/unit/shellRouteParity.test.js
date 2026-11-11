@@ -37,13 +37,9 @@ const SHELLS = {
 
 const SHELL_ONLY = {
     routes: {
-        menu: {
-            shells: ['web'],
-            reason: 'The compact web layout uses a full-screen overflow menu; desktop and popup expose its destinations directly.',
-        },
         alerts: {
-            shells: ['web'],
-            reason: 'The alerts screen belongs to the compact web overflow menu; desktop and popup surface alerts on Home.',
+            shells: ['desktop', 'web'],
+            reason: 'The wallet menu lists Alerts in every shell; the extension popup opens Home, its existing alerts surface.',
         },
     },
     messaging: {
@@ -83,100 +79,15 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to advanced actions.',
         },
-        'AppHeader.accountNonDefault': {
+        'AppHeader.onPopOut': {
             shells: ['web'],
             kind: 'intended',
-            reason: 'The web shell header presents account context that other shells place in their native layout.',
-        },
-        'AppHeader.activeAccount': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header presents account context that other shells place in their native layout.',
-        },
-        'AppHeader.chainRegistry': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header builds its network selector from the chain registry.',
-        },
-        'AppHeader.coinFamilies': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header builds its network selector from coin-family metadata.',
-        },
-        'AppHeader.developerMode': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header adapts its network selector for developer mode.',
-        },
-        'AppHeader.networkFilter': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network filter.',
-        },
-        'AppHeader.onActiveNetworkChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network selector.',
-        },
-        'AppHeader.onManageAddresses': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes compact-layout address management.',
-        },
-        'AppHeader.onMenuOpen': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'Only the compact web layout uses the overflow menu.',
-        },
-        'AppHeader.onNetworkFilterChange': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network filter.',
-        },
-        'AppHeader.onOpenAccountPicker': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the compact-layout account picker.',
-        },
-        'AppHeader.onOpenSettings': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes settings in its compact layout.',
-        },
-        'AppHeader.onOpenWalletPicker': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the compact-layout wallet picker.',
-        },
-        'AppHeader.onScan': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes scanning in its compact layout.',
-        },
-        'AppHeader.onViewAddress': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header exposes the active address in its compact layout.',
-        },
-        'AppHeader.platformCurrent': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header marks the current platform network.',
-        },
-        'AppHeader.walletNonDefault': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header presents wallet context that other shells place in their native layout.',
+            reason: 'Only the web shell supplies its own pop-out handler; the other shells use the header default.',
         },
         'BatchComposerForm.hasDexSurface': {
             shells: ['web'],
             kind: 'intended',
             reason: 'Only the web shell currently exposes the DEX surface to batch composition.',
-        },
-        'BottomTabBar.badges': {
-            shells: ['desktop', 'web'],
-            kind: 'intended',
-            reason: 'The popup tab bar omits badges to fit its constrained layout.',
         },
         'ContactsList.onScanPrefillConsumed': {
             shells: ['web'],
@@ -322,46 +233,6 @@ const SHELL_ONLY = {
             shells: ['extension'],
             kind: 'intended',
             reason: 'The extension popup controls whether its constrained layout shows the title.',
-        },
-        'BottomTabBar.currentView': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tab bar performs its own route selection.',
-        },
-        'BottomTabBar.hasDexSurface': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations to available surfaces.',
-        },
-        'BottomTabBar.hasVmAddress': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations to the active address capabilities.',
-        },
-        'BottomTabBar.isSignerMode': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tailors its tab destinations for signer mode.',
-        },
-        'BottomTabBar.onLock': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts its lock action in the compact tab bar.',
-        },
-        'BottomTabBar.onOpenSettings': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts settings in the compact tab bar.',
-        },
-        'BottomTabBar.onOpenWalletPicker': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup puts wallet selection in the compact tab bar.',
-        },
-        'BottomTabBar.onSelect': {
-            shells: ['extension'],
-            kind: 'intended',
-            reason: 'The extension popup tab bar performs its own route selection.',
         },
         'Home.onCommandPalette': {
             shells: ['extension'],

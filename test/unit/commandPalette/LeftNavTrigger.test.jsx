@@ -24,13 +24,13 @@ const baseProps = { currentView: 'home', onSelect: () => {} };
 describe('LeftNav command-palette trigger', () => {
     it('renders no search row when onCommandPalette is not provided', () => {
         render(<LeftNav {...baseProps} />);
-        expect(screen.queryByRole('button', { name: 'Open command palette' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Open the wallet menu' })).toBeNull();
     });
 
     it('renders a search row and fires the handler when onCommandPalette is provided', () => {
         const onCommandPalette = vi.fn();
         render(<LeftNav {...baseProps} onCommandPalette={onCommandPalette} />);
-        const btn = screen.getByRole('button', { name: 'Open command palette' });
+        const btn = screen.getByRole('button', { name: 'Open the wallet menu' });
         expect(btn).toHaveAttribute('aria-keyshortcuts', 'Meta+K Control+K');
         fireEvent.click(btn);
         expect(onCommandPalette).toHaveBeenCalledOnce();

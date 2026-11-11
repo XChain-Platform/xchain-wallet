@@ -1,8 +1,8 @@
 {
     "rawElements": {
         "packages/core/src/shared/commandPalette/CommandPalette.jsx": {
-            "count": 1,
-            "reason": "The palette search is a combobox inside an overlay with its own listbox; the kit Input has no combobox mode."
+            "count": 3,
+            "reason": "The palette search is a combobox inside an overlay with its own listbox; the kit Input has no combobox mode, and the menu rows are whole-row click targets."
         },
         "packages/core/src/shared/components/ActivityRow.jsx": {
             "count": 1,
@@ -13,16 +13,12 @@
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/components/BottomTabBar.jsx": {
-            "count": 7,
+            "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/components/DurationSlider.jsx": {
             "count": 1,
             "reason": "A native range input provides the same accessible slider behavior as the network fee slider in the UI kit."
-        },
-        "packages/core/src/shared/components/HeaderActionMenu.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
         "packages/core/src/shared/components/LayoutModeToggle.jsx": {
             "count": 2,
@@ -159,7 +155,7 @@
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/AppHeader.module.css": {
-            "count": 2,
+            "count": 1,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/BackupReminderCard.module.css": {

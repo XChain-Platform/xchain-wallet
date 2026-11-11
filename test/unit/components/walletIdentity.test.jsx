@@ -75,10 +75,8 @@ describe('wallet identity surfaces', () => {
 
     it('keeps the same wallet tone and name in the header and switcher', async () => {
         const header = render(<AppHeader activeWallet={wallets[1]} />);
-        const headerIdentity = screen.getByTestId('wallet-identity');
-        expect(headerIdentity).toHaveTextContent('CR');
-        expect(headerIdentity).toHaveTextContent('Cold Reserve');
-        expect(headerIdentity).toHaveAttribute('data-wallet-tone', String(walletIdentityTone('wallet-cold')));
+        expect(screen.queryByTestId('wallet-identity')).toBeNull();
+        expect(screen.getByTitle('Cold Reserve')).toHaveTextContent('Cold Reserve');
         header.unmount();
 
         render(
@@ -94,7 +92,7 @@ describe('wallet identity surfaces', () => {
 
         const activeRow = await screen.findByRole('button', { name: /Cold Reserve/ });
         const pickerIdentity = within(activeRow).getByTestId('wallet-identity');
-        expect(pickerIdentity).toHaveAttribute('data-wallet-tone', headerIdentity.getAttribute('data-wallet-tone'));
+        expect(pickerIdentity).toHaveAttribute('data-wallet-tone', String(walletIdentityTone('wallet-cold')));
         expect(activeRow).toHaveAttribute('aria-current', 'true');
     });
 

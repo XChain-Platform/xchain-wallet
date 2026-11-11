@@ -266,7 +266,7 @@ describe('<Button>', () => {
         }
 
         const tabCss = readCss('shared/components/BottomTabBar.module.css');
-        for (const selector of ['tabIcon', 'sheetIcon']) {
+        for (const selector of ['tabIcon']) {
             const block = tabCss.match(new RegExp(`\\.${selector}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
             expect(block).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
             expect(block).toMatch(/align-items:\s*center/);
