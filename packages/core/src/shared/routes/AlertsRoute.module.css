@@ -126,15 +126,27 @@
     border-block-end: 0;
 }
 
+/* Button wraps its children in one label span, so the three columns live on an
+   inner grid and the label span stretches across the whole row. */
 .rowButton {
+    width: 100%;
+    display: flex;
+    padding: var(--xc-space-3) 0;
+    color: inherit;
+    text-align: start;
+}
+
+.rowButton > span {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.rowGrid {
     width: 100%;
     display: grid;
     grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) auto;
     gap: var(--xc-space-3);
     align-items: center;
-    padding: var(--xc-space-3) 0;
-    color: inherit;
-    text-align: start;
 }
 
 .iconTile {
@@ -245,7 +257,7 @@
         flex-basis: 8.25rem;
     }
 
-    .rowButton {
+    .rowGrid {
         gap: var(--xc-space-2);
     }
 }

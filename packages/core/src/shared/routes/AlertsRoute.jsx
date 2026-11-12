@@ -156,15 +156,17 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                         return (
                                             <li key={alert.id} className={`${styles.row} ${alert.read ? styles.read : styles.unread}`}>
                                                 <Button variant="rowAction" icon={null} className={styles.rowButton} onClick={() => openAlert(alert)} aria-label={alert.action?.label || alert.title}>
-                                                    <span className={`${styles.iconTile} ${TYPE_ICON_CLASS[alert.type] || ''}`}><TypeIcon /></span>
-                                                    <span className={styles.copy}>
-                                                        <span className={`${styles.typeLabel} ${TYPE_LABEL_CLASS[alert.type] || ''}`}><Highlight text={typeLabel(alert.type)} query={normalizedQuery} /></span>
-                                                        <span className={styles.title}><Highlight text={alert.title} query={normalizedQuery} /></span>
-                                                        <span className={styles.message}><Highlight text={alert.message} query={normalizedQuery} /></span>
-                                                    </span>
-                                                    <span className={styles.meta}>
-                                                        <time dateTime={new Date(alert.at).toISOString()}>{new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(alert.at)}</time>
-                                                        {!alert.read ? <span className={styles.unreadDot} aria-label={t('alerts.unread')} /> : null}
+                                                    <span className={styles.rowGrid}>
+                                                        <span className={`${styles.iconTile} ${TYPE_ICON_CLASS[alert.type] || ''}`}><TypeIcon /></span>
+                                                        <span className={styles.copy}>
+                                                            <span className={`${styles.typeLabel} ${TYPE_LABEL_CLASS[alert.type] || ''}`}><Highlight text={typeLabel(alert.type)} query={normalizedQuery} /></span>
+                                                            <span className={styles.title}><Highlight text={alert.title} query={normalizedQuery} /></span>
+                                                            <span className={styles.message}><Highlight text={alert.message} query={normalizedQuery} /></span>
+                                                        </span>
+                                                        <span className={styles.meta}>
+                                                            <time dateTime={new Date(alert.at).toISOString()}>{new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(alert.at)}</time>
+                                                            {!alert.read ? <span className={styles.unreadDot} aria-label={t('alerts.unread')} /> : null}
+                                                        </span>
                                                     </span>
                                                 </Button>
                                             </li>
