@@ -197,7 +197,7 @@ test('switching wallets while balances load never paints the previous wallet bal
         probe.balanceLeak = false;
         probe.balanceObserver = new MutationObserver(() => {
             const identity = document.querySelector(
-                '[aria-label="App header"] [data-testid="wallet-identity"]',
+                '[aria-label="App header"] span[title]',
             );
             if (identity?.textContent?.includes('Second Wallet')
                 && document.body.textContent?.includes(oldBalance)) {
