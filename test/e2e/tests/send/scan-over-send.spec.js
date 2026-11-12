@@ -40,8 +40,8 @@ async function openScanner(page) {
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible({ timeout: 15_000 });
-    await palette.getByRole('combobox').first().fill('Scan a QR');
-    await page.getByRole('option', { name: /^Scan a QR code/ }).first().click();
+    await palette.getByRole('combobox').first().fill('Scan');
+    await page.getByRole('option', { name: /^Scan\b/ }).first().click();
     await expect(page.getByRole('textbox', { name: 'Or paste it here', exact: true })).toBeVisible();
 }
 

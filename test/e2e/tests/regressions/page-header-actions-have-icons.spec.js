@@ -67,6 +67,9 @@ async function openRoute(page, route) {
 
     if (route.open === 'account-rename') {
         await openPaletteRoute(page, { paletteName: 'Settings' });
+        // Settings reopens on the sub-page the wallet rename left open.
+        const back = page.getByRole('button', { name: 'Back to settings' });
+        if (await back.isVisible().catch(() => false)) await back.click();
         // Switching account lives on the This wallet page.
         await page.getByRole('main').getByRole('button', { name: /^This wallet\b/ }).click();
         await page.getByRole('button', { name: 'Switch account…' }).click();
