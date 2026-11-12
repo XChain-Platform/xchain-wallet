@@ -123,12 +123,12 @@ async function expectScreen(page, viewport, heading, options = {}) {
     );
 }
 
-async function openCommand(page, name) {
+async function openCommand(page, name, optionName = new RegExp(`^${name}`)) {
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(name);
-    await palette.getByRole('option', { name: new RegExp(`^${name}`) }).first().click();
+    await palette.getByRole('option', { name: optionName }).first().click();
 }
 
 async function fillExternalHardware(row, cosigner) {
@@ -176,7 +176,7 @@ test.describe('multisig flow', () => {
         // Demo wallets hide create and multisig commands, so this walk
         // uses a real dev wallet.
         await createWallet(page);
-        await openCommand(page, 'Create multisig');
+        await openCommand(page, 'Multisig', /^Multisig(?! signing)/);
 
         const createForm = page.getByRole('form', { name: 'Create multisig' });
         await expect(createForm).toBeVisible();

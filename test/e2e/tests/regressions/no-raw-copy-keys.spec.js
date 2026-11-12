@@ -73,7 +73,7 @@ test('first screens and lazy routes render copy, never raw keys', async ({ page 
         await expectNoRawKeys(page, section);
     }
 
-    for (const title of ['Addresses', 'Create a token', 'Open DEX']) {
+    for (const title of ['Addresses', 'Create a token', 'DEX']) {
         await openPaletteCommand(page, title);
         await expect(page.getByRole('main')).toBeVisible();
         await expectNoRawKeys(page, title);
