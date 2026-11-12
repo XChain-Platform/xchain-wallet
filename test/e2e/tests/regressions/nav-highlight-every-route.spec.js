@@ -43,7 +43,7 @@ const ROUTES = [
         visit: async (page) => {
             await gotoSection(page, 'Settings');
             await page.getByRole('main').getByRole('button', { name: /^This wallet\b/ }).click();
-            await page.getByRole('main').getByRole('button', { name: /^Account\b/ }).click();
+            await page.getByRole('button', { name: 'Switch account…' }).click();
         },
     },
 ];
