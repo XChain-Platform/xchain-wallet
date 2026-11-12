@@ -32,11 +32,16 @@ describe('wallet menu CSS layout contracts', () => {
         );
     });
 
-    it('fits the catalogue in short phone sheets without shrinking rows below 40px', () => {
-        // Denser rhythm makes the catalogue fit; auto overflow means large text scrolls instead of clipping Lock wallet.
+    it('fits the whole menu in short phone sheets with 8px side margins', () => {
+        // Rows share the height the sheet has left, between 32px and 40px, so Settings and Lock wallet always show.
         expect(source).toMatch(/@media \(max-height: 700px\)\s*\{\s*@container wallet-menu not \(min-width: 640px\)/s);
-        expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletSurface\s*\{[^}]*gap:\s*var\(--xc-space-1\);[^}]*padding:\s*var\(--xc-space-1\);[^}]*overflow-y:\s*auto;/);
-        expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletGroupList \.walletRow,[\s\S]*?\.walletFooter \.walletFooterRow\s*\{[^}]*--xc-button-height:\s*40px;[^}]*min-block-size:\s*40px;[^}]*font-size:\s*max\(var\(--xc-text-sm\)/);
+        expect(source).toMatch(/--xc-wallet-menu-row-h:\s*clamp\(32px, calc\(\(var\(--xc-viewport-h, 100vh\) - 136px\) \/ 13\), 40px\);/);
+        expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletSurface\s*\{[^}]*padding:\s*var\(--xc-space-1\) var\(--xc-space-2\);/);
+        expect(source).toMatch(/@media \(max-height: 700px\)[\s\S]*?\.walletGroupList \.walletRow,[\s\S]*?\.walletFooter \.walletFooterRow\s*\{[^}]*--xc-button-height:\s*var\(--xc-wallet-menu-row-h\);[^}]*min-block-size:\s*var\(--xc-wallet-menu-row-h\);/);
+    });
+
+    it('reserves no scrollbar lane, so both side margins match', () => {
+        expect(source).toMatch(/\.menuPanel \.walletSurface,\s*\.menuPanel \.walletGrid\s*\{[^}]*scrollbar-gutter:\s*auto;/);
     });
 
     it('uses only the shared focus-visible ring on the search box', () => {

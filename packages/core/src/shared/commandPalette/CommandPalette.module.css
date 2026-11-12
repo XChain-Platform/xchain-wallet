@@ -478,6 +478,13 @@
     overflow-wrap: normal;
 }
 
+/* The menu keeps equal margins on both sides, so it does not reserve the
+   shared scroll class's scrollbar lane; a scrollbar shows only on overflow. */
+.menuPanel .walletSurface,
+.menuPanel .walletGrid {
+    scrollbar-gutter: auto;
+}
+
 /* Settings and Lock wallet share one row at every width, half each. */
 .walletFooter {
     flex: none;
@@ -510,9 +517,13 @@
 @supports (container-type: inline-size) and (width: 1cqw) {
     @media (max-height: 700px) {
         @container wallet-menu not (min-width: 640px) {
+            .panel.menuPanel {
+                --xc-wallet-menu-row-h: clamp(32px, calc((var(--xc-viewport-h, 100vh) - 136px) / 13), 40px);
+            }
+
             .menuHeader {
-                gap: var(--xc-space-1);
-                padding: var(--xc-space-1);
+                gap: var(--xc-space-2);
+                padding: var(--xc-space-1) var(--xc-space-2);
                 padding-block-start: calc(var(--xc-space-1) + env(safe-area-inset-top, 0));
             }
 
@@ -530,12 +541,12 @@
 
             .walletSurface {
                 gap: var(--xc-space-1);
-                padding: var(--xc-space-1);
+                padding: var(--xc-space-1) var(--xc-space-2);
                 overflow-y: auto;
             }
 
             .walletGrid {
-                gap: var(--xc-space-1);
+                gap: var(--xc-space-1) var(--xc-space-2);
             }
 
             .walletGroupHead {
@@ -548,8 +559,9 @@
 
             .walletGroupList .walletRow,
             .walletFooter .walletFooterRow {
-                --xc-button-height: 40px;
-                min-block-size: 40px;
+                --xc-button-height: var(--xc-wallet-menu-row-h);
+                min-block-size: var(--xc-wallet-menu-row-h);
+                block-size: var(--xc-wallet-menu-row-h);
                 font-size: max(var(--xc-text-sm), var(--xc-control-font-md, var(--xc-text-md)));
             }
 
