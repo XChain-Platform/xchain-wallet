@@ -12,8 +12,8 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
 const VIEWPORTS = [
     { width: 390, height: 844, columns: 2 },
-    { width: 834, height: 1112, columns: 4 },
-    { width: 1280, height: 800, columns: 4 },
+    { width: 834, height: 1112, columns: 3 },
+    { width: 1280, height: 800, columns: 3 },
 ];
 
 const menuDialog = (page) => page.getByRole('dialog', { name: 'Wallet menu' });
@@ -56,8 +56,8 @@ test('wallet menu lays out its catalogue, searches, and provides compact navigat
             await page.setViewportSize(viewport);
             const { dialog, opener } = await openMenu(page);
             const groups = dialog.locator('[data-wallet-menu-group]');
-            await expect(groups).toHaveCount(4);
-            for (const id of ['wallet', 'trade', 'manage', 'people']) {
+            await expect(groups).toHaveCount(6);
+            for (const id of ['wallet', 'assets', 'trade', 'earn', 'people', 'actions']) {
                 const group = dialog.locator(`[data-wallet-menu-group="${id}"]`);
                 await expect(group).toBeVisible();
                 await expect(group).toHaveCSS('border-top-width', '1px');
@@ -67,10 +67,17 @@ test('wallet menu lays out its catalogue, searches, and provides compact navigat
             const positions = await groupPositions(dialog);
             expect(new Set(Object.values(positions)).size, 'the menu uses the expected group columns')
                 .toBe(viewport.columns);
+            // Equal boxes line up in columns: two across on phones, three on wide panels.
             if (viewport.columns === 2) {
-                expect(positions.wallet).toBe(positions.people);
-                expect(positions.trade).toBe(positions.manage);
-                expect(positions.wallet).not.toBe(positions.trade);
+                expect(positions.wallet).toBe(positions.trade);
+                expect(positions.trade).toBe(positions.people);
+                expect(positions.assets).toBe(positions.earn);
+                expect(positions.earn).toBe(positions.actions);
+                expect(positions.wallet).not.toBe(positions.assets);
+            } else {
+                expect(positions.wallet).toBe(positions.earn);
+                expect(positions.assets).toBe(positions.people);
+                expect(positions.trade).toBe(positions.actions);
             }
 
             await expect(dialog.locator('[data-wallet-menu-row="settings"]')).toHaveAccessibleName('Settings');

@@ -371,10 +371,10 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-        'wallet trade'
-        'wallet manage'
-        'people manage';
-    align-items: start;
+        'wallet assets'
+        'trade earn'
+        'people actions';
+    align-items: stretch;
     gap: var(--xc-space-2);
 }
 
@@ -387,9 +387,11 @@
 }
 
 .walletGroup[data-wallet-menu-group='wallet'] { grid-area: wallet; }
+.walletGroup[data-wallet-menu-group='assets'] { grid-area: assets; }
 .walletGroup[data-wallet-menu-group='trade'] { grid-area: trade; }
-.walletGroup[data-wallet-menu-group='manage'] { grid-area: manage; }
+.walletGroup[data-wallet-menu-group='earn'] { grid-area: earn; }
 .walletGroup[data-wallet-menu-group='people'] { grid-area: people; }
+.walletGroup[data-wallet-menu-group='actions'] { grid-area: actions; }
 
 .walletGroupHead {
     margin: 0;
@@ -534,9 +536,15 @@
                 font-size: max(var(--xc-text-sm), var(--xc-control-font-md, var(--xc-text-md)));
             }
 
+            /* Settings and Lock share one row so the six boxes keep their room. */
             .walletFooter {
+                flex-direction: row;
                 gap: var(--xc-space-1);
                 padding-block-start: var(--xc-space-1);
+            }
+
+            .walletFooter .walletFooterRow {
+                inline-size: auto;
             }
         }
     }
@@ -565,32 +573,22 @@
             border-block-end: 0;
         }
 
-        .menuHeader .close {
-            display: none;
-        }
-
         .walletSurface {
             padding: 0 var(--xc-space-3) var(--xc-space-3);
         }
 
+        /* Three columns of two boxes: each column is as wide as its widest
+           label, so box edges line up down the columns and across the rows. */
         .walletGrid {
-            grid-template-columns: repeat(4, max-content);
-            grid-template-areas: 'wallet trade manage people';
+            grid-template-columns: repeat(3, max-content);
+            grid-template-areas:
+                'wallet assets trade'
+                'earn people actions';
         }
 
         .walletFooter {
             flex-direction: row;
             align-items: center;
-        }
-    }
-}
-
-@media (hover: hover) and (pointer: fine) {
-    @supports (container-type: inline-size) and (width: 1cqw) {
-        @container wallet-menu (min-width: 640px) {
-            .menuPanel .escHint {
-                display: inline-flex;
-            }
         }
     }
 }

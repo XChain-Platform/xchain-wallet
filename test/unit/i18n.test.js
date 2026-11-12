@@ -467,8 +467,6 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
-            // The wallet menu reuses the label the same destination carries elsewhere.
-            ['accountPicker.manage', 'walletMenu.group.manage'],
             // The action catalogue heading and its command-palette destination.
             ['actionsMenu.title', 'walletMenu.row.allActions'],
             // The wallet menu reuses the label the same destination carries elsewhere.
@@ -522,8 +520,14 @@ describe('translations', () => {
             ['palette.category.trade', 'walletMenu.group.trade'],
             // The raw action tool in the palette and Settings.
             ['palette.createAdvanced.title', 'settings.developer.advancedAction'],
+            // The wallet menu row and the palette entry it replaces in search.
+            ['palette.createPublishFile.title', 'walletMenu.row.publishFile'],
+            ['palette.createToken.title', 'walletMenu.row.createToken'],
+            ['palette.navBetting.title', 'walletMenu.row.betting'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['routes.addressList.dispensers', 'walletMenu.row.dispensers'],
+            // The menu's Actions group and the token page's actions heading.
+            ['routes.manageToken.actions', 'walletMenu.group.actions'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['scan.title', 'walletMenu.row.scan'],
             // The Send form's network field and the Settings network row.

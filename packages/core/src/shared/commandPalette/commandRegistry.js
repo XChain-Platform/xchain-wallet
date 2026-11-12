@@ -153,6 +153,10 @@ const CATALOGUE_COMMAND_META = {
     messaging: { subtitleKey: 'palette.navMessaging.subtitle', keywords: ['inbox', 'messages', 'chat'] },
     contacts: { subtitleKey: 'palette.navContacts.subtitle', keywords: ['address book', 'people'] },
     alerts: { keywords: ['notifications', 'notify'] },
+    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'] },
+    wizard: { subtitleKey: 'palette.createToken.subtitle', keywords: ['issue', 'new token', 'mint', 'launch'] },
+    'publish-file': { subtitleKey: 'palette.createPublishFile.subtitle', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'] },
+    'sign-message': { subtitleKey: 'palette.signMessage.subtitle', keywords: ['sign', 'message', 'attest'] },
 };
 
 const CATALOGUE_COMMAND_IDS = {
@@ -161,6 +165,10 @@ const CATALOGUE_COMMAND_IDS = {
     'contracts-list': 'nav-contracts',
     'staking-dashboard': 'nav-staking',
     actions: 'nav-actions',
+    'bet-markets': 'nav-betting',
+    wizard: 'create-token',
+    'publish-file': 'create-publish-file',
+    'sign-message': 'sign-message',
 };
 
 /**
@@ -387,6 +395,19 @@ export function buildCommands(ctx) {
 
     // ---- Settings -------------------------------------------------------
     list.push({ id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') });
+
+    // A palette entry whose destination is now a menu row steps aside, so
+    // search lists that destination once, under Menu.
+    const menuIds = new Set();
+    const deduped = list.filter((command) => {
+        if (command.searchGroup === 'Menu') {
+            menuIds.add(command.id);
+            return true;
+        }
+        return !menuIds.has(command.id);
+    });
+    list.length = 0;
+    list.push(...deduped);
 
     if (ctx.isSignerMode) {
         return markAllActionCommands(list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category)));

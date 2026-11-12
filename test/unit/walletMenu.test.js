@@ -26,8 +26,11 @@ import {
 const allRows = [...WALLET_MENU_GROUPS.flatMap((group) => group.rows), ...WALLET_MENU_FOOTER];
 
 describe('wallet menu catalogue', () => {
-    it('holds the four groups in reading order', () => {
-        expect(WALLET_MENU_GROUPS.map((group) => group.id)).toEqual(['wallet', 'trade', 'manage', 'people']);
+    it('holds six groups of four rows in reading order', () => {
+        expect(WALLET_MENU_GROUPS.map((group) => group.id)).toEqual(['wallet', 'assets', 'trade', 'earn', 'people', 'actions']);
+        // Equal boxes are the point of the layout: every group lines up with its neighbours.
+        for (const group of WALLET_MENU_GROUPS) expect(group.rows, group.id).toHaveLength(4);
+        expect(WALLET_MENU_GROUPS.at(-1).rows.at(-1).id).toBe('actions');
     });
 
     it('gives every row a unique id, an icon export and an English label', () => {

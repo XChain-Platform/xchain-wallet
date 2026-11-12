@@ -74,7 +74,7 @@ describe('CommandPalette wallet menu surface', () => {
 
         expect(root).toHaveAttribute('data-wallet-menu', '');
         expect(groups.map((group) => group.getAttribute('data-wallet-menu-group'))).toEqual([
-            'wallet', 'trade', 'manage', 'people',
+            'wallet', 'assets', 'trade', 'earn', 'people', 'actions',
         ]);
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute(
             'data-wallet-menu-row',
@@ -99,9 +99,11 @@ describe('CommandPalette wallet menu surface', () => {
         expect(input).toHaveAttribute('aria-controls', listbox.id);
         expect(groups.map((group) => group.getAttribute('aria-labelledby'))).toEqual([
             'xc-wallet-menu-group-wallet',
+            'xc-wallet-menu-group-assets',
             'xc-wallet-menu-group-trade',
-            'xc-wallet-menu-group-manage',
+            'xc-wallet-menu-group-earn',
             'xc-wallet-menu-group-people',
+            'xc-wallet-menu-group-actions',
         ]);
         expect(home).toHaveAttribute('aria-selected', 'true');
         expect(input).toHaveAttribute('aria-activedescendant', home.id);

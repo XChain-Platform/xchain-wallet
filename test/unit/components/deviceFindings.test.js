@@ -35,12 +35,11 @@ describe('device finding fixes', () => {
         expect(walletMenu).toMatch(/id: 'dispensers-list'[^\n]*icon: 'DollarIcon'/);
     });
 
-    it('hides the menu shortcut hint for touch input', () => {
+    it('shows the X close button instead of a shortcut hint on every width', () => {
         const css = read('packages/core/src/shared/commandPalette/CommandPalette.module.css');
 
         expect(rule(css, '.menuPanel .escHint')).toMatch(/display:\s*none/);
-        expect(css).toMatch(
-            /@media \(hover: hover\) and \(pointer: fine\)\s*\{\s*(?:@supports [^{]+\{\s*)?@container wallet-menu \(min-width: 640px\)\s*\{\s*\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/,
-        );
+        expect(css).not.toMatch(/\.menuPanel \.escHint\s*\{[^}]*display:\s*inline-flex/);
+        expect(css).not.toMatch(/\.menuHeader \.close\s*\{[^}]*display:\s*none/);
     });
 });

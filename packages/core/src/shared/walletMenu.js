@@ -40,7 +40,12 @@ import '../i18n/locales/en/walletMenu.js';
  * @property {WalletMenuRow[]} rows
  */
 
-/** @type {readonly WalletMenuGroup[]} */
+/**
+ * Six groups of four rows, so every box in the menu has the same height and
+ * the boxes line up in rows on every width. Anything not listed here is one
+ * search away, or on the All actions page.
+ * @type {readonly WalletMenuGroup[]}
+ */
 export const WALLET_MENU_GROUPS = Object.freeze([
     {
         id: 'wallet',
@@ -50,9 +55,16 @@ export const WALLET_MENU_GROUPS = Object.freeze([
             { id: 'send', labelKey: 'walletMenu.row.send', icon: 'SendIcon', gate: 'spendable' },
             { id: 'receive', labelKey: 'walletMenu.row.receive', icon: 'ReceiveIcon', gate: 'spendable' },
             { id: 'history', labelKey: 'walletMenu.row.history', icon: 'HistoryIcon' },
-            { id: 'scan', labelKey: 'walletMenu.row.scan', icon: 'ScanIcon' },
+        ],
+    },
+    {
+        id: 'assets',
+        labelKey: 'walletMenu.group.assets',
+        rows: [
             { id: 'my-tokens', labelKey: 'walletMenu.row.myTokens', icon: 'TokenIcon' },
             { id: 'addresses', labelKey: 'walletMenu.row.addresses', icon: 'AddressIcon' },
+            { id: 'lists', labelKey: 'walletMenu.row.lists', icon: 'TokenListIcon' },
+            { id: 'scan', labelKey: 'walletMenu.row.scan', icon: 'ScanIcon' },
         ],
     },
     {
@@ -61,20 +73,18 @@ export const WALLET_MENU_GROUPS = Object.freeze([
         rows: [
             { id: 'markets', labelKey: 'walletMenu.row.dex', icon: 'MarketIcon', gate: 'dex' },
             { id: 'market-activity', labelKey: 'walletMenu.row.marketplace', icon: 'LineChartIcon', gate: 'dex' },
-            { id: 'dispensers-list', labelKey: 'walletMenu.row.dispensers', icon: 'DollarIcon' },
             { id: 'cross-chain-templates', labelKey: 'walletMenu.row.crossChain', icon: 'LinkIcon' },
             { id: 'obligations', labelKey: 'walletMenu.row.paymentsDue', icon: 'ClockIcon' },
         ],
     },
     {
-        id: 'manage',
-        labelKey: 'walletMenu.group.manage',
+        id: 'earn',
+        labelKey: 'walletMenu.group.earn',
         rows: [
+            { id: 'dispensers-list', labelKey: 'walletMenu.row.dispensers', icon: 'DollarIcon' },
             { id: 'contracts-list', labelKey: 'walletMenu.row.contracts', icon: 'ContractIcon', gate: 'vm' },
             { id: 'staking-dashboard', labelKey: 'walletMenu.row.staking', icon: 'StakeIcon', gate: 'btc' },
-            { id: 'multisig-create', labelKey: 'walletMenu.row.multisig', icon: 'MultisigIcon', gate: 'btc' },
-            { id: 'lists', labelKey: 'walletMenu.row.lists', icon: 'TokenListIcon' },
-            { id: 'actions', labelKey: 'walletMenu.row.allActions', icon: 'GridIcon' },
+            { id: 'bet-markets', labelKey: 'walletMenu.row.betting', icon: 'HandshakeIcon' },
         ],
     },
     {
@@ -84,6 +94,17 @@ export const WALLET_MENU_GROUPS = Object.freeze([
             { id: 'messaging', labelKey: 'walletMenu.row.messaging', icon: 'MessageIcon' },
             { id: 'contacts', labelKey: 'walletMenu.row.contacts', icon: 'UsersIcon' },
             { id: 'alerts', labelKey: 'walletMenu.row.alerts', icon: 'BellIcon' },
+            { id: 'multisig-create', labelKey: 'walletMenu.row.multisig', icon: 'MultisigIcon', gate: 'btc' },
+        ],
+    },
+    {
+        id: 'actions',
+        labelKey: 'walletMenu.group.actions',
+        rows: [
+            { id: 'wizard', labelKey: 'walletMenu.row.createToken', icon: 'PlusIcon', gate: 'spendable' },
+            { id: 'publish-file', labelKey: 'walletMenu.row.publishFile', icon: 'UploadIcon', gate: 'spendable' },
+            { id: 'sign-message', labelKey: 'walletMenu.row.signMessage', icon: 'SignIcon' },
+            { id: 'actions', labelKey: 'walletMenu.row.allActions', icon: 'GridIcon' },
         ],
     },
 ]);

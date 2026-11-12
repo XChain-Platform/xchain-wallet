@@ -17,9 +17,12 @@ const source = readFileSync(
 );
 
 describe('wallet menu CSS layout contracts', () => {
-    it('packs the phone groups into two independent visual columns', () => {
+    it('lays the six groups out two across on phones and three across on wide panels', () => {
         expect(source).toMatch(
-            /\.walletGrid\s*\{[^}]*grid-template-areas:\s*'wallet trade'\s*'wallet manage'\s*'people manage'/s,
+            /\.walletGrid\s*\{[^}]*grid-template-areas:\s*'wallet assets'\s*'trade earn'\s*'people actions'/s,
+        );
+        expect(source).toMatch(
+            /@container wallet-menu \(min-width: 640px\)[\s\S]*?\.walletGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, max-content\);[^}]*grid-template-areas:\s*'wallet assets trade'\s*'earn people actions'/,
         );
     });
 
