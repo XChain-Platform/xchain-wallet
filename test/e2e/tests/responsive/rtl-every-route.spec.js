@@ -168,7 +168,7 @@ test.describe('responsive RTL route sweep', () => {
                     // Home has no PageHeader and its Send and Receive actions
                     // carry directional icons, so look for the Back control by name.
                     await expect(
-                        page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back/ }),
+                        page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back⟧/ }),
                         `${route.name}: a bottom-bar tab shows a redundant back control`,
                     ).toHaveCount(0);
                 } else {

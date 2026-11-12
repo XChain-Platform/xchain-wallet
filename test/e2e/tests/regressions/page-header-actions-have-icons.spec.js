@@ -67,9 +67,9 @@ async function openRoute(page, route) {
 
     if (route.open === 'account-rename') {
         await openPaletteRoute(page, { paletteName: 'Settings' });
-        await page.getByRole('main').getByRole('button', {
-            name: /^Accounts & addresses\b/,
-        }).click();
+        // Switching account lives on the This wallet page.
+        await page.getByRole('main').getByRole('button', { name: /^This wallet\b/ }).click();
+        await page.getByRole('button', { name: 'Switch account…' }).click();
         await expect(page.getByRole('heading', { level: 1, name: 'Accounts' })).toBeVisible();
         await page.getByRole('main').getByRole('button', { name: /^Rename\b/ }).first().click();
         return;
