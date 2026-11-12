@@ -468,16 +468,22 @@
     overflow-wrap: normal;
 }
 
+/* Settings and Lock wallet share one row at every width, half each. */
 .walletFooter {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-1);
     padding-block-start: var(--xc-space-2);
     border-block-start: 1px solid var(--xc-border);
 }
 
 .walletFooter .walletFooterRow {
-    inline-size: auto;
+    inline-size: 100%;
+}
+
+/* A wallet that cannot lock shows Settings alone, across the full row. */
+.walletFooter .walletFooterRow:only-child {
+    grid-column: 1 / -1;
 }
 
 .walletFooterRow[data-destructive='true'] {
@@ -536,15 +542,9 @@
                 font-size: max(var(--xc-text-sm), var(--xc-control-font-md, var(--xc-text-md)));
             }
 
-            /* Settings and Lock share one row so the six boxes keep their room. */
             .walletFooter {
-                flex-direction: row;
                 gap: var(--xc-space-1);
                 padding-block-start: var(--xc-space-1);
-            }
-
-            .walletFooter .walletFooterRow {
-                inline-size: auto;
             }
         }
     }
@@ -577,18 +577,14 @@
             padding: 0 var(--xc-space-3) var(--xc-space-3);
         }
 
-        /* Three columns of two boxes: each column is as wide as its widest
-           label, so box edges line up down the columns and across the rows. */
+        /* Three equal columns of two boxes that fill the panel: no column is
+           narrower than its widest label, and box edges line up down the
+           columns and across the rows. */
         .walletGrid {
-            grid-template-columns: repeat(3, max-content);
+            grid-template-columns: repeat(3, minmax(max-content, 1fr));
             grid-template-areas:
                 'wallet assets trade'
                 'earn people actions';
-        }
-
-        .walletFooter {
-            flex-direction: row;
-            align-items: center;
         }
     }
 }

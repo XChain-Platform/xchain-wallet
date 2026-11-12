@@ -22,7 +22,7 @@ describe('wallet menu CSS layout contracts', () => {
             /\.walletGrid\s*\{[^}]*grid-template-areas:\s*'wallet assets'\s*'trade earn'\s*'people actions'/s,
         );
         expect(source).toMatch(
-            /@container wallet-menu \(min-width: 640px\)[\s\S]*?\.walletGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, max-content\);[^}]*grid-template-areas:\s*'wallet assets trade'\s*'earn people actions'/,
+            /@container wallet-menu \(min-width: 640px\)[\s\S]*?\.walletGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(max-content, 1fr\)\);[^}]*grid-template-areas:\s*'wallet assets trade'\s*'earn people actions'/,
         );
     });
 
