@@ -394,10 +394,19 @@ async function openWalletMenuDestination(page, name) {
     }
     const dialog = commandPalette(page);
     if (!(await dialog.isVisible())) {
-        await page.evaluate(() => {
-            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-        });
-        await page.keyboard.press('ControlOrMeta+k');
+        // The header menu button is what a user presses, and it works on every
+        // device. The shortcut is only the fallback: an emulated phone reports
+        // a non-Mac platform, so the Cmd key the harness sends is not its
+        // modifier.
+        const pancake = page.getByRole('button', { name: 'Open menu' }).first();
+        if (await pancake.isVisible()) {
+            await pancake.click();
+        } else {
+            await page.evaluate(() => {
+                if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+            });
+            await page.keyboard.press('ControlOrMeta+k');
+        }
     }
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     const row = dialog.locator(`[data-wallet-menu-row="${id}"]`);
@@ -525,9 +534,10 @@ export async function submitTokenWizard(page, { onReview } = {}) {
 }
 
 /**
- * The nav rail's "Lock" button. Only the phone layout's header carries a
- * "Lock wallet" button (never beside the rail), but a substring match on
- * "Lock" would still hit it, so anchor on the exact accessible name.
+ * The visible Lock control: the sidebar foot's "Lock wallet" button, or the
+ * app header's "Lock" button where no sidebar shows. The wallet menu's own
+ * "Lock wallet" row lives in a closed dialog, so it is not visible here.
+ * Anchored on the whole accessible name so no longer label can match.
  */
 export function lockButton(page) {
     // The side navigation foot and the wallet menu read "Lock wallet", the
