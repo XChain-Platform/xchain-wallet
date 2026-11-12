@@ -35,16 +35,15 @@ const ROUTES = [
     { name: 'Contacts', section: 'Contacts', visit: (page) => gotoSection(page, 'Contacts') },
     { name: 'Addresses', section: null, visit: (page) => openPaletteRoute(page, 'Addresses') },
     { name: 'Create token', section: null, visit: (page) => openPaletteRoute(page, 'Create a token') },
-    { name: 'Markets', section: 'DEX', visit: (page) => openPaletteRoute(page, 'Open DEX') },
+    { name: 'Markets', section: 'DEX', visit: (page) => openPaletteRoute(page, 'DEX') },
     { name: 'Settings', section: 'Settings', visit: (page) => gotoSection(page, 'Settings') },
     {
         name: 'Settings Accounts',
         section: null,
         visit: async (page) => {
             await gotoSection(page, 'Settings');
-            await page.getByRole('main')
-                .getByRole('button', { name: /^Accounts & addresses\b/ })
-                .click();
+            await page.getByRole('main').getByRole('button', { name: /^This wallet\b/ }).click();
+            await page.getByRole('main').getByRole('button', { name: /^Account\b/ }).click();
         },
     },
 ];

@@ -164,11 +164,11 @@ test.describe('responsive RTL route sweep', () => {
                 if (route.back) {
                     await expectBackAtStartWithMirroredChevrons(page, route.name);
                 } else if (route.tab) {
-                    const heading = page.getByRole('heading', { level: 1 }).first();
-                    await expect(heading).toBeVisible();
-                    // h1 > title group > PageHeader row
+                    await expect(page.getByRole('heading', { level: 1 }).first()).toBeAttached();
+                    // Home has no PageHeader and its Send and Receive actions
+                    // carry directional icons, so look for the Back control by name.
                     await expect(
-                        heading.locator('xpath=../..').locator('button:has(svg[data-xc-directional])'),
+                        page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back/ }),
                         `${route.name}: a bottom-bar tab shows a redundant back control`,
                     ).toHaveCount(0);
                 } else {

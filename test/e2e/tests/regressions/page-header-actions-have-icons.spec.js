@@ -22,7 +22,7 @@ const VIEWPORTS = [
 // or in the EmptyState when the list is empty (the demo wallet has no lists).
 const CONTENT_ACTION_ROUTES = [
     { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
-    { paletteName: 'My lists', heading: 'My lists', actionName: 'Create list' },
+    { paletteName: 'Lists', heading: 'My lists', actionName: 'Create list' },
     { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
     { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New conversation' },
     { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },

@@ -107,7 +107,9 @@ for (const phone of LANDSCAPE_PHONES) {
             // Compact action routes: header + body floor + actions must fit, or
             // the screen scrolls a sliver of the title row away.
             await test.step('Accounts', async () => {
-                await openSettingsRow(page, /Accounts/);
+                // Switching account lives on the This wallet page.
+                await openSettingsRow(page, /^This wallet/);
+                await page.getByRole('button', { name: 'Switch account…' }).click();
                 // U48 keeps page actions directly under their content, never in a pinned footer.
                 await expect(page.getByRole('main').getByRole('button', { name: 'Add account' })).toBeVisible();
                 await expect(page.locator('footer')).toHaveCount(0);

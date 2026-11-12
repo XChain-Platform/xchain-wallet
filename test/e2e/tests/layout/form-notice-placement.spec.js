@@ -313,7 +313,7 @@ const ALL_FORMS = [
         notice: /Token-gated content rule/,
     },
     // Last: an edited multisig form holds the page until its changes are dealt with.
-    { label: 'Create multisig', open: (page) => palette(page, 'Create multisig'), trigger: multisigComposeError },
+    { label: 'Create multisig', open: (page) => palette(page, 'Multisig'), trigger: multisigComposeError },
 ];
 
 /**
