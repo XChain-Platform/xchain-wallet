@@ -67,9 +67,11 @@ describe('scoreCommand', () => {
     it('can search a display title by its own label without its breadcrumb', () => {
         const section = cmd('Settings › Backup', {
             searchTitle: 'Backup',
+            searchContext: 'Settings',
             keywords: ['seed', 'restore'],
         });
         expect(scoreCommand('settings', section)).toBe(0);
+        expect(scoreCommand('settings backup', section)).toBeGreaterThan(0);
         expect(scoreCommand('backup', section)).toBeGreaterThan(0);
         expect(scoreCommand('seed', section)).toBeGreaterThan(0);
     });

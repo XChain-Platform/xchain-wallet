@@ -265,10 +265,36 @@ describe('CommandPalette wallet menu surface', () => {
             .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
-    it('puts Receive first for rec', () => {
+    it('finds Settings sections by a multi-word contextual title only', () => {
         renderMenu({ commands: integratedCommands() });
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'rec' } });
-        expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', 'xc-cmd-nav-receive');
+        const input = screen.getByRole('combobox');
+
+        for (const [query, id] of [
+            ['settings keyboard', 'xc-cmd-settings-keyboard'],
+            ['settings privacy', 'xc-cmd-settings-privacy'],
+        ]) {
+            fireEvent.change(input, { target: { value: query } });
+            expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', id);
+        }
+
+        for (const query of ['set', 'settings']) {
+            fireEvent.change(input, { target: { value: query } });
+            expect(screen.queryByRole('option', { name: 'Settings › Keyboard' })).toBeNull();
+            expect(screen.queryByRole('option', { name: 'Settings › Privacy' })).toBeNull();
+        }
+    });
+
+    it('puts direct destinations first for common searches', () => {
+        renderMenu({ commands: integratedCommands() });
+        const input = screen.getByRole('combobox');
+
+        for (const [query, id] of [
+            ['rec', 'xc-cmd-nav-receive'],
+            ['all', 'xc-cmd-nav-actions'],
+        ]) {
+            fireEvent.change(input, { target: { value: query } });
+            expect(screen.getAllByRole('option')[0]).toHaveAttribute('id', id);
+        }
     });
 
     it('keeps a matching footer row in the Menu group', () => {

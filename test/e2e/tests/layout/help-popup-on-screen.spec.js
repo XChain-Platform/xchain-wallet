@@ -36,7 +36,7 @@ const FORM_ROUTES = [
     },
     { name: 'sign-message', open: (page) => openPaletteRoute(page, 'Sign a message') },
     { name: 'publish-file', open: (page) => openPaletteRoute(page, 'Publish file') },
-    { name: 'multisig-create', open: (page) => openPaletteRoute(page, 'Create multisig') },
+    { name: 'multisig-create', open: (page) => openPaletteRoute(page, 'Multisig') },
 ];
 
 async function visibleShellBounds(page) {

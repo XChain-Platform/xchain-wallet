@@ -20,12 +20,13 @@ const WIDTHS = [{ width: 360, height: 800 }, { width: 1440, height: 900 }];
 const SCALES = [1, 1.5];
 const BASE_CONTROL_PX = 14;
 
-async function openByPalette(page, query) {
+async function openByPalette(page, query, title = null) {
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(query);
-    await palette.getByRole('option').first().click();
+    const options = palette.getByRole('option');
+    await (title ? options.filter({ hasText: title }) : options).first().click();
     await expect(palette).toBeHidden();
     await page.waitForTimeout(800);
 }
@@ -87,7 +88,7 @@ for (const { width, height } of WIDTHS) {
                 expect(box.y + box.height, `${label}: Max bottom edge`).toBeLessThanOrEqual(amount.y + amount.height + 1);
             }
 
-            await openByPalette(page, 'Advanced');
+            await openByPalette(page, 'Advanced', 'Advanced action');
             expectFieldsFit(await page.evaluate(readFields), scale, `${width}px x${scale} Advanced action`);
         });
     }

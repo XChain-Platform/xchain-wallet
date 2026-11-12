@@ -43,8 +43,8 @@ const ROUTES = [
     { label: 'History', rows: true, open: (page) => gotoSection(page, 'History') },
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive') },
-    { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions') },
-    { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses') },
+    { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions', 'Staking') },
+    { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses', 'Contacts') },
     { label: 'Issue a token', open: issueForm },
     { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button').filter({ hasText: /\// })) },
     { label: 'Dispenser detail', open: (page) => openFirst(page, 'Dispensers', page.getByRole('main').locator('li').getByRole('button')) },
@@ -66,11 +66,13 @@ async function homeTab(page, name) {
     await tab.click();
 }
 
-async function palette(page, destination) {
+// The menu filters by entry label, so a destination known by its subtitle is
+// found by typing the label (`query`) and picking the row that shows it.
+async function palette(page, destination, query = destination) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('combobox').fill(destination);
+    await dialog.getByRole('combobox').fill(query);
     // A renamed entry fails here by name instead of a click that waits out the test.
     const option = dialog.getByRole('option').filter({ hasText: destination }).first();
     await expect(option, `the palette offers "${destination}"`).toBeVisible();
@@ -83,7 +85,7 @@ async function palette(page, destination) {
  * form is its Custom template (ruling U79).
  */
 async function issueForm(page) {
-    await palette(page, 'Choose a token template');
+    await palette(page, 'Choose a token template', 'Issue token');
     await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
     await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
 }

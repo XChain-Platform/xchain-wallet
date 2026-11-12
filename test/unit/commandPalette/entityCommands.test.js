@@ -86,6 +86,7 @@ describe('settingsSectionsToCommands', () => {
         const backup = cmds.find((c) => c.id === 'settings-backup');
         expect(backup.title).toBe('Settings › Backup');
         expect(backup.searchTitle).toBe('Backup');
+        expect(backup.searchContext).toBe('Settings');
         expect(backup.keywords).not.toContain('settings');
         backup.run();
         expect(openSettings).toHaveBeenCalledWith('backup');

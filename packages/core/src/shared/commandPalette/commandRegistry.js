@@ -553,6 +553,7 @@ export function settingsSectionsToCommands(ctx) {
         searchGroup: 'In Settings',
         title: t('palette.settingsSectionTitle', { section: s.title }),
         searchTitle: s.title,
+        searchContext: t('walletMenu.row.settings'),
         keywords: s.keywords,
         Icon: Icon.GearIcon,
         run: () => ctx.openSettings(s.id),

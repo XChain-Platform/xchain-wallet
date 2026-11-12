@@ -27,6 +27,7 @@
  * @property {string} category
  * @property {string} title
  * @property {string} [searchTitle]
+ * @property {string} [searchContext]
  * @property {boolean} [searchOnlyTitle]
  * @property {string} [searchGroup]
  * @property {string} [subtitle]
@@ -86,7 +87,15 @@ export function scoreText(query, textRaw) {
  */
 export function scoreCommand(query, command, { respectSearchOnlyTitle = false } = {}) {
     if (!query) return 1;
-    const titleScore = scoreText(query, command.searchTitle || command.title);
+    let titleScore = scoreText(query, command.searchTitle || command.title);
+    // Context qualifies multi-word queries without making every contextual
+    // command match a single word such as "settings".
+    if (command.searchTitle && command.searchContext && query.split(/\s+/).length > 1) {
+        titleScore = Math.max(
+            titleScore,
+            scoreText(query, `${command.searchContext} ${command.searchTitle}`),
+        );
+    }
     // Keep title matches in a separate tier so even a loose title match
     // outranks an exact keyword or subtitle match.
     let best = titleScore > 0 ? 1000 + titleScore : 0;
