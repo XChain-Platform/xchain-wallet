@@ -71,7 +71,11 @@ const icons = read('packages', 'core', 'src', 'ui', 'icons', 'index.jsx');
 assert.match(icons, /export function ClockIcon/, 'ClockIcon exists');
 
 const paletteSrc = read('packages', 'core', 'src', 'shared', 'commandPalette', 'commandRegistry.js');
-assert.match(paletteSrc, /id: CATALOGUE_COMMAND_IDS\[row\.id\] \|\| `nav-\$\{row\.id\}`[\s\S]*?run: go\(row\.id\)/, 'command palette entry');
+assert.match(
+    paletteSrc,
+    /for \(const group of visibleWalletMenu\(ctx\)\)[\s\S]*?id: CATALOGUE_COMMAND_IDS\[row\.id\] \|\| `nav-\$\{row\.id\}`[\s\S]*?run: row\.id === 'scan'[\s\S]*?: go\(row\.id\)/,
+    'catalogue rows become command palette entries with the normal navigation fallback',
+);
 assert.match(paletteSrc, /obligations: \{ subtitleKey: 'palette\.navObligations\.subtitle'/, 'command palette obligations meta');
 
 // ---- Shell wiring (web + desktop) --------------------------------------

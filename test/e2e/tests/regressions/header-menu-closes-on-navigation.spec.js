@@ -63,7 +63,7 @@ for (const scenario of CASES) {
             if (scenario.destination === 'wallets') {
                 const main = page.getByRole('main');
                 await activate(main.getByRole('button', { name: /^This wallet\b/ }), scenario.hasTouch);
-                await activate(main.getByRole('button', { name: /^Open wallets/ }), scenario.hasTouch);
+                await activate(main.getByRole('button', { name: /^Switch \/ rename/ }), scenario.hasTouch);
                 await expect(page.getByRole('heading', { name: 'Wallets', level: 1 })).toBeVisible();
             }
 

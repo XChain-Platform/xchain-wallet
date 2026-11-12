@@ -26,16 +26,20 @@ assert.deepEqual(TAB_BAR_DESTINATIONS, WALLET_TAB_BAR_IDS,
     'routeRegistry uses the catalogue tab ids');
 assert.deepEqual(TAB_BAR_DESTINATIONS, ['home', 'send', 'receive', 'history', 'settings'],
     'the compact bar has the approved five destinations');
-assert.ok(/TAB_BAR_DESTINATIONS\.map\(tabRow\)/.test(barSrc),
+assert.ok(/TAB_BAR_DESTINATIONS\s*\.map\(tabRow\)/.test(barSrc),
     'tabs resolve through the catalogue row adapter');
-assert.ok(/walletMenuRow\(id\)/.test(barSrc) && /Icon\[row\.icon\]/.test(barSrc),
-    'tab labels and icons come from walletMenuRow');
+assert.ok(/walletMenuRow\(id\)/.test(barSrc)
+    && /label:\s*t\(row\.labelKey\)/.test(barSrc)
+    && /Icon:\s*Icon\[row\.icon\]/.test(barSrc),
+    'tab labels resolve at render and icons come from walletMenuRow');
 assert.ok(/walletMenuRowVisible\(tab, \{ isSignerMode \}\)/.test(barSrc),
     'signer mode applies the catalogue spendable gate');
 assert.ok(/tab\.id === 'settings'\) onOpenSettings\?\.\(\)/.test(barSrc),
     'Settings calls the dedicated settings callback');
 assert.ok(!/sheet|moreTrigger|badges|tabDot/i.test(barSrc),
     'the tab bar has no More sheet or badge state');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('more'), 'More is not a tab bar destination');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('scan'), 'Scan is not a tab bar destination');
 
 assert.ok(/\.bar\s*\{[\s\S]*?position:\s*absolute/.test(cssSrc),
     'the bar is anchored to the measured shell');

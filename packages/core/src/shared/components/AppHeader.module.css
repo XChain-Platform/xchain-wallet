@@ -42,9 +42,11 @@
     display: none;
 }
 
-@container app-header (min-width: 640px) {
-    .popOut {
-        display: inline-flex;
+@supports (container-type: inline-size) and (width: 1cqw) {
+    @container app-header (min-width: 640px) {
+        .popOut {
+            display: inline-flex;
+        }
     }
 }
 

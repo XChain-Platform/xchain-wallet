@@ -13,8 +13,8 @@
 // Asserts:
 //   1. ScanRoute exists, mounts QrScanner + a paste fallback, and
 //      classifies via the existing detectQrContent helper.
-//   2. BottomTabBar PRIMARY_TABS swaps Receive for Scan and the More
-//      sheet now lists Receive (so the surface set stays complete).
+//   2. BottomTabBar draws its five catalogue destinations through the
+//      row adapter, resolves labels at render, and has no More or Scan tab.
 //   3. LeftNav primary list grows a Scan entry between Receive and DEX
 //      and VIEW_GROUPS knows about it.
 //   4. Web + desktop + extension popup App.jsx import ScanRoute, ship
@@ -114,26 +114,23 @@ assert.ok(/\{n\}/.test(en['scan.error.xcwChunk']) && /\{total\}/.test(en['scan.e
 assert.ok(!/\{type\}/.test(en['scan.error.unknown']),
     'scan.error.unknown does not expose an internal classifier type');
 
-// --- 2. BottomTabBar PRIMARY_TABS swap --------------------------------
+// --- 2. BottomTabBar catalogue destinations ---------------------------
 
 const tabBarSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'BottomTabBar.jsx'),
     'utf8',
 );
-// Slice each array's body so the regex only inspects the intended block.
-function arrayBody(name) {
-    const start = tabBarSrc.indexOf(`const ${name} = [`);
-    if (start < 0) throw new Error(`${name} not found in BottomTabBar.jsx`);
-    const end = tabBarSrc.indexOf('];', start);
-    return tabBarSrc.slice(start, end + 2);
-}
 // The tab bar is TAB_BAR_DESTINATIONS in order, drawn from the wallet menu
 // catalogue. Scan is not a tab; it stays reachable from the wallet menu and the sidebar.
-assert.ok(/const TABS = TAB_BAR_DESTINATIONS\.map\(tabRow\)/.test(tabBarSrc),
+assert.ok(/const tabs = TAB_BAR_DESTINATIONS\s*\.map\(tabRow\)/.test(tabBarSrc),
     'the tab bar is built from the tab bar destination list');
+assert.ok(/walletMenuRow\(id\)/.test(tabBarSrc)
+    && /label:\s*t\(row\.labelKey\)/.test(tabBarSrc),
+    'the row adapter resolves catalogue labels at render');
 assert.deepEqual(TAB_BAR_DESTINATIONS, ['home', 'send', 'receive', 'history', 'settings'],
     'the tab bar carries Home, Send, Receive, History and Settings');
 assert.ok(!TAB_BAR_DESTINATIONS.includes('scan'), 'Scan is not a tab bar destination');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('more'), 'More is not a tab bar destination');
 assert.ok(!/SHEET_PRIMARY|More/.test(tabBarSrc.replace(/\/\*[\s\S]*?\*\//g, '')),
     'the tab bar has no More sheet');
 
@@ -212,5 +209,5 @@ assert.ok(['wif', 'unknown', 'address'].includes(wif.type),
     'wif test string classifies into one of the documented branches');
 
 console.log(
-    'OK: scan-route smoke (§24.3 / Cluster Y FOLLOWUP 1: ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar swaps Receive->Scan in PRIMARY_TABS and lists Receive in More; LeftNav grows a Scan row + VIEW_GROUPS entry; web/desktop/popup App.jsx all import ScanRoute and route send/receive/psbt outcomes to existing views; secret material is NOT auto-imported)',
+    'OK: scan-route smoke (ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar uses five catalogue destinations with labels resolved at render and no More or Scan tab; LeftNav includes Scan; web/desktop/popup App.jsx route send/receive/psbt outcomes; secret material is not auto-imported)',
 );

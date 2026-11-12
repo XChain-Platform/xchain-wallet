@@ -279,12 +279,12 @@ test('a long wallet name ellipsises inside a one-row app header at every width',
         await settle(page);
         const result = await page.evaluate(() => {
             const bar = document.querySelector('[aria-label="App header"]');
-            const name = bar.querySelector('[class*="identity"] [class*="name"]');
+            const name = bar.querySelector('[class*="walletName"]');
             const original = name.textContent;
             name.textContent = 'An extremely long wallet name that no phone header could ever hold in one row';
             const barBox = bar.getBoundingClientRect();
             const nameBox = name.getBoundingClientRect();
-            const controls = Array.from(bar.querySelectorAll('button')).map((el) => el.getBoundingClientRect());
+            const controls = Array.from(bar.querySelectorAll('button')).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
             const out = {
                 barHeight: barBox.height,
                 nameEllipsised: name.scrollWidth > name.clientWidth,
