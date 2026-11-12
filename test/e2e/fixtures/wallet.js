@@ -530,7 +530,9 @@ export async function submitTokenWizard(page, { onReview } = {}) {
  * "Lock" would still hit it, so anchor on the exact accessible name.
  */
 export function lockButton(page) {
-    return page.getByRole('button', { name: 'Lock', exact: true });
+    // The side navigation foot and the wallet menu read "Lock wallet", the
+    // header icon button carries the same name.
+    return page.getByRole('button', { name: /^Lock wallet$/ });
 }
 
 /**

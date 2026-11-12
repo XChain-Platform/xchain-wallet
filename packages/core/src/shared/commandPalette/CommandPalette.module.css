@@ -465,11 +465,11 @@
 }
 
 .walletFooterRow[data-destructive='true'] {
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .walletFooterRow[data-destructive='true'] .walletRowIcon {
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Short phone sheets trade spare rhythm for a fully visible catalogue. The
