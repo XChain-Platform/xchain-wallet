@@ -535,9 +535,9 @@ export async function submitTokenWizard(page, { onReview } = {}) {
 
 /**
  * The visible Lock control: the sidebar foot's "Lock wallet" button, or the
- * app header's "Lock" button where no sidebar shows. The wallet menu's own
- * "Lock wallet" row lives in a closed dialog, so it is not visible here.
- * Anchored on the whole accessible name so no longer label can match.
+ * app header's "Lock wallet" button where no sidebar shows (never both). The
+ * wallet menu's own "Lock wallet" row lives in a closed dialog, so it is not
+ * visible here. Anchored on the whole accessible name so no longer label can match.
  */
 export function lockButton(page) {
     // The side navigation foot and the wallet menu read "Lock wallet", the
