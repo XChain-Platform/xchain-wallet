@@ -367,8 +367,18 @@
     overscroll-behavior: contain;
 }
 
+/* On a screen too short for every box, the boxes scroll and the Settings
+   and Lock wallet row stays in view under them. */
 .walletGrid {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: grid;
+    /* Rows keep their full height, so a short screen scrolls the boxes
+       instead of squeezing them. */
+    grid-auto-rows: max-content;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
         'wallet assets'
@@ -470,6 +480,7 @@
 
 /* Settings and Lock wallet share one row at every width, half each. */
 .walletFooter {
+    flex: none;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-1);
