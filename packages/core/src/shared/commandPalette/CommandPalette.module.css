@@ -93,27 +93,41 @@
     border-bottom: 1px solid var(--xc-border);
 }
 
+/* The field holds the search icon at its start edge, the way Home's filter
+   search does, and the typed text starts after the icon. */
+.searchField {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
 .searchIcon {
-    --xc-icon-size: var(--xc-icon-md);
+    position: absolute;
+    inset-inline-start: 10px;
+    z-index: calc(var(--xc-z-base) + 1);
     display: inline-flex;
+    align-items: center;
     color: var(--xc-text-muted);
-    flex: 0 0 auto;
+    pointer-events: none;
 }
 
 /* The search box is a form field like any other, so it carries the shared
    field border, radius, height and focus ring. */
 .input {
     flex: 1 1 auto;
+    width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--xc-control-border);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius, 8px);
     outline: none;
-    background: var(--xc-surface);
+    background: var(--xc-bg);
     color: var(--xc-text);
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    padding-inline: var(--xc-space-3);
+    padding-inline: var(--xc-space-8) var(--xc-space-3);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);

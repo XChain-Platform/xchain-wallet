@@ -296,32 +296,35 @@ export function CommandPalette({
 
     const searchControl = (
         <div className={styles.searchRow}>
-            <span className={styles.searchIcon} aria-hidden="true">
-                <Icon.SearchIcon />
+            {/* The icon sits inside the field, as on Home's filter search. */}
+            <span className={styles.searchField}>
+                <span className={styles.searchIcon} aria-hidden="true">
+                    <Icon.SearchIcon />
+                </span>
+                {/* eslint-disable-next-line jsx-a11y/no-autofocus -- palette
+                    is a transient modal; focusing search is the whole point */}
+                <input
+                    ref={inputRef}
+                    type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    className={styles.input}
+                    value={query}
+                    onChange={(e) => updateQuery(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    placeholder={placeholder || (menu
+                        ? t('walletMenu.search')
+                        : t('commandPalette.commandPalette.searchActionsTokensContacts'))}
+                    aria-label={t('commandPalette.commandPalette.searchCommands')}
+                    role="combobox"
+                    aria-expanded="true"
+                    aria-controls="xc-cmd-listbox"
+                    aria-activedescendant={activeId}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
             </span>
-            {/* eslint-disable-next-line jsx-a11y/no-autofocus -- palette
-                is a transient modal; focusing search is the whole point */}
-            <input
-                ref={inputRef}
-                type="search"
-                enterKeyHint="search"
-                autoCapitalize="off"
-                className={styles.input}
-                value={query}
-                onChange={(e) => updateQuery(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder={placeholder || (menu
-                    ? t('walletMenu.search')
-                    : t('commandPalette.commandPalette.searchActionsTokensContacts'))}
-                aria-label={t('commandPalette.commandPalette.searchCommands')}
-                role="combobox"
-                aria-expanded="true"
-                aria-controls="xc-cmd-listbox"
-                aria-activedescendant={activeId}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
             <kbd className={styles.escHint} aria-hidden="true">
                 {menu
                     ? t('commandPalette.commandPalette.shortcut')
