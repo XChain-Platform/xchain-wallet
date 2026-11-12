@@ -185,7 +185,10 @@ for (const viewport of VIEWPORTS) {
                     atTop: true,
                 });
 
-                await page.getByRole('main').getByRole('button', { name: /^Accounts & addresses/ }).click();
+                // Switching account lives on the This wallet page.
+                await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).click();
+                await expectScreen(page, 'This wallet', `${size} this wallet for accounts`, { atTop: true });
+                await page.getByRole('button', { name: 'Switch account…' }).click();
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Add account' }),

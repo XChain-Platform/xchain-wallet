@@ -165,6 +165,10 @@ export function unlockedAnyScreen(page) {
 export async function openSettings(page) {
     if (await nav(page).count() > 0) {
         await gotoSection(page, 'Settings');
+        // Choosing Settings while a Settings sub-page is open (the wallet
+        // picker after an add-wallet flow) leaves that sub-page on screen.
+        const back = page.getByRole('button', { name: 'Back to settings', exact: true });
+        if (await back.isVisible().catch(() => false)) await back.click();
         return;
     }
 
@@ -250,12 +254,12 @@ export async function openPaletteCommand(page, title, { option, timeoutMs = 30_0
 /**
  * The active wallet's identity in the App header.
  *
- * The header names the active wallet in a `WalletIdentity` span (not a
- * button), and the wallet picker closes itself after a pick, so this is the
- * one place a switch can be confirmed.
+ * The header names the active wallet as a plain label (a span carrying the
+ * name as its title, not a button), and the wallet picker closes itself after
+ * a pick, so this is the one place a switch can be confirmed.
  */
 export function activeWalletIdentity(page) {
-    return page.getByRole('region', { name: 'App header' }).getByTestId('wallet-identity');
+    return page.getByRole('region', { name: 'App header' }).locator('span[title]');
 }
 
 /** Asserts the App header names `name` as the active wallet. */
@@ -272,7 +276,7 @@ export async function openWalletPicker(page) {
     const back = page.getByRole('button', { name: 'Back to settings' });
     if (await back.isVisible().catch(() => false)) await back.click();
     await main.getByRole('button', { name: /^This wallet\b/ }).click();
-    await main.getByRole('button', { name: /^Open wallets/ }).click();
+    await main.getByRole('button', { name: /^Switch \/ rename/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
 }
 

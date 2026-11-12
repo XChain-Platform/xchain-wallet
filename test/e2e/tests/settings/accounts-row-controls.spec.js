@@ -19,8 +19,12 @@ const VIEWPORTS = [
 
 async function openAccounts(page) {
     await openSettings(page);
-    const row = page.getByRole('main').getByRole('button', { name: /^Accounts & addresses\b/ });
-    await expect(row, 'Settings has no Accounts & addresses row').toBeVisible();
+    // Switching account lives on the This wallet page, under Settings.
+    const thisWallet = page.getByRole('main').getByRole('button', { name: /^This wallet\b/ });
+    await expect(thisWallet, 'Settings has no This wallet row').toBeVisible();
+    await thisWallet.click();
+    const row = page.getByRole('main').getByRole('button', { name: 'Switch account…' });
+    await expect(row, 'This wallet has no Switch account row').toBeVisible();
     await row.click();
     await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
 }

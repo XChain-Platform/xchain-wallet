@@ -23,7 +23,7 @@
 // No chain, no funds, no signing: this is a shell-state question, so it runs on
 // the dev-server venue.
 
-import { createWallet, expect, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
+import { activeWalletIdentity, createWallet, expect, openWalletPicker, test, unlockedShell } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 // Every wait below sits on the far side of an Argon2id derivation (a create or
@@ -34,9 +34,9 @@ const KDF_STEP_MS = kdfStepTimeout();
 
 const PASSWORD = 'add-wallet-activation';
 
-// The condensed header names the active wallet as text, not as a button.
+// The header names the active wallet as a plain label, not as a button.
 function activeWallet(page, name) {
-    return page.getByRole('region', { name: 'App header' }).getByText(`Wallet: ${name}`);
+    return activeWalletIdentity(page).filter({ hasText: name });
 }
 
 test.describe('adding a second wallet', () => {

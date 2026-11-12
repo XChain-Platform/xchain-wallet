@@ -34,6 +34,7 @@ import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
+import '../../i18n/locales/en/walletMenu.js';
 import { Icon } from '../../ui/index.js';
 import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
 
