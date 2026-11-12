@@ -219,10 +219,10 @@ export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}
             });
             await page.keyboard.press('ControlOrMeta+k');
         }
-        await expect(search, 'the wallet menu did not open').toBeEditable({ timeout: 3_000 });
+        await expect(search, 'the wallet menu is not open').toBeEditable({ timeout: 3_000 });
         await search.fill(query, { timeout: 3_000 });
         await expect(search).toHaveValue(query, { timeout: 2_000 });
-    }, `the wallet menu never opened with "${query}" typed into its search field`)
+    }, `the wallet menu search does not accept "${query}"`)
         .toPass({ timeout: timeoutMs });
     return dialog;
 }
@@ -243,7 +243,7 @@ export async function openPaletteCommand(page, title, { option, timeoutMs = 30_0
     const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
     await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
     await row.click();
-    await expect(dialog, `the wallet menu stayed open after choosing "${title}"`)
+    await expect(dialog, `the wallet menu is visible after choosing "${title}"`)
         .toBeHidden({ timeout: 15_000 });
 }
 
@@ -537,7 +537,7 @@ export async function submitTokenWizard(page, { onReview } = {}) {
  * The visible Lock control: the sidebar foot's "Lock wallet" button, or the
  * app header's "Lock wallet" button where no sidebar shows (never both). The
  * wallet menu's own "Lock wallet" row lives in a closed dialog, so it is not
- * visible here. Anchored on the whole accessible name so no longer label can match.
+ * visible here. The whole-name anchor excludes longer labels.
  */
 export function lockButton(page) {
     // The side navigation foot and the wallet menu read "Lock wallet", the

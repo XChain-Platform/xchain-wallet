@@ -550,8 +550,8 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    // Unread-message state still feeds the Alerts route, but navigation
-    // surfaces deliberately expose no unread badges or counts.
+    // Unread-message state feeds the Alerts route, while navigation surfaces
+    // expose no unread badges or counts.
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. The global shortcut is inert unless the wallet is unlocked

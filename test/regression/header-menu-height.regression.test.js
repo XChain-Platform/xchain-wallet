@@ -10,11 +10,9 @@
 
 // Regression suite: wallet menu height.
 //
-//   2026-10-14: the header overflow menu was capped at 520px, so on tall
-//   phones it cut its last visible row through the label while hundreds of
-//   pixels sat empty below it. The wallet menu that replaced it is bounded by
-//   the viewport alone: a full-height sheet on a phone, and a dropdown whose
-//   height is the viewport minus the app bar at wider widths.
+// The wallet menu follows the viewport bounds: a full-height sheet on a phone,
+// and a dropdown whose height is the viewport minus the app bar at wider widths.
+// The phone sheet shows every row without an unused lower band.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

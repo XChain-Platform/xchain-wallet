@@ -78,7 +78,7 @@ describe('web startup imports', () => {
         );
     });
 
-    it('does not load the retired menu route', () => {
+    it('does not load MenuRoute', () => {
         expect(appSource).not.toContain('MenuRoute');
     });
 

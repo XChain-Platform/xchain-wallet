@@ -43,7 +43,7 @@ async function gotoPalette(page, title, heading = title, form = heading) {
     // and `fill` waits forever on something that is not the palette.
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
-    await expect(dialog, 'the wallet menu did not open').toBeVisible({ timeout: 15_000 });
+    await expect(dialog, 'the wallet menu is not open').toBeVisible({ timeout: 15_000 });
     const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeEditable({ timeout: 15_000 });
     await combobox.fill(title);

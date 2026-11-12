@@ -10,24 +10,15 @@
 
 // WHAT EACH SHELL HANDS <Home>, CHECKED AGAINST WHAT Home TAKES.
 //
-// test/unit/routes/Home.deadProps.test.jsx already guards one direction:
-// Home declares no prop it never reads. Nothing guarded the other
-// direction, and both halves of a shell/component contract can rot.
+// test/unit/routes/Home.deadProps.test.jsx guards one direction: Home declares
+// no prop it never reads. This check covers the shell side of the contract.
 //
-// WHAT IT COST, measured 2026-08-25 on this tree. The desktop renderer
-// handed <Home> five handlers Home does not destructure:
-// onMyTokens / onMarketActivity / onCrossChain / onContacts / onMultisig.
-// Those destinations belong to the shared wallet menu and navigation
-// surfaces, not Home. Home takes an explicit parameter list with no
-// rest-spread, so all five reached no render path. The block reads as if a
-// desktop home surface offers Marketplace, My Tokens, Cross-chain, Contacts
-// and Multisig; nothing there did.
+// Home receives no destination handlers owned by the shared wallet menu and
+// navigation surfaces: onMyTokens, onMarketActivity, onCrossChain, onContacts
+// and onMultisig. Its explicit parameter list has no rest spread.
 //
-// The same call site was missing a prop Home DOES read: `onSelectEntry`,
-// which Home forwards to HomeTabs, which hands it to every demo Activity
-// and DeFi row's onClick. Those rows render an unconditional <button>, so
-// on desktop they were live buttons with no effect - the exact shape
-// packages/core/src/shared/actionEntries.js:34-36 was written against.
+// Every shell supplies `onSelectEntry`. Home forwards it to HomeTabs, which
+// gives every demo Activity and DeFi row an effective onClick handler.
 //
 // WHY IT IS A SOURCE READ. Rendering Home in three shells needs a wallet,
 // a vault and a host per shell. The question here is narrower and answers

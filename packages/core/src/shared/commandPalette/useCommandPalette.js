@@ -77,8 +77,7 @@ export function useCommandPalette(opts = {}) {
         if (!enabled) setOpen(false);
     }, [enabled]);
 
-    // Any navigation closes the palette so it does not stay open over the
-    // screen the user moved to.
+    // Any navigation closes the palette so it is absent from the destination screen.
     useEffect(() => {
         setOpen(false);
     }, [currentView]);

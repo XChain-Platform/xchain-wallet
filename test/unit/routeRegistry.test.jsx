@@ -99,7 +99,7 @@ describe('route registry consistency', () => {
         expect(classified).toEqual(Object.keys(ROUTE_REGISTRY).sort());
     });
 
-    it('uses the catalogue tab ids and omits the retired menu route', () => {
+    it('uses the catalogue tab ids and excludes the menu route', () => {
         expect(TAB_BAR_DESTINATIONS).toBe(WALLET_TAB_BAR_IDS);
         expect(ROUTE_REGISTRY.menu).toBeUndefined();
         expect(Object.values(ROUTE_NAV_GROUPS).flat()).not.toContain('menu');

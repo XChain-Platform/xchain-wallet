@@ -250,11 +250,9 @@ describe('buildCommands', () => {
         expect(findById(buildCommands({ navigate() {}, hasBtcAddress: true, isDemoWallet: true }), 'nav-cosigner-accounts')).toBeUndefined();
     });
 
-    // The betting views shipped with no palette entry at all, so the only route
-    // to them was the old overflow route: two clicks deep in a
-    // catalogue, for a surface whose whole point is coming back to check a
-    // market. Every comparable destination (Governance, Staking, Dispensers, My
-    // orders) has an entry, and a returning user reaches for the palette.
+    // The betting views have direct palette entries for returning users who
+    // check a market. Comparable destinations such as Governance, Staking,
+    // Dispensers and My orders are also directly findable.
     it('routes the three betting views, ungated like the actions-menu entry', () => {
         const navigate = vi.fn();
         // No context flags: betting must be findable in a bare wallet, because

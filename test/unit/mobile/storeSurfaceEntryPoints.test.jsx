@@ -85,11 +85,9 @@ describe('the command palette', () => {
     });
 });
 
-// The same failure one level down. Home's quick-action row hides
-// Exchange on a surface-stripped build, but kept its "All actions" button, whose only
-// entry is the DEX-gated Swap. The button survived into a build with nothing
-// behind it, so tapping it opened a menu whose single row read
-// "No additional actions".
+// Home hides Exchange and All actions on a surface-stripped build. The only
+// All actions entry on this surface is the DEX-gated Swap, so no empty menu
+// trigger renders.
 describe("Home's quick-action fallback", () => {
     const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
     const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };

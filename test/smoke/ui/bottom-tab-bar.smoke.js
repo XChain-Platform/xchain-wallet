@@ -48,7 +48,7 @@ assert.ok(/\.bar\s*\{[\s\S]*?min-height:\s*3\.5rem/.test(cssSrc),
 assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
     'the bar respects the bottom safe area');
 assert.ok(!/sheetItem|sheetList|tabDot/.test(cssSrc),
-    'retired sheet and unread styles are absent');
+    'sheet and unread styles are absent');
 
 const navSrc = readFileSync(join(core, 'src', 'shared', 'components', 'LeftNav.jsx'), 'utf8');
 const navCss = readFileSync(join(core, 'src', 'shared', 'components', 'LeftNav.module.css'), 'utf8');

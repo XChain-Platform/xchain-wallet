@@ -11,9 +11,8 @@
 // Regression suite: Home quick actions are the same four square tiles at
 // every width and for demo wallets.
 //
-//   [P2] 2026-11-10: Below 834px the row offered Swap in place of More
-//        actions, a demo wallet lost Receive and All actions, and each
-//        tile laid its icon beside the label in a wide, short button.
+// The row contains Send, Receive, Exchange and All actions at every width,
+// including demo wallets. Each square tile stacks its icon above its label.
 //
 // jsdom has no layout, so the tile shape is pinned on the stylesheet and the
 // e2e layout sweep measures it in a browser.

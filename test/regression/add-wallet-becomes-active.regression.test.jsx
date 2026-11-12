@@ -82,7 +82,7 @@ function answerRecoveryQuiz() {
 }
 
 async function openAddWallet() {
-    // Switching wallets lives on the Settings page now, not in the header.
+    // Wallet switching lives on the Settings page.
     fireEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0]);
     // Settings is a lazy route, so its first import in jsdom can outlast the default wait.
     fireEvent.click(await screen.findByRole('button', { name: /^This wallet/ }, { timeout: 20_000 }));

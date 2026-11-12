@@ -90,7 +90,7 @@ async function openFromHeader(page) {
         if (await dialog.isVisible()) return;
         await page.getByRole('button', { name: 'Open menu' }).click({ timeout: 3_000 });
         await expect(dialog).toBeVisible({ timeout: 3_000 });
-    }, 'the header menu never opened the wallet menu').toPass({ timeout: 30_000 });
+    }, 'the header menu does not open the wallet menu').toPass({ timeout: 30_000 });
     return dialog;
 }
 

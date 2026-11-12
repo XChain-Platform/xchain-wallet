@@ -48,7 +48,7 @@ async function expectNoUnreadMarkers(scope, label) {
     await expect(markers, `${label} contains no unread dot or count`).toHaveCount(0);
 }
 
-test('wallet menu lays out its catalogue, searches, and replaces compact overflow navigation', async ({ page }) => {
+test('wallet menu lays out its catalogue, searches, and provides compact navigation', async ({ page }) => {
     await createWallet(page, { name: 'Menu layout wallet' });
 
     for (const viewport of VIEWPORTS) {

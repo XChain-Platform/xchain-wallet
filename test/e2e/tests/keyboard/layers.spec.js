@@ -148,7 +148,7 @@ for (const size of SIZES) {
             await page.keyboard.press('Enter');
             const heading = page.getByRole('heading', { level: 1, name: 'Receive', exact: true });
             await expect(heading).toBeVisible();
-            await expect(heading, 'focus does not return to the menu button behind the new screen').toBeFocused();
+            await expect(heading, 'focus stays on the destination screen').toBeFocused();
         });
 
         for (const route of ['Send', 'Receive', 'Settings']) {

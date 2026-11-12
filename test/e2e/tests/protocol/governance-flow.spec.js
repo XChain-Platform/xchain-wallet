@@ -44,7 +44,7 @@ const NORMAL_FEE = '0.000015 BTC (6 sat/vB)';
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
-    await expect(dialog, 'the wallet menu did not open').toBeVisible({ timeout: 15_000 });
+    await expect(dialog, 'the wallet menu is not open').toBeVisible({ timeout: 15_000 });
     const combobox = dialog.getByRole('combobox').first();
     await expect(combobox).toBeEditable({ timeout: 15_000 });
     await combobox.fill(title);
